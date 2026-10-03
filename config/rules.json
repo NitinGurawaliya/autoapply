@@ -1,0 +1,12 @@
+{
+  "require_user_approval": true,
+  "allow_submit_on_real_sites": true,
+  "test_profile_mock_only": true,
+  "no_fabrication": true,
+  "sensitive_keys_never_ai": ["current_ctc", "expected_ctc", "salary_expectation", "notice_period", "work_authorization", "needs_sponsorship", "willing_to_relocate"],
+  "eeo_default": "Decline to answer",
+  "min_match_score": 40,
+  "max_applications_per_day": 120,
+  "max_ai_drafts_per_application": 3,
+  "max_attempts": 2
+}

@@ -1,0 +1,55 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { getCurrentUser } from "@/lib/auth";
+import { getAll, upsert } from "@/modules/answers";
+
+const putSchema = z.object({
+  answers: z.array(
+    z.object({
+      key: z.string(),
+      question: z.string(),
+      answer: z.string(),
+      source: z.enum(["resume", "user", "ai_draft", "default"]),
+    }),
+  ),
+});
+
+export async function GET() {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const answers = await getAll(user.id);
+  return NextResponse.json({
+    answers: answers.map((row) => ({
+      key: row.key,
+      question: row.question,
+      answer: row.answer,
+      source: row.source,
+    })),
+  });
+}
+
+export async function PUT(req: Request) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const parsed = putSchema.safeParse(await req.json());
+  if (!parsed.success) return NextResponse.json({ error: "invalid" }, { status: 400 });
+
+  try {
+    for (const row of parsed.data.answers) {
+      await upsert(user.id, row);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "invalid";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+
+  const answers = await getAll(user.id);
+  return NextResponse.json({
+    answers: answers.map((row) => ({
+      key: row.key,
+      question: row.question,
+      answer: row.answer,
+      source: row.source,
+    })),
+  });
+}

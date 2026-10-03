@@ -1,0 +1,60 @@
+import type { Page } from "playwright";
+
+export type FormField = {
+  selector: string;
+  label: string;
+  type: string;
+  required: boolean;
+  options?: string[];
+};
+
+export type ResolvedValue = {
+  key: string;
+  label: string;
+  value: string;
+  source: string;
+  selector: string;
+  type: string;
+  fileName?: string;
+};
+
+export type FilledField = {
+  key: string;
+  label: string;
+  value: string;
+  source: string;
+  selector: string;
+};
+
+export type PendingQuestion = {
+  key: string;
+  label: string;
+  type: string;
+  options?: string[];
+  required: boolean;
+};
+
+export type SubmitResult = {
+  confirmed: boolean;
+  evidence: string;
+};
+
+export type SubmitContext = {
+  /** Ask the user for a one-time code the ATS emailed them. Resolves null if they do not answer in time. */
+  requestCode(prompt: string): Promise<string | null>;
+};
+
+export interface AtsAdapter {
+  source: "greenhouse" | "lever" | "ashby" | "mock";
+  matches(url: string): boolean;
+  /** URL of the actual application form, when the listing URL is not the form itself. */
+  formUrl?(job: { applyUrl: string; externalId: string; companySlug: string }): string;
+  inspect(page: Page): Promise<FormField[]>;
+  /** Attach a file the way this ATS expects; returns a cleanup that deletes the temp file. Defaults to setInputFiles. */
+  uploadFile?(page: Page, value: ResolvedValue, bytes: Uint8Array): Promise<() => Promise<void>>;
+  fill(page: Page, values: ResolvedValue[]): Promise<FilledField[]>;
+  submit(page: Page, ctx: SubmitContext): Promise<SubmitResult>;
+}
+
+/** Thrown once a submit may have reached the employer; the runner must not retry and risk a duplicate application. */
+export class NoRetryError extends Error {}
