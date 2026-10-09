@@ -144,8 +144,17 @@ async function execute(applicationId: string) {
     const mapped = await mapFields(adapter.source, fields);
     const resolved = resolveValues(mapped, profile, answers);
     await writeEvent(applicationId, "resolve", `Resolved ${resolved.values.length}, pending ${resolved.pending.length}`);
-    // An already-answered question coming back means the saved answer no longer fits the form; asking again would loop.
-    const repeated = resolved.pending.find((question) => answers.some((row) => row.key === question.key));
+    // A saved answer only proves a loop when the user gave it in reply to THIS application's own prompt and the form
+    // still refuses it. An older answer (the same question on another company's form, with other options, such as
+    // "How did you hear about this job?") is simply asked again with this form's options; the new answer replaces it.
+    const lastAsk = await db.applicationEvent.findFirst({
+      where: { applicationId, type: "ask_user" },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    });
+    const repeated = lastAsk
+      ? resolved.pending.find((question) => answers.some((row) => row.key === question.key && row.updatedAt >= lastAsk.createdAt))
+      : undefined;
     if (repeated) {
       const message = `Your saved answer for "${repeated.label.slice(0, 80)}" does not match this form's options`;
       await writeEvent(applicationId, "error", message);
