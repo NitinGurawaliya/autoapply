@@ -331,6 +331,8 @@ Derivation (T54): after memory, `modules/apply/derive.ts` `deriveAnswers` works 
 
 Essay drafts (T55, product decision): `modules/apply/essay.ts`. Open questions ("why this role / why us", "best project you've built", "tell us about…") are drafted after the one-time permission `accept_ai_essays` (asked once for all essays), from the resume and the job only; a draft that names an organisation, school or product absent from both is dropped and the question asked. "Best project" is drafted once and saved as `essay_best_project` (`ai_draft`, editable on the Answers page) and reused; "why this company" is drafted per application and only an answer given for the same company is ever reused (never the global free-text answer). At most `max_ai_drafts_per_application` (3) drafts per application, now enforced; the rest are asked. Checks: `scripts/essay-test.ts`, `scripts/essay-smoke.ts` (mock end to end).
 
+Decisions (10 Oct): conflicting saved answers are not reviewed; the newest wins (the verify step prefers the most recently saved candidate). Years-of-experience questions are always derived when the resume settles them (no switch). Essay drafts must also be numerically grounded: every number in a draft must appear in the resume or the job, otherwise the draft is dropped and the question asked.
+
 ## 7. Governance (`config/rules.json` + `modules/governance/rules.ts`)
 
 ```json

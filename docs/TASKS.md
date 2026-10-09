@@ -307,6 +307,8 @@ Done 10 Oct: replay 34 % → 46 % answered without asking; 0 wrong sensitive ans
 One-time permission `accept_ai_essays`; `modules/apply/essay.ts` drafts from resume + job only; "best project" saved once and editable; enforce `max_ai_drafts_per_application`. **Done when:** mock run fills an essay as `ai_draft`; a 4th draft is asked; drafts name no employer or school absent from the resume.
 Done 10 Oct: `essay-test` PASS (15: detection, grounding check rejects an invented school, one permission question for all essays, "why us" never reused across companies, saved best project reused, the 4th essay asked, live drafts grounded); `essay-smoke` PASS (mock: permission asked once, then "Why this role?" drafted as `ai_draft` and submitted).
 
+Decisions (10 Oct): conflicting saved answers are not reviewed, the newest wins; years-of-experience questions are always derived; essay drafts must also be numerically grounded (done, `essay-test` PASS).
+
 ### [ ] T56 — Ask before the run, fill in one go
 Pre-scan Greenhouse `…/jobs/{id}?questions=true` for feed jobs (new `prescan` queue); ask never-seen facts at swipe time; "fill your gaps" screen; mid-run popup only as a de-duplicated fallback. **Done when:** a swiped Greenhouse job with a missing fact asks at swipe time and the run completes with no pause; feed coverage % shows.
 

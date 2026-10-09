@@ -58,7 +58,11 @@ export function draftIsGrounded(text: string, mentions: string[], sources: strin
   const named = new Set(mentions.map((m) => m.trim()).filter(Boolean));
   // Also catch organisations the model did not list: "X University", "X Inc", "X Labs", "X College"...
   for (const match of text.matchAll(/\b([A-Z][\w&.-]*(?:\s+[A-Z][\w&.-]*)*\s+(?:University|College|Institute|Inc\.?|Labs|Technologies|Corporation|Corp\.?|Ltd\.?|LLC))\b/g)) named.add(match[1]);
-  return [...named].every((name) => corpus.includes(words(name)));
+  if (![...named].every((name) => corpus.includes(words(name)))) return false;
+  // Every number must be one the resume or the job states ("40 store managers", "2024"): an invented metric such as
+  // "cut load time by 70%" fails here even when the model did not list it.
+  const sourceNumbers = new Set([...sources.join(" ").matchAll(/\d+(?:\.\d+)?/g)].map((m) => m[0]));
+  return [...text.matchAll(/\d+(?:\.\d+)?/g)].every((m) => sourceNumbers.has(m[0]));
 }
 
 /** Drafts for these essay questions; only drafts that pass draftIsGrounded are returned (by index). */

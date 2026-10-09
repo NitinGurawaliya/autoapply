@@ -25,6 +25,8 @@ async function main() {
 
   check("a draft naming only resume and job facts is grounded", draftIsGrounded("At Acme Labs I built React dashboards; Stripe's payments work fits that.", ["Acme Labs", "React", "Stripe"], ["Engineer at Acme Labs. React, Node.", "Stripe", "Payments engineer"]));
   check("a draft naming a school not in the resume is rejected", !draftIsGrounded("I studied at Stanford University and built React apps.", ["React"], ["Engineer at Acme Labs. React."]));
+  check("a draft with a number not in the resume or job is rejected", !draftIsGrounded("At Acme Labs I cut load time by 70%.", ["Acme Labs"], ["Engineer at Acme Labs. Cut page load from 6s to 2s."]));
+  check("numbers the resume states are allowed", draftIsGrounded("At Acme Labs I cut page load from 6s to 2s for 40 store managers.", ["Acme Labs"], ["Engineer at Acme Labs. Cut page load from 6s to 2s for 40 store managers."]));
   check("a listed mention absent from both sources is rejected", !draftIsGrounded("I led the Kubernetes migration.", ["Kubernetes"], ["Engineer at Acme Labs. React."]));
 
   const why = area("Why do you want to work here?");
