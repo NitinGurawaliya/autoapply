@@ -83,6 +83,37 @@ async function complete(system: string, user: string) {
   return body.choices?.[0]?.message?.content ?? "";
 }
 
+export const EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL?.trim() || "text-embedding-3-small";
+export const EMBEDDING_DIMENSIONS = 1536;
+
+/** One vector per text, in order. Used to find a user's past questions that mean the same thing (modules/answers). */
+export async function embed(texts: string[]): Promise<number[][]> {
+  if (texts.length === 0) return [];
+  loadEnvKey();
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
+  const out: number[][] = [];
+  // The API takes many inputs per call; keep batches modest.
+  for (let start = 0; start < texts.length; start += 256) {
+    const batch = texts.slice(start, start + 256);
+    const started = Date.now();
+    const response = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: EMBEDDING_MODEL, input: batch, dimensions: EMBEDDING_DIMENSIONS }),
+    });
+    const body = (await response.json()) as {
+      error?: { message?: string };
+      data?: Array<{ index: number; embedding: number[] }>;
+      usage?: { prompt_tokens?: number };
+    };
+    if (!response.ok || !body.data) throw new Error(body.error?.message ?? `OpenAI embeddings failed (${response.status})`);
+    console.log(`llm embed inputs=${batch.length} tokens=${body.usage?.prompt_tokens ?? 0} latencyMs=${Date.now() - started}`);
+    for (const item of [...body.data].sort((a, b) => a.index - b.index)) out.push(item.embedding);
+  }
+  return out;
+}
+
 export async function callJson<T>(
   schema: z.ZodType<T>,
   system: string,

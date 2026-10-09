@@ -274,3 +274,35 @@ Ashby checkbox groups (OpenAI's arbitration and "I certify" boxes, Snowflake's p
 ### [x] T48 — Performance quick wins (from the 9 Oct audit)
 One shared, visibility-aware poller on a small `/api/applications/summary` endpoint instead of four timers on the full list (about 7x fewer requests, none while the tab is hidden); loading and error screens on Governance and Account; `getCurrentUser` cached per request; independent queries in parallel and joins instead of two reads (`history.ts`, `/api/applications`, `listFeed`, governance overview); indexes on `Job(source, country, postedAt)` and `ApplicationEvent(applicationId, type, createdAt)`; feed header streams before the cards. Measured (dev, test account): Applications tab 20 s to 1.8 s, Governance first feedback 11 s to 1.3 s, feed header 14-27 s to about 2 s. Not done here: feed scoring and cookie sessions (decisions 1 and 5 in the performance audit doc).
 **Done when:** the regression smokes pass and the timings above are re-measured. Done 9 Oct.
+
+## Phase F — Smarter answers (ask only what we cannot know)
+
+Plan (v2, agreed 9 Oct): retrieve, then verify. Every answered question is stored with its embedding (pgvector in the same Neon database) and the job it was answered for. For each form question: exact/canonical answer → recall the user's 5 closest past questions → one AI verify per form ("same question, same company/city/country/skill?") → hard parameter checks in code for risky questions (work authorization and sponsorship per country, worked-at per company, office per city, sensitive, EEO) → derive with evidence → essay draft (one-time permission) → fit to the form's options → ask, preferably before the run. Similarity alone never fills an answer. Reused/derived answers on by default, each with a badge and its reason. Every step re-runs the replay scoreboard (auto-answer rate up, wrong sensitive answers = 0).
+
+### [x] T49 — Embedding experiment (decision gate)
+`embed()` in `src/lib/llm.ts`; `scripts/embedding-experiment.ts` prints nearest neighbours and scores for the real users' saved questions, true paraphrases vs look-alike traps. **Done when:** a retrieval cut-off is chosen from the numbers and the traps are shown to need the verify step.
+Result (9 Oct, 197 real wordings, `text-embedding-3-small`): true paraphrases score as low as 0.599 ("How did you hear about us?" ~ "How did you learn about this job?"; zip-code wordings 0.718) while traps score as high as 0.834 ("work from our US office" ~ "…London office"). No threshold separates them, so the verify step is required. Retrieval: top 5 candidates with score ≥ 0.54 go to verify.
+
+### [~] T50 — Replay scoreboard
+`scripts/replay-questions.ts` (written; currently finds 0 questions, fix the query): leave-one-out replay of every saved wording; % answered without asking, % agreeing with the user, wrong sensitive answers. **Done when:** the baseline prints for the real profiles.
+
+### [ ] T51 — pgvector storage and backfill
+Extension, `Answer.context`, `Answer.embedding`, `LabelEmbedding` cache; `modules/answers/memory.ts` `remember` / `recall`; answer writes record the job context; `scripts/backfill-embeddings.ts`. **Done when:** recall returns the right neighbours for sample wordings and the backfill ran.
+
+### [ ] T52 — Retrieve-then-verify in the run
+`modules/answers/concepts.ts` (small risky catalog with parameters), `modules/apply/recall.ts` (async pre-pass in the runner, one batched verify per form, code-side checks) feeding `resolveValues`; source `matched`. **Done when:** replay answers the duplicate clusters, trap pairs are not reused, wrong sensitive answers = 0.
+
+### [ ] T53 — AI option mapping
+Map a value onto the form's own options when `fitOption` fails; one option or none; sensitive/EEO values never changed. **Done when:** fixture cases pass and "does not fit" prompts drop in replay.
+
+### [ ] T54 — Derivation with evidence
+Resume dates normalised and per-role skills; residence, previous employers and skill years derived with verified evidence; source `derived`. **Done when:** replay answers those questions with the right basis and zero sensitive/EEO derivations.
+
+### [ ] T55 — Essay drafts
+One-time permission `accept_ai_essays`; `modules/apply/essay.ts` drafts from resume + job only; "best project" saved once and editable; enforce `max_ai_drafts_per_application`. **Done when:** mock run fills an essay as `ai_draft`; a 4th draft is asked; drafts name no employer or school absent from the resume.
+
+### [ ] T56 — Ask before the run, fill in one go
+Pre-scan Greenhouse `…/jobs/{id}?questions=true` for feed jobs (new `prescan` queue); ask never-seen facts at swipe time; "fill your gaps" screen; mid-run popup only as a de-duplicated fallback. **Done when:** a swiped Greenhouse job with a missing fact asks at swipe time and the run completes with no pause; feed coverage % shows.
+
+### [ ] T57 — Badges, basis and audit
+`matched` / `derived` badges with their reason on the application page; governance counts answered-from-your-data vs asked. **Done when:** extended applications and governance smokes pass.
