@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { enqueueApply } from "@/lib/queue";
 import { storage } from "@/lib/storage";
 import { notifyNeedsInput } from "@/lib/notify";
-import { ONE_TIME_CODE_KEY } from "@/modules/answers";
+import { ONE_TIME_CODE_KEY, upsert } from "@/modules/answers";
 import { check, loadRules, writeEvent } from "@/modules/governance";
 import { NeedsAnswerError, NoRetryError, type FilledField } from "./adapter";
 import { uploadResume } from "./adapters/mock";
@@ -14,6 +14,8 @@ import { boardSupported } from "./lifecycle";
 import { pickAdapter } from "./pick";
 import { formUrlAllowed } from "./urls";
 import { LockStopped, withSubmitLock } from "./submitLock";
+import { deriveAnswers } from "./derive";
+import { BEST_PROJECT_KEY, draftEssays, essayKind, ESSAY_PERMISSION_KEY, type EssayKind } from "./essay";
 import { mapToOptions } from "./optionMap";
 import { answerFromMemory, type MemoryAnswer } from "./recall";
 import { resolveValues } from "./valueResolver";
@@ -144,7 +146,8 @@ async function execute(applicationId: string) {
     const fields = await adapter.inspect(session.page);
     await writeEvent(applicationId, "inspect", `Found ${fields.length} fields`);
     const mapped = await mapFields(adapter.source, fields);
-    let resolved = resolveValues(mapped, profile, answers);
+    const jobRef = { company: job.company.name };
+    let resolved = resolveValues(mapped, profile, answers, undefined, undefined, jobRef);
     let memoryAnswers: Map<string, MemoryAnswer> | undefined;
     // Retrieve, then verify (recall.ts): before asking, look for the same fact among the user's answers to other
     // wordings, checked by the model and then in code (same country / company / place for risky questions).
@@ -158,7 +161,7 @@ async function execute(applicationId: string) {
         });
         if (memory.answers.size > 0) {
           memoryAnswers = memory.answers;
-          resolved = resolveValues(mapped, profile, answers, memoryAnswers);
+          resolved = resolveValues(mapped, profile, answers, memoryAnswers, undefined, jobRef);
           await writeEvent(applicationId, "resolve", `Answered ${memory.answers.size} from your saved answers to other questions`, undefined, {
             matched: [...memory.answers.keys()].map((label) => label.slice(0, 120)),
           });
@@ -171,6 +174,55 @@ async function execute(applicationId: string) {
         await writeEvent(applicationId, "resolve", `Could not check saved answers (${error instanceof Error ? error.message.slice(0, 80) : "error"}); asking instead`);
       }
     }
+    // What the profile and resume already prove (derive.ts): residence from the profile's country, previous employers
+    // and years of experience from the resume. Each answer carries the evidence it rests on.
+    if (resolved.pending.length > 0) {
+      const pendingLabels = new Set(resolved.pending.map((question) => question.label));
+      try {
+        const derived = await deriveAnswers({ profile, fields: mapped.filter((item) => pendingLabels.has(item.field.label)).map((item) => item.field) });
+        if (derived.size > 0) {
+          memoryAnswers = new Map([...(memoryAnswers ?? []), ...derived]);
+          resolved = resolveValues(mapped, profile, answers, memoryAnswers, undefined, jobRef);
+          await writeEvent(applicationId, "resolve", `Worked out ${derived.size} answers from your profile and resume`, undefined, {
+            derived: [...derived.entries()].map(([label, found]) => `${label.slice(0, 80)}: ${found.basis.slice(0, 120)}`),
+          });
+        }
+      } catch (error) {
+        await writeEvent(applicationId, "resolve", `Could not work out answers from your resume (${error instanceof Error ? error.message.slice(0, 80) : "error"}); asking instead`);
+      }
+    }
+    // Essay questions with the user's permission (essay.ts): drafted from the resume and the job, at most
+    // max_ai_drafts_per_application per application; drafts that name anything absent from both are dropped (asked).
+    const essayPermission = answers.find((row) => row.key === ESSAY_PERMISSION_KEY);
+    if (resolved.pending.length > 0 && essayPermission && /^yes$/i.test(essayPermission.answer.trim())) {
+      const pendingLabels = new Set(resolved.pending.map((question) => question.label));
+      const essays = mapped
+        .map((item) => ({ label: item.field.label, kind: essayKind(item.field.label, item.field.type) }))
+        .filter((item): item is { label: string; kind: EssayKind } => item.kind !== null && pendingLabels.has(item.label));
+      const room = Math.max(0, rules.max_ai_drafts_per_application - resolved.values.filter((value) => value.source === "ai_draft").length);
+      const take = essays.slice(0, room);
+      if (take.length > 0) {
+        try {
+          const drafts = await draftEssays({ profile, resumeText: profile.resumeText, job: { company: job.company.name, title: job.title, description: job.description }, items: take });
+          const drafted = new Map<string, MemoryAnswer>();
+          for (const [index, text] of drafts) {
+            const item = take[index];
+            drafted.set(item.label, { key: item.kind === "best_project" ? BEST_PROJECT_KEY : "", answer: text, basis: "AI draft from your resume and the job", score: 1, source: "ai_draft" });
+            // The best-project story is saved once (editable on the Answers page) and reused on every form.
+            if (item.kind === "best_project") await upsert(application.userId, { key: BEST_PROJECT_KEY, question: item.label, answer: text, source: "ai_draft" });
+          }
+          if (drafted.size > 0) {
+            memoryAnswers = new Map([...(memoryAnswers ?? []), ...drafted]);
+            resolved = resolveValues(mapped, profile, answers, memoryAnswers, undefined, jobRef);
+            await writeEvent(applicationId, "resolve", `Drafted ${drafted.size} essay answers (AI draft)`, undefined, { drafted: [...drafted.keys()].map((label) => label.slice(0, 120)) });
+          }
+          if (drafts.size < take.length) await writeEvent(applicationId, "resolve", `Asked ${take.length - drafts.size} essay questions instead: the draft was missing or named something not in your resume`);
+        } catch (error) {
+          await writeEvent(applicationId, "resolve", `Could not draft essay answers (${error instanceof Error ? error.message.slice(0, 80) : "error"}); asking instead`);
+        }
+      }
+      if (essays.length > take.length) await writeEvent(applicationId, "resolve", `Asked ${essays.length - take.length} essay questions: the limit is ${rules.max_ai_drafts_per_application} AI drafts per application`);
+    }
     // An answer we already have but worded differently from the form's options ("30 days" vs "1 month"): re-word it
     // onto one of the options (optionMap.ts) instead of asking again.
     const pendingNow = new Set(resolved.pending.map((question) => question.label));
@@ -179,7 +231,7 @@ async function execute(applicationId: string) {
       try {
         const matches = await mapToOptions(unfit);
         if (matches.size > 0) {
-          resolved = resolveValues(mapped, profile, answers, memoryAnswers, matches);
+          resolved = resolveValues(mapped, profile, answers, memoryAnswers, matches, jobRef);
           await writeEvent(applicationId, "resolve", `Matched ${matches.size} saved answers to this form's options`);
         }
       } catch (error) {

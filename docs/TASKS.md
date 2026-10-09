@@ -299,11 +299,13 @@ Done 10 Oct: replay 26 % → 34 % answered without asking, wrong sensitive answe
 Map a value onto the form's own options when `fitOption` fails; one option or none; sensitive/EEO values never changed. **Done when:** fixture cases pass and "does not fit" prompts drop in replay.
 Done 10 Oct: `option-map-test` PASS (10 cases incl. refusals: an unlisted event without "Other", "60 days" with no such option), `option-map-smoke` PASS (mock: "Yes, I am authorized to work" filled as "Authorized", submitted without asking). The replay cannot measure this step (old forms' options were not stored); the mapping is exercised end to end instead.
 
-### [ ] T54 — Derivation with evidence
+### [x] T54 — Derivation with evidence
 Resume dates normalised and per-role skills; residence, previous employers and skill years derived with verified evidence; source `derived`. **Done when:** replay answers those questions with the right basis and zero sensitive/EEO derivations.
+Done 10 Oct: replay 34 % → 46 % answered without asking; 0 wrong sensitive answers, 0 derivations on a forbidden kind; 12 derived answers contradict a saved answer and are listed for review (India-based profiles with saved "Yes, I live in the UK / worked at Snowflake"). `derive-test` PASS (18). Simplification: dates are normalised in code and role summaries are matched (model fallback picks existing roles only) instead of re-parsing every resume. Citizenship ("U.S. person") split from work authorization.
 
-### [ ] T55 — Essay drafts
+### [x] T55 — Essay drafts
 One-time permission `accept_ai_essays`; `modules/apply/essay.ts` drafts from resume + job only; "best project" saved once and editable; enforce `max_ai_drafts_per_application`. **Done when:** mock run fills an essay as `ai_draft`; a 4th draft is asked; drafts name no employer or school absent from the resume.
+Done 10 Oct: `essay-test` PASS (15: detection, grounding check rejects an invented school, one permission question for all essays, "why us" never reused across companies, saved best project reused, the 4th essay asked, live drafts grounded); `essay-smoke` PASS (mock: permission asked once, then "Why this role?" drafted as `ai_draft` and submitted).
 
 ### [ ] T56 — Ask before the run, fill in one go
 Pre-scan Greenhouse `…/jobs/{id}?questions=true` for feed jobs (new `prescan` queue); ask never-seen facts at swipe time; "fill your gaps" screen; mid-run popup only as a de-duplicated fallback. **Done when:** a swiped Greenhouse job with a missing fact asks at swipe time and the run completes with no pause; feed coverage % shows.

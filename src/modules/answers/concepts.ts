@@ -10,6 +10,7 @@
 export const CONCEPT_IDS = [
   "general",
   "residence",
+  "citizenship",
   "work_authorization",
   "needs_sponsorship",
   "willing_to_relocate",
@@ -26,7 +27,9 @@ export type ConceptId = (typeof CONCEPT_IDS)[number];
 type Parameter = "country" | "place" | "company";
 
 export const RISKY: Record<Exclude<ConceptId, "general">, { parameter: Parameter | null; detector: RegExp }> = {
-  work_authorization: { parameter: "country", detector: /authori[sz]ed\b.{0,30}\bwork|(legally|lawfully|eligible|permitted|allowed) to work|right to work|work permit|u\.?s\.? person|citizenship|citizen of/i },
+  // Citizenship / permanent residence ("U.S. person", green card) is not the same fact as being allowed to work.
+  citizenship: { parameter: "country", detector: /u\.?s\.? person|\bcitizen|citizenship|permanent resident|green card|nationality/i },
+  work_authorization: { parameter: "country", detector: /authori[sz]ed\b.{0,30}\bwork|(legally|lawfully|eligible|permitted|allowed) to work|right to work|work permit/i },
   residence: { parameter: "place", detector: /\breside\b|\bresiding\b|\bresident of\b|currently (live|living|located|based)|where do you (live|reside)|located in the|live in the|based in the/i },
   needs_sponsorship: { parameter: "country", detector: /sponsor|\bvisa\b/i },
   willing_to_relocate: { parameter: "place", detector: /relocat/i },

@@ -12,7 +12,8 @@ import type { FormField } from "./adapter";
  */
 
 export type JobContext = { company: string; title: string; location: string; country: string };
-export type MemoryAnswer = { key: string; answer: string; basis: string; score: number };
+/** An answer from memory ("matched", the default) or worked out from the profile and resume ("derived", derive.ts). */
+export type MemoryAnswer = { key: string; answer: string; basis: string; score: number; source?: "matched" | "derived" | "ai_draft" };
 
 const verifySchema = z.object({
   results: z.array(
@@ -30,10 +31,10 @@ const verifySchema = z.object({
 const SYSTEM = `You decide whether a job applicant's SAVED answer can be reused for a NEW question on an application form.
 Reuse only when the saved question asks for exactly the same fact about the applicant, so the saved answer is correct for the new question as asked for THIS job. Different wording is fine; a different subject is not.
 Check the saved ANSWER, not only the wording: it must be a correct, complete answer to the new question exactly as asked. Different parts of one thing are different facts: a month is not a year, a start date is not an end date, a degree is not a major/branch, a graduation date is not a degree, availability (yes/no) is not a term or duration. A yes/no answer never answers a what/which/when/how question, and a list or choice never answers a yes/no question unless it clearly implies it. If two candidates answer it differently, prefer the most recently saved one (savedOn).
-Classify each new question's concept: residence, work_authorization, needs_sponsorship, willing_to_relocate, office_attendance, previously_employed_by, company_relationship, compensation, notice_period, eeo, or general for anything else.
+Classify each new question's concept: residence, citizenship (citizen, "U.S. person", permanent resident, green card: NOT the same as being allowed to work), work_authorization, needs_sponsorship, willing_to_relocate, office_attendance, previously_employed_by, company_relationship, compensation, notice_period, eeo, or general for anything else.
 General questions (how the applicant heard about or found the job, zip code, start date, degree, links, overall experience and the like) are facts about the applicant, not about one employer: reuse them across companies even though the saved answer was given for another job, unless the saved answer itself names that other company or a person there.
 residence means asking WHETHER the applicant lives in a particular place ("Do you reside in the US or Canada?"); asking for the applicant's address, city, state or zip code is general.
-For work_authorization and needs_sponsorship the parameter is a country; for residence, willing_to_relocate and office_attendance a place (city, region or country; for residence it is the place the question asks about, e.g. "the United States or Canada"); for previously_employed_by and company_relationship a company. Questions with a different parameter are NOT the same: "worked at MongoDB" is not "worked at Thoughtworks", "our US office" is not "our London office", "authorized to work in the US" is not "authorized to work in the UK".
+For citizenship, work_authorization and needs_sponsorship the parameter is a country; for residence, willing_to_relocate and office_attendance a place (city, region or country; for residence it is the place the question asks about, e.g. "the United States or Canada"); for previously_employed_by and company_relationship a company. Questions with a different parameter are NOT the same: "worked at MongoDB" is not "worked at Thoughtworks", "our US office" is not "our London office", "authorized to work in the US" is not "authorized to work in the UK".
 - param: the country/place/company the NEW question is about. When it says "this job", "our office", "the country where the job is located" or names no place, use the job given. Null for concepts without a parameter or when it cannot be told.
 - match: the number of the saved candidate that answers the new question, or null if none does. Never pick a candidate about a different skill, company, place or country.
 - matchParam: the country/place/company the MATCHED saved question was about; when it says "this job" or "our office", use the job it was answered for ("answeredFor"); null if that is unknown.

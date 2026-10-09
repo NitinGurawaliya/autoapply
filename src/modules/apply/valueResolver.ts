@@ -2,9 +2,10 @@ import { customQuestionKey, detectConcept, getAnswerKey, matchKeyBySynonym, RISK
 import { loadRules } from "@/modules/governance";
 import { ACKNOWLEDGEMENT_KEY, ACKNOWLEDGEMENT_QUESTION, acknowledgementValue } from "./acknowledgement";
 import type { FormField, PendingQuestion, ResolvedValue } from "./adapter";
+import { BEST_PROJECT_KEY, essayKind, ESSAY_PERMISSION_KEY, ESSAY_PERMISSION_QUESTION } from "./essay";
 import type { MemoryAnswer } from "./recall";
 
-type AnswerRow = { key: string; answer: string; source: string };
+type AnswerRow = { key: string; answer: string; source: string; context?: unknown };
 
 type ProfileFacts = {
   fullName: string;
@@ -107,6 +108,8 @@ export function resolveValues(
   memory?: Map<string, MemoryAnswer>,
   /** A known answer re-worded onto this form's own option (optionMap.ts), by optionKey(label, answer). */
   optionMatches?: Map<string, string>,
+  /** The job being applied to: a "why this company" answer is only reused for the same company. */
+  job?: { company: string },
 ) {
   const rules = loadRules();
   const bank = new Map(answers.map((row) => [row.key, row]));
@@ -170,8 +173,45 @@ export function resolveValues(
       const exact = !refersToTheJob(field.label) ? bank.get(questionKey) : undefined;
       if (exact && exact.source === "user" && push(key ?? questionKey, exact.answer, exact.source)) continue;
       const verified = memory?.get(field.label);
-      if (verified && push(key ?? questionKey, verified.answer, "matched")) {
+      if (verified && push(key ?? questionKey, verified.answer, verified.source ?? "matched")) {
         values[values.length - 1].basis = verified.basis;
+        continue;
+      }
+      ask(questionKey);
+      continue;
+    }
+
+    // Essay questions (essay.ts). "Why this role / why us" is about one company, so neither a global free-text answer
+    // nor the same wording answered for another company counts: only an answer given for this company, or a draft
+    // written for this application. Other essays may reuse the user's answer to the same wording or the saved "best
+    // project". Without those: the one-time permission, then the runner drafts it (Yes) or the user answers (No).
+    const essay = essayKind(field.label, field.type);
+    if (essay) {
+      // A field whose id IS the canonical free-text key (our mock form) keeps its saved answer when there is one.
+      const canonical = canonicalFreeText && key === "free_text" ? bank.get("free_text") : undefined;
+      if (canonical && push("free_text", canonical.answer, canonical.source)) continue;
+      const exact = bank.get(questionKey);
+      // "Why us" reuses the same wording only for the same company: the answer was given for it, or the question names it.
+      const sameCompany =
+        !!exact &&
+        !!job?.company &&
+        ((exact.context as { company?: string } | null | undefined)?.company?.toLowerCase() === job.company.toLowerCase() ||
+          ` ${field.label.toLowerCase().replace(/[^a-z0-9]+/g, " ")} `.includes(` ${job.company.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `));
+      if (exact && (essay !== "motivation" || sameCompany) && push(questionKey, exact.answer, exact.source)) continue;
+      const saved = essay === "best_project" ? bank.get(BEST_PROJECT_KEY) : undefined;
+      if (saved && push(BEST_PROJECT_KEY, saved.answer, saved.source)) {
+        values[values.length - 1].basis = "your saved best-project answer";
+        continue;
+      }
+      const draft = memory?.get(field.label);
+      if (draft && (draft.source === "ai_draft" || essay !== "motivation") && push(draft.key || questionKey, draft.answer, draft.source ?? "matched")) {
+        values[values.length - 1].basis = draft.basis;
+        continue;
+      }
+      if (!bank.get(ESSAY_PERMISSION_KEY)) {
+        if (field.required && !pending.some((q) => q.key === ESSAY_PERMISSION_KEY)) {
+          pending.push({ key: ESSAY_PERMISSION_KEY, label: ESSAY_PERMISSION_QUESTION, type: "select", options: ["Yes", "No"], required: true });
+        }
         continue;
       }
       ask(questionKey);
@@ -184,7 +224,7 @@ export function resolveValues(
 
     // The same fact, saved under another wording, verified to apply to this job.
     const recalled = memory?.get(field.label);
-    if (recalled && push(key ?? questionKey, recalled.answer, "matched")) {
+    if (recalled && push(key ?? questionKey, recalled.answer, recalled.source ?? "matched")) {
       values[values.length - 1].basis = recalled.basis;
       continue;
     }

@@ -9,13 +9,14 @@ export const ANSWER_LABELS: Record<string, string> = {
   accept_acknowledgements: "Tick privacy, truthfulness and arbitration acknowledgements for me",
   gender: "Gender", race: "Race", ethnicity: "Ethnicity", veteran_status: "Veteran status", disability: "Disability", pronouns: "Pronouns",
   how_heard: "How you heard about the job", cover_letter: "Cover letter", free_text: "Additional information",
+  accept_ai_essays: "Let SwipeApply draft essay answers for me", essay_best_project: "Your best project (used for \"proudest project\" questions)",
 };
 
 /** Keys a user may add by hand. Identity details and the resume come from the profile, so they are not here. */
 export const ADDABLE_KEYS = [
   "current_ctc", "expected_ctc", "salary_expectation", "notice_period", "work_authorization", "needs_sponsorship", "willing_to_relocate", "accept_acknowledgements",
   "employment_type", "preferred_location", "start_date", "how_heard", "gender", "race", "ethnicity", "veteran_status", "disability", "pronouns",
-  "cover_letter", "free_text",
+  "cover_letter", "free_text", "accept_ai_essays", "essay_best_project",
 ] as const;
 
 export const SENSITIVE_KEYS = new Set(["current_ctc", "expected_ctc", "salary_expectation", "notice_period", "work_authorization", "needs_sponsorship", "willing_to_relocate"]);

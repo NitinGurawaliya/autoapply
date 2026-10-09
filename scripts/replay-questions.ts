@@ -8,6 +8,7 @@ import { db } from "../src/lib/db";
 import { customQuestionKey, detectConcept, isCustomQuestionKey } from "../src/modules/answers";
 import { mapFields, resolveValues } from "../src/modules/apply";
 import type { FormField } from "../src/modules/apply";
+import { deriveAnswers } from "../src/modules/apply/derive";
 import { answerFromMemory } from "../src/modules/apply/recall";
 import { loadRules } from "../src/modules/governance";
 
@@ -46,6 +47,11 @@ async function replayUser(userId: string) {
       const memory = await answerFromMemory({ userId, job: null, fields: [item.field], excludeKeys: [ownKey] });
       if (memory.answers.size > 0) values = resolveValues([item], profile, others, memory.answers).values;
     }
+    if (values.length === 0 && useMemory) {
+      // T54: what the profile and resume prove (residence, previous employers, years of experience).
+      const derived = await deriveAnswers({ profile, fields: [item.field] });
+      if (derived.size > 0) values = resolveValues([item], profile, others, derived).values;
+    }
     const value = values[0];
     const sensitive = (item.key ? SENSITIVE.has(item.key) : false) || detectConcept(item.field.label) !== null;
     if (!value) rows.push({ label: item.field.label, outcome: "asked", key: item.key, sensitive });
@@ -72,7 +78,16 @@ async function main() {
 
   const answered = all.filter((row) => row.outcome === "answered");
   const agree = answered.filter((row) => row.agrees);
-  const wrongSensitive = answered.filter((row) => row.sensitive && !row.agrees);
+  // A derived answer rests on the profile/resume; when it contradicts what was typed, one of the two is wrong, so it is
+  // listed for review instead of being counted as the agent's mistake. Derivation itself must never touch pay, notice,
+  // work authorization, sponsorship, relocation, office, citizenship or EEO questions.
+  const wrongSensitive = answered.filter((row) => row.sensitive && !row.agrees && row.source !== "derived");
+  const contradicted = answered.filter((row) => row.source === "derived" && !row.agrees);
+  const forbiddenDerivations = answered.filter((row) => {
+    if (row.source !== "derived") return false;
+    const kind = detectConcept(row.label);
+    return SENSITIVE.has(row.key ?? "") || (kind !== null && kind !== "residence" && kind !== "previously_employed_by");
+  });
   const pct = (n: number, d: number) => (d === 0 ? "0%" : `${Math.round((n / d) * 100)}%`);
   const bySource = answered.reduce<Record<string, number>>((acc, row) => ((acc[row.source ?? "?"] = (acc[row.source ?? "?"] ?? 0) + 1), acc), {});
 
@@ -93,8 +108,12 @@ async function main() {
     for (const row of all.filter((item) => item.outcome === "asked")) console.log(`  ${row.label.replace(/\s+/g, " ").slice(0, 110)}`);
   }
   console.log("note: questions are replayed as plain text fields; on a real form, options can turn some answers into questions.");
-  console.log(wrongSensitive.length === 0 ? "PASS replay" : "FAIL replay (wrong sensitive answers)");
-  process.exit(wrongSensitive.length === 0 ? 0 : 1);
+  console.log(`derived on a forbidden kind:   ${forbiddenDerivations.length}  (must be 0)`);
+  console.log(`derived but the user typed otherwise (review: profile/resume vs saved answer): ${contradicted.length}`);
+  for (const row of contradicted) console.log(`  CONTRADICTS  "${row.label.replace(/\s+/g, " ").slice(0, 80)}"  derived "${row.given?.slice(0, 20)}", typed "${row.actual?.slice(0, 30)}"`);
+  const ok = wrongSensitive.length === 0 && forbiddenDerivations.length === 0;
+  console.log(ok ? "PASS replay" : "FAIL replay (wrong sensitive answers or forbidden derivations)");
+  process.exit(ok ? 0 : 1);
 }
 
 main().finally(() => db.$disconnect());

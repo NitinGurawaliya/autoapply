@@ -6,7 +6,7 @@ export type GroupName = (typeof GROUP_ORDER)[number];
 const GROUP_OF: Record<string, GroupName> = {
   first_name: "Contact", last_name: "Contact", full_name: "Contact", email: "Contact", phone: "Contact", city: "Contact", country: "Contact",
   linkedin: "Links", github: "Links", portfolio: "Links",
-  resume: "Documents", cover_letter: "Documents",
+  resume: "Documents", cover_letter: "Documents", essay_best_project: "Documents", accept_ai_essays: "Your answers",
   years_experience: "Experience", current_title: "Experience", current_company: "Experience", start_date: "Experience", employment_type: "Experience", preferred_location: "Experience",
   current_ctc: "Your answers", expected_ctc: "Your answers", salary_expectation: "Your answers", notice_period: "Your answers",
   work_authorization: "Your answers", needs_sponsorship: "Your answers", willing_to_relocate: "Your answers", accept_acknowledgements: "Your answers",

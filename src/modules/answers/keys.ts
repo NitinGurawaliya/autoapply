@@ -53,6 +53,9 @@ export const ANSWER_KEYS: AnswerKeyDef[] = [
   { key: "how_heard", type: "text", policy: "default_only", default: "Job board", synonyms: [/how\s*did\s*you\s*hear/i, /how\s*did\s*you\s*find/i] },
   { key: "cover_letter", type: "long_text", policy: "ai_draft_ok", synonyms: [/cover\s*letter/i] },
   { key: "free_text", type: "long_text", policy: "ai_draft_ok", synonyms: [/additional\s*information/i, /anything\s*else/i] },
+  // Essay drafts (modules/apply/essay.ts): the one-time permission, and the "best project" story drafted once and reused.
+  { key: "accept_ai_essays", type: "select", policy: "bank_or_ask", synonyms: [] },
+  { key: "essay_best_project", type: "long_text", policy: "ai_draft_ok", synonyms: [] },
 ];
 
 const BY_KEY = new Map(ANSWER_KEYS.map((def) => [def.key, def]));

@@ -1,0 +1,205 @@
+import { z } from "zod";
+import { callJson } from "@/lib/llm";
+import { detectConcept } from "@/modules/answers";
+import type { FormField } from "./adapter";
+import type { MemoryAnswer } from "./recall";
+
+/**
+ * Answers worked out from what the profile and resume already prove (T54), each with the evidence it rests on:
+ * - residence: "Do you reside in the US or Canada?" from the profile's country;
+ * - worked at a named company: from the resume's employers;
+ * - "N years of experience in X": "No" when total experience is under N, "Yes" when the resume's dated roles that
+ *   involve X add up to N years (the model may only say WHICH existing roles involve X; the arithmetic is code).
+ * Anything not clearly settled by the evidence is left for the user. Never used for pay, notice period, work
+ * authorization, sponsorship or EEO questions (they are not derivable from a resume).
+ */
+
+type Role = { title: string; company: string; start: string | null; end: string | null; summary: string | null };
+export type ProfileForDerive = {
+  country: string | null;
+  city: string | null;
+  yearsExperience: number | null;
+  currentCompany: string | null;
+  skills: unknown;
+  experience: unknown;
+};
+
+const COUNTRIES: Record<string, string[]> = {
+  US: ["united states", "united states of america", "usa", "us", "u s", "america"],
+  CA: ["canada"],
+  UK: ["united kingdom", "uk", "u k", "great britain", "britain", "england", "scotland", "wales", "northern ireland"],
+  IN: ["india"],
+  IE: ["ireland"],
+  DE: ["germany"],
+  FR: ["france"],
+  NL: ["netherlands"],
+  ES: ["spain"],
+  SG: ["singapore"],
+  AU: ["australia"],
+  AE: ["united arab emirates", "uae"],
+};
+const EU = ["IE", "DE", "FR", "NL", "ES"];
+const REGIONS: Record<string, string[]> = { europe: [...EU, "UK"], eu: EU, "european union": EU, "north america": ["US", "CA"] };
+// Places inside a country: a question about one cannot be settled from the country alone unless the country differs.
+const SUB_REGIONS: Record<string, string> = { "northern ireland": "UK", scotland: "UK", wales: "UK", england: "UK", texas: "US", california: "US", "new york": "US", bangalore: "IN", bengaluru: "IN", delhi: "IN", mumbai: "IN" };
+
+const words = (text: string) => ` ${text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+const has = (text: string, phrase: string) => words(text).includes(` ${phrase} `);
+
+function countryCode(name: string | null) {
+  if (!name) return null;
+  for (const [code, names] of Object.entries(COUNTRIES)) if (names.some((n) => words(name).trim() === n)) return code;
+  return null;
+}
+
+// Leading tags such as "[Relocation]" do not change what is asked.
+const opening = (question: string) => question.replace(/^\s*\[[^\]]*\]\s*/, "").trim();
+// A yes/no question, also when it opens with a statement and asks at the end ("... let us know if you're residing in X?").
+const asksYesNo = (question: string) =>
+  /^(are|do|does|did|have|has|had|is|was|were|will|would|can|could)\b/i.test(opening(question)) || /\b(if|whether) (you|you're|you are)\b[^.]*\?\s*$/i.test(question);
+
+/** "Do you reside in the US or Canada?" → "No" for a profile in India. */
+function residence(label: string, profile: ProfileForDerive): { answer: string; basis: string } | null {
+  if (!asksYesNo(label) || /relocat|willing|commut|visa|authori/i.test(label)) return null;
+  if (!/\b(reside|residing|resident|live|living|located|based)\b/i.test(label)) return null;
+  const home = countryCode(profile.country);
+  if (!home) return null;
+  const named = new Set<string>();
+  for (const [code, names] of Object.entries(COUNTRIES)) if (names.some((n) => has(label, n))) named.add(code);
+  for (const [region, codes] of Object.entries(REGIONS)) if (has(label, region)) codes.forEach((code) => named.add(code));
+  const subRegions = Object.entries(SUB_REGIONS).filter(([place]) => has(label, place));
+  for (const [, code] of subRegions) named.add(code);
+  if (named.size === 0) return null;
+  const where = profile.city ? `${profile.city}, ${profile.country}` : `${profile.country}`;
+  if (!named.has(home)) return { answer: "No", basis: `derived from your location: ${where}` };
+  // In the right country but asked about a smaller place in it: the country alone does not settle it.
+  if (subRegions.some(([, code]) => code === home)) return null;
+  return { answer: "Yes", basis: `derived from your location: ${where}` };
+}
+
+const normalCompany = (name: string) =>
+  words(name)
+    .replace(/ (inc|llc|ltd|limited|corp|corporation|co|company|technologies|technology|labs|pvt|private|plc|gmbh|or any of its subsidiaries|or a .* affiliate) /g, " ")
+    .trim();
+
+/** "Have you ever worked at MongoDB?" → "No" when MongoDB is not among the resume's employers. */
+function workedAt(label: string, roles: Role[]): { answer: string; basis: string } | null {
+  if (!asksYesNo(label) || detectConcept(label) !== "previously_employed_by" || roles.length === 0) return null;
+  const match = label.match(/(?:worked|employed|interned|contracted)\b.{0,40}?\b(?:at|for|by|with)\s+([A-Z][\w&.'-]*(?:[ ,]+(?:[A-Z][\w&.'-]*|Inc\.?))*)/);
+  const company = match?.[1]?.trim();
+  if (!company || /^(any|a|an|the)\b/i.test(company)) return null;
+  const target = normalCompany(company);
+  if (!target) return null;
+  const employers = roles.map((role) => role.company).filter(Boolean);
+  const hit = employers.find((employer) => {
+    const e = normalCompany(employer);
+    return e === target || ` ${e} `.includes(` ${target} `) || ` ${target} `.includes(` ${e} `);
+  });
+  if (hit) return { answer: "Yes", basis: `derived from your resume: you worked at ${hit}` };
+  return { answer: "No", basis: `derived from your resume: ${company.replace(/[,.]+$/, "")} is not among your employers (${employers.join(", ")})` };
+}
+
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+/** "Jan 2026", "June 2025", "2023-01", "01/2023", "2020" → months since year 0; "present" → now. */
+export function monthIndex(value: string | null, now = new Date()): number | null {
+  if (!value) return null;
+  const text = value.trim().toLowerCase();
+  if (/^(present|current|now|till date|to date|ongoing)$/.test(text)) return now.getUTCFullYear() * 12 + now.getUTCMonth();
+  const iso = text.match(/^(\d{4})-(\d{1,2})/);
+  if (iso) return Number(iso[1]) * 12 + Number(iso[2]) - 1;
+  const slash = text.match(/^(\d{1,2})\/(\d{4})$/);
+  if (slash) return Number(slash[2]) * 12 + Number(slash[1]) - 1;
+  const named = text.match(/^([a-z]{3})[a-z]*\.?\s+(\d{4})$/);
+  if (named && MONTHS.includes(named[1])) return Number(named[2]) * 12 + MONTHS.indexOf(named[1]);
+  const year = text.match(/^(\d{4})$/);
+  if (year) return Number(year[1]) * 12;
+  return null;
+}
+
+/** Total years covered by these roles, overlaps counted once; roles without usable dates are left out. */
+export function yearsIn(roles: Role[], now = new Date()) {
+  const spans = roles
+    .map((role) => [monthIndex(role.start, now), monthIndex(role.end ?? null, now)] as const)
+    .filter((span): span is readonly [number, number] => span[0] !== null && span[1] !== null && span[1] >= span[0])
+    .map(([a, b]) => [a, b + 1] as const)
+    .sort((x, y) => x[0] - y[0]);
+  let months = 0;
+  let reach = -Infinity;
+  for (const [a, b] of spans) {
+    if (b <= reach) continue;
+    months += b - Math.max(a, reach);
+    reach = b;
+  }
+  return months / 12;
+}
+
+const yearsQuestion = (label: string) => {
+  const m = opening(label).match(/(\d+)\s*\+?\s*(?:or more\s+)?years?\s+(?:of\s+)?(?:professional\s+|hands-on\s+|relevant\s+|industry\s+|work\s+|full-time\s+)?experience\s+(?:in|with|as|using|of|on|developing)\s+(.+?)\??$/i);
+  return m ? { years: Number(m[1]), subject: m[2].trim() } : null;
+};
+
+const pickSchema = z.object({ results: z.array(z.object({ index: z.number().int(), roles: z.array(z.number().int()) })) });
+
+/** For each subject, which roles (by number) clearly involved it; only roles that exist are kept. */
+async function rolesInvolving(subjects: string[], roles: Role[]): Promise<number[][]> {
+  if (subjects.length === 0 || roles.length === 0) return subjects.map(() => []);
+  const verdict = await callJson(
+    pickSchema,
+    `For each skill or role, list the numbers of the applicant's resume roles whose title or summary clearly show the applicant doing it or using it. Only list a role when the text says so; do not guess from the job title alone unless the title names it. Return {"results":[{"index","roles":[numbers]}]}.`,
+    JSON.stringify({ subjects: subjects.map((subject, index) => ({ index, subject })), roles: roles.map((role, n) => ({ n, title: role.title, company: role.company, summary: (role.summary ?? "").slice(0, 1200) })) }),
+  );
+  return subjects.map((_, index) => (verdict.results.find((result) => result.index === index)?.roles ?? []).filter((n) => Number.isInteger(n) && n >= 0 && n < roles.length));
+}
+
+const describe = (role: Role) => `${role.title} at ${role.company} (${role.start ?? "?"} – ${role.end ?? "?"})`;
+
+/** Derived answers for these fields, by label. */
+export async function deriveAnswers(input: { profile: ProfileForDerive; fields: FormField[] }): Promise<Map<string, MemoryAnswer>> {
+  const out = new Map<string, MemoryAnswer>();
+  const roles = Array.isArray(input.profile.experience) ? (input.profile.experience as Role[]).filter((role) => role && (role.title || role.company)) : [];
+  const yearsAsked: Array<{ label: string; years: number; subject: string }> = [];
+  const put = (label: string, found: { answer: string; basis: string }) => out.set(label, { key: "", answer: found.answer, basis: found.basis, score: 1, source: "derived" });
+
+  for (const field of input.fields) {
+    const label = field.label;
+    // Never pay, notice period, work authorization, sponsorship, relocation, office or EEO.
+    const kind = detectConcept(label);
+    if (kind && kind !== "residence" && kind !== "previously_employed_by") continue;
+    const lived = kind === "residence" || !kind ? residence(label, input.profile) : null;
+    if (lived) {
+      put(label, lived);
+      continue;
+    }
+    const worked = workedAt(label, roles);
+    if (worked) {
+      put(label, worked);
+      continue;
+    }
+    const asked = asksYesNo(label) && !kind ? yearsQuestion(label) : null;
+    if (!asked) continue;
+    const total = input.profile.yearsExperience;
+    if (total != null && total < asked.years) {
+      put(label, { answer: "No", basis: `derived from your resume: about ${total} years of experience in total, fewer than ${asked.years}` });
+      continue;
+    }
+    yearsAsked.push({ label, ...asked });
+  }
+
+  if (yearsAsked.length > 0 && roles.length > 0) {
+    // Plain text match first; the model only for subjects no role names outright ("NoSQL databases" vs "MongoDB").
+    const direct = yearsAsked.map((item) => roles.map((role, n) => (has(`${role.title} ${role.summary ?? ""}`, item.subject.toLowerCase()) ? n : -1)).filter((n) => n >= 0));
+    const unresolved = yearsAsked.map((item, i) => (direct[i].length ? null : item.subject));
+    const picked = await rolesInvolving(unresolved.filter((s): s is string => s !== null), roles).catch(() => []);
+    let next = 0;
+    for (const [i, item] of yearsAsked.entries()) {
+      const chosen = direct[i].length ? direct[i] : (unresolved[i] !== null ? picked[next++] ?? [] : []);
+      const used = chosen.map((n) => roles[n]);
+      const years = yearsIn(used);
+      if (used.length > 0 && years >= item.years) {
+        put(item.label, { answer: "Yes", basis: `derived from your resume: ${years.toFixed(1)} years across ${used.map(describe).join("; ")}` });
+      }
+    }
+  }
+  return out;
+}
