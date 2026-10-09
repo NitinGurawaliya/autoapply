@@ -129,7 +129,7 @@ model Job { id String @id @default(cuid()); source String; externalId String
   description String; applyUrl String; postedAt DateTime; fetchedAt DateTime
   raw Json
   closedAt DateTime?   // the company's board no longer lists it (6.16)
-  @@unique([source, externalId]); @@index([postedAt]); @@index([country]) }
+  @@unique([source, externalId]); @@index([postedAt]); @@index([country]); @@index([source, country, postedAt]) }
 
 model Swipe { id String @id @default(cuid()); userId String; jobId String; direction String
   createdAt DateTime @default(now()); user User @relation(fields:[userId], references:[id])
@@ -151,7 +151,7 @@ model ApplicationEvent { id String @id @default(cuid()); applicationId String
   type String          // rule_check | inspect | resolve | ask_user | fill | screenshot | submit | block | error | retry | cancel | diagnostic
   message String; rule String?; data Json?
   createdAt DateTime @default(now())
-  application Application @relation(fields:[applicationId], references:[id]); @@index([applicationId]) }
+  application Application @relation(fields:[applicationId], references:[id]); @@index([applicationId]); @@index([applicationId, type, createdAt]) }
 
 model FileBlob { key String @id; bytes Bytes; contentType String; size Int; userId String?
   createdAt DateTime @default(now()); @@index([userId]) }
@@ -201,7 +201,7 @@ Feed and right-swipes are limited to `APPLY_BOARDS` (`modules/jobs/match.ts`): b
 Deterministic 0–100: title overlap with current title/skills (40), skills overlap with description (30), experience fit (20), country/remote preference fit (10). Reason templated from the top overlaps. Feed: filters → exclude swiped → sort `score desc, postedAt desc`. Optional stretch: batched LLM reasons for the top 30, cached.
 Experience (updated): the job's required years come from `requiredYears(title, description)` in `modules/jobs/tagging.ts` (title seniority such as Senior ≈ 5, Staff ≈ 8, Engineer II ≈ 2, intern/graduate = 0, plus "N+ years of experience" phrases; the stored `Job.experienceMin` is not used for scoring). The gap to the candidate's years sets the 20 experience points (≤0 → 20, 1 → 16, 2 → 8, 3 → 2, ≥4 → 0; unknown → 14) and caps the total (gap 2 → 50, 3 → 35, ≥4 → 25), so a seniority mismatch cannot be offset by a matching title or skills. The feed hides jobs under `min_match_score` and jobs above the `expMax` filter. Check: `scripts/match-test.ts`.
 Feed card and filters: see docs/DESIGN.md ("Feed card"); `FeedJob` also carries `remoteType`, `requiredYears` and the matched `skillHits`.
-Feed UX: `swipe-deck.tsx` is optimistic. The card advances at once and the swipe POST runs in the background; a failed save puts the card back, a blocked one shows the rule. When 5 or fewer cards remain it fetches more from `/api/jobs` and de-duplicates against swipes made this session.
+Feed page: the header and filters render from the URL alone; the cards are a separate async component behind `Suspense` (keyed on the filters), so the page shows at once and the scored cards stream in. Feed UX: `swipe-deck.tsx` is optimistic. The card advances at once and the swipe POST runs in the background; a failed save puts the card back, a blocked one shows the rule. When 5 or fewer cards remain it fetches more from `/api/jobs` and de-duplicates against swipes made this session.
 Applications UI: `/applications` (list with filters, polls while runs are active) and `/applications/[id]` (company, role, status, every filled field with its source badge, the pre-submit screenshot, and a timeline that includes the confirmation evidence). The needs-input popup names the company and role and says how many others are waiting. Check: `scripts/ui-smoke.ts`.
 
 ### 6.4 Swipe → queue
@@ -280,7 +280,7 @@ Greenhouse (`adapters/greenhouse.ts`): always opens the hosted form `https://job
 
 ### 6.11 Notifying the user
 
-`components/needs-input-notifier.tsx` (mounted in the shell header) polls `/api/applications` every 4 s. The list API reports `waitingFor` (`answers` or `code`) and `promptId` (the id of the latest `ask_user` event, so a new prompt such as a rejected security code is a new prompt). The tab title always shows `(N) SwipeApply` while N applications wait. After the user turns the bell on (and the browser grants permission), one Notification per prompt names the company; seen prompts are remembered in localStorage so polling and reloads never repeat it, and clicking one opens the application. Optional email: `lib/notify.ts` POSTs `{to, subject, text}` to `NOTIFY_WEBHOOK_URL` (bearer `NOTIFY_WEBHOOK_SECRET`) from the runner at each of its three pause points; unset means off, and a failing webhook never affects the run. The text carries company, role and what is needed, never answers or codes. Check: `scripts/notify-smoke.ts`.
+The shell has ONE poller, `components/applications-summary.tsx` (a provider in `(app)/layout.tsx`): every 5 s, and never while the tab is hidden (it polls at once when the tab comes back), it reads `GET /api/applications/summary`, which returns only the applications waiting for the user with `waitingFor` (`answers` or `code`) and `promptId` (the id of the latest `ask_user` event, so a new prompt such as a rejected security code is a new prompt). The nav badge, `components/needs-input-notifier.tsx` and the input popup all read it; the popup loads an application's questions only when the first waiting application or its prompt changes. The tab title always shows `(N) SwipeApply` while N applications wait. After the user turns the bell on (and the browser grants permission), one Notification per prompt names the company; seen prompts are remembered in localStorage so polling and reloads never repeat it, and clicking one opens the application. Optional email: `lib/notify.ts` POSTs `{to, subject, text}` to `NOTIFY_WEBHOOK_URL` (bearer `NOTIFY_WEBHOOK_SECRET`) from the runner at each of its three pause points; unset means off, and a failing webhook never affects the run. The text carries company, role and what is needed, never answers or codes. Check: `scripts/notify-smoke.ts`.
 
 ### 6.12 Multi-user safety
 

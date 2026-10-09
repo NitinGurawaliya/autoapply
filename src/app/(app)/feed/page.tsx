@@ -1,7 +1,9 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { SearchX } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { APPLY_BOARDS, listFeed, parseFeedFilters } from "@/modules/jobs";
+import type { FeedFilters } from "@/modules/jobs";
 import { redirect } from "next/navigation";
 import { DailyUsage } from "@/components/daily-usage";
 import { FilterSheet } from "./filter-sheet";
@@ -95,13 +97,19 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
     expMax: one(params.expMax),
     days: one(params.days),
   });
-  const jobs = await listFeed(user.id, filters);
   const current: FeedQuery = {
     boards: filters.boards,
     countries: filters.countries,
     expMax: filters.expMax == null ? "" : String(filters.expMax),
     days: String(filters.days),
   };
+
+  const deckQuery = new URLSearchParams({
+    boards: current.boards.join(","),
+    country: current.countries.join(","),
+    expMax: current.expMax,
+    days: current.days,
+  }).toString();
 
   // What is narrowing the feed right now, in plain words.
   const active: string[] = [];
@@ -184,38 +192,42 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
         </div>
       ) : null}
 
-      {jobs.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-card px-6 py-10 text-center shadow-card">
-          <span className="grid size-12 place-items-center rounded-full bg-muted text-muted-foreground">
-            <SearchX className="size-6" aria-hidden />
-          </span>
-          <h2 className="text-base font-semibold">No jobs match these filters</h2>
-          <p className="max-w-[30ch] text-sm text-muted-foreground">
-            {active.length > 0
-              ? "Try a wider search: more places, any experience, or the last 30 days."
-              : "Jobs you have not applied to yet will show up here as companies post them."}
-          </p>
-          {active.length > 0 ? (
-            <Link href="/feed" className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
-              Reset filters
-            </Link>
-          ) : (
-            <Link href="/applications" className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
-              See your applications
-            </Link>
-          )}
-        </div>
-      ) : (
-        <SwipeDeck
-          jobs={jobs}
-          query={new URLSearchParams({
-            boards: current.boards.join(","),
-            country: current.countries.join(","),
-            expMax: current.expMax,
-            days: current.days,
-          }).toString()}
-        />
-      )}
+      {/* The header and filters need only the URL; the cards stream in when the feed is scored. */}
+      <Suspense key={deckQuery} fallback={<DeckSkeleton />}>
+        <FeedDeck userId={user.id} filters={filters} filtered={active.length > 0} query={deckQuery} />
+      </Suspense>
     </>
+  );
+}
+
+function DeckSkeleton() {
+  return <div className="h-[420px] animate-pulse rounded-2xl bg-muted" aria-busy="true" aria-label="Loading jobs" />;
+}
+
+async function FeedDeck({ userId, filters, filtered, query }: { userId: string; filters: FeedFilters; filtered: boolean; query: string }) {
+  const jobs = await listFeed(userId, filters);
+  return jobs.length === 0 ? (
+    <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-card px-6 py-10 text-center shadow-card">
+      <span className="grid size-12 place-items-center rounded-full bg-muted text-muted-foreground">
+        <SearchX className="size-6" aria-hidden />
+      </span>
+      <h2 className="text-base font-semibold">No jobs match these filters</h2>
+      <p className="max-w-[30ch] text-sm text-muted-foreground">
+        {filtered
+          ? "Try a wider search: more places, any experience, or the last 30 days."
+          : "Jobs you have not applied to yet will show up here as companies post them."}
+      </p>
+      {filtered ? (
+        <Link href="/feed" className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
+          Reset filters
+        </Link>
+      ) : (
+        <Link href="/applications" className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
+          See your applications
+        </Link>
+      )}
+    </div>
+  ) : (
+    <SwipeDeck jobs={jobs} query={query} />
   );
 }

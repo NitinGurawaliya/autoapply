@@ -3,12 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, BellOff, BellRing } from "lucide-react";
-
-type Row = { id: string; status: string; company: string; title: string; waitingFor: "code" | "answers" | null; promptId: string | null };
+import { useApplicationsSummary } from "@/components/applications-summary";
 
 const OPT_IN = "swipeapply:notify";
 const SEEN = "swipeapply:notified";
-const POLL_MS = 4000;
 
 function readSeen(): string[] {
   try {
@@ -21,7 +19,7 @@ function readSeen(): string[] {
 /**
  * Tells the user when an application is waiting for them: the tab title always shows the count, and, once the user
  * turns the bell on and the browser allows it, a notification names the company. One per prompt, remembered across
- * reloads, so polling never repeats it.
+ * reloads, so polling never repeats it. Reads the shell's shared poller (applications-summary.tsx).
  */
 export function NeedsInputNotifier() {
   const [permission, setPermission] = useState<NotificationPermission | "unsupported">("default");
@@ -46,53 +44,38 @@ export function NeedsInputNotifier() {
     routerRef.current = router;
   }, [enabled, router]);
 
-  useEffect(() => {
+  const { waiting } = useApplicationsSummary();
+
+  function setBadge(count: number) {
     if (baseTitle.current === null) baseTitle.current = document.title.replace(/^\(\d+\)\s*/, "");
-    let stopped = false;
+    const base = baseTitle.current ?? "SwipeApply";
+    document.title = count > 0 ? `(${count}) ${base}` : base;
+  }
 
-    function setBadge(count: number) {
-      const base = baseTitle.current ?? "SwipeApply";
-      document.title = count > 0 ? `(${count}) ${base}` : base;
+  useEffect(() => () => setBadge(0), []);
+
+  useEffect(() => {
+    if (!waiting) return;
+    setBadge(waiting.length);
+    if (!enabledRef.current || !("Notification" in window) || Notification.permission !== "granted") return;
+    const seen = readSeen();
+    for (const row of waiting) {
+      const key = `${row.id}:${row.promptId ?? row.waitingFor}`;
+      if (seen.includes(key)) continue;
+      seen.push(key);
+      const text =
+        row.waitingFor === "code"
+          ? { title: `${row.company}: enter the security code`, body: `${row.title}. Greenhouse emailed you a code to finish this application.` }
+          : { title: `${row.company} needs an answer`, body: `${row.title}. Your application is paused until you answer.` };
+      const note = new Notification(text.title, { body: text.body, tag: key });
+      note.onclick = () => {
+        window.focus();
+        routerRef.current.push(`/applications/${row.id}`);
+        note.close();
+      };
     }
-
-    async function poll() {
-      try {
-        const response = await fetch("/api/applications", { cache: "no-store" });
-        if (!response.ok || stopped) return;
-        const body = (await response.json()) as { applications: Row[] };
-        const waiting = body.applications.filter((row) => row.status === "needs_input");
-        setBadge(waiting.length);
-        if (!enabledRef.current || !("Notification" in window) || Notification.permission !== "granted") return;
-        const seen = readSeen();
-        for (const row of waiting) {
-          const key = `${row.id}:${row.promptId ?? row.waitingFor}`;
-          if (seen.includes(key)) continue;
-          seen.push(key);
-          const text =
-            row.waitingFor === "code"
-              ? { title: `${row.company}: enter the security code`, body: `${row.title}. Greenhouse emailed you a code to finish this application.` }
-              : { title: `${row.company} needs an answer`, body: `${row.title}. Your application is paused until you answer.` };
-          const note = new Notification(text.title, { body: text.body, tag: key });
-          note.onclick = () => {
-            window.focus();
-            routerRef.current.push(`/applications/${row.id}`);
-            note.close();
-          };
-        }
-        localStorage.setItem(SEEN, JSON.stringify(seen.slice(-200)));
-      } catch {
-        // Try again on the next tick.
-      }
-    }
-
-    void poll();
-    const timer = window.setInterval(() => void poll(), POLL_MS);
-    return () => {
-      stopped = true;
-      window.clearInterval(timer);
-      setBadge(0);
-    };
-  }, []);
+    localStorage.setItem(SEEN, JSON.stringify(seen.slice(-200)));
+  }, [waiting]);
 
   async function toggle() {
     if (!("Notification" in window)) return;

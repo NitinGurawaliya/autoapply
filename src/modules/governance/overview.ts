@@ -30,13 +30,19 @@ export async function governanceOverview(userId: string) {
   ]);
 
   const ids = [...new Set([...events, ...blocks].map((event) => event.applicationId))];
-  const apps = await db.application.findMany({ where: { id: { in: ids }, userId }, select: { id: true, jobId: true } });
-  const jobs = await db.job.findMany({ where: { id: { in: apps.map((app) => app.jobId) } }, select: { id: true, title: true, company: { select: { name: true } } } });
-  const jobById = new Map(jobs.map((job) => [job.id, job]));
-  const appJob = new Map(apps.map((app) => [app.id, jobById.get(app.jobId)]));
+  // Company and role for each application shown, in one join rather than two reads.
+  const rows = ids.length
+    ? await db.$queryRaw<Array<{ id: string; title: string; company: string }>>`
+        SELECT a."id" AS "id", j."title" AS "title", c."name" AS "company"
+        FROM "Application" a
+        JOIN "Job" j ON j."id" = a."jobId"
+        JOIN "Company" c ON c."id" = j."companyId"
+        WHERE a."id" = ANY(${ids}) AND a."userId" = ${userId}`
+    : [];
+  const appJob = new Map(rows.map((row) => [row.id, row]));
   const label = (applicationId: string) => {
     const job = appJob.get(applicationId);
-    return job ? { company: job.company.name, title: job.title } : { company: "Unknown company", title: "Unknown role" };
+    return job ? { company: job.company, title: job.title } : { company: "Unknown company", title: "Unknown role" };
   };
 
   const rules = loadRules();

@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ClipboardList, Layers, MessageSquareText, ShieldCheck } from "lucide-react";
+import { useApplicationsSummary } from "@/components/applications-summary";
 
 // Add a tab here when its page exists.
 const TABS = [
@@ -14,26 +14,8 @@ const TABS = [
 ] as const;
 
 function usePendingCount(initial: number) {
-  const [pending, setPending] = useState(initial);
-  useEffect(() => {
-    let stopped = false;
-    async function load() {
-      try {
-        const response = await fetch("/api/applications", { cache: "no-store" });
-        if (!response.ok) return;
-        const body = (await response.json()) as { applications: Array<{ status: string }> };
-        if (!stopped) setPending(body.applications.filter((app) => app.status === "needs_input").length);
-      } catch {
-        // Keep the last known count.
-      }
-    }
-    const timer = window.setInterval(() => void load(), 5000);
-    return () => {
-      stopped = true;
-      window.clearInterval(timer);
-    };
-  }, []);
-  return pending;
+  const { waiting } = useApplicationsSummary();
+  return waiting ? waiting.length : initial;
 }
 
 function Badge({ count }: { count: number }) {

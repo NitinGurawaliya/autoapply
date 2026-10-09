@@ -26,26 +26,28 @@ export async function GET() {
   });
   // Which prompt an application is waiting on: the id of its latest "ask_user" event. A new prompt (a rejected
   // security code, a second question) gets a new id, so the client can notify once per prompt and never twice.
+  // Place in line is counted over everyone's queued applications (the worker takes them oldest first), so a person who
+  // swiped on many jobs can see how long the wait is. The three reads are independent: one round trip.
   const waiting = applications.filter((application) => application.status === "needs_input").map((application) => application.id);
-  const prompts = waiting.length
-    ? await db.applicationEvent.findMany({
-        where: { applicationId: { in: waiting }, type: "ask_user" },
-        orderBy: { createdAt: "desc" },
-        select: { id: true, applicationId: true },
-      })
-    : [];
+  const [prompts, jobs, waitingInLine] = await Promise.all([
+    waiting.length
+      ? db.applicationEvent.findMany({
+          where: { applicationId: { in: waiting }, type: "ask_user" },
+          orderBy: { createdAt: "desc" },
+          select: { id: true, applicationId: true },
+        })
+      : [],
+    db.job.findMany({
+      where: { id: { in: applications.map((application) => application.jobId) } },
+      select: { id: true, title: true, location: true, applyUrl: true, company: { select: { name: true } } },
+    }),
+    applications.some((application) => application.status === "queued")
+      ? db.application.findMany({ where: { status: "queued" }, select: { createdAt: true } })
+      : [],
+  ]);
   const promptByApp = new Map<string, string>();
   for (const prompt of prompts) if (!promptByApp.has(prompt.applicationId)) promptByApp.set(prompt.applicationId, prompt.id);
-  const jobs = await db.job.findMany({
-    where: { id: { in: applications.map((application) => application.jobId) } },
-    select: { id: true, title: true, location: true, applyUrl: true, company: { select: { name: true } } },
-  });
   const byId = new Map(jobs.map((job) => [job.id, job]));
-  // Place in line, counted over everyone's queued applications (the worker takes them oldest first), so a person who
-  // swiped on many jobs can see how long the wait is.
-  const waitingInLine = applications.some((application) => application.status === "queued")
-    ? await db.application.findMany({ where: { status: "queued" }, select: { createdAt: true } })
-    : [];
   return NextResponse.json(
     {
     applications: applications.map((application) => {

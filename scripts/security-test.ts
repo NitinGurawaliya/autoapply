@@ -51,7 +51,7 @@ async function main() {
 
     // ---- signed out: every protected route says 401, none crashes
     const anon: Array<[string, string, unknown?]> = [
-      ["GET", "/api/answers"], ["PUT", "/api/answers", { answers: [] }], ["GET", "/api/applications"], ["GET", `/api/applications/${appA.id}`],
+      ["GET", "/api/answers"], ["PUT", "/api/answers", { answers: [] }], ["GET", "/api/applications"], ["GET", "/api/applications/summary"], ["GET", `/api/applications/${appA.id}`],
       ["POST", `/api/applications/${appA.id}/cancel`], ["POST", `/api/applications/${appA.id}/retry`], ["POST", `/api/applications/${appA.id}/answers`, { answers: [{ key: "notice_period", answer: "1" }] }],
       ["GET", "/api/profile"], ["PUT", "/api/profile", {}], ["GET", "/api/jobs"], ["POST", "/api/swipes", { jobId: job.id, direction: "right" }],
       ["GET", `/api/files/screenshots/${appA.id}/1.png`], ["POST", "/api/jobs/ingest", { days: 7 }], ["GET", "/api/account/export"], ["POST", "/api/account/delete", { confirm: "DELETE MY ACCOUNT" }],
@@ -75,6 +75,9 @@ async function main() {
     check("the owner's file is served, private and unsniffable", fileAsA.status === 200 && /no-store/.test(fileAsA.headers.get("cache-control") ?? "") && fileAsA.headers.get("x-content-type-options") === "nosniff", `${fileAsA.status} ${fileAsA.headers.get("cache-control")}`);
     const listB = (await (await call(B, "GET", "/api/applications")).json()) as { applications: Array<{ id: string }> };
     check("a user's list holds only their own applications", listB.applications.length === 1 && listB.applications[0].id === appB.id);
+    const summaryB = JSON.stringify(await (await call(B, "GET", "/api/applications/summary")).json());
+    const summaryA = (await (await call(A, "GET", "/api/applications/summary")).json()) as { waiting: Array<{ id: string }> };
+    check("the waiting-for-you summary is per user", !summaryB.includes(appA.id) && summaryA.waiting.some((row) => row.id === appA.id), summaryB.slice(0, 80));
     const answersB = JSON.stringify(await (await call(B, "GET", "/api/answers")).json());
     check("a user's answers never include another's", !answersB.includes("A-SECRET-ANSWER"));
     const profileB = JSON.stringify(await (await call(B, "GET", "/api/profile")).json());

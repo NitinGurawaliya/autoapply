@@ -1,4 +1,5 @@
 import { PrismaAdapter } from "@auth/prisma-adapter";
+import { cache } from "react";
 import type { DefaultSession } from "next-auth";
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
@@ -26,8 +27,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
 });
 
-export async function getCurrentUser() {
+// Once per request: the layout and the page both ask, and each ask is a session read plus a user read.
+export const getCurrentUser = cache(async () => {
   const session = await auth();
   if (!session?.user?.id) return null;
   return db.user.findUnique({ where: { id: session.user.id } });
-}
+});

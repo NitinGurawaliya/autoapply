@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useApplicationsSummary } from "@/components/applications-summary";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -19,7 +20,6 @@ type Waiting = {
   id: string;
   company: string;
   title: string;
-  others: number;
   questions: PendingQuestion[];
 };
 
@@ -30,60 +30,44 @@ export function NeedsInputDialog() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
+  const { waiting: summary, refresh } = useApplicationsSummary();
+  const first = summary?.[0] ?? null;
+  const others = summary ? Math.max(summary.length - 1, 0) : 0;
+
+  // Load the questions only when a different application, or a new prompt on the same one, comes first in line.
   useEffect(() => {
+    if (!first) return;
     let stopped = false;
-
-    async function poll() {
-      const listResponse = await fetch("/api/applications", { cache: "no-store" });
-      if (!listResponse.ok) return;
-      const list = (await listResponse.json()) as {
-        applications: Array<{ id: string; status: string }>;
-      };
-      const waitingApps = list.applications.filter((item) => item.status === "needs_input");
-      const hit = waitingApps[0];
-      if (!hit) {
-        if (!stopped) setWaiting(null);
-        return;
-      }
-      const detailResponse = await fetch(`/api/applications/${hit.id}`, { cache: "no-store" });
-      if (!detailResponse.ok) return;
-      const detail = (await detailResponse.json()) as {
-        company: string;
-        title: string;
-        pendingQuestions: PendingQuestion[];
-      };
-      if (stopped) return;
-      setWaiting({
-        id: hit.id,
-        company: detail.company,
-        title: detail.title,
-        others: waitingApps.length - 1,
-        questions: detail.pendingQuestions,
-      });
-    }
-
-    void poll();
-    const timer = window.setInterval(() => void poll(), 1500);
+    void (async () => {
+      const response = await fetch(`/api/applications/${first.id}`, { cache: "no-store" });
+      if (!response.ok || stopped) return;
+      const detail = (await response.json()) as { company: string; title: string; pendingQuestions: PendingQuestion[] };
+      if (!stopped) setWaiting({ id: first.id, company: detail.company, title: detail.title, questions: detail.pendingQuestions });
+    })();
     return () => {
       stopped = true;
-      window.clearInterval(timer);
     };
-  }, []);
+    // first?.promptId: a rejected code or a second question is a new prompt for the same application.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [first?.id, first?.promptId]);
+
+  // Shown only while the loaded questions belong to the application first in line.
+  const current = waiting && first && waiting.id === first.id ? waiting : null;
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (!waiting) return;
-    if (waiting.questions.some((question) => !values[question.key]?.trim())) {
+    if (!current) return;
+    if (current.questions.some((question) => !values[question.key]?.trim())) {
       setError("Answer every question.");
       return;
     }
     setSaving(true);
     setError("");
-    const response = await fetch(`/api/applications/${waiting.id}/answers`, {
+    const response = await fetch(`/api/applications/${current.id}/answers`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        answers: waiting.questions.map((question) => ({
+        answers: current.questions.map((question) => ({
           key: question.key,
           question: question.label,
           answer: values[question.key].trim(),
@@ -97,24 +81,25 @@ export function NeedsInputDialog() {
     }
     setWaiting(null);
     setValues({});
+    refresh();
     router.refresh();
   }
 
-  const open = Boolean(waiting && waiting.questions.length > 0);
+  const open = Boolean(current && current.questions.length > 0);
 
   return (
     <Dialog open={open}>
       <DialogContent showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>{waiting ? `${waiting.company} asks` : "This job asks"}</DialogTitle>
+          <DialogTitle>{current ? `${current.company} asks` : "This job asks"}</DialogTitle>
           <DialogDescription>
-            {waiting ? `${waiting.title}. ` : ""}Your answer is saved and the application continues.
-            {waiting && waiting.others > 0 ? ` ${waiting.others} more waiting after this.` : ""}
+            {current ? `${current.title}. ` : ""}Your answer is saved and the application continues.
+            {current && others > 0 ? ` ${others} more waiting after this.` : ""}
           </DialogDescription>
         </DialogHeader>
-        {waiting ? (
+        {current ? (
           <form onSubmit={onSubmit} className="flex flex-col gap-4">
-            {waiting.questions.map((question) => (
+            {current.questions.map((question) => (
               <div key={question.key} className="flex flex-col gap-2">
                 <Label htmlFor={`answer-${question.key}`}>{question.label}</Label>
                 {question.options && question.options.length > 0 ? (

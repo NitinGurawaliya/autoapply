@@ -7,15 +7,17 @@ import { NeedsInputNotifier } from "@/components/needs-input-notifier";
 import { SignOutForm } from "@/components/sign-out-form";
 import { UserMenu } from "@/components/user-menu";
 import { getCurrentUser } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { ApplicationsSummaryProvider } from "@/components/applications-summary";
 
 // One shell for every signed-in page: header, navigation, account menu, and the input popup.
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
-  const pending = await db.application.count({ where: { userId: user.id, status: "needs_input" } });
+  // The pending badge comes from the shared poller (first poll on mount); no count query on every navigation.
+  const pending = 0;
 
   return (
+    <ApplicationsSummaryProvider>
     <div className="flex min-h-full flex-1 flex-col">
       <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
         <div className="mx-auto flex h-14 w-full max-w-[480px] items-center justify-between gap-3 px-4">
@@ -38,5 +40,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <NavTabs variant="bottom" initialPending={pending} />
       <NeedsInputDialog />
     </div>
+    </ApplicationsSummaryProvider>
   );
 }

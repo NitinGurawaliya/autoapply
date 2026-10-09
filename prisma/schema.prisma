@@ -136,6 +136,7 @@ model Job {
   @@unique([source, externalId])
   @@index([postedAt])
   @@index([country])
+  @@index([source, country, postedAt]) // the feed's filter
 }
 
 model Swipe {
@@ -186,6 +187,7 @@ model ApplicationEvent {
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
   @@index([applicationId])
+  @@index([applicationId, type, createdAt]) // governance counters and the latest prompt per application
 }
 
 model FileBlob {

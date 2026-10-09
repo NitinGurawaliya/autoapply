@@ -190,12 +190,12 @@ export function dedupeListings<T extends { roleKey: string; location: string; so
 }
 
 export async function listFeed(userId: string, filters: FeedFilters): Promise<FeedJob[]> {
-  const profile = await db.profile.findUnique({ where: { userId } });
-  const answers = await db.answer.findMany({
-    where: { userId, key: "preferred_location" },
-    select: { answer: true },
-  });
-  const swipes = await db.swipe.findMany({ where: { userId }, select: { jobId: true } });
+  // Independent reads run together: every database round trip is ~250 ms from India to the database.
+  const [profile, answers, swipes] = await Promise.all([
+    db.profile.findUnique({ where: { userId } }),
+    db.answer.findMany({ where: { userId, key: "preferred_location" }, select: { answer: true } }),
+    db.swipe.findMany({ where: { userId }, select: { jobId: true } }),
+  ]);
   const skills = skillsSchema.safeParse(profile?.skills).success ? skillsSchema.parse(profile?.skills) : [];
   const preferred = (answers[0]?.answer ?? "")
     .split(",")
@@ -203,35 +203,37 @@ export async function listFeed(userId: string, filters: FeedFilters): Promise<Fe
     .filter((item) => item === "India" || item === "US" || item === "Other");
 
   const cutoff = new Date(Date.now() - filters.days * 24 * 60 * 60 * 1000);
-      const sources = profile?.isTest ? [...new Set([...filters.boards, "mock"])] : filters.boards;
-      const jobs = await db.job.findMany({
-        where: {
-          source: { in: sources },
-      country: { in: filters.countries },
-      postedAt: { gte: cutoff },
-      closedAt: null,
-      id: { notIn: swipes.map((swipe) => swipe.jobId) },
-    },
-    select: {
-      id: true,
-      title: true,
-      location: true,
-      source: true,
-      country: true,
-      remoteType: true,
-      experienceMin: true,
-      description: true,
-      applyUrl: true,
-      postedAt: true,
-      companyId: true,
-      company: { select: { name: true } },
-    },
-  });
-  const applied = await appliedRoleKeys(userId);
+  const sources = profile?.isTest ? [...new Set([...filters.boards, "mock"])] : filters.boards;
+  const [jobs, applied, results] = await Promise.all([
+    db.job.findMany({
+      where: {
+        source: { in: sources },
+        country: { in: filters.countries },
+        postedAt: { gte: cutoff },
+        closedAt: null,
+        id: { notIn: swipes.map((swipe) => swipe.jobId) },
+      },
+      select: {
+        id: true,
+        title: true,
+        location: true,
+        source: true,
+        country: true,
+        remoteType: true,
+        experienceMin: true,
+        description: true,
+        applyUrl: true,
+        postedAt: true,
+        companyId: true,
+        company: { select: { name: true } },
+      },
+    }),
+    appliedRoleKeys(userId),
+    companyResultsById().catch(() => new Map<string, never>()),
+  ]);
 
   // Jobs below the governance minimum would be blocked on swipe anyway, so they never reach the deck.
   const minScore = loadRules().min_match_score;
-  const results = await companyResultsById().catch(() => new Map());
 
   const scored = jobs
     .map((job) => {
