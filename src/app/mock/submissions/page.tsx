@@ -1,7 +1,10 @@
+import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
+import { mockFormEnabled } from "@/lib/mock-gate";
 import { mockPayloadSchema } from "@/app/mock/schema";
 
 export default async function MockSubmissionsPage() {
+  if (!mockFormEnabled()) notFound();
   const rows = await db.mockSubmission.findMany({
     orderBy: { createdAt: "desc" },
     take: 20,

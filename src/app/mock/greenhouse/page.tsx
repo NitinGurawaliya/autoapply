@@ -1,7 +1,9 @@
+import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { mockFormEnabled } from "@/lib/mock-gate";
 import { HowHeardCombobox } from "./how-heard";
 
 const selectClass =
@@ -19,6 +21,7 @@ export default async function MockGreenhousePage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
+  if (!mockFormEnabled()) notFound();
   const { error } = await searchParams;
 
   return (

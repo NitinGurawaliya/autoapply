@@ -20,6 +20,11 @@ export async function GET(_request: Request, context: RouteContext) {
     headers: {
       "Content-Type": file.contentType,
       "Content-Length": String(file.size),
+      // Personal documents: never cached by a shared cache, never sniffed into another type, never run as a page.
+      "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox",
+      "Content-Disposition": "inline",
     },
   });
 }

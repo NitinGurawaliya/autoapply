@@ -1,4 +1,4 @@
-import { customQuestionKey, getAnswerKey } from "@/modules/answers";
+import { customQuestionKey, getAnswerKey, matchKeyBySynonym } from "@/modules/answers";
 import { loadRules } from "@/modules/governance";
 import type { FormField, PendingQuestion, ResolvedValue } from "./adapter";
 
@@ -84,7 +84,13 @@ export function resolveValues(
   const values: ResolvedValue[] = [];
   const pending: PendingQuestion[] = [];
 
-  for (const { field, key } of mapped) {
+  for (const item of mapped) {
+    const { field } = item;
+    // The canonical free-text key is for "additional information / anything else". A question the mapper only guessed
+    // is free text ("Why do you want this job?") is about one company: never share one saved answer across companies.
+    // It is asked and saved under the question's own key, like any other question the canonical keys do not cover.
+    const canonicalFreeText = field.selector === "#free_text" || matchKeyBySynonym(field.label) === "free_text" || field.hintKey === "free_text";
+    const key = item.key === "free_text" && !canonicalFreeText ? null : item.key;
     const questionKey = customQuestionKey(field.label);
     const ask = (askKey: string) => {
       if (!field.required) return;
@@ -101,6 +107,7 @@ export function resolveValues(
         source,
         selector: field.selector,
         type: field.type,
+        required: field.required,
         fileName: valueKey === "resume" ? raw : undefined,
       });
       return true;

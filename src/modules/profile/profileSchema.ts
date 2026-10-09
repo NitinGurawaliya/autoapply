@@ -1,59 +1,63 @@
 import { z } from "zod";
 
-function nullableText() {
+// Text from a parsed resume or an edit form is cut to a sane length, never rejected: a long summary must not lose
+// the whole profile, and nothing unbounded is stored.
+function nullableText(max = 500) {
   return z.preprocess((value) => {
     if (typeof value !== "string") return null;
-    const trimmed = value.trim();
+    const trimmed = value.trim().slice(0, max);
     return trimmed.length > 0 ? trimmed : null;
   }, z.string().nullable());
 }
 
+const short = (max: number) => z.string().default("").transform((value) => value.slice(0, max));
+
 export const experienceItemSchema = z.object({
-  title: z.string().default(""),
-  company: z.string().default(""),
-  start: nullableText(),
-  end: nullableText(),
-  summary: nullableText(),
+  title: short(200),
+  company: short(200),
+  start: nullableText(40),
+  end: nullableText(40),
+  summary: nullableText(2000),
 });
 
 export const educationItemSchema = z.object({
-  school: z.string().default(""),
-  degree: nullableText(),
-  year: nullableText(),
+  school: short(200),
+  degree: nullableText(200),
+  year: nullableText(40),
 });
 
 export const profileSchema = z.object({
-  fullName: z.string().trim().min(1),
-  email: z.string().trim().min(1),
-  phone: nullableText(),
-  city: nullableText(),
-  country: nullableText(),
-  linkedin: nullableText(),
-  github: nullableText(),
-  portfolio: nullableText(),
+  fullName: z.string().trim().min(1).max(200),
+  email: z.string().trim().min(1).max(254),
+  phone: nullableText(40),
+  city: nullableText(120),
+  country: nullableText(120),
+  linkedin: nullableText(300),
+  github: nullableText(300),
+  portfolio: nullableText(300),
   yearsExperience: z.preprocess((value) => {
     if (value == null || value === "") return null;
     const number = typeof value === "number" ? value : Number(value);
     return Number.isFinite(number) ? number : null;
   }, z.number().nullable()),
-  currentTitle: nullableText(),
-  currentCompany: nullableText(),
+  currentTitle: nullableText(200),
+  currentCompany: nullableText(200),
   skills: z.preprocess((value) => {
     if (Array.isArray(value)) {
-      return value.filter((item) => typeof item === "string" && item.trim()).map((item) => item.trim());
+      return value.filter((item) => typeof item === "string" && item.trim()).map((item) => item.trim().slice(0, 80)).slice(0, 100);
     }
     if (typeof value === "string") {
-      return value.split(",").map((item) => item.trim()).filter(Boolean);
+      return value.split(",").map((item) => item.trim().slice(0, 80)).filter(Boolean).slice(0, 100);
     }
     return [];
   }, z.array(z.string())),
   experience: z.preprocess((value) => {
     if (!Array.isArray(value)) return [];
-    return value.filter((item) => item && typeof item === "object");
+    return value.filter((item) => item && typeof item === "object").slice(0, 30);
   }, z.array(experienceItemSchema)).transform((items) => items.filter((item) => item.title || item.company)),
   education: z.preprocess((value) => {
     if (!Array.isArray(value)) return [];
-    return value.filter((item) => item && typeof item === "object");
+    return value.filter((item) => item && typeof item === "object").slice(0, 20);
   }, z.array(educationItemSchema)).transform((items) => items.filter((item) => item.school)),
 });
 

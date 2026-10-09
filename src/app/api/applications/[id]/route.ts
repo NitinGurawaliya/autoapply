@@ -23,6 +23,8 @@ const pendingSchema = z.array(
   }),
 );
 
+export const dynamic = "force-dynamic";
+
 export async function GET(_req: Request, context: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -33,9 +35,19 @@ export async function GET(_req: Request, context: { params: Promise<{ id: string
   });
   if (!application) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
+  const job = await db.job.findUnique({
+    where: { id: application.jobId },
+    select: { title: true, location: true, applyUrl: true, company: { select: { name: true } } },
+  });
+
   return NextResponse.json({
     id: application.id,
     jobId: application.jobId,
+    title: job?.title ?? "Unknown role",
+    company: job?.company.name ?? "Unknown company",
+    location: job?.location ?? "",
+    applyUrl: job?.applyUrl ?? null,
+    createdAt: application.createdAt,
     status: application.status,
     error: application.error,
     attempt: application.attempt,

@@ -11,6 +11,8 @@ export interface Storage {
   put(key: string, bytes: Uint8Array, contentType: string, userId?: string): Promise<void>;
   get(key: string): Promise<StoredFile | null>;
   url(key: string): string;
+  /** Erases every file stored for a user (account deletion). Returns how many. */
+  deleteForUser(userId: string): Promise<number>;
 }
 
 class PostgresStorage implements Storage {
@@ -37,6 +39,11 @@ class PostgresStorage implements Storage {
       size: row.size,
       userId: row.userId,
     };
+  }
+
+  async deleteForUser(userId: string) {
+    const result = await db.fileBlob.deleteMany({ where: { userId } });
+    return result.count;
   }
 
   url(key: string) {

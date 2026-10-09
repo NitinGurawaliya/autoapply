@@ -2,13 +2,19 @@ import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { mockPayloadSchema } from "@/app/mock/schema";
+import { mockFormEnabled } from "@/lib/mock-gate";
 
 function text(form: FormData, key: string) {
   const value = form.get(key);
   return typeof value === "string" ? value.trim() : "";
 }
 
+const MAX_BODY_BYTES = 6_000_000;
+
 export async function POST(req: Request) {
+  // An anonymous endpoint that writes to the database: only where the mock form is meant to exist.
+  if (!mockFormEnabled()) return new NextResponse("Not found", { status: 404 });
+  if (Number(req.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) return new NextResponse("Too large", { status: 413 });
   const form = await req.formData();
   const resume = form.get("resume");
   const resumeFileName = resume instanceof File && resume.size > 0 ? resume.name : "";

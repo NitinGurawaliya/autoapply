@@ -99,4 +99,4 @@ Payments, mobile app, push notifications, WhatsApp / extension / MCP, Workday, N
 | Company API down | Jobs already in Postgres from last ingest; demo from DB |
 | Venue Wi-Fi fails | Hotspot; worker and web both local; Neon needs network, so keep a local Postgres (Docker) as plan B |
 | Real form has a CAPTCHA | Pick 3 pre-tested Greenhouse jobs the night before; mock form as last resort |
-| LLM API down | Cached sample profile; field mapping falls back to the synonym table |
+| LLM API down | Cached sample profile; field mapping falls back to the synonym table |npm run worker

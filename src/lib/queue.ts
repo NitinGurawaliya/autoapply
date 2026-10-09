@@ -27,9 +27,11 @@ export function getBoss() {
   return bossPromise;
 }
 
-export async function enqueueApply(applicationId: string) {
+export async function enqueueApply(applicationId: string, delaySeconds = 0) {
   const boss = await getBoss();
-  return boss.send(APPLY_QUEUE, { applicationId });
+  // One hour covers a form plus waiting behind another application's security code; no automatic pg-boss retry,
+  // because the runner retries on its own and a blind re-run of a submitted form could apply twice.
+  return boss.send(APPLY_QUEUE, { applicationId }, { expireInSeconds: 3600, retryLimit: 0, ...(delaySeconds > 0 ? { startAfter: delaySeconds } : {}) });
 }
 
 export async function enqueueIngest(days: number) {

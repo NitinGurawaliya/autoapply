@@ -17,7 +17,8 @@
 /.next/
 /out/
 
-/.greenhouse-profile
+/.greenhouse-profile*
+/.browser-profiles
 # production
 /build
 

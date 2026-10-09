@@ -91,13 +91,15 @@ Done when: a test profile (`isTest=true`) right-swiping the mock job → worker 
 Do: pending questions from `valueResolver`; runner → `needs_input`; modal on feed + application page (text / select); `POST /api/applications/:id/answers` → upsert → `enqueueApply`.
 Done when: with `notice_period` deleted, the mock run pauses, the modal asks, the user answers, the run completes; a second run doesn't ask.
 
-### [~] T14 — Greenhouse adapter, real submit (50 min) — 14:55
+### [x] T14 — Greenhouse adapter, real submit (50 min) — 14:55
 
 Do: `adapters/greenhouse.ts`: inspect inputs/selects/textareas/comboboxes/file inputs on both `boards.greenhouse.io` and `job-boards.greenhouse.io` forms; fill via common helpers; submit + `waitForConfirmation`.
 Done when: with the presenter's real profile (`isTest=false`), right-swipe on a pre-tested Greenhouse job → worker fills live (headed), submits, confirmation detected, `submitted` with screenshot and the fields list with sources.
 Night-before prep: pick 3 Greenhouse jobs you genuinely want, open each form by hand, note any unusual fields.
 
-### [ ] T15 — Applications list + detail + governance page (40 min) — 15:45
+### [x] T15 — Applications list + detail + governance page (40 min) — 15:45
+
+Status: list, detail and the governance page (T42) are done.
 
 Do: list with status badges (polls while running); detail: fields table (label, value, source badge), screenshot via signed URL, event timeline; governance page: rules + today's counters + last 20 events.
 Done when: both pages show T12–T14 data; temporarily setting `min_match_score=95` produces a `blocked` application showing the rule name.
@@ -116,15 +118,147 @@ Done when: video saved; demo passes twice in a row without manual fixes.
 
 ## Stretch
 
-### [ ] T18 — Lever adapter (40 min) — Done when: a real Lever form reaches `submitted`.
-
-### [ ] T19 — Ashby adapter (40 min) — Done when: a real Ashby form reaches `submitted`.
-
-### [ ] T20 — Scheduled ingest (pg-boss cron every 6 h) (15 min) — Done when: cron registered and visible in worker logs.
-
 ### [ ] T21 — LLM match reasons for top 30, cached (20 min).
 
 ### [ ] T22 — `tests/smoke.spec.ts` (30 min) — sign-in (test profile) → upload → questions → feed → right-swipe mock job → `submitted`.
 
 ### [ ] T23 — SSE for live application status instead of polling (30 min).
 
+---
+
+## Next phase — polished MVP
+
+Order matters: safety first, then friction, then coverage, then the UI pass, then shipping. One task per session. Each task ends with its check run and the output pasted, then `npm run typecheck && npm run lint`.
+
+### Phase A — Safe for more than one user
+
+### [x] T24 — Browser profile isolation per user (30 min)
+
+Do: `browser.ts` must never share cookies or storage between users. Profile folders are keyed by user id (`.greenhouse-profile/<userId>/slot-N`); runs of the same user still get their own slot; a run for user B can never open user A's folder. Clean temp folders of finished test users.
+Done when: `scripts/profile-isolation-smoke.ts` sets a cookie in a run for user A and shows user B's run cannot see it, and two runs of the same user still run in parallel.
+
+### [x] T25 — Duplicate and mismatch guards (30 min)
+
+Do: governance rules `no_duplicate_role` (same company and normalised title already submitted or in flight for this user) and `max_per_company_per_week` (config, default 3). A right-swipe that would break one is blocked with the rule name, and the feed hides jobs that are already applied to. Show today's count against the daily cap on the feed and applications pages.
+Done when: swiping the same role twice, or a fourth role at one company within a week, ends `blocked` with the rule name; counters match the database.
+
+### [x] T26 — Database-backed submit lock and stale-job reaper (40 min)
+
+Do: replace the in-memory per-user submit lock with a database lock (a `SubmitLock` table with expiry), so it holds across several worker processes. Add a reaper in the worker: apply jobs `active` for longer than the expiry with no live worker are cancelled and their applications marked `failed` with a readable reason.
+Done when: `scripts/queue-smoke.ts` passes with two worker processes running; a killed worker's active job is reaped within the expiry and shows as failed.
+
+### [x] T44 — Multi-user safety hardening (new, from the endpoint audit)
+
+Do: (a) ingest endpoint admin-only and size-limited; (b) mock form and its endpoint disabled in production; (c) database rate limiter, used on resume uploads; (d) length limits on every free-text input; (e) the worker opens only allow-listed ATS hosts; (f) per-user cap on in-flight applications so one user cannot fill the shared queue; (g) security headers; (h) "delete my account and data".
+Done when: `scripts/security-test.ts` shows two users cannot read or change each other's data through any route, signed-out calls get 401, each limit above is enforced, and the headers are present.
+
+### Phase B — Remove friction
+
+### [x] T27 — Notify when the user is needed (40 min)
+
+Do: when an application goes to `needs_input` (questions or security code), notify with a browser Notification and a tab-title badge while the app is open, plus an optional email through a configured provider (off by default). The text names the company. One notification per application per state.
+Done when: forcing a `needs_input` application shows a notification and a title badge without a page refresh, and no duplicate appears on the next poll.
+
+### [x] T28 — Cancel and retry buttons (30 min)
+
+Do: `POST /api/applications/:id/cancel` and `POST /api/applications/:id/retry` (owner only; retry only from failed or cancelled, and it re-checks governance and duplicate rules). Buttons on the list rows and the detail page, with a confirm step for cancelling a running application.
+Done when: cancelling a run waiting for a code stops it within 3 s and shows Cancelled; retrying a failed application re-queues it and it completes on the mock form.
+
+### [x] T29 — Saved answers page (40 min)
+
+Do: `/answers` lists every saved answer (canonical and per-question) with its question text, value and source badge; edit, delete and add; sensitive keys marked. Deleting a stale answer makes the next run ask again.
+Done when: editing and deleting an answer is reflected in the next mock run (it asks again after a delete and uses the new value after an edit).
+
+### [x] T30 — Per-company results (30 min)
+
+Do: record per run whether a security code was asked and the final outcome; a small stats query by company and board; the feed ranks code-free, previously successful companies slightly higher and shows a "usually needs an emailed code" hint on the card.
+Done when: after a few runs the stats query returns correct counts, and a company with a recorded code request shows the hint.
+
+### Phase C — Coverage
+
+### [~] T18 — Lever adapter (40 min) — Done when: a real Lever form reaches `submitted`. Un-hide Lever in `APPLY_BOARDS` only after this passes.
+
+Status: adapter built and dry-run verified on 8 live Lever forms (fills every field, reads each back, resume attached, nothing submitted). Waiting on one real submission with the owner's go-ahead, then add `lever` to `APPLY_BOARDS` in `src/modules/jobs/match.ts`.
+
+### [~] T19 — Ashby adapter (40 min) — Done when: a real Ashby form reaches `submitted`. Un-hide Ashby in `APPLY_BOARDS` only after this passes.
+
+Status: adapter built and dry-run verified on 6 live Ashby forms (fills every field including Yes/No buttons, radios, checkbox groups and the date picker, reads each back, resume attached; a closed job is reported as closed). Waiting on one real submission with the owner's go-ahead, then add `ashby` to `APPLY_BOARDS`.
+
+### [x] T20 — Scheduled ingest (pg-boss cron every 6 h) (15 min) — Done when: the cron is registered and visible in the worker logs.
+
+### [x] T31 — Ingest module boundary and cross-source dedupe (40 min)
+
+Do: the ingest code in `modules/jobs` (fetchers, normalise, tagging) imports nothing from `app/` or `apply`. Write `docs/INGEST_CONTRACT.md` (Job row fields, unique key, required tags). Dedupe the same role across sources by company, title and location, keeping the direct ATS apply link.
+Done when: `scripts/ingest-contract-test.ts` passes, and two sources carrying the same role give one feed card.
+
+### [ ] T32 — More public ATS fetchers (40 min)
+
+Do: Workable, SmartRecruiters and Recruitee fetchers behind the same interface (public APIs only), with companies added to the seed.
+Done when: `npm run ingest` logs rows for each new source with valid `postedAt`, `country` and `applyUrl`.
+
+### Phase D — UI polish
+
+**On hold:** T37–T40 wait for the owner's own design, which will be handed over separately. T33–T36 are done and will be re-skinned then. Do not start T37–T40 before that.
+
+Rules from CLAUDE.md stay: mobile first at 390 px, centred at 480 px on desktop, shadcn/ui, tokens in `globals.css`, one brand accent plus the fixed status colours, no gradients, no emoji. The goal is to replace the black and white look with a clear brand colour, hierarchy and depth.
+
+### [x] T33 — Design tokens and theme (40 min)
+
+Do: pick one brand accent and a soft neutral background; set colour, radius, shadow, spacing and type-scale tokens in `globals.css` (light and dark); replace the default black primary; document the tokens in `docs/DESIGN.md`.
+Done when: screenshots of feed, applications and sign-in at 390 px show the brand accent in buttons, active chips and links, and a script confirms text contrast of at least 4.5:1.
+
+### [x] T34 — App shell and navigation (30 min)
+
+Do: a shared header with the logo and wordmark, a bottom tab bar on mobile (Feed and Applications now; T29 adds Answers to `TABS` in `nav-tabs.tsx`), top nav on desktop, a user menu with sign out, and a pending-count badge on Applications. Replace the per-page nav and sign-out blocks.
+Done when: every signed-in page uses the shell, the active tab is highlighted, and the badge shows the number of applications needing input.
+
+### [x] T35 — Feed card and filter redesign (60 min)
+
+Do: a card with a company-initials avatar, role, location, "x days ago", a match ring or bar coloured by score, tags (remote, experience asked) and skill chips. Colour overlays fade in while dragging (green for apply, grey for skip). Filters move into a bottom sheet with an active-filter summary. Better empty state with next steps.
+Done when: `scripts/ui-smoke.ts` still passes; screenshots at 390 px show the new card; dragging shows the overlay; filters open and apply from the sheet.
+
+### [x] T36 — Applications list and detail polish (40 min)
+
+Do: a summary strip (submitted, in progress, needs you, failed), richer rows with company avatars and status colours, a vertical step timeline on the detail page, a grouped field list with source badges, the screenshot in an expandable section, and a clear failure explanation with the next action.
+Done when: screenshots of list and detail at 390 px are reviewed and `ui-smoke.ts` passes.
+
+### [ ] T37 — Onboarding polish (40 min)
+
+Do: a step indicator across upload, confirm and questions; drag-and-drop upload with parse progress; a clearer confirm form grouped by section; helpful validation messages; loading and error states on every step.
+Done when: a fresh test user completes onboarding in the browser test with the step indicator updating on each page.
+
+### [ ] T38 — Popups and live status (40 min)
+
+Do: redesign the needs-input and security-code dialogs (company header, per-question help, a list when several applications wait, a clear "this code is for X" line), and add a live progress strip on the feed showing running applications.
+Done when: with two applications waiting, the dialog lists both and answering one moves to the next; screenshots are reviewed.
+
+### [ ] T39 — Sign-in and landing page (30 min)
+
+Do: a short landing page (what it does, how governance protects the user, Google sign-in) in plain language, with accessible contrast.
+Done when: signed-out visitors see the landing page and sign-in works.
+
+### [ ] T40 — Accessibility, empty/loading/error states, responsive pass (40 min)
+
+Do: a keyboard and screen-reader pass (focus rings, labels, dialog focus trap, aria on tabs and chips), skeleton loaders, error and empty states on every screen, and checks at 390 px, 768 px and desktop.
+Done when: an automated axe check via Playwright reports no serious violations on the main pages, and every screen has loading, empty and error states.
+
+### Phase E — Ship
+
+### [ ] T41 — Deploy (60 min)
+
+Do: follow `docs/DEPLOY.md`: add `postinstall: prisma generate`, `maxDuration` on the resume route, `Dockerfile.worker`, the ingest schedule (T20) and production env vars; deploy the web app to Vercel and the worker to a container host; point the mock job at the production URL.
+Done when: on the production URL a test user completes onboarding and a mock application reaches `submitted`, and a real Greenhouse job reaches `submitted` with a recorded confirmation.
+
+### [x] T42 — Governance page (30 min)
+
+Do: `/governance` shows the rules, today's counters (applications, blocks, AI drafts) and the last 20 events across the user's applications.
+Done when: setting `min_match_score` high produces a blocked application and the page shows the rule and the event.
+
+### [ ] T43 — End-to-end test and CI (40 min)
+
+Do: `tests/smoke.spec.ts` (T22): sign in as a test user, onboard, open the feed, swipe the mock job and reach `submitted`; run typecheck, lint and the backend smoke scripts in CI.
+Done when: the Playwright test and the smoke scripts pass in one command locally and in CI.
+
+### [x] T45 — Adapter hardening and many swipes at once
+Shared failure handling for the Greenhouse, Lever and Ashby adapters (cookie banners, named field errors, required-field checks before Submit, unsupported-question stop, Submit button fallbacks, failure screenshots), board-confirmed "closed" detection, one-worker-per-machine lock, retry delay, and a single race-safe swipe path with a queue cap that does not lose swipes. See ARCHITECTURE.md 6.16 and 6.17.
+**Done when:** `scripts/adapters-robust-test.ts`, `scripts/swipe-batch-test.ts`, `scripts/closed-test.ts` print PASS and live dry runs pass on 3 Ashby forms and 1 Lever form.

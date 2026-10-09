@@ -20,6 +20,10 @@ async function cachedKey(source: string, label: string) {
 export async function mapFields(source: string, fields: FormField[]) {
   const mapped: Array<{ field: FormField; key: string | null }> = [];
   for (const field of fields) {
+    if (field.hintKey && getAnswerKey(field.hintKey)) {
+      mapped.push({ field, key: field.hintKey });
+      continue;
+    }
     const id = field.selector.match(/^#(.+)$|^\[id="(.+)"\]$/)?.slice(1).find(Boolean) ?? field.selector;
     if (getAnswerKey(id)) {
       mapped.push({ field, key: id });

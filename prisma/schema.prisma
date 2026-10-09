@@ -128,6 +128,7 @@ model Job {
   applyUrl      String
   postedAt      DateTime
   fetchedAt     DateTime
+  closedAt      DateTime? // set when the company's board stops listing the job; cleared if it comes back
   raw           Json
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -161,6 +162,7 @@ model Application {
   error             String?
   submittedAt       DateTime?
   verificationCode  String?   // one-time ATS email code typed by the user; cleared as soon as the worker reads it
+  heartbeatAt       DateTime? // refreshed by the worker while it runs this application; a stale one means the worker died
   codeRequestId     String?   // id of the in-flight email-code agent request; callbacks must match it
   codeRequestStatus String?   // pending | found | not_found | ambiguous | no_access | failed
   createdAt         DateTime  @default(now())
@@ -211,4 +213,22 @@ model FieldMappingCache {
   createdAt DateTime @default(now())
 
   @@unique([source, labelHash])
+}
+
+// One row per user while their application is submitting or waiting for a security code, so two workers
+// (or two processes) never have two of that user's forms waiting on emailed codes at once.
+// The lease expires on its own if the holder dies.
+model SubmitLock {
+  userId    String   @id
+  holderId  String
+  expiresAt DateTime
+}
+
+// One row per counted action, so a rate limit is "how many rows in the last N seconds for this key".
+model RateEvent {
+  id        String   @id @default(cuid())
+  key       String
+  createdAt DateTime @default(now())
+
+  @@index([key, createdAt])
 }

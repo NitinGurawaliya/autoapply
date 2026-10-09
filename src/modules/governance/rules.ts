@@ -11,6 +11,9 @@ const rulesSchema = z.object({
   eeo_default: z.string(),
   min_match_score: z.number(),
   max_applications_per_day: z.number(),
+  max_per_company_per_week: z.number().default(3),
+  max_in_flight_per_user: z.number().default(25),
+  no_duplicate_role: z.boolean().default(true),
   max_ai_drafts_per_application: z.number(),
   max_attempts: z.number(),
 });
@@ -24,6 +27,9 @@ export type GovernanceContext = {
   profileExists?: boolean;
   score?: number | null;
   applicationsToday?: number;
+  duplicateRole?: boolean;
+  companyWeekCount?: number;
+  inFlight?: number;
   isTest?: boolean;
   adapterSource?: string;
 };
@@ -48,6 +54,18 @@ export async function check(stage: GovernanceStage, ctx: GovernanceContext) {
       ok = false;
       rule = "profile_required";
       message = "A profile is required before applying";
+    } else if (rules.no_duplicate_role && ctx.duplicateRole) {
+      ok = false;
+      rule = "no_duplicate_role";
+      message = "You already applied to this role";
+    } else if ((ctx.companyWeekCount ?? 0) >= rules.max_per_company_per_week) {
+      ok = false;
+      rule = "max_per_company_per_week";
+      message = `Already ${ctx.companyWeekCount} applications to this company in the last 7 days (limit ${rules.max_per_company_per_week})`;
+    } else if ((ctx.inFlight ?? 0) >= rules.max_in_flight_per_user) {
+      ok = false;
+      rule = "max_in_flight";
+      message = `${ctx.inFlight} applications are already running or waiting in line (limit ${rules.max_in_flight_per_user})`;
     } else if (ctx.score != null && ctx.score < rules.min_match_score) {
       ok = false;
       rule = "min_match_score";

@@ -3,8 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright";
 import type { AtsAdapter, FilledField, FormField, ResolvedValue, SubmitContext, SubmitResult } from "../adapter";
-import { NoRetryError } from "../adapter";
-import { fillText, selectOption } from "./common";
+import { NeedsAnswerError, NoRetryError } from "../adapter";
+import { customQuestionKey } from "@/modules/answers";
+import { assertJobOpen, dismissOverlays, fillText, friendlyError, inField, selectOption } from "./common";
 
 // Greenhouse hosts the same form for every board, even when the listing lives on a company careers site.
 function formUrl(job: { applyUrl: string; externalId: string; companySlug: string }) {
@@ -32,7 +33,14 @@ function cleanLabel(text: string) {
 }
 
 async function waitForForm(page: Page) {
-  await page.locator("#first_name, #application-form, form").first().waitFor({ timeout: 30000 });
+  await page
+    .locator("#first_name, #application-form, form")
+    .first()
+    .waitFor({ timeout: 25000 })
+    .catch(async (error) => {
+      await assertJobOpen(page);
+      throw error;
+    });
   // The uploader script loads after the form renders; files attached before it is ready are dropped.
   await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => undefined);
 }
@@ -180,7 +188,10 @@ async function pickCombobox(page: Page, selector: string, value: string, label: 
   const choice = bestOption(texts, value);
   if (!choice) {
     await closeMenu(page);
-    throw new Error(`No option "${value}" for "${label}"`);
+    // Live options when the list showed some; otherwise a free-text question so the user can try another search term.
+    const shown = texts.filter(Boolean).slice(0, 30);
+    const question = { key: customQuestionKey(label), label: shown.length ? label : `${label} (nothing matched "${value}", try another search word)`, type: shown.length ? "combobox" : "text", required: true, ...(shown.length ? { options: shown } : {}) };
+    throw new NeedsAnswerError(question);
   }
   await options.nth(texts.indexOf(choice)).click();
   return choice;
@@ -294,19 +305,29 @@ export const greenhouseAdapter: AtsAdapter = {
   uploadFile: attachFile,
   async fill(page, values) {
     const filled: FilledField[] = [];
+    await dismissOverlays(page);
     for (const value of values) {
       if (value.type === "file") continue;
-      let written = value.value;
-      if (value.type === "combobox") written = await pickCombobox(page, value.selector, value.value, value.label);
-      else if (value.type === "select") await selectOption(page, value.selector, { label: value.value });
-      else if (value.type === "checkbox") await setCheckbox(page, value.selector, value.value);
-      else await fillText(page, value.selector, value.value);
+      const written = await inField(value.label, async () => {
+        if (value.type === "combobox") return pickCombobox(page, value.selector, value.value, value.label);
+        if (value.type === "select") await selectOption(page, value.selector, { label: value.value });
+        else if (value.type === "checkbox") await setCheckbox(page, value.selector, value.value);
+        else await fillText(page, value.selector, value.value);
+        return value.value;
+      });
       filled.push({ key: value.key, label: value.label, value: written, source: value.source, selector: value.selector });
     }
     return filled;
   },
   async submit(page, ctx): Promise<SubmitResult> {
-    await page.getByRole("button", { name: /submit application/i }).click();
+    await dismissOverlays(page);
+    try {
+      const button = page.getByRole("button", { name: /submit application/i });
+      await button.scrollIntoViewIfNeeded().catch(() => undefined);
+      await button.click({ timeout: 20000 });
+    } catch (error) {
+      throw new NoRetryError(`Could not press Submit on the Greenhouse form: ${friendlyError(error)}`);
+    }
     const evidence = await waitForGreenhouseConfirmation(page, ctx);
     return { confirmed: true, evidence };
   },

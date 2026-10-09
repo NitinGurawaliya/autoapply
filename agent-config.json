@@ -1,0 +1,94 @@
+{
+  "name": "SwipeApply",
+  "version": "1.0.0",
+  "description": "A governed AI agent that applies to jobs for a candidate after they swipe right. It reads the live application form, fills only facts the candidate has provided, asks the candidate for anything missing, and submits only when its governance rules pass.",
+  "agent_type": "workflow",
+  "execution": {
+    "mode": "workflow",
+    "runtime": "worker",
+    "stateless": true,
+    "rerunnable_from_job_url": true,
+    "max_attempts": 2
+  },
+  "trigger": {
+    "type": "user_action",
+    "description": "The candidate swipes right on a job in the feed.",
+    "input_schema": {
+      "jobId": "string",
+      "direction": "right"
+    },
+    "endpoint": "POST /api/swipes"
+  },
+  "steps": [
+    { "id": "swipe_check", "name": "Governance check: swipe_right", "description": "Daily cap, minimum match score, profile exists." },
+    { "id": "start_check", "name": "Governance check: start", "description": "Profile exists; test profiles may only run on the mock form." },
+    { "id": "open_form", "name": "Open the application form", "description": "Greenhouse hosted form built from the job's company slug and id." },
+    { "id": "inspect", "name": "Inspect form fields", "description": "Read inputs, selects, comboboxes, checkboxes and the resume upload." },
+    { "id": "map_fields", "name": "Map fields to answer keys", "description": "Synonym rules first, then cached mappings, then the LLM for unknown labels." },
+    { "id": "resolve", "name": "Resolve values", "description": "The candidate's own answers first, then resume data, then declared defaults. Every value carries a source." },
+    { "id": "ask_user", "name": "Ask the candidate", "description": "Any required answer that is missing pauses the run as needs_input and is asked in the app." },
+    { "id": "fill", "name": "Fill the form and attach the resume", "description": "One audit event per field." },
+    { "id": "screenshot", "name": "Save a screenshot", "description": "Stored in the file store before submission." },
+    { "id": "submit_check", "name": "Governance check: submit", "description": "Blocks the submit unless every rule passes." },
+    { "id": "submit", "name": "Submit and confirm", "description": "Waits for the confirmation page. If the ATS emails a security code, the candidate enters it in the app." }
+  ],
+  "tools": [
+    { "name": "browser", "type": "playwright_chromium", "scope": "worker only" },
+    { "name": "llm", "type": "openai_chat_completions", "model": "gpt-4o-mini", "usage": "resume parsing, unknown field labels, optional match reasons; JSON-only output validated with Zod" },
+    { "name": "database", "type": "postgres", "usage": "profiles, answers, jobs, applications, audit events, queue, files" }
+  ],
+  "inputs": [
+    { "key": "profile", "source": "candidate resume parsed once, confirmed by the candidate" },
+    { "key": "answer_bank", "source": "candidate answers (current and expected CTC, notice period, work authorization and similar)" },
+    { "key": "job", "source": "public job board APIs (Greenhouse, Lever, Ashby)" }
+  ],
+  "outputs": [
+    { "key": "status", "values": ["queued", "inspecting", "needs_input", "filling", "submitted", "failed", "blocked"] },
+    { "key": "fields", "description": "Every filled field with label, value and source (resume | user | ai_draft | default)" },
+    { "key": "screenshot", "description": "Screenshot taken before submission" },
+    { "key": "events", "description": "Full audit trail of rule checks, decisions and errors" }
+  ],
+  "governance": {
+    "enforced_in": "code (modules/governance), never only in prompts",
+    "rules": {
+      "require_user_approval": true,
+      "allow_submit_on_real_sites": true,
+      "test_profile_mock_only": true,
+      "no_fabrication": true,
+      "sensitive_keys_never_ai": ["current_ctc", "expected_ctc", "salary_expectation", "notice_period", "work_authorization", "needs_sponsorship", "willing_to_relocate"],
+      "eeo_default": "Decline to answer",
+      "min_match_score": 40,
+      "max_applications_per_day": 20,
+      "max_ai_drafts_per_application": 3,
+      "max_attempts": 2
+    },
+    "guarantees": [
+      "A real submission happens only after the candidate right-swipes that job.",
+      "Test profiles can only run against the mock form.",
+      "No fact about the candidate is ever invented; every filled value has a recorded source.",
+      "Only cover letter and free text answers may be AI-drafted, up to a fixed limit.",
+      "Sensitive answers are never AI-drafted; missing ones are asked of the candidate.",
+      "Equal-opportunity questions default to the form's decline option.",
+      "Every governance check writes an audit event; blocked runs end as blocked with the rule name.",
+      "Jobs come only from public APIs; no scraping of login-walled sites.",
+      "The agent never solves or bypasses a CAPTCHA; verification codes are entered by the candidate.",
+      "Resumes and contact details are never logged."
+    ]
+  },
+  "human_in_the_loop": {
+    "needs_input": "Missing required answers are asked in the app, then the run resumes from the form URL.",
+    "security_code": "If the ATS emails a one-time code, the run waits up to 10 minutes for the candidate to enter it in the app.",
+    "approval": "Applications start only from the candidate's own right-swipe."
+  },
+  "supported_boards": ["greenhouse"],
+  "planned_boards": ["lever", "ashby"],
+  "failure_handling": {
+    "retry": "One automatic retry, then failed with a readable error.",
+    "no_retry_after_submit": "If a submit may already have reached the employer, the run is not retried, to avoid duplicate applications."
+  },
+  "data_handling": {
+    "storage": "Postgres (Neon); files behind a storage interface",
+    "secrets": "Environment variables only; none stored in this file"
+  },
+  "stack": ["Next.js 16", "TypeScript", "Prisma", "Postgres (Neon)", "pg-boss", "Playwright", "Auth.js (Google)", "OpenAI"]
+}

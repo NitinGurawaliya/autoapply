@@ -1,28 +1,8 @@
 import type { AtsAdapter } from "./adapter";
+import { ashbyAdapter } from "./adapters/ashby";
 import { greenhouseAdapter } from "./adapters/greenhouse";
+import { leverAdapter } from "./adapters/lever";
 import { mockAdapter } from "./adapters/mock";
-
-function laterAdapter(source: "lever" | "ashby"): AtsAdapter {
-  return {
-    source,
-    matches(url: string) {
-      if (source === "lever") return /lever\.co/i.test(url);
-      return /ashbyhq\.com/i.test(url);
-    },
-    async inspect() {
-      throw new Error(`${source} adapter is not ready`);
-    },
-    async fill() {
-      throw new Error(`${source} adapter is not ready`);
-    },
-    async submit() {
-      throw new Error(`${source} adapter is not ready`);
-    },
-  };
-}
-
-const leverAdapter = laterAdapter("lever");
-const ashbyAdapter = laterAdapter("ashby");
 
 const BY_SOURCE: Record<string, AtsAdapter> = {
   greenhouse: greenhouseAdapter,

@@ -14,6 +14,11 @@ export async function get(userId: string, key: string) {
   return db.answer.findUnique({ where: { userId_key: { userId, key } } });
 }
 
+export async function remove(userId: string, key: string) {
+  const result = await db.answer.deleteMany({ where: { userId, key } });
+  return result.count > 0;
+}
+
 export async function upsert(
   userId: string,
   input: { key: string; question: string; answer: string; source: AnswerSource },

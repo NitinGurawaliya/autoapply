@@ -1,17 +1,19 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
-import { getAll, upsert } from "@/modules/answers";
+import { remove, getAll, upsert } from "@/modules/answers";
 
 const putSchema = z.object({
-  answers: z.array(
-    z.object({
-      key: z.string(),
-      question: z.string(),
-      answer: z.string(),
-      source: z.enum(["resume", "user", "ai_draft", "default"]),
-    }),
-  ),
+  answers: z
+    .array(
+      z.object({
+        key: z.string().min(1).max(80),
+        question: z.string().max(500),
+        answer: z.string().max(2000),
+        source: z.enum(["resume", "user", "ai_draft", "default"]),
+      }),
+    )
+    .max(60),
 });
 
 export async function GET() {
@@ -52,4 +54,14 @@ export async function PUT(req: Request) {
       source: row.source,
     })),
   });
+}
+
+// Removing an answer makes the next application that needs it ask again.
+export async function DELETE(req: Request) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const key = new URL(req.url).searchParams.get("key") ?? "";
+  if (key.length === 0 || key.length > 80) return NextResponse.json({ error: "invalid" }, { status: 400 });
+  const removed = await remove(user.id, key);
+  return removed ? NextResponse.json({ ok: true }) : NextResponse.json({ error: "not_found" }, { status: 404 });
 }

@@ -4,3 +4,5 @@ export { mapFields } from "./fieldMapper";
 export { pickAdapter } from "./pick";
 export { resolveValues } from "./valueResolver";
 export { runApplication } from "./runner";
+export { boardSupported, cancelApplication, candidateScore, CANCELLABLE, RETRYABLE, retryApplication } from "./lifecycle";
+export type { RetryResult } from "./lifecycle";

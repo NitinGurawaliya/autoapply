@@ -12,12 +12,13 @@ const bodySchema = z.object({
   answers: z
     .array(
       z.object({
-        key: z.string().min(1),
-        answer: z.string().trim().min(1),
-        question: z.string().optional(),
+        key: z.string().min(1).max(80),
+        answer: z.string().trim().min(1).max(2000),
+        question: z.string().max(500).optional(),
       }),
     )
-    .min(1),
+    .min(1)
+    .max(40),
 });
 
 export async function POST(req: Request, context: { params: Promise<{ id: string }> }) {

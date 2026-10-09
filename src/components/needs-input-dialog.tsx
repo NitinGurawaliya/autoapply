@@ -17,6 +17,9 @@ type PendingQuestion = {
 
 type Waiting = {
   id: string;
+  company: string;
+  title: string;
+  others: number;
   questions: PendingQuestion[];
 };
 
@@ -31,21 +34,32 @@ export function NeedsInputDialog() {
     let stopped = false;
 
     async function poll() {
-      const listResponse = await fetch("/api/applications");
+      const listResponse = await fetch("/api/applications", { cache: "no-store" });
       if (!listResponse.ok) return;
       const list = (await listResponse.json()) as {
         applications: Array<{ id: string; status: string }>;
       };
-      const hit = list.applications.find((item) => item.status === "needs_input");
+      const waitingApps = list.applications.filter((item) => item.status === "needs_input");
+      const hit = waitingApps[0];
       if (!hit) {
         if (!stopped) setWaiting(null);
         return;
       }
-      const detailResponse = await fetch(`/api/applications/${hit.id}`);
+      const detailResponse = await fetch(`/api/applications/${hit.id}`, { cache: "no-store" });
       if (!detailResponse.ok) return;
-      const detail = (await detailResponse.json()) as { pendingQuestions: PendingQuestion[] };
+      const detail = (await detailResponse.json()) as {
+        company: string;
+        title: string;
+        pendingQuestions: PendingQuestion[];
+      };
       if (stopped) return;
-      setWaiting({ id: hit.id, questions: detail.pendingQuestions });
+      setWaiting({
+        id: hit.id,
+        company: detail.company,
+        title: detail.title,
+        others: waitingApps.length - 1,
+        questions: detail.pendingQuestions,
+      });
     }
 
     void poll();
@@ -92,8 +106,11 @@ export function NeedsInputDialog() {
     <Dialog open={open}>
       <DialogContent showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>This job asks</DialogTitle>
-          <DialogDescription>Your answer is saved and the application continues.</DialogDescription>
+          <DialogTitle>{waiting ? `${waiting.company} asks` : "This job asks"}</DialogTitle>
+          <DialogDescription>
+            {waiting ? `${waiting.title}. ` : ""}Your answer is saved and the application continues.
+            {waiting && waiting.others > 0 ? ` ${waiting.others} more waiting after this.` : ""}
+          </DialogDescription>
         </DialogHeader>
         {waiting ? (
           <form onSubmit={onSubmit} className="flex flex-col gap-4">

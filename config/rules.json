@@ -7,6 +7,9 @@
   "eeo_default": "Decline to answer",
   "min_match_score": 40,
   "max_applications_per_day": 120,
+  "max_per_company_per_week": 3,
+  "max_in_flight_per_user": 25,
+  "no_duplicate_role": true,
   "max_ai_drafts_per_application": 3,
   "max_attempts": 2
 }
