@@ -29,7 +29,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
   const { id } = await context.params;
   const application = await db.application.findFirst({
     where: { id, userId: user.id },
-    select: { id: true, status: true, updatedAt: true },
+    select: { id: true, status: true, updatedAt: true, jobId: true },
   });
   if (!application) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (application.status !== "needs_input") {
@@ -59,6 +59,10 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     return NextResponse.json({ ok: true, applicationId: application.id, expired: true });
   }
 
+  // The job these answers were given for: a question that depends on the company, city or country is only reused
+  // for a job where that matches (modules/apply/recall.ts).
+  const job = await db.job.findUnique({ where: { id: application.jobId }, select: { title: true, location: true, country: true, company: { select: { name: true } } } });
+  const jobContext = job ? { company: job.company.name, title: job.title, location: job.location, country: job.country } : null;
   try {
     for (const row of parsed.data.answers) {
       await upsert(user.id, {
@@ -66,6 +70,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
         question: row.question?.trim() || row.key,
         answer: row.answer,
         source: "user",
+        context: jobContext,
       });
     }
   } catch (error) {

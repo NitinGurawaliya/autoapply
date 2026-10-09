@@ -1,4 +1,6 @@
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import type { AnswerContext } from "./memory";
 import { getAnswerKey } from "./keys";
 import { isCustomQuestionKey } from "./questionKey";
 
@@ -21,7 +23,7 @@ export async function remove(userId: string, key: string) {
 
 export async function upsert(
   userId: string,
-  input: { key: string; question: string; answer: string; source: AnswerSource },
+  input: { key: string; question: string; answer: string; source: AnswerSource; context?: AnswerContext | null },
 ) {
   const def = getAnswerKey(input.key);
   const custom = isCustomQuestionKey(input.key);
@@ -31,9 +33,12 @@ export async function upsert(
     throw new Error(`Key ${input.key} cannot be ai_draft`);
   }
 
+  // The embedding is refreshed lazily (memory.ensureEmbeddings) when the wording changes, so a save stays one query.
+  const context = input.context ? (input.context as Prisma.InputJsonValue) : Prisma.DbNull;
+  const data = { question: input.question, answer: input.answer, source: input.source, context };
   return db.answer.upsert({
     where: { userId_key: { userId, key: input.key } },
-    create: { userId, ...input },
-    update: { question: input.question, answer: input.answer, source: input.source },
+    create: { userId, key: input.key, ...data },
+    update: data,
   });
 }

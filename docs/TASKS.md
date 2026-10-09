@@ -287,8 +287,9 @@ Result (9 Oct, 197 real wordings, `text-embedding-3-small`): true paraphrases sc
 `scripts/replay-questions.ts`: leave-one-out replay of every saved wording; % answered without asking, % agreeing with the user (yes/no compared by meaning), wrong sensitive answers. **Done when:** the baseline prints for the real profiles.
 Baseline (9 Oct, today's resolver, 3 real users): 237 questions; 62 answered without asking (26 %), of which 25 agree with what the user said (40 %); 175 still asked (74 %); **7 wrong sensitive answers**, all one global `willing_to_relocate` / `work_authorization` answer reused for a different place (Bangalore, Austin, a US-person check). That is the parameter problem T52 fixes; the target is 0.
 
-### [ ] T51 — pgvector storage and backfill
+### [x] T51 — pgvector storage and backfill
 Extension, `Answer.context`, `Answer.embedding`, `LabelEmbedding` cache; `modules/answers/memory.ts` `remember` / `recall`; answer writes record the job context; `scripts/backfill-embeddings.ts`. **Done when:** recall returns the right neighbours for sample wordings and the backfill ran.
+Done 10 Oct: migration `answer_memory` (pgvector on Neon), `modules/answers/memory.ts`; `memory-smoke` PASS (paraphrases recalled first, London office recalls the US-office answer at 0.834 as expected, context kept, changed wording re-embedded); backfill embedded all 343 saved answers. ARCHITECTURE 6.19.
 
 ### [ ] T52 — Retrieve-then-verify in the run
 `modules/answers/concepts.ts` (small risky catalog with parameters), `modules/apply/recall.ts` (async pre-pass in the runner, one batched verify per form, code-side checks) feeding `resolveValues`; source `matched`. **Done when:** replay answers the duplicate clusters, trap pairs are not reused, wrong sensitive answers = 0.

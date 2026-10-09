@@ -319,6 +319,10 @@ Every API route resolves the signed-in user and scopes its queries by `userId`; 
 
 Most forms require a box such as "I have read the privacy notice", "my answers are true and complete" or "I acknowledge the arbitration agreement" and reject the application without it. `modules/apply/acknowledgement.ts` `acknowledgementValue(field)` recognises a **required** field as one (a single checkbox, a group with exactly one box, or a choice with exactly one affirmative option) by its wording, and never counts marketing opt-ins or certifications of facts (work authorization, sponsorship, age, record, past employment). These are a legal choice, not a fact, so the agent does not decide alone: the resolver asks once for the standing permission `accept_acknowledgements` (one question per run, however many boxes). With Yes, every adapter ticks them from then on, recorded as the user's answer under that key; with No, each acknowledgement is asked on its own; an earlier answer to the exact question always wins. The user can change it on `/answers`. Check: `scripts/acknowledgement-test.ts`.
 
+### 6.19 Answer memory (retrieve, then verify)
+
+Every saved answer's question is embedded so a new wording can find the user's past questions that mean the same (Phase F, T49-T57). Built so far (T51): pgvector in the same Neon database (`CREATE EXTENSION vector`, migration `answer_memory`); `Answer.embedding vector(1536)` plus `Answer.embeddedHash` (md5 of the wording it was computed for) and `Answer.context` (the job an answer was given for: company, title, location, country; set by `POST /api/applications/:id/answers`, null for onboarding and the answers page); `LabelEmbedding` caches one embedding per distinct wording for all users (wordings are not personal). `modules/answers/memory.ts` (raw SQL, the vector column is invisible to Prisma): `labelVectors` (cache first, then `lib/llm.ts embed()`, `text-embedding-3-small`), `ensureEmbeddings(userId)` (re-embeds answers whose wording is new or changed, so a save stays one query), and `recall(userId, labels)` (the user's 5 closest past questions per label with cosine score >= 0.54). Recall only proposes candidates: in the T49 experiment on 197 real wordings, true paraphrases scored as low as 0.599 while look-alike traps scored as high as 0.834 ("work from our US office" vs "London office"), so no threshold is safe and a verify step decides (T52). Answers saved before T51 have no context and are never reused for company-, city- or country-specific questions. Checks: `scripts/embedding-experiment.ts`, `scripts/memory-smoke.ts`, `scripts/backfill-embeddings.ts`, and the replay scoreboard `scripts/replay-questions.ts`.
+
 ## 7. Governance (`config/rules.json` + `modules/governance/rules.ts`)
 
 ```json
@@ -368,6 +372,7 @@ NOTIFY_WEBHOOK_SECRET=
 APP_URL=http://localhost:3000    # used in links inside notification emails
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4o-mini
+OPENAI_EMBEDDING_MODEL=          # optional, default text-embedding-3-small (answer memory, 6.19)
 DEMO_HEADED=1
 APPLY_CONCURRENCY=3              # browsers per worker, clamped 1–8 (6.7)
 BROWSER_PROFILE_ROOT=            # where per-user browser profiles live; default ./.browser-profiles (6.7)

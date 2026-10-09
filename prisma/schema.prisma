@@ -95,10 +95,26 @@ model Answer {
   answer    String
   source    String
   updatedAt DateTime @updatedAt
+  // The job this answer was given for ({company, title, location, country}); null for answers given outside a form
+  // (onboarding, the answers page). Questions that depend on the company, city or country are only reused when it matches.
+  context   Json?
+  // Answer memory (modules/answers/memory.ts, raw SQL): the question's embedding and the md5 of the wording it was
+  // computed for, so a changed wording is re-embedded before the next recall.
+  embedding    Unsupported("vector(1536)")?
+  embeddedHash String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, key])
+}
+
+// One embedding per distinct question wording, shared by all users (wordings are not personal); filled by memory.ts.
+model LabelEmbedding {
+  labelHash String                       @id
+  label     String
+  embedding Unsupported("vector(1536)")
+  model     String
+  createdAt DateTime                     @default(now())
 }
 
 model Company {
