@@ -14,7 +14,7 @@ import { groupFields } from "@/lib/field-groups";
 import { buildSteps, type StepState } from "@/lib/steps";
 
 const fieldsSchema = z.array(
-  z.object({ key: z.string(), label: z.string(), value: z.string(), source: z.string(), selector: z.string().optional() }),
+  z.object({ key: z.string(), label: z.string(), value: z.string(), source: z.string(), selector: z.string().optional(), basis: z.string().optional() }),
 );
 
 const RUNNING = ["queued", "inspecting", "filling", "needs_input"];
@@ -171,6 +171,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
                       <SourceBadge source={field.source} />
                     </div>
                     <span className="break-words text-sm">{field.value || "—"}</span>
+                    {field.basis ? <span className="text-xs text-muted-foreground">Why: {field.basis}</span> : null}
                   </li>
                 ))}
               </ul>

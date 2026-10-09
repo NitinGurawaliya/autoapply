@@ -40,6 +40,9 @@ async function main() {
     { key: "q_0123456789ab", label: "Are you authorized to work in India?", value: "Yes", source: "user", selector: "#e" },
     { key: "cover_letter", label: "Cover letter", value: "A short draft", source: "ai_draft", selector: "#f" },
     { key: "gender", label: "Gender", value: "Decline to answer", source: "default", selector: "#g" },
+    // T57: answers from the user's data show their badge and why.
+    { key: "q_aaaaaaaaaaa1", label: "How did you learn about this opportunity?", value: "LinkedIn", source: "matched", selector: "#h", basis: 'your answer to "How did you hear about this job?" (OpenAI)' },
+    { key: "q_aaaaaaaaaaa2", label: "Do you reside in the United States?", value: "No", source: "derived", selector: "#i", basis: "derived from your location: Pune, India" },
   ];
   const browser = await chromium.launch();
   try {
@@ -95,8 +98,9 @@ async function main() {
     await page.screenshot({ path: `${OUT}/detail-submitted.png`, fullPage: true });
     const main = await page.locator("main").innerText();
     check("fields are grouped under plain headings", ["CONTACT", "LINKS", "DOCUMENTS", "YOUR ANSWERS", "EQUAL OPPORTUNITY"].every((h) => main.toUpperCase().includes(h)));
-    check("the field count is shown", /7 fields/.test(main));
+    check("the field count is shown", /9 fields/.test(main));
     check("every filled value shows its source", ["You", "Resume", "AI draft", "Default"].every((s) => main.includes(s)));
+    check("reused and worked-out answers show their badge and why", main.includes("You · reused") && main.includes("Worked out") && main.includes('Why: your answer to "How did you hear about this job?" (OpenAI)') && main.includes("Why: derived from your location: Pune, India"));
     const stepNames = await page.locator('section[aria-label="Progress"] li p').allInnerTexts();
     check("the timeline shows the steps, all done, ending in Submitted", ["Rules checked", "Application form read", "Answers prepared", "Form filled in", "Submitted"].every((s) => stepNames.join("|").includes(s)));
     check("the confirmation appears under the Submitted step", main.includes('Confirmation: text "Thank you for applying"'));

@@ -21,10 +21,14 @@ export function StatusBadge({ status }: { status: string }) {
   );
 }
 
-// resume gray · you blue · AI draft purple · default outline
+// resume gray · you blue · you reused blue outline · worked out gray outline · AI draft purple · default outline
 const SOURCE: Record<string, { label: string; className: string; variant?: "outline" }> = {
   resume: { label: "Resume", className: "bg-muted text-muted-foreground" },
   user: { label: "You", className: "bg-info-soft text-info" },
+  // Your answer to another wording of the question, verified for this job (modules/apply/recall.ts).
+  matched: { label: "You · reused", className: "border-info/40 bg-transparent text-info", variant: "outline" },
+  // Worked out from your profile or resume, with the evidence shown beside it (modules/apply/derive.ts).
+  derived: { label: "Worked out", className: "bg-transparent text-muted-foreground", variant: "outline" },
   ai_draft: { label: "AI draft", className: "bg-ai-soft text-ai" },
   default: { label: "Default", className: "bg-transparent text-foreground", variant: "outline" },
 };

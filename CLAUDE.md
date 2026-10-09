@@ -60,7 +60,7 @@ npx playwright test
 - Every screen has loading, empty and error states.
 - Feed card: title, company, location, "x days ago", match % badge, 2-line reason. Right = apply, left = skip, keyboard ← → too.
 - Status badges: queued (gray) · inspecting/filling (blue, animated) · needs_input (amber) · submitted (green) · failed (red) · blocked (red outline).
-- Source badges: resume (gray) · you (blue) · AI draft (purple) · default (outline).
+- Source badges: resume (gray) · you (blue) · you · reused (blue outline) · worked out (gray outline) · AI draft (purple) · default (outline). Reused, worked-out and drafted answers also show why (their basis).
 
 ## Testing
 

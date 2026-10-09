@@ -45,6 +45,7 @@ export default async function GovernancePage() {
           <Stat label="Submitted" value={String(counters.submitted)} hint="Sent to a company" />
           <Stat label="Blocked" value={String(counters.blocked)} hint="Stopped by a rule" />
           <Stat label="Questions asked" value={String(counters.asked)} hint="Times it paused to ask you" />
+          <Stat label="Answered from your data" value={String(counters.fromData)} hint="Reused, worked out or drafted instead of asking" />
           <Stat label="Rule checks" value={String(counters.checks)} hint="Every one is logged" />
         </div>
         <p className="text-[11px] text-muted-foreground">Days run on UTC.</p>

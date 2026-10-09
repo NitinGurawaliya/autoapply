@@ -1,4 +1,4 @@
-export type FilledField = { key: string; label: string; value: string; source: string };
+export type FilledField = { key: string; label: string; value: string; source: string; basis?: string };
 
 export const GROUP_ORDER = ["Contact", "Links", "Documents", "Experience", "Your answers", "Equal opportunity", "Other"] as const;
 export type GroupName = (typeof GROUP_ORDER)[number];

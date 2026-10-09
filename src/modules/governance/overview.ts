@@ -8,7 +8,7 @@ const NOISE = ["fill"];
 export async function governanceOverview(userId: string) {
   const since = startOfTodayUtc();
   const mine = { application: { userId } };
-  const [started, submitted, blockedEvents, asked, checks, events, blocks] = await Promise.all([
+  const [started, submitted, blockedEvents, asked, checks, events, blocks, fromData] = await Promise.all([
     db.application.count({ where: { userId, createdAt: { gte: since } } }),
     db.application.count({ where: { userId, submittedAt: { gte: since } } }),
     db.applicationEvent.count({ where: { ...mine, type: "block", createdAt: { gte: since } } }),
@@ -27,6 +27,11 @@ export async function governanceOverview(userId: string) {
       take: 10,
       select: { id: true, rule: true, message: true, createdAt: true, applicationId: true },
     }),
+    // Fields filled today from the user's data instead of asking: reused answers, worked-out answers and essay drafts.
+    db.$queryRaw<Array<{ n: number }>>`
+      SELECT count(*)::int AS "n" FROM "ApplicationEvent" e JOIN "Application" a ON a."id" = e."applicationId"
+      WHERE a."userId" = ${userId} AND e."type" = 'fill' AND e."createdAt" >= ${since}
+        AND e."data"->>'source' IN ('matched', 'derived', 'ai_draft')`.then((rows) => rows[0]?.n ?? 0),
   ]);
 
   const ids = [...new Set([...events, ...blocks].map((event) => event.applicationId))];
@@ -48,7 +53,7 @@ export async function governanceOverview(userId: string) {
   const rules = loadRules();
   return {
     rules,
-    counters: { started, cap: rules.max_applications_per_day, submitted, blocked: blockedEvents, asked, checks },
+    counters: { started, cap: rules.max_applications_per_day, submitted, blocked: blockedEvents, asked, checks, fromData },
     events: events.map((event) => ({ ...event, ...label(event.applicationId) })),
     blocks: blocks.map((event) => ({ ...event, ...label(event.applicationId) })),
   };

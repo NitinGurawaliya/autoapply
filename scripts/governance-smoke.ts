@@ -35,13 +35,17 @@ async function main() {
   try {
     const app = (userId: string, jobId: string, status: string, extra: Record<string, unknown> = {}) =>
       db.application.create({ data: { userId, jobId, status, fields: [], pendingQuestions: [], ...extra } as never });
-    const ev = (applicationId: string, type: string, message: string, rule?: string, createdAt?: Date) =>
-      db.applicationEvent.create({ data: { applicationId, type, message, rule: rule ?? null, ...(createdAt ? { createdAt } : {}) } });
+    const ev = (applicationId: string, type: string, message: string, rule?: string, createdAt?: Date, data?: object) =>
+      db.applicationEvent.create({ data: { applicationId, type, message, rule: rule ?? null, ...(createdAt ? { createdAt } : {}), ...(data ? { data } : {}) } });
 
     // A: one submitted, one blocked by a real rule check, one waiting on a question.
     const sent = await app(A.user.id, jobA.id, "submitted", { submittedAt: new Date() });
     await ev(sent.id, "rule_check", "swipe_right passed", "swipe_right");
     await ev(sent.id, "fill", "Filled first_name");
+    // T57: two fields answered from the user's data (reused, worked out), one from the resume (not counted).
+    await ev(sent.id, "fill", "Filled q_aaaaaaaaaaa1", undefined, undefined, { key: "q_aaaaaaaaaaa1", source: "matched" });
+    await ev(sent.id, "fill", "Filled q_aaaaaaaaaaa2", undefined, undefined, { key: "q_aaaaaaaaaaa2", source: "derived" });
+    await ev(sent.id, "fill", "Filled resume", undefined, undefined, { key: "resume", source: "resume" });
     await ev(sent.id, "submit", "Application submitted");
     const blocked = await app(A.user.id, jobB.id, "blocked", { error: "min_match_score" });
     const decision = await governance("swipe_right", { applicationId: blocked.id, profileExists: true, score: 12 });
@@ -61,6 +65,7 @@ async function main() {
     const o = await governanceOverview(A.user.id);
     check("counters count today's applications, submissions, blocks, questions and checks", o.counters.started === 3 && o.counters.submitted === 1 && o.counters.blocked === 1 && o.counters.asked === 1 && o.counters.checks >= 2, JSON.stringify(o.counters));
     check("the daily cap is the one from the rules", o.counters.cap === rules.max_applications_per_day);
+    check("answers from the user's data are counted (reused + worked out, not resume)", o.counters.fromData === 2, String(o.counters.fromData));
     check("blocks list newest first and include yesterday's", o.blocks.map((b) => b.rule).join(",") === "min_match_score,no_duplicate_role", o.blocks.map((b) => b.rule).join(","));
     check("filled-field events are left out of the decisions", !o.events.some((e) => e.type === "fill"));
     check("events carry the company and role they belong to", o.events.every((e) => e.company.length > 0 && e.title.length > 0) && o.blocks[0].company === jobB.company.name);
@@ -92,7 +97,7 @@ async function main() {
       const page = await open(A.token);
       await page.screenshot({ path: `${process.env.TEMP ?? "."}/governance-page.png`, fullPage: true });
       const stat = async (label: string) => (await page.locator(`[data-stat="${label}"] span`).first().innerText()).trim();
-      check("the page shows today's counters", (await stat("Started")) === `3 of ${rules.max_applications_per_day}` && (await stat("Submitted")) === "1" && (await stat("Blocked")) === "1" && (await stat("Questions asked")) === "1");
+      check("the page shows today's counters", (await stat("Started")) === `3 of ${rules.max_applications_per_day}` && (await stat("Submitted")) === "1" && (await stat("Blocked")) === "1" && (await stat("Questions asked")) === "1" && (await stat("Answered from your data")) === "2");
       check("the page lists every rule with its value", (await page.locator("[data-rule]").count()) === 13 && (await page.locator('[data-rule="min_match_score"]').innerText()).includes(`${rules.min_match_score}%`));
       const blockRow = page.locator('[data-block-rule="min_match_score"]');
       const blockText = await blockRow.innerText();
