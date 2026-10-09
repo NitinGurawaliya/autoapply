@@ -6,6 +6,7 @@ import { APPLY_BOARDS, listFeed, parseFeedFilters } from "@/modules/jobs";
 import type { FeedFilters } from "@/modules/jobs";
 import { redirect } from "next/navigation";
 import { DailyUsage } from "@/components/daily-usage";
+import { GapsLink } from "@/components/gaps-link";
 import { FilterSheet } from "./filter-sheet";
 import { SwipeDeck } from "./swipe-deck";
 
@@ -128,8 +129,11 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Feed</h1>
           <p className="mt-1 text-sm text-muted-foreground">Jobs that match your profile.</p>
-          <div className="mt-2">
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
             <DailyUsage userId={user.id} />
+            <Suspense fallback={null}>
+              <GapsLink userId={user.id} />
+            </Suspense>
           </div>
         </div>
         <FilterSheet activeCount={active.length}>

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { enqueuePrescan } from "@/lib/queue";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { remove, getAll, upsert } from "@/modules/answers";
@@ -45,6 +46,8 @@ export async function PUT(req: Request) {
     const message = error instanceof Error ? error.message : "invalid";
     return NextResponse.json({ error: message }, { status: 400 });
   }
+  // New answers may close gaps in the feed (T56): rescan in the background (at most once per 10 minutes).
+  void enqueuePrescan(user.id).catch(() => undefined);
 
   const answers = await getAll(user.id);
   return NextResponse.json({

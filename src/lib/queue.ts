@@ -5,6 +5,7 @@ loadEnvFile();
 
 const APPLY_QUEUE = "apply";
 const INGEST_QUEUE = "ingest";
+const PRESCAN_QUEUE = "prescan";
 
 let bossPromise: Promise<PgBoss> | null = null;
 
@@ -21,6 +22,7 @@ export function getBoss() {
     bossPromise = boss.start().then(async (started) => {
       await ensureQueue(started, APPLY_QUEUE);
       await ensureQueue(started, INGEST_QUEUE);
+      await ensureQueue(started, PRESCAN_QUEUE);
       return started;
     });
   }
@@ -37,4 +39,10 @@ export async function enqueueApply(applicationId: string, delaySeconds = 0) {
 export async function enqueueIngest(days: number) {
   const boss = await getBoss();
   return boss.send(INGEST_QUEUE, { days }, { expireInSeconds: 1800, retryLimit: 0 });
+}
+
+/** Pre-scan a user's feed for missing facts (modules/apply/prescan.ts); at most one per user every 10 minutes. */
+export async function enqueuePrescan(userId: string) {
+  const boss = await getBoss();
+  return boss.send(PRESCAN_QUEUE, { userId }, { singletonKey: userId, singletonSeconds: 600, expireInSeconds: 1800, retryLimit: 0 });
 }

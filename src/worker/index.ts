@@ -1,6 +1,7 @@
 import { getBoss } from "@/lib/queue";
 import { handleApply } from "./handlers/apply";
 import { handleIngest } from "./handlers/ingest";
+import { handlePrescan } from "./handlers/prescan";
 import { housekeeping, reapStaleRuns } from "./reaper";
 import { registerSchedules } from "./schedule";
 import { claimWorkerLock } from "./single";
@@ -13,6 +14,7 @@ async function main() {
   const concurrency = Math.min(Math.max(Number(process.env.APPLY_CONCURRENCY) || 3, 1), 8);
   await boss.work("apply", { localConcurrency: concurrency }, handleApply);
   await boss.work("ingest", handleIngest);
+  await boss.work("prescan", handlePrescan);
   console.log(`worker listening for apply (x${concurrency}) and ingest`);
   const ingest = await registerSchedules(boss);
   console.log(`ingest scheduled: "${ingest.cron}" ${ingest.timezone}, last ${ingest.days} days`);

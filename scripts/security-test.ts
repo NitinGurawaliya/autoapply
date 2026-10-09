@@ -51,7 +51,7 @@ async function main() {
 
     // ---- signed out: every protected route says 401, none crashes
     const anon: Array<[string, string, unknown?]> = [
-      ["GET", "/api/answers"], ["PUT", "/api/answers", { answers: [] }], ["GET", "/api/applications"], ["GET", "/api/applications/summary"], ["GET", `/api/applications/${appA.id}`],
+      ["GET", "/api/answers"], ["PUT", "/api/answers", { answers: [] }], ["GET", "/api/applications"], ["GET", "/api/applications/summary"], ["POST", "/api/gaps", { key: "q_aaaaaaaaaaaa", answer: "x" }], ["GET", `/api/applications/${appA.id}`],
       ["POST", `/api/applications/${appA.id}/cancel`], ["POST", `/api/applications/${appA.id}/retry`], ["POST", `/api/applications/${appA.id}/answers`, { answers: [{ key: "notice_period", answer: "1" }] }],
       ["GET", "/api/profile"], ["PUT", "/api/profile", {}], ["GET", "/api/jobs"], ["POST", "/api/swipes", { jobId: job.id, direction: "right" }],
       ["GET", `/api/files/screenshots/${appA.id}/1.png`], ["POST", "/api/jobs/ingest", { days: 7 }], ["GET", "/api/account/export"], ["POST", "/api/account/delete", { confirm: "DELETE MY ACCOUNT" }],

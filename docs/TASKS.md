@@ -309,8 +309,9 @@ Done 10 Oct: `essay-test` PASS (15: detection, grounding check rejects an invent
 
 Decisions (10 Oct): conflicting saved answers are not reviewed, the newest wins; years-of-experience questions are always derived; essay drafts must also be numerically grounded (done, `essay-test` PASS).
 
-### [ ] T56 — Ask before the run, fill in one go
+### [x] T56 — Ask before the run, fill in one go
 Pre-scan Greenhouse `…/jobs/{id}?questions=true` for feed jobs (new `prescan` queue); ask never-seen facts at swipe time; "fill your gaps" screen; mid-run popup only as a de-duplicated fallback. **Done when:** a swiped Greenhouse job with a missing fact asks at swipe time and the run completes with no pause; feed coverage % shows.
+Done 10 Oct: `precheck-smoke` PASS (mock: asked before opening the form, no browser; one answer released the other waiting application through the real route; the run then filled straight through; the pre-scan reported the gap, then full coverage). `gaps-test` PASS (two real US Greenhouse jobs' differently worded work-authorization questions → one gap "Are you legally authorized to work in the United States?"; answered via /api/gaps with the country; reused for a third US job, refused for a UK job). Live: the worker's pre-scan of the test account's 20 feed jobs ran end to end. Asked-at-swipe-time means seconds after the swipe, when the worker picks the job up, before any browser opens.
 
 ### [ ] T57 — Badges, basis and audit
 `matched` / `derived` badges with their reason on the application page; governance counts answered-from-your-data vs asked. **Done when:** extended applications and governance smokes pass.

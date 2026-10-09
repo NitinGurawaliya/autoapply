@@ -145,6 +145,10 @@ model Job {
   postedAt      DateTime
   fetchedAt     DateTime
   closedAt      DateTime? // set when the company's board stops listing the job; cleared if it comes back
+  // The application form's questions read from the board's public API (modules/jobs/questions.ts), so the agent can
+  // ask what it is missing before opening a browser. Null until fetched.
+  questions          Json?
+  questionsFetchedAt DateTime?
   raw           Json
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -249,4 +253,28 @@ model RateEvent {
   createdAt DateTime @default(now())
 
   @@index([key, createdAt])
+}
+
+// "Fill your gaps" (T56): the result of pre-scanning a user's top feed jobs (worker job `prescan`). FeedScan is the
+// summary (how many jobs could be answered in full); FeedGap one missing fact and how many scanned jobs it would unblock.
+model FeedScan {
+  userId    String   @id
+  scanned   Int
+  covered   Int
+  updatedAt DateTime @updatedAt
+}
+
+model FeedGap {
+  userId    String
+  key       String
+  label     String
+  type      String
+  options   Json?
+  // For a question about the job's country (work authorization, sponsorship), the country it was grouped by; the
+  // answer is saved with it so memory can reuse it for every job in that country.
+  context   Json?
+  jobs      Int
+  updatedAt DateTime @updatedAt
+
+  @@id([userId, key])
 }

@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { enqueueApply } from "@/lib/queue";
 import { db } from "@/lib/db";
 import { ONE_TIME_CODE_KEY, upsert } from "@/modules/answers";
+import { writeEvent } from "@/modules/governance";
 
 // Matches CODE_WAIT_MS in modules/apply/runner.ts (not imported: the runner pulls Playwright into the web bundle).
 const CODE_WAIT_MS = 10 * 60 * 1000;
@@ -84,5 +85,18 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
   });
   const queueJobId = await enqueueApply(application.id);
   if (!queueJobId) return NextResponse.json({ error: "queue_failed" }, { status: 500 });
-  return NextResponse.json({ ok: true, applicationId: application.id, queueJobId });
+
+  // One answer releases every other application waiting on the same question (T56): they run again and use it
+  // (anything else they still miss is asked then). One waiting for an emailed code is left alone.
+  const answered = new Set(parsed.data.answers.map((row) => row.key));
+  const waiting = await db.application.findMany({ where: { userId: user.id, status: "needs_input", id: { not: application.id } }, select: { id: true, pendingQuestions: true } });
+  let released = 0;
+  for (const other of waiting) {
+    const keys = Array.isArray(other.pendingQuestions) ? other.pendingQuestions.map((question) => (question as { key?: string })?.key) : [];
+    if (keys.includes(ONE_TIME_CODE_KEY) || !keys.some((key) => key && answered.has(key))) continue;
+    await db.application.update({ where: { id: other.id }, data: { status: "queued", pendingQuestions: [], error: null } });
+    await writeEvent(other.id, "resolve", "Answered on another application; running again");
+    if (await enqueueApply(other.id)) released += 1;
+  }
+  return NextResponse.json({ ok: true, applicationId: application.id, queueJobId, released });
 }

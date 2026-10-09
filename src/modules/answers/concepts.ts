@@ -58,7 +58,7 @@ const COUNTRY_ALIASES: Record<string, string> = {
 /** Lower-case words only, countries folded to one code ("United States", "USA", "US" → "us"). */
 export function normalizeParam(value: string | null | undefined) {
   if (!value) return null;
-  const words = value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const words = value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/^the /, "");
   if (!words) return null;
   return COUNTRY_ALIASES[words] ?? words;
 }

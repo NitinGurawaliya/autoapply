@@ -4,21 +4,17 @@ import { db } from "@/lib/db";
 import { enqueueApply } from "@/lib/queue";
 import { storage } from "@/lib/storage";
 import { notifyNeedsInput } from "@/lib/notify";
-import { ONE_TIME_CODE_KEY, upsert } from "@/modules/answers";
+import { ONE_TIME_CODE_KEY } from "@/modules/answers";
 import { check, loadRules, writeEvent } from "@/modules/governance";
-import { NeedsAnswerError, NoRetryError, type FilledField } from "./adapter";
+import { NeedsAnswerError, NoRetryError, type FilledField, type PendingQuestion } from "./adapter";
 import { uploadResume } from "./adapters/mock";
 import { openBrowser } from "./browser";
-import { mapFields } from "./fieldMapper";
 import { boardSupported } from "./lifecycle";
 import { pickAdapter } from "./pick";
+import { jobQuestions } from "./questions";
+import { resolveForm } from "./resolveForm";
 import { formUrlAllowed } from "./urls";
 import { LockStopped, withSubmitLock } from "./submitLock";
-import { deriveAnswers } from "./derive";
-import { BEST_PROJECT_KEY, draftEssays, essayKind, ESSAY_PERMISSION_KEY, type EssayKind } from "./essay";
-import { mapToOptions } from "./optionMap";
-import { answerFromMemory, type MemoryAnswer } from "./recall";
-import { resolveValues } from "./valueResolver";
 
 /** The user (or a queue clear) cancelled this application while it was running. */
 export class CancelledError extends Error {
@@ -141,115 +137,45 @@ async function execute(applicationId: string) {
   let session: Awaited<ReturnType<typeof openBrowser>> | null = null;
   // Held in an object because it is assigned from inside a closure.
   const upload: { cleanup: (() => Promise<void>) | null } = { cleanup: null };
+  const jobInfo = { company: job.company.name, title: job.title, location: job.location, country: job.country, description: job.description };
+  const resolveLog = async (message: string, data?: Record<string, unknown>) => {
+    await writeEvent(applicationId, "resolve", message, undefined, data as Prisma.InputJsonValue | undefined);
+  };
+  // A saved answer only proves a loop when the user gave it in reply to THIS application's own prompt and the form
+  // still refuses it. An older answer (the same question on another company's form, with other options, such as
+  // "How did you hear about this job?") is simply asked again with this form's options; the new answer replaces it.
+  const repeatedQuestion = async (pending: PendingQuestion[]) => {
+    const lastAsk = await db.applicationEvent.findFirst({ where: { applicationId, type: "ask_user" }, orderBy: { createdAt: "desc" }, select: { createdAt: true } });
+    return lastAsk ? pending.find((question) => answers.some((row) => row.key === question.key && row.updatedAt >= lastAsk.createdAt)) : undefined;
+  };
   try {
+    // Ask before opening the form (T56): when the board publishes the form's questions, run the same answering chain on
+    // them first; anything genuinely missing is asked now, with no browser open and no half-filled form. Essays the run
+    // will draft do not count as missing. If the questions cannot be read, the run asks mid-form as before.
+    const known = await jobQuestions(job);
+    if (known && known.length > 0) {
+      const before = await resolveForm({ userId: application.userId, source: adapter.source, fields: known, profile, answers, job: jobInfo, draftEssays: false, log: async (message, data) => resolveLog(`Before opening the form: ${message}`, data) });
+      if (before.missing.length > 0) {
+        const repeatedEarly = await repeatedQuestion(before.missing);
+        if (repeatedEarly) {
+          const message = `Your saved answer for "${repeatedEarly.label.slice(0, 80)}" does not match this form's options`;
+          await writeEvent(applicationId, "error", message);
+          await setApp(applicationId, { status: "failed", error: message, attempt: application.attempt });
+          return;
+        }
+        await setApp(applicationId, { status: "needs_input", attempt: application.attempt, pendingQuestions: before.missing as Prisma.InputJsonValue });
+        await writeEvent(applicationId, "ask_user", `Need ${before.missing.length} answers before opening the form`);
+        void notifyNeedsInput(applicationId, "answers");
+        return;
+      }
+      await writeEvent(applicationId, "resolve", "Every question on the form can be answered; opening it");
+    }
     session = await openBrowser(formUrl, application.userId);
     const fields = await adapter.inspect(session.page);
     await writeEvent(applicationId, "inspect", `Found ${fields.length} fields`);
-    const mapped = await mapFields(adapter.source, fields);
-    const jobRef = { company: job.company.name };
-    let resolved = resolveValues(mapped, profile, answers, undefined, undefined, jobRef);
-    let memoryAnswers: Map<string, MemoryAnswer> | undefined;
-    // Retrieve, then verify (recall.ts): before asking, look for the same fact among the user's answers to other
-    // wordings, checked by the model and then in code (same country / company / place for risky questions).
-    if (resolved.pending.length > 0) {
-      const pendingLabels = new Set(resolved.pending.map((question) => question.label));
-      try {
-        const memory = await answerFromMemory({
-          userId: application.userId,
-          job: { company: job.company.name, title: job.title, location: job.location, country: job.country },
-          fields: mapped.filter((item) => pendingLabels.has(item.field.label)).map((item) => item.field),
-        });
-        if (memory.answers.size > 0) {
-          memoryAnswers = memory.answers;
-          resolved = resolveValues(mapped, profile, answers, memoryAnswers, undefined, jobRef);
-          await writeEvent(applicationId, "resolve", `Answered ${memory.answers.size} from your saved answers to other questions`, undefined, {
-            matched: [...memory.answers.keys()].map((label) => label.slice(0, 120)),
-          });
-        }
-        if (memory.rejected.length > 0) {
-          await writeEvent(applicationId, "resolve", `Did not reuse ${memory.rejected.length} similar answers`, undefined, { rejected: memory.rejected.slice(0, 10) });
-        }
-      } catch (error) {
-        // The model or embeddings being down only means asking, never failing the run.
-        await writeEvent(applicationId, "resolve", `Could not check saved answers (${error instanceof Error ? error.message.slice(0, 80) : "error"}); asking instead`);
-      }
-    }
-    // What the profile and resume already prove (derive.ts): residence from the profile's country, previous employers
-    // and years of experience from the resume. Each answer carries the evidence it rests on.
-    if (resolved.pending.length > 0) {
-      const pendingLabels = new Set(resolved.pending.map((question) => question.label));
-      try {
-        const derived = await deriveAnswers({ profile, fields: mapped.filter((item) => pendingLabels.has(item.field.label)).map((item) => item.field) });
-        if (derived.size > 0) {
-          memoryAnswers = new Map([...(memoryAnswers ?? []), ...derived]);
-          resolved = resolveValues(mapped, profile, answers, memoryAnswers, undefined, jobRef);
-          await writeEvent(applicationId, "resolve", `Worked out ${derived.size} answers from your profile and resume`, undefined, {
-            derived: [...derived.entries()].map(([label, found]) => `${label.slice(0, 80)}: ${found.basis.slice(0, 120)}`),
-          });
-        }
-      } catch (error) {
-        await writeEvent(applicationId, "resolve", `Could not work out answers from your resume (${error instanceof Error ? error.message.slice(0, 80) : "error"}); asking instead`);
-      }
-    }
-    // Essay questions with the user's permission (essay.ts): drafted from the resume and the job, at most
-    // max_ai_drafts_per_application per application; drafts that name anything absent from both are dropped (asked).
-    const essayPermission = answers.find((row) => row.key === ESSAY_PERMISSION_KEY);
-    if (resolved.pending.length > 0 && essayPermission && /^yes$/i.test(essayPermission.answer.trim())) {
-      const pendingLabels = new Set(resolved.pending.map((question) => question.label));
-      const essays = mapped
-        .map((item) => ({ label: item.field.label, kind: essayKind(item.field.label, item.field.type) }))
-        .filter((item): item is { label: string; kind: EssayKind } => item.kind !== null && pendingLabels.has(item.label));
-      const room = Math.max(0, rules.max_ai_drafts_per_application - resolved.values.filter((value) => value.source === "ai_draft").length);
-      const take = essays.slice(0, room);
-      if (take.length > 0) {
-        try {
-          const drafts = await draftEssays({ profile, resumeText: profile.resumeText, job: { company: job.company.name, title: job.title, description: job.description }, items: take });
-          const drafted = new Map<string, MemoryAnswer>();
-          for (const [index, text] of drafts) {
-            const item = take[index];
-            drafted.set(item.label, { key: item.kind === "best_project" ? BEST_PROJECT_KEY : "", answer: text, basis: "AI draft from your resume and the job", score: 1, source: "ai_draft" });
-            // The best-project story is saved once (editable on the Answers page) and reused on every form.
-            if (item.kind === "best_project") await upsert(application.userId, { key: BEST_PROJECT_KEY, question: item.label, answer: text, source: "ai_draft" });
-          }
-          if (drafted.size > 0) {
-            memoryAnswers = new Map([...(memoryAnswers ?? []), ...drafted]);
-            resolved = resolveValues(mapped, profile, answers, memoryAnswers, undefined, jobRef);
-            await writeEvent(applicationId, "resolve", `Drafted ${drafted.size} essay answers (AI draft)`, undefined, { drafted: [...drafted.keys()].map((label) => label.slice(0, 120)) });
-          }
-          if (drafts.size < take.length) await writeEvent(applicationId, "resolve", `Asked ${take.length - drafts.size} essay questions instead: the draft was missing or named something not in your resume`);
-        } catch (error) {
-          await writeEvent(applicationId, "resolve", `Could not draft essay answers (${error instanceof Error ? error.message.slice(0, 80) : "error"}); asking instead`);
-        }
-      }
-      if (essays.length > take.length) await writeEvent(applicationId, "resolve", `Asked ${essays.length - take.length} essay questions: the limit is ${rules.max_ai_drafts_per_application} AI drafts per application`);
-    }
-    // An answer we already have but worded differently from the form's options ("30 days" vs "1 month"): re-word it
-    // onto one of the options (optionMap.ts) instead of asking again.
-    const pendingNow = new Set(resolved.pending.map((question) => question.label));
-    const unfit = resolved.unfit.filter((item) => pendingNow.has(item.label));
-    if (unfit.length > 0) {
-      try {
-        const matches = await mapToOptions(unfit);
-        if (matches.size > 0) {
-          resolved = resolveValues(mapped, profile, answers, memoryAnswers, matches, jobRef);
-          await writeEvent(applicationId, "resolve", `Matched ${matches.size} saved answers to this form's options`);
-        }
-      } catch (error) {
-        await writeEvent(applicationId, "resolve", `Could not match answers to the form's options (${error instanceof Error ? error.message.slice(0, 80) : "error"}); asking instead`);
-      }
-    }
+    const { resolved } = await resolveForm({ userId: application.userId, source: adapter.source, fields, profile, answers, job: jobInfo, draftEssays: true, log: resolveLog });
     await writeEvent(applicationId, "resolve", `Resolved ${resolved.values.length}, pending ${resolved.pending.length}`);
-    // A saved answer only proves a loop when the user gave it in reply to THIS application's own prompt and the form
-    // still refuses it. An older answer (the same question on another company's form, with other options, such as
-    // "How did you hear about this job?") is simply asked again with this form's options; the new answer replaces it.
-    const lastAsk = await db.applicationEvent.findFirst({
-      where: { applicationId, type: "ask_user" },
-      orderBy: { createdAt: "desc" },
-      select: { createdAt: true },
-    });
-    const repeated = lastAsk
-      ? resolved.pending.find((question) => answers.some((row) => row.key === question.key && row.updatedAt >= lastAsk.createdAt))
-      : undefined;
+    const repeated = await repeatedQuestion(resolved.pending);
     if (repeated) {
       const message = `Your saved answer for "${repeated.label.slice(0, 80)}" does not match this form's options`;
       await writeEvent(applicationId, "error", message);
