@@ -295,8 +295,9 @@ Done 10 Oct: migration `answer_memory` (pgvector on Neon), `modules/answers/memo
 `modules/answers/concepts.ts` (small risky catalog with parameters), `modules/apply/recall.ts` (async pre-pass in the runner, one batched verify per form, code-side checks) feeding `resolveValues`; source `matched`. **Done when:** replay answers the duplicate clusters, trap pairs are not reused, wrong sensitive answers = 0.
 Done 10 Oct: replay 26 % → 34 % answered without asking, wrong sensitive answers 7 → 0 (risky questions with a country/company/place now need a verified answer about the same one; the old global answers caused all 7). recall-test PASS (paraphrases reused; US vs London office, UK vs US work authorization, MongoDB vs Thoughtworks, month vs year, yes/no vs open questions refused); recall-smoke PASS (mock form: notice period filled from another wording, `matched` with its basis, submitted without asking). Remaining disagreements are mostly the user's own conflicting answers, for T56.
 
-### [ ] T53 — AI option mapping
+### [x] T53 — AI option mapping
 Map a value onto the form's own options when `fitOption` fails; one option or none; sensitive/EEO values never changed. **Done when:** fixture cases pass and "does not fit" prompts drop in replay.
+Done 10 Oct: `option-map-test` PASS (10 cases incl. refusals: an unlisted event without "Other", "60 days" with no such option), `option-map-smoke` PASS (mock: "Yes, I am authorized to work" filled as "Authorized", submitted without asking). The replay cannot measure this step (old forms' options were not stored); the mapping is exercised end to end instead.
 
 ### [ ] T54 — Derivation with evidence
 Resume dates normalised and per-role skills; residence, previous employers and skill years derived with verified evidence; source `derived`. **Done when:** replay answers those questions with the right basis and zero sensitive/EEO derivations.

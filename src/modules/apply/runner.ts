@@ -14,7 +14,8 @@ import { boardSupported } from "./lifecycle";
 import { pickAdapter } from "./pick";
 import { formUrlAllowed } from "./urls";
 import { LockStopped, withSubmitLock } from "./submitLock";
-import { answerFromMemory } from "./recall";
+import { mapToOptions } from "./optionMap";
+import { answerFromMemory, type MemoryAnswer } from "./recall";
 import { resolveValues } from "./valueResolver";
 
 /** The user (or a queue clear) cancelled this application while it was running. */
@@ -144,6 +145,7 @@ async function execute(applicationId: string) {
     await writeEvent(applicationId, "inspect", `Found ${fields.length} fields`);
     const mapped = await mapFields(adapter.source, fields);
     let resolved = resolveValues(mapped, profile, answers);
+    let memoryAnswers: Map<string, MemoryAnswer> | undefined;
     // Retrieve, then verify (recall.ts): before asking, look for the same fact among the user's answers to other
     // wordings, checked by the model and then in code (same country / company / place for risky questions).
     if (resolved.pending.length > 0) {
@@ -155,7 +157,8 @@ async function execute(applicationId: string) {
           fields: mapped.filter((item) => pendingLabels.has(item.field.label)).map((item) => item.field),
         });
         if (memory.answers.size > 0) {
-          resolved = resolveValues(mapped, profile, answers, memory.answers);
+          memoryAnswers = memory.answers;
+          resolved = resolveValues(mapped, profile, answers, memoryAnswers);
           await writeEvent(applicationId, "resolve", `Answered ${memory.answers.size} from your saved answers to other questions`, undefined, {
             matched: [...memory.answers.keys()].map((label) => label.slice(0, 120)),
           });
@@ -166,6 +169,21 @@ async function execute(applicationId: string) {
       } catch (error) {
         // The model or embeddings being down only means asking, never failing the run.
         await writeEvent(applicationId, "resolve", `Could not check saved answers (${error instanceof Error ? error.message.slice(0, 80) : "error"}); asking instead`);
+      }
+    }
+    // An answer we already have but worded differently from the form's options ("30 days" vs "1 month"): re-word it
+    // onto one of the options (optionMap.ts) instead of asking again.
+    const pendingNow = new Set(resolved.pending.map((question) => question.label));
+    const unfit = resolved.unfit.filter((item) => pendingNow.has(item.label));
+    if (unfit.length > 0) {
+      try {
+        const matches = await mapToOptions(unfit);
+        if (matches.size > 0) {
+          resolved = resolveValues(mapped, profile, answers, memoryAnswers, matches);
+          await writeEvent(applicationId, "resolve", `Matched ${matches.size} saved answers to this form's options`);
+        }
+      } catch (error) {
+        await writeEvent(applicationId, "resolve", `Could not match answers to the form's options (${error instanceof Error ? error.message.slice(0, 80) : "error"}); asking instead`);
       }
     }
     await writeEvent(applicationId, "resolve", `Resolved ${resolved.values.length}, pending ${resolved.pending.length}`);

@@ -81,6 +81,19 @@ function fitOption(value: string, options: string[] | undefined, eeo: boolean) {
   return starts.length === 1 ? starts[0] : null;
 }
 
+/** An answer we had for a field but could not place on its options (the runner may re-word it, optionMap.ts). */
+export type UnfitAnswer = { label: string; answer: string; options: string[]; key: string; sensitive: boolean };
+
+/** Lookup key for a re-worded answer: the same answer on the same question. */
+export const optionKey = (label: string, answer: string) => `${label}\u0000${answer}`;
+
+const EEO_KEYS = new Set(["gender", "race", "ethnicity", "veteran_status", "disability", "pronouns"]);
+
+/** Sensitive and EEO answers may only be re-worded, never changed into a different fact (optionMap.ts). */
+function sensitiveOrEeo(key: string, label: string) {
+  return loadRules().sensitive_keys_never_ai.includes(key) || EEO_KEYS.has(key) || detectConcept(label) !== null;
+}
+
 /** Words that make a question depend on the job it appears on. "We / our / us" only in lower case ("US" is a country). */
 function refersToTheJob(label: string) {
   return /\b(this|the) (job|role|position|opportunity|company|team|location)\b|country (where|in which)|you are applying|you('| a)re applying|\bthe office\b/i.test(label) || /\b(we|our|us)\b/.test(label);
@@ -92,11 +105,15 @@ export function resolveValues(
   answers: AnswerRow[],
   /** Answers recalled from the user's other questions and verified for this job (recall.ts), by field label. */
   memory?: Map<string, MemoryAnswer>,
+  /** A known answer re-worded onto this form's own option (optionMap.ts), by optionKey(label, answer). */
+  optionMatches?: Map<string, string>,
 ) {
   const rules = loadRules();
   const bank = new Map(answers.map((row) => [row.key, row]));
   const values: ResolvedValue[] = [];
   const pending: PendingQuestion[] = [];
+  // Answers we had but could not place on the form's options; the runner may map them (optionMap.ts) and resolve again.
+  const unfit: UnfitAnswer[] = [];
 
   for (const item of mapped) {
     const { field } = item;
@@ -112,8 +129,22 @@ export function resolveValues(
       pending.push({ key: askKey, label: field.label, type: field.type, options, required: true });
     };
     const push = (valueKey: string, raw: string, source: string, eeo = false) => {
-      const value = field.type === "file" ? raw : field.type === "number" ? fitNumber(raw) : fitOption(raw, field.options, eeo);
+      let value = field.type === "file" ? raw : field.type === "number" ? fitNumber(raw) : fitOption(raw, field.options, eeo);
+      let reworded = false;
+      if (value == null && field.options?.length) {
+        const mapped = optionMatches?.get(optionKey(field.label, raw));
+        if (mapped && field.options.includes(mapped)) {
+          value = mapped;
+          reworded = true;
+        } else if (!unfit.some((item) => item.label === field.label && item.answer === raw)) {
+          unfit.push({ label: field.label, answer: raw, options: field.options, key: valueKey, sensitive: sensitiveOrEeo(valueKey, field.label) });
+        }
+      }
       if (value == null) return false;
+      if (reworded) {
+        values.push({ key: valueKey, label: field.label, value, source, selector: field.selector, type: field.type, required: field.required, basis: `your answer "${raw.slice(0, 60)}", as this form's option` });
+        return true;
+      }
       values.push({
         key: valueKey,
         label: field.label,
@@ -206,5 +237,5 @@ export function resolveValues(
     ask(key);
   }
 
-  return { values, pending };
+  return { values, pending, unfit };
 }
