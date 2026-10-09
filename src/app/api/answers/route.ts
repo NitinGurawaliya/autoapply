@@ -8,7 +8,8 @@ const putSchema = z.object({
     .array(
       z.object({
         key: z.string().min(1).max(80),
-        question: z.string().max(500),
+        // Shortened, not refused: see applications/[id]/answers/route.ts.
+        question: z.string().max(5000).transform((text) => text.slice(0, 1000)),
         answer: z.string().max(2000),
         source: z.enum(["resume", "user", "ai_draft", "default"]),
       }),

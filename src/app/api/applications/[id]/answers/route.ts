@@ -14,7 +14,9 @@ const bodySchema = z.object({
       z.object({
         key: z.string().min(1).max(80),
         answer: z.string().trim().min(1).max(2000),
-        question: z.string().max(500).optional(),
+        // Form labels can be long (a 744-character Okta conflict-of-interest question). The text is only shown on the
+        // answers page (answers are matched by a hash of the label), so a long one is shortened, never refused.
+        question: z.string().max(5000).optional().transform((text) => text?.slice(0, 1000)),
       }),
     )
     .min(1)

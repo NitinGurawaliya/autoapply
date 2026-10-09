@@ -76,7 +76,15 @@ export function NeedsInputDialog() {
     });
     setSaving(false);
     if (!response.ok) {
-      setError("Could not save that answer.");
+      if (response.status === 409) {
+        // Cancelled, or another tab already answered it: nothing to save any more.
+        setError("This application is no longer waiting for an answer.");
+        refresh();
+      } else if (response.status === 400) {
+        setError("One of these answers could not be saved. Check that each is filled in and not unusually long.");
+      } else {
+        setError("Could not save that answer. Try again in a moment.");
+      }
       return;
     }
     setWaiting(null);
