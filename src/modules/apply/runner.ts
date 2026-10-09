@@ -10,6 +10,7 @@ import { NeedsAnswerError, NoRetryError, type FilledField } from "./adapter";
 import { uploadResume } from "./adapters/mock";
 import { openBrowser } from "./browser";
 import { mapFields } from "./fieldMapper";
+import { boardSupported } from "./lifecycle";
 import { pickAdapter } from "./pick";
 import { formUrlAllowed } from "./urls";
 import { LockStopped, withSubmitLock } from "./submitLock";
@@ -100,6 +101,11 @@ async function execute(applicationId: string) {
   ]);
   if (!job || !profile) {
     await block(applicationId, "profile_required", "Profile or job is missing");
+    return;
+  }
+  // A board switched off in APPLY_BOARDS never runs, even for an application queued or answered before it was switched off.
+  if (!boardSupported(job.source)) {
+    await block(applicationId, "board_not_supported", `Applying on ${job.source} is switched off for now`);
     return;
   }
 

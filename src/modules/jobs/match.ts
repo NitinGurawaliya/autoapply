@@ -7,8 +7,10 @@ import { requiredYears } from "./tagging";
 
 export { daysAgoLabel };
 
-// Boards with a working apply adapter (modules/apply/pick.ts).
-export const APPLY_BOARDS = ["greenhouse", "lever", "ashby"] as const;
+// Boards the agent applies on: the feed, its filters, swipes, retries and the runner all read this list.
+// Lever and Ashby adapters exist (modules/apply/adapters) but are switched off until they submit reliably
+// (hCaptcha on Lever, reCAPTCHA spam refusals on Ashby); their jobs are still ingested. Add them back here to switch on.
+export const APPLY_BOARDS = ["greenhouse"] as const;
 const BOARDS = APPLY_BOARDS;
 const COUNTRIES = ["IN", "US", "REMOTE", "OTHER"] as const;
 

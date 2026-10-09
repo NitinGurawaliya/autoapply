@@ -178,11 +178,11 @@ Done when: after a few runs the stats query returns correct counts, and a compan
 
 ### [~] T18 — Lever adapter (40 min) — Done when: a real Lever form reaches `submitted`. Un-hide Lever in `APPLY_BOARDS` only after this passes.
 
-Status: adapter built and dry-run verified on 8 live Lever forms (fills every field, reads each back, resume attached, nothing submitted). `lever` is already in `APPLY_BOARDS` (`src/modules/jobs/match.ts`) although no real Lever form has reached `submitted` yet (as of 9 Oct: 0 submitted, 1 failed on the hCaptcha Submit button). Either get one real submission or take `lever` back out of the list before the demo.
+Status: adapter built and dry-run verified on 8 live Lever forms (fills every field, reads each back, resume attached, nothing submitted). Switched off on 9 Oct (`lever` removed from `APPLY_BOARDS` in `src/modules/jobs/match.ts`): 0 real submissions, 1 failure on the hCaptcha Submit button. Add it back once a real Lever form reaches `submitted`.
 
 ### [x] T19 — Ashby adapter (40 min) — Done when: a real Ashby form reaches `submitted`. Un-hide Ashby in `APPLY_BOARDS` only after this passes.
 
-Status: adapter built and dry-run verified on 6 live Ashby forms (fills every field including Yes/No buttons, radios, checkbox groups and the date picker, reads each back, resume attached; a closed job is reported as closed). Done: real Ashby applications reached `submitted` (3 by 9 Oct) and `ashby` is in `APPLY_BOARDS`. Most Ashby failures are its spam refusal (reCAPTCHA scoring), handed back to the user as "submit it yourself".
+Status: adapter built and dry-run verified on 6 live Ashby forms (fills every field including Yes/No buttons, radios, checkbox groups and the date picker, reads each back, resume attached; a closed job is reported as closed). Done: real Ashby applications reached `submitted` (3 by 9 Oct). Switched off again on 9 Oct (`ashby` removed from `APPLY_BOARDS`) because most runs end in Ashby's spam refusal; improve, then add it back. Most Ashby failures are its spam refusal (reCAPTCHA scoring), handed back to the user as "submit it yourself".
 
 ### [x] T20 — Scheduled ingest (pg-boss cron every 6 h) (15 min) — Done when: the cron is registered and visible in the worker logs.
 
