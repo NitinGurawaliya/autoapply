@@ -1,7 +1,8 @@
-import { customQuestionKey, getAnswerKey, matchKeyBySynonym } from "@/modules/answers";
+import { customQuestionKey, detectConcept, getAnswerKey, matchKeyBySynonym, RISKY } from "@/modules/answers";
 import { loadRules } from "@/modules/governance";
 import { ACKNOWLEDGEMENT_KEY, ACKNOWLEDGEMENT_QUESTION, acknowledgementValue } from "./acknowledgement";
 import type { FormField, PendingQuestion, ResolvedValue } from "./adapter";
+import type { MemoryAnswer } from "./recall";
 
 type AnswerRow = { key: string; answer: string; source: string };
 
@@ -80,10 +81,17 @@ function fitOption(value: string, options: string[] | undefined, eeo: boolean) {
   return starts.length === 1 ? starts[0] : null;
 }
 
+/** Words that make a question depend on the job it appears on. "We / our / us" only in lower case ("US" is a country). */
+function refersToTheJob(label: string) {
+  return /\b(this|the) (job|role|position|opportunity|company|team|location)\b|country (where|in which)|you are applying|you('| a)re applying|\bthe office\b/i.test(label) || /\b(we|our|us)\b/.test(label);
+}
+
 export function resolveValues(
   mapped: Array<{ field: FormField; key: string | null }>,
   profile: ProfileFacts,
   answers: AnswerRow[],
+  /** Answers recalled from the user's other questions and verified for this job (recall.ts), by field label. */
+  memory?: Map<string, MemoryAnswer>,
 ) {
   const rules = loadRules();
   const bank = new Map(answers.map((row) => [row.key, row]));
@@ -119,9 +127,36 @@ export function resolveValues(
       return true;
     };
 
+    // A question about a particular country, company or place ("authorized to work in the country where this job is
+    // located", "worked at MongoDB", "our London office") may only reuse an answer verified to be about the same one
+    // (recall.ts checks the job each answer was given for). Neither a global saved answer nor the same wording given
+    // for another job is enough, so for these only the verified memory answer counts; otherwise the user is asked.
+    const kind = detectConcept(field.label);
+    if (kind && RISKY[kind].parameter) {
+      // The same wording is the same question only when it names its own subject ("employed by any government entity",
+      // "worked at MongoDB"); one that points at the job ("this role", "our office", "the country where the job is
+      // located") means something different for every job, so even the exact wording needs the verified memory answer.
+      const exact = !refersToTheJob(field.label) ? bank.get(questionKey) : undefined;
+      if (exact && exact.source === "user" && push(key ?? questionKey, exact.answer, exact.source)) continue;
+      const verified = memory?.get(field.label);
+      if (verified && push(key ?? questionKey, verified.answer, "matched")) {
+        values[values.length - 1].basis = verified.basis;
+        continue;
+      }
+      ask(questionKey);
+      continue;
+    }
+
     // The user's answer to this exact question beats anything inferred from a canonical key.
     const own = bank.get(questionKey);
     if (own && push(key ?? questionKey, own.answer, own.source)) continue;
+
+    // The same fact, saved under another wording, verified to apply to this job.
+    const recalled = memory?.get(field.label);
+    if (recalled && push(key ?? questionKey, recalled.answer, "matched")) {
+      values[values.length - 1].basis = recalled.basis;
+      continue;
+    }
 
     // Privacy notices, "my answers are true" and arbitration acknowledgements: ticked with the user's standing
     // permission, asked once for that permission when it is missing, asked one by one if they said no.

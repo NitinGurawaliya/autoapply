@@ -20,6 +20,8 @@ export type ResolvedValue = {
   fileName?: string;
   /** Whether the form marks this field required, so an adapter knows if a miss may be skipped. */
   required?: boolean;
+  /** Why this value was chosen when it did not come straight from the bank or profile ("your answer to ..."). */
+  basis?: string;
 };
 
 export type FilledField = {
@@ -28,6 +30,7 @@ export type FilledField = {
   value: string;
   source: string;
   selector: string;
+  basis?: string;
 };
 
 export type PendingQuestion = {

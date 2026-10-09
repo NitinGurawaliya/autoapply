@@ -46,7 +46,7 @@ async function writeFieldLabel(source: string, label: string, key: string) {
   });
 }
 
-async function complete(system: string, user: string) {
+async function complete(system: string, user: string, model = MODEL) {
   loadEnvKey();
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
@@ -59,7 +59,7 @@ async function complete(system: string, user: string) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: MODEL,
+      model,
       temperature: 0,
       response_format: { type: "json_object" },
       messages: [
@@ -118,7 +118,7 @@ export async function callJson<T>(
   schema: z.ZodType<T>,
   system: string,
   user: string,
-  options?: { cacheKey?: string; fieldLabel?: { source: string; label: string } },
+  options?: { cacheKey?: string; fieldLabel?: { source: string; label: string }; model?: string },
 ): Promise<T> {
   if (options?.cacheKey && memory.has(options.cacheKey)) {
     console.log(`llm cache hit ${options.cacheKey}`);
@@ -131,7 +131,7 @@ export async function callJson<T>(
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const prompt = attempt === 0 ? user : `${user}\n\nThe previous response failed validation: ${lastError}`;
-    const raw = stripFences(await complete(jsonSystem, prompt));
+    const raw = stripFences(await complete(jsonSystem, prompt, options?.model?.trim() || MODEL));
     try {
       parsed = schema.parse(JSON.parse(raw));
       break;

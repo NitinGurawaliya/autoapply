@@ -291,8 +291,9 @@ Baseline (9 Oct, today's resolver, 3 real users): 237 questions; 62 answered wit
 Extension, `Answer.context`, `Answer.embedding`, `LabelEmbedding` cache; `modules/answers/memory.ts` `remember` / `recall`; answer writes record the job context; `scripts/backfill-embeddings.ts`. **Done when:** recall returns the right neighbours for sample wordings and the backfill ran.
 Done 10 Oct: migration `answer_memory` (pgvector on Neon), `modules/answers/memory.ts`; `memory-smoke` PASS (paraphrases recalled first, London office recalls the US-office answer at 0.834 as expected, context kept, changed wording re-embedded); backfill embedded all 343 saved answers. ARCHITECTURE 6.19.
 
-### [ ] T52 — Retrieve-then-verify in the run
+### [x] T52 — Retrieve-then-verify in the run
 `modules/answers/concepts.ts` (small risky catalog with parameters), `modules/apply/recall.ts` (async pre-pass in the runner, one batched verify per form, code-side checks) feeding `resolveValues`; source `matched`. **Done when:** replay answers the duplicate clusters, trap pairs are not reused, wrong sensitive answers = 0.
+Done 10 Oct: replay 26 % → 34 % answered without asking, wrong sensitive answers 7 → 0 (risky questions with a country/company/place now need a verified answer about the same one; the old global answers caused all 7). recall-test PASS (paraphrases reused; US vs London office, UK vs US work authorization, MongoDB vs Thoughtworks, month vs year, yes/no vs open questions refused); recall-smoke PASS (mock form: notice period filled from another wording, `matched` with its basis, submitted without asking). Remaining disagreements are mostly the user's own conflicting answers, for T56.
 
 ### [ ] T53 — AI option mapping
 Map a value onto the form's own options when `fitOption` fails; one option or none; sensitive/EEO values never changed. **Done when:** fixture cases pass and "does not fit" prompts drop in replay.

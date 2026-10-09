@@ -14,6 +14,7 @@ import { boardSupported } from "./lifecycle";
 import { pickAdapter } from "./pick";
 import { formUrlAllowed } from "./urls";
 import { LockStopped, withSubmitLock } from "./submitLock";
+import { answerFromMemory } from "./recall";
 import { resolveValues } from "./valueResolver";
 
 /** The user (or a queue clear) cancelled this application while it was running. */
@@ -95,7 +96,7 @@ async function execute(applicationId: string) {
   if (["submitted", "blocked", "cancelled"].includes(application.status)) return;
 
   const [job, profile, answers] = await Promise.all([
-    db.job.findUnique({ where: { id: application.jobId }, include: { company: { select: { slug: true } } } }),
+    db.job.findUnique({ where: { id: application.jobId }, include: { company: { select: { slug: true, name: true } } } }),
     db.profile.findUnique({ where: { userId: application.userId } }),
     db.answer.findMany({ where: { userId: application.userId } }),
   ]);
@@ -142,7 +143,31 @@ async function execute(applicationId: string) {
     const fields = await adapter.inspect(session.page);
     await writeEvent(applicationId, "inspect", `Found ${fields.length} fields`);
     const mapped = await mapFields(adapter.source, fields);
-    const resolved = resolveValues(mapped, profile, answers);
+    let resolved = resolveValues(mapped, profile, answers);
+    // Retrieve, then verify (recall.ts): before asking, look for the same fact among the user's answers to other
+    // wordings, checked by the model and then in code (same country / company / place for risky questions).
+    if (resolved.pending.length > 0) {
+      const pendingLabels = new Set(resolved.pending.map((question) => question.label));
+      try {
+        const memory = await answerFromMemory({
+          userId: application.userId,
+          job: { company: job.company.name, title: job.title, location: job.location, country: job.country },
+          fields: mapped.filter((item) => pendingLabels.has(item.field.label)).map((item) => item.field),
+        });
+        if (memory.answers.size > 0) {
+          resolved = resolveValues(mapped, profile, answers, memory.answers);
+          await writeEvent(applicationId, "resolve", `Answered ${memory.answers.size} from your saved answers to other questions`, undefined, {
+            matched: [...memory.answers.keys()].map((label) => label.slice(0, 120)),
+          });
+        }
+        if (memory.rejected.length > 0) {
+          await writeEvent(applicationId, "resolve", `Did not reuse ${memory.rejected.length} similar answers`, undefined, { rejected: memory.rejected.slice(0, 10) });
+        }
+      } catch (error) {
+        // The model or embeddings being down only means asking, never failing the run.
+        await writeEvent(applicationId, "resolve", `Could not check saved answers (${error instanceof Error ? error.message.slice(0, 80) : "error"}); asking instead`);
+      }
+    }
     await writeEvent(applicationId, "resolve", `Resolved ${resolved.values.length}, pending ${resolved.pending.length}`);
     // A saved answer only proves a loop when the user gave it in reply to THIS application's own prompt and the form
     // still refuses it. An older answer (the same question on another company's form, with other options, such as
@@ -197,11 +222,15 @@ async function execute(applicationId: string) {
         selector: resume.selector,
       });
     }
+    // Keep why each value was chosen (a reused answer's original question) with the field and its event.
+    const basisBySelector = new Map(resolved.values.map((value) => [value.selector, value.basis]));
+    for (const field of filled) field.basis = basisBySelector.get(field.selector);
     for (const field of filled) {
       await writeEvent(applicationId, "fill", `Filled ${field.key}`, undefined, {
         key: field.key,
         source: field.source,
         selector: field.selector,
+        ...(field.basis ? { basis: field.basis } : {}),
       });
     }
 

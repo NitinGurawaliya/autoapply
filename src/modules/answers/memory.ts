@@ -24,6 +24,7 @@ export type Recalled = {
   source: string;
   context: AnswerContext | null;
   score: number;
+  updatedAt: Date;
 };
 
 const clean = (label: string) => label.replace(/\s+/g, " ").trim();
@@ -72,9 +73,11 @@ export async function ensureEmbeddings(userId: string) {
 }
 
 /** For each label, the user's closest past questions and their answers (best first, score >= RECALL_MIN_SCORE). */
-export async function recall(userId: string, labels: string[], options: { limit?: number; minScore?: number } = {}) {
+export async function recall(userId: string, labels: string[], options: { limit?: number; minScore?: number; excludeKeys?: string[] } = {}) {
   const limit = options.limit ?? RECALL_LIMIT;
   const minScore = options.minScore ?? RECALL_MIN_SCORE;
+  // Standing permissions (accept_*) are not answers to a question, so they are never offered as candidates.
+  const exclude = options.excludeKeys ?? [];
   const out = new Map<string, Recalled[]>();
   if (labels.length === 0) return out;
   await ensureEmbeddings(userId);
@@ -84,9 +87,9 @@ export async function recall(userId: string, labels: string[], options: { limit?
       const vector = vectors.get(clean(label));
       if (!vector) return out.set(label, []);
       const rows = await db.$queryRaw<Array<Omit<Recalled, "score"> & { score: number }>>`
-        SELECT "id", "key", "question", "answer", "source", "context", 1 - ("embedding" <=> ${vector}::vector) AS "score"
+        SELECT "id", "key", "question", "answer", "source", "context", "updatedAt", 1 - ("embedding" <=> ${vector}::vector) AS "score"
         FROM "Answer"
-        WHERE "userId" = ${userId} AND "embedding" IS NOT NULL
+        WHERE "userId" = ${userId} AND "embedding" IS NOT NULL AND "key" NOT LIKE 'accept\\_%' AND NOT ("key" = ANY(${exclude}))
         ORDER BY "embedding" <=> ${vector}::vector
         LIMIT ${limit}`;
       out.set(
