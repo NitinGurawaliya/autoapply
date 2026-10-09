@@ -26,6 +26,10 @@ function byId(id: string) {
   return `[id="${id.replace(/"/g, '\\"')}"]`;
 }
 
+function byName(name: string) {
+  return `[name="${name.replace(/"/g, '\\"')}"]`;
+}
+
 const SEARCHABLE_OVER = 50;
 
 function cleanLabel(text: string) {
@@ -105,7 +109,8 @@ async function readComboboxOptions(page: Page, input: Locator) {
 async function readFields(page: Page): Promise<FormField[]> {
   await waitForForm(page);
   const raw = await page.evaluate(() => {
-    const rows: Array<{ id: string; label: string; kind: string; required: boolean; options?: string[] }> = [];
+    const rows: Array<{ id: string; name?: string; label: string; kind: string; required: boolean; options?: string[] }> = [];
+    const groups = new Set<string>();
     document.querySelectorAll("input, select, textarea").forEach((node) => {
       const el = node as HTMLInputElement;
       const type = (el.getAttribute("type") ?? el.tagName).toLowerCase();
@@ -118,6 +123,26 @@ async function readFields(page: Page): Promise<FormField[]> {
           .join(" ");
       }
       if (!label.trim()) label = el.closest("label")?.textContent ?? el.getAttribute("aria-label") ?? "";
+      // Checkboxes and radios are one question per name: the fieldset legend is the question, the box labels are the
+      // options. Every box in a required group carries `required`, so they must never be filled one by one.
+      if (type === "checkbox" || type === "radio") {
+        const name = el.getAttribute("name") || el.id;
+        if (!name || groups.has(name)) return;
+        groups.add(name);
+        const fieldset = el.closest("fieldset");
+        const legend = fieldset?.querySelector("legend")?.textContent ?? "";
+        const boxes = Array.from(document.querySelectorAll(`input[name="${CSS.escape(name)}"]`)) as HTMLInputElement[];
+        const options = boxes.map((box) =>
+          ((box.id ? document.querySelector(`label[for="${CSS.escape(box.id)}"]`)?.textContent : "") || box.closest("label")?.textContent || box.value || "").replace(/\s+/g, " ").trim(),
+        );
+        const groupRequired = boxes.some((box) => box.required || box.getAttribute("aria-required") === "true") || fieldset?.getAttribute("aria-required") === "true";
+        if (type === "radio" || boxes.length > 1) {
+          rows.push({ id: el.id, name, label: legend || label, kind: type === "radio" ? "radio" : "checkbox-group", required: groupRequired, options });
+        } else if (el.id) {
+          rows.push({ id: el.id, label: legend || label, kind: "checkbox", required: groupRequired });
+        }
+        return;
+      }
       if (!el.id || ["hidden", "submit", "search", "button"].includes(type)) return;
       if (el.id.startsWith("g-recaptcha") || el.id.startsWith("iti-")) return;
       const required = el.required || el.getAttribute("aria-required") === "true";
@@ -132,13 +157,6 @@ async function readFields(page: Page): Promise<FormField[]> {
         rows.push({ id: el.id, label, kind: "combobox", required });
         return;
       }
-      if (type === "checkbox") {
-        const group = el.closest("fieldset");
-        const legend = group?.querySelector("legend")?.textContent ?? "";
-        rows.push({ id: el.id, label: legend ? `${legend} — ${label}` : label, kind: "checkbox", required });
-        return;
-      }
-      if (type === "radio") return;
       rows.push({ id: el.id, label, kind: el.tagName === "TEXTAREA" ? "textarea" : type, required });
     });
     return rows;
@@ -146,7 +164,7 @@ async function readFields(page: Page): Promise<FormField[]> {
 
   const fields: FormField[] = [];
   for (const row of raw) {
-    const selector = byId(row.id);
+    const selector = row.name ? byName(row.name) : byId(row.id);
     const label = cleanLabel(row.label) || row.id;
     if (row.kind === "combobox") {
       const options = await readComboboxOptions(page, page.locator(selector));
@@ -202,6 +220,67 @@ async function setCheckbox(page: Page, selector: string, value: string) {
   const box = page.locator(selector);
   if (checked) await box.check({ force: true });
   else await box.uncheck({ force: true });
+}
+
+/** Tick the box (or radio) whose label fits the answer. */
+async function pickInGroup(page: Page, value: ResolvedValue) {
+  const boxes = page.locator(value.selector);
+  const labels = await boxes.evaluateAll((nodes) =>
+    nodes.map((node) =>
+      ((node.id ? document.querySelector(`label[for="${CSS.escape(node.id)}"]`)?.textContent : "") || node.closest("label")?.textContent || (node as HTMLInputElement).value || "").replace(/\s+/g, " ").trim(),
+    ),
+  );
+  const choice = bestOption(labels, value.value);
+  if (!choice) throw new NeedsAnswerError({ key: customQuestionKey(value.label), label: value.label, type: value.type, required: true, options: labels });
+  await boxes.nth(labels.indexOf(choice)).check({ force: true });
+  return choice;
+}
+
+/**
+ * Required questions still empty just before Submit, by label. Greenhouse only names them after a submit attempt,
+ * and an attempt with holes is a wasted (and logged) submit. Questions hidden by the form's own conditions do not count.
+ */
+export async function missingRequired(page: Page): Promise<string[]> {
+  const raw = await page.evaluate(() => {
+    const missing: string[] = [];
+    const groups = new Set<string>();
+    document.querySelectorAll("input, select, textarea").forEach((node) => {
+      const el = node as HTMLInputElement;
+      const type = (el.getAttribute("type") ?? el.tagName).toLowerCase();
+      if (["hidden", "submit", "search", "button", "file"].includes(type)) return;
+      if (/^(g-recaptcha|iti-|security-input-)/.test(el.id)) return;
+      const fieldset = el.closest("fieldset");
+      const box = type === "checkbox" || type === "radio";
+      const required = el.required || el.getAttribute("aria-required") === "true" || (box && fieldset?.getAttribute("aria-required") === "true");
+      if (!required) return;
+      if (el.getClientRects().length === 0 && (!fieldset || fieldset.getClientRects().length === 0)) return;
+      let label = (el.id ? document.querySelector(`label[for="${CSS.escape(el.id)}"]`)?.textContent : "") ?? "";
+      if (!label.trim() && el.getAttribute("aria-labelledby")) {
+        label = (el.getAttribute("aria-labelledby") ?? "")
+          .split(/\s+/)
+          .map((part) => document.getElementById(part)?.textContent ?? "")
+          .join(" ");
+      }
+      if (box) {
+        const name = el.getAttribute("name") || el.id;
+        if (groups.has(name)) return;
+        groups.add(name);
+        const checked = Array.from(document.querySelectorAll(`input[name="${CSS.escape(name)}"]`)).some((other) => (other as HTMLInputElement).checked);
+        if (!checked) missing.push(fieldset?.querySelector("legend")?.textContent || label || name);
+        return;
+      }
+      if (el.getAttribute("role") === "combobox") {
+        // react-select keeps the choice outside the input. Only a control still showing its placeholder is empty;
+        // markup we do not recognise is left to Greenhouse rather than blocking a good form.
+        const control = el.closest(".select__control");
+        if (control?.querySelector(".select__placeholder") && !control.querySelector(".select__single-value, .select__multi-value")) missing.push(label || el.id);
+        return;
+      }
+      if (!el.value.trim()) missing.push(label || el.id);
+    });
+    return missing;
+  });
+  return [...new Set(raw.map((label) => cleanLabel(label).slice(0, 80)).filter(Boolean))];
 }
 
 async function visibleErrors(page: Page) {
@@ -310,6 +389,7 @@ export const greenhouseAdapter: AtsAdapter = {
       if (value.type === "file") continue;
       const written = await inField(value.label, async () => {
         if (value.type === "combobox") return pickCombobox(page, value.selector, value.value, value.label);
+        if (value.type === "radio" || value.type === "checkbox-group") return pickInGroup(page, value);
         if (value.type === "select") await selectOption(page, value.selector, { label: value.value });
         else if (value.type === "checkbox") await setCheckbox(page, value.selector, value.value);
         else await fillText(page, value.selector, value.value);
@@ -321,6 +401,8 @@ export const greenhouseAdapter: AtsAdapter = {
   },
   async submit(page, ctx): Promise<SubmitResult> {
     await dismissOverlays(page);
+    const missing = await missingRequired(page);
+    if (missing.length > 0) throw new NoRetryError(`Greenhouse needs these filled before it will submit: ${missing.slice(0, 5).join(", ")}`);
     try {
       const button = page.getByRole("button", { name: /submit application/i });
       await button.scrollIntoViewIfNeeded().catch(() => undefined);

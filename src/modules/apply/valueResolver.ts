@@ -56,6 +56,11 @@ function numericRange(value: string, options: string[]) {
   return hits.length === 1 ? hits[0] : null;
 }
 
+/** Number inputs refuse anything else: "30 days" → "30"; "Immediate" or "2-3 years" do not fit. */
+function fitNumber(value: string) {
+  return value.trim().match(/^[^\d-]*(-?\d+(?:\.\d+)?)\D*$/)?.[1] ?? null;
+}
+
 /** Map a value onto the form's own options. Null means the value does not fit, so the user must answer. */
 // Forms mix plain and non-breaking spaces in the same option text, so compare with all whitespace collapsed.
 function norm(text: string) {
@@ -98,7 +103,7 @@ export function resolveValues(
       pending.push({ key: askKey, label: field.label, type: field.type, options, required: true });
     };
     const push = (valueKey: string, raw: string, source: string, eeo = false) => {
-      const value = field.type === "file" ? raw : fitOption(raw, field.options, eeo);
+      const value = field.type === "file" ? raw : field.type === "number" ? fitNumber(raw) : fitOption(raw, field.options, eeo);
       if (value == null) return false;
       values.push({
         key: valueKey,

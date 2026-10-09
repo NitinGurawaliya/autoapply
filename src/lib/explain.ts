@@ -28,6 +28,7 @@ const FAILURES: Array<[RegExp, (m: RegExpMatchArray) => Omit<Outcome, "tone">]> 
   [/captcha|human check/i, () => ({ headline: "The job board asked for a human check", next: "Open the posting and submit it yourself." })],
   [/flagged as (possible )?spam|refused the application/i, () => ({ headline: "The job board rejected it as automated", next: "Open the posting and submit it yourself." })],
   [/does not take applications on its job board/i, () => ({ headline: "Apply on the company site", next: "This company lists the job here but takes applications on its own careers site. Open the posting and apply there." })],
+  [/needs these filled before it will submit:\s*(.*)/i, (m) => ({ headline: "Some required questions were empty", next: `Nothing was sent. Answer: ${m[1].slice(0, 120)}, then retry.` })],
   [/rejected the form:\s*(.*)/i, (m) => ({ headline: "The form rejected some answers", next: `Check: ${m[1].slice(0, 120)}. Update those answers, then retry.` })],
   [/no confirmation appeared/i, () => ({ headline: "No confirmation seen", next: "We clicked Submit but never saw a confirmation. Check your email before retrying so you do not apply twice." })],
   [/worker stopped/i, () => ({ headline: "The worker stopped partway", next: "Retry it." })],
