@@ -283,8 +283,9 @@ Plan (v2, agreed 9 Oct): retrieve, then verify. Every answered question is store
 `embed()` in `src/lib/llm.ts`; `scripts/embedding-experiment.ts` prints nearest neighbours and scores for the real users' saved questions, true paraphrases vs look-alike traps. **Done when:** a retrieval cut-off is chosen from the numbers and the traps are shown to need the verify step.
 Result (9 Oct, 197 real wordings, `text-embedding-3-small`): true paraphrases score as low as 0.599 ("How did you hear about us?" ~ "How did you learn about this job?"; zip-code wordings 0.718) while traps score as high as 0.834 ("work from our US office" ~ "…London office"). No threshold separates them, so the verify step is required. Retrieval: top 5 candidates with score ≥ 0.54 go to verify.
 
-### [~] T50 — Replay scoreboard
-`scripts/replay-questions.ts` (written; currently finds 0 questions, fix the query): leave-one-out replay of every saved wording; % answered without asking, % agreeing with the user, wrong sensitive answers. **Done when:** the baseline prints for the real profiles.
+### [x] T50 — Replay scoreboard
+`scripts/replay-questions.ts`: leave-one-out replay of every saved wording; % answered without asking, % agreeing with the user (yes/no compared by meaning), wrong sensitive answers. **Done when:** the baseline prints for the real profiles.
+Baseline (9 Oct, today's resolver, 3 real users): 237 questions; 62 answered without asking (26 %), of which 25 agree with what the user said (40 %); 175 still asked (74 %); **7 wrong sensitive answers**, all one global `willing_to_relocate` / `work_authorization` answer reused for a different place (Bangalore, Austin, a US-person check). That is the parameter problem T52 fixes; the target is 0.
 
 ### [ ] T51 — pgvector storage and backfill
 Extension, `Answer.context`, `Answer.embedding`, `LabelEmbedding` cache; `modules/answers/memory.ts` `remember` / `recall`; answer writes record the job context; `scripts/backfill-embeddings.ts`. **Done when:** recall returns the right neighbours for sample wordings and the backfill ran.
