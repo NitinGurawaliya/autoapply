@@ -8,6 +8,10 @@ const cases: Array<[string, string]> = [
   ["Do you now or will you in the future require sponsorship", "needs_sponsorship"],
   ["How did you hear about us?", "how_heard"],
   ["Gender", "gender"],
+  ["Are you authorized to work in the country where the job is located?", "work_authorization"],
+  ["Will you now or in the future require sponsorship for employment visa status in the country where the job is located?", "needs_sponsorship"],
+  ["Country", "country"],
+  ["Which country do you currently live in?", "country"],
 ];
 
 let failed = false;

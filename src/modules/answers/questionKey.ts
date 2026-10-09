@@ -1,9 +1,14 @@
 import { createHash } from "node:crypto";
 import { ANSWER_KEYS } from "./keys";
 
+// Sensitive questions often mention an identity word ("authorized to work in the country where the job is located"),
+// so they are matched first: a work-authorization question must never be read as the candidate's country.
+const SENSITIVE_FIRST = new Set(["current_ctc", "expected_ctc", "salary_expectation", "notice_period", "work_authorization", "needs_sponsorship", "willing_to_relocate"]);
+const MATCH_ORDER = [...ANSWER_KEYS.filter((def) => SENSITIVE_FIRST.has(def.key)), ...ANSWER_KEYS.filter((def) => !SENSITIVE_FIRST.has(def.key))];
+
 export function matchKeyBySynonym(label: string): string | null {
   const text = label.trim();
-  for (const def of ANSWER_KEYS) {
+  for (const def of MATCH_ORDER) {
     if (def.synonyms.some((pattern) => pattern.test(text))) return def.key;
   }
   return null;
