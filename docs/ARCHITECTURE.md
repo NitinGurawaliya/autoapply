@@ -84,7 +84,7 @@ swipeapply/
                    listing.ts (is the job still listed), results.ts (per-company outcomes)
       apply/       adapter.ts, adapters/{common,greenhouse,lever,ashby,mock}.ts,
                    fieldMapper.ts, valueResolver.ts, runner.ts, browser.ts, pick.ts,
-                   lifecycle.ts (swipe, cancel, retry), submitLock.ts, urls.ts (allowed hosts)
+                   lifecycle.ts (swipe, cancel, retry), submitLock.ts, urls.ts (allowed hosts), acknowledgement.ts (6.18)
       governance/  rules.ts, audit.ts, history.ts (duplicate/company guards), overview.ts
       account/     export and delete a user's data
   tests/smoke.spec.ts
@@ -174,6 +174,7 @@ Work: `years_experience current_title current_company employment_type start_date
 Sensitive (never AI-drafted; answer bank or ask user): `current_ctc expected_ctc salary_expectation notice_period work_authorization needs_sponsorship willing_to_relocate`
 EEO (default "Decline to answer"): `gender race ethnicity veteran_status disability pronouns`
 Misc: `how_heard` (default "Job board") · `cover_letter`, `free_text` (ai_draft allowed)
+Permission: `accept_acknowledgements` (Yes/No, asked once; see 6.18)
 Custom: `q_<12 hex>` = sha256 of the normalised label, for job-specific questions no canonical key covers (and for canonical fields whose value does not fit the form's options). Policy `bank_or_ask`, never AI-drafted; the answer is reused whenever the same label appears again.
 
 Each key: `{key, type, synonyms: RegExp[], default?, policy: deterministic | bank_or_ask | ai_draft_ok | default_only}`.
@@ -218,7 +219,7 @@ browser.open(adapter.formUrl?(job) ?? job.applyUrl)
 fields  = adapter.inspect(page)                 → FormField[] {selector,label,type,required,options}
 keys    = fieldMapper.map(fields)               → synonyms → FieldMappingCache → LLM → cache
 values, pending = valueResolver.resolve(fields, keys, profile, answers, rules)
-   # order per field: user's answer to this exact label (q_ key) → answer bank → profile → key default → ask
+   # order per field: user's answer to this exact label (q_ key) → acknowledgement (6.18) → answer bank → profile → key default → ask
    # option fields: value must match one of the form's options (exact, unique prefix, or a single numeric range);
    # EEO keys pick the form's own "decline" option; otherwise → ask
 if pending.length: save pendingQuestions, status needs_input (attempt unchanged), event ask_user, close, return
@@ -253,7 +254,7 @@ export interface AtsAdapter {
 ```
 `adapters/common.ts`: `fillText`, `selectOption`, `pickComboboxOption(labelText)`, `uploadFile(bytes, name)`, `waitForConfirmation`.
 
-Ashby (`adapters/ashby.ts`): form address is the posting's `/application` page. Every question is a `.ashby-application-form-field-entry` block addressed by `data-field-path`; the adapter reads each block's one control (text, textarea, Yes/No button pair, radios, checkbox group, select, location type-ahead, date picker, file) and gives the mapper a `hintKey` for name, email, location and resume. Attaching a resume does not auto-fill (that is a separate button we never press). Date pickers need a real date: a value that is not one (for example "Immediate") becomes a question for the user, and a plain number is read as days from now. Submit is the "Submit Application" button; the form uses reCAPTCHA, and a visible challenge, a spam refusal or field errors end the run with a readable message (never retried, never solved). Ashby is in `APPLY_BOARDS`; real forms have reached `submitted`. Its most common failure is the spam refusal, which is reCAPTCHA scoring the automated browser and is handed back to the user, never worked around.
+Ashby (`adapters/ashby.ts`): form address is the posting's `/application` page. Every question is an outermost `[data-field-path]` block (checkbox groups, which include most acknowledgements, do not carry the `.ashby-application-form-field-entry` class, so the class is never used to find questions); option text comes from the box's `label[for]`; a Yes/No pair counts as answered when a button is pressed (its hidden checkbox stays unticked for No); the adapter reads each block's one control (text, textarea, Yes/No button pair, radios, checkbox group, select, location type-ahead, date picker, file) and gives the mapper a `hintKey` for name, email, location and resume. Attaching a resume does not auto-fill (that is a separate button we never press). Date pickers need a real date: a value that is not one (for example "Immediate") becomes a question for the user, and a plain number is read as days from now. Submit is the "Submit Application" button; the form uses reCAPTCHA, and a visible challenge, a spam refusal or field errors end the run with a readable message (never retried, never solved). Ashby is in `APPLY_BOARDS`; real forms have reached `submitted`. Its most common failure is the spam refusal, which is reCAPTCHA scoring the automated browser and is handed back to the user, never worked around.
 
 All adapters share `adapters/common.ts`: `assertJobOpen` turns a missing form on a closed posting into "This job is no longer open" (job feeds keep listing taken-down jobs), and `toDatePickerText` parses dates. Check: `scripts/adapters-test.ts` (offline) and `scripts/ats-smoke.ts` (live dry run).
 
@@ -313,6 +314,10 @@ Every API route resolves the signed-in user and scopes its queries by `userId`; 
 - **Failures leave evidence.** A failed run saves a full-page screenshot and the site's own error lines (`screenshots/<id>/fail-<n>.png`, event `diagnostic`).
 - **Retries wait.** A retry starts 20 seconds times the attempt number after the failure.
 - `rateLimit` takes a per-key advisory lock, so parallel calls cannot slip past the limit.
+
+### 6.18 Acknowledgements (privacy, truthfulness, arbitration)
+
+Most forms require a box such as "I have read the privacy notice", "my answers are true and complete" or "I acknowledge the arbitration agreement" and reject the application without it. `modules/apply/acknowledgement.ts` `acknowledgementValue(field)` recognises a **required** field as one (a single checkbox, a group with exactly one box, or a choice with exactly one affirmative option) by its wording, and never counts marketing opt-ins or certifications of facts (work authorization, sponsorship, age, record, past employment). These are a legal choice, not a fact, so the agent does not decide alone: the resolver asks once for the standing permission `accept_acknowledgements` (one question per run, however many boxes). With Yes, every adapter ticks them from then on, recorded as the user's answer under that key; with No, each acknowledgement is asked on its own; an earlier answer to the exact question always wins. The user can change it on `/answers`. Check: `scripts/acknowledgement-test.ts`.
 
 ## 7. Governance (`config/rules.json` + `modules/governance/rules.ts`)
 

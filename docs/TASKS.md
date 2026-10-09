@@ -266,3 +266,7 @@ Shared failure handling for the Greenhouse, Lever and Ashby adapters (cookie ban
 ### [x] T46 — Greenhouse form gaps (from the 9 Oct failure review)
 Checkbox fieldsets read as one question (no more unticking every box of a required group), one-box acknowledgements asked by their legend, radio groups, number inputs that only take a number, and a required-field check before Submit. See ARCHITECTURE.md 6.6 (Greenhouse).
 **Done when:** `scripts/greenhouse-form-test.ts` prints PASS. Live check still to do: one dry run (`scripts/ats-smoke.ts`) on the Stripe, Twilio and SingleStore forms that failed before.
+
+### [x] T47 — Acknowledgements on every adapter, and the invisible Ashby questions
+Ashby checkbox groups (OpenAI's arbitration and "I certify" boxes, Snowflake's privacy notice) were never found: they lack the field-entry class the adapter searched for, so runs ended "Missing entry for required field". Fixed by finding questions by `data-field-path`; Yes/No answered "No" no longer counts as empty. Required privacy, truthfulness and arbitration acknowledgements are ticked under a one-time standing permission (`accept_acknowledgements`). See ARCHITECTURE.md 6.18.
+**Done when:** `scripts/acknowledgement-test.ts` prints PASS. Live check still to do: retry the failed OpenAI and Snowflake Ashby applications.

@@ -1,5 +1,6 @@
 import { customQuestionKey, getAnswerKey, matchKeyBySynonym } from "@/modules/answers";
 import { loadRules } from "@/modules/governance";
+import { ACKNOWLEDGEMENT_KEY, ACKNOWLEDGEMENT_QUESTION, acknowledgementValue } from "./acknowledgement";
 import type { FormField, PendingQuestion, ResolvedValue } from "./adapter";
 
 type AnswerRow = { key: string; answer: string; source: string };
@@ -121,6 +122,23 @@ export function resolveValues(
     // The user's answer to this exact question beats anything inferred from a canonical key.
     const own = bank.get(questionKey);
     if (own && push(key ?? questionKey, own.answer, own.source)) continue;
+
+    // Privacy notices, "my answers are true" and arbitration acknowledgements: ticked with the user's standing
+    // permission, asked once for that permission when it is missing, asked one by one if they said no.
+    const ack = acknowledgementValue(field);
+    if (ack) {
+      const standing = bank.get(ACKNOWLEDGEMENT_KEY);
+      // An answer to this exact question that did not tick it (above) beats the standing permission: ask again.
+      if (!own && standing && /^yes$/i.test(standing.answer.trim()) && push(ACKNOWLEDGEMENT_KEY, ack, standing.source)) continue;
+      if (!standing) {
+        if (!pending.some((q) => q.key === ACKNOWLEDGEMENT_KEY)) {
+          pending.push({ key: ACKNOWLEDGEMENT_KEY, label: ACKNOWLEDGEMENT_QUESTION, type: "select", options: ["Yes", "No"], required: true });
+        }
+        continue;
+      }
+      ask(questionKey);
+      continue;
+    }
 
     if (!key) {
       ask(questionKey);

@@ -36,6 +36,7 @@ npx playwright test
 - NEVER invent a fact about the candidate. Every filled value carries `source`: `resume | user | ai_draft | default`. Only `cover_letter` and `free_text` keys may be `ai_draft`, max `max_ai_drafts_per_application`.
 - Sensitive keys (`current_ctc expected_ctc salary_expectation notice_period work_authorization needs_sponsorship willing_to_relocate`) are never AI-drafted. Missing → `needs_input`.
 - EEO keys default to "Decline to answer". Never guess gender, race, veteran or disability.
+- Required privacy-notice, "my answers are true" and arbitration acknowledgements are ticked only under the user's standing permission (`accept_acknowledgements` = Yes, asked once); without it each is asked. Marketing opt-ins and certifications of facts (work authorization, age, record) are never auto-ticked. See `modules/apply/acknowledgement.ts`.
 - Every governance check writes an `ApplicationEvent`. Blocked runs end in `status = blocked` with the rule name.
 - Jobs come only from public APIs (Greenhouse, Lever, Ashby). No scraping Naukri, LinkedIn or login-walled sites.
 - No data in local files: companies, jobs, profiles, answers, applications → Postgres; resumes, screenshots → `lib/storage.ts` (FileBlob table; never the filesystem). Only `lib/storage.ts` touches `FileBlob`. Temp files for Playwright uploads are deleted in `finally`.

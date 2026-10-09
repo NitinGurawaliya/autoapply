@@ -30,9 +30,11 @@ type Row = { path: string; label: string; kind: string; required: boolean; optio
 // Runs inside the page. A plain string on purpose: tsx would wrap named helpers in a function the page does not have.
 const READ_FORM = `(() => {
   const clean = (text) => (text || '').replace(/\\u00a0/g, ' ').replace(/\\s+/g, ' ').trim();
-  const optionText = (el) => clean((el.closest('label') || el.parentElement || el).textContent);
+  const optionText = (el) => clean(((el.id && document.querySelector('label[for="' + CSS.escape(el.id) + '"]')) || el.closest('label') || el.parentElement || el).textContent);
   const rows = [];
-  document.querySelectorAll('.ashby-application-form-field-entry').forEach((entry) => {
+  // Every question is a [data-field-path] block. Checkbox groups (acknowledgements among them) do not carry the
+  // field-entry class, so selecting by class missed them entirely.
+  Array.from(document.querySelectorAll('[data-field-path]')).filter((el) => !el.parentElement.closest('[data-field-path]')).forEach((entry) => {
     const path = entry.getAttribute('data-field-path') || '';
     if (!path) return;
     const labelEl = entry.querySelector('.ashby-application-form-question-title');
@@ -50,7 +52,7 @@ const READ_FORM = `(() => {
     if (text) return void rows.push({ path, label, kind: text.tagName === 'TEXTAREA' ? 'textarea' : 'text', required });
     if (radios.length) return void rows.push({ path, label, kind: 'radio', required, options: radios.map(optionText) });
     const boxes = Array.from(entry.querySelectorAll('input[type=checkbox]'));
-    if (boxes.length > 1) return void rows.push({ path, label, kind: 'checkbox-group', required, options: boxes.map(optionText) });
+    if (boxes.length > 1 || (boxes.length === 1 && entry.querySelector('.ashby-application-form-input-checkbox-group'))) return void rows.push({ path, label, kind: 'checkbox-group', required, options: boxes.map(optionText) });
     if (boxes.length === 1) return void rows.push({ path, label: label || optionText(boxes[0]), kind: 'checkbox', required });
     if (entry.querySelector('input, select, textarea, [role=combobox], [role=listbox], [contenteditable=true]')) rows.push({ path, label, kind: 'unsupported', required });
   });
@@ -62,7 +64,7 @@ const READ_FORM = `(() => {
 const EMPTY_REQUIRED = `(() => {
   const clean = (text) => (text || '').replace(/\\s+/g, ' ').trim();
   const out = [];
-  document.querySelectorAll('.ashby-application-form-field-entry').forEach((entry) => {
+  Array.from(document.querySelectorAll('[data-field-path]')).filter((el) => !el.parentElement.closest('[data-field-path]')).forEach((entry) => {
     const title = entry.querySelector('.ashby-application-form-question-title');
     if (!title || !/_required_/.test(title.className)) return;
     if (entry.querySelector('input[type=file]')) return;
@@ -70,13 +72,20 @@ const EMPTY_REQUIRED = `(() => {
     const radios = Array.from(entry.querySelectorAll('input[type=radio], input[type=checkbox]'));
     const select = entry.querySelector('select');
     let empty = false;
-    if (select) empty = !select.value;
-    else if (text && !entry.querySelector('.ashby-application-form-input-yesno')) empty = !text.value.trim();
+    // A Yes/No pair keeps a hidden checkbox that stays unticked for "No": judge it by the pressed button.
+    if (entry.querySelector('.ashby-application-form-input-yesno')) empty = !entry.querySelector('[aria-pressed="true"]');
+    else if (select) empty = !select.value;
+    else if (text) empty = !text.value.trim();
     else if (radios.length > 0 && !text) empty = !radios.some((r) => r.checked);
     if (empty) out.push(clean(title.textContent));
   });
   return out;
 })()`;
+
+/** Labels of required questions that still have no answer. */
+export async function emptyRequired(page: Page) {
+  return [...new Set((await page.evaluate(EMPTY_REQUIRED)) as string[])];
+}
 
 async function readFields(page: Page): Promise<FormField[]> {
   await page
@@ -179,7 +188,7 @@ async function captchaChallengeVisible(page: Page) {
 }
 
 async function entriesWithErrors(page: Page) {
-  return (await page.evaluate(`Array.from(document.querySelectorAll('.ashby-application-form-field-entry')).filter((entry) => entry.querySelector('[class*="_error"], [role="alert"]')).map((entry) => ((entry.querySelector('.ashby-application-form-question-title') || {}).textContent || '').replace(/\\s+/g, ' ').trim()).filter(Boolean)`)) as string[];
+  return (await page.evaluate(`Array.from(document.querySelectorAll('[data-field-path]')).filter((el) => !el.parentElement.closest('[data-field-path]')).filter((entry) => entry.querySelector('[class*="_error"], [role="alert"]')).map((entry) => ((entry.querySelector('.ashby-application-form-question-title') || {}).textContent || '').replace(/\\s+/g, ' ').trim()).filter(Boolean)`)) as string[];
 }
 
 export async function waitForAshbyConfirmation(page: Page, timeoutMs = 60000) {
@@ -243,7 +252,9 @@ export const ashbyAdapter: AtsAdapter = {
         if (value.type === "radio" || value.type === "checkbox-group") {
           const kind = value.type === "radio" ? "radio" : "checkbox";
           const inputs = entry.locator(`input[type="${kind}"]`);
-          const labels = await inputs.evaluateAll((nodes) => nodes.map((node) => ((node.closest("label") ?? node.parentElement)?.textContent ?? "").replace(/\s+/g, " ").trim()));
+          const labels = await inputs.evaluateAll((nodes) =>
+            nodes.map((node) => (((node.id ? document.querySelector(`label[for="${CSS.escape(node.id)}"]`) : null) ?? node.closest("label") ?? node.parentElement)?.textContent ?? "").replace(/\s+/g, " ").trim()),
+          );
           const index = pickLabel(labels, value.value);
           if (index < 0) throw new Error(`No option "${value.value}" for "${value.label}"`);
           await inputs.nth(index).check({ force: true });
@@ -266,8 +277,8 @@ export const ashbyAdapter: AtsAdapter = {
   async submit(page): Promise<SubmitResult> {
     await dismissOverlays(page);
     // Catch an unfilled required field here, before Submit: a form sent half empty is the kind Ashby's spam check dislikes.
-    const empty = (await page.evaluate(EMPTY_REQUIRED)) as string[];
-    if (empty.length > 0) throw new NoRetryError(`These required questions are still empty: ${[...new Set(empty)].slice(0, 5).join(", ")}`);
+    const empty = await emptyRequired(page);
+    if (empty.length > 0) throw new NoRetryError(`These required questions are still empty: ${empty.slice(0, 5).join(", ")}`);
     const button = await firstVisible(page, ["button.ashby-application-form-submit-button", "button[type=submit]"], 20000);
     if (!button) throw new NoRetryError("The Submit button never appeared on the Ashby form. Open the form and submit it yourself.");
     await button.scrollIntoViewIfNeeded().catch(() => undefined);

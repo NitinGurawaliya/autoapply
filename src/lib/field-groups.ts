@@ -9,7 +9,7 @@ const GROUP_OF: Record<string, GroupName> = {
   resume: "Documents", cover_letter: "Documents",
   years_experience: "Experience", current_title: "Experience", current_company: "Experience", start_date: "Experience", employment_type: "Experience", preferred_location: "Experience",
   current_ctc: "Your answers", expected_ctc: "Your answers", salary_expectation: "Your answers", notice_period: "Your answers",
-  work_authorization: "Your answers", needs_sponsorship: "Your answers", willing_to_relocate: "Your answers",
+  work_authorization: "Your answers", needs_sponsorship: "Your answers", willing_to_relocate: "Your answers", accept_acknowledgements: "Your answers",
   gender: "Equal opportunity", race: "Equal opportunity", ethnicity: "Equal opportunity", veteran_status: "Equal opportunity", disability: "Equal opportunity", pronouns: "Equal opportunity",
 };
 

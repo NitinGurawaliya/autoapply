@@ -69,13 +69,13 @@ async function main() {
     check("number inputs keep their type", byLabel("Total years")?.type === "number" && byLabel("Start date year")?.type === "number");
 
     const mapped = fields.map((field) => ({ field, key: matchKeyBySynonym(field.label) }));
-    const answers = [{ key: "start_date", answer: "Immediate", source: "user" }, { key: "years_experience", answer: "3 years", source: "user" }];
+    const answers = [{ key: "start_date", answer: "Immediate", source: "user" }, { key: "years_experience", answer: "3 years", source: "user" }, { key: "accept_acknowledgements", answer: "Yes", source: "user" }];
     const { values, pending } = resolveValues(mapped, PROFILE, answers);
     const value = (start: string) => values.find((v) => v.label.startsWith(start));
     const asked = (start: string) => pending.find((q) => q.label.startsWith(start));
     check("the country group gets the profile country as one of its options", value("Please select the country")?.value === "India");
     check("a default that is not one of the boxes asks instead of unticking them", !value("How did you hear") && asked("How did you hear")?.options?.includes("LinkedIn") === true);
-    check("the acknowledgement is asked, never ticked on the candidate's behalf", !value("By clicking") && asked("By clicking")?.options?.join("|") === "Yes|No");
+    check("the acknowledgement is ticked under the candidate's standing permission", value("By clicking")?.value === "Yes" && value("By clicking")?.key === "accept_acknowledgements" && !asked("By clicking"));
     check("a number field takes the number out of the answer", value("Total years")?.value === "3");
     check("an optional number field skips a non-number answer instead of typing it", !value("Start date year") && !asked("Start date year"));
 
@@ -93,7 +93,7 @@ async function main() {
     // The user answers what was asked; fill everything.
     const answered: ResolvedValue[] = pending.filter((q) => !q.label.startsWith("Which visa")).map((q) => {
       const field = fields.find((f) => f.label === q.label)!;
-      const reply = q.label.startsWith("How did you hear") ? "LinkedIn" : q.label.startsWith("By clicking") ? "Yes" : q.label.startsWith("Are you 18") ? "Yes" : "x";
+      const reply = q.label.startsWith("How did you hear") ? "LinkedIn" : q.label.startsWith("Are you 18") ? "Yes" : "x";
       return { key: q.key, label: q.label, value: reply, source: "user", selector: field.selector, type: field.type, required: true };
     });
     const toFill = [...values, ...answered].filter((v) => v.type !== "combobox");

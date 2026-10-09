@@ -6,13 +6,14 @@ export const ANSWER_LABELS: Record<string, string> = {
   start_date: "Available to start", preferred_location: "Preferred locations",
   current_ctc: "Current CTC", expected_ctc: "Expected CTC", salary_expectation: "Salary expectation", notice_period: "Notice period (days)",
   work_authorization: "Work authorization", needs_sponsorship: "Needs visa sponsorship", willing_to_relocate: "Willing to relocate",
+  accept_acknowledgements: "Tick privacy, truthfulness and arbitration acknowledgements for me",
   gender: "Gender", race: "Race", ethnicity: "Ethnicity", veteran_status: "Veteran status", disability: "Disability", pronouns: "Pronouns",
   how_heard: "How you heard about the job", cover_letter: "Cover letter", free_text: "Additional information",
 };
 
 /** Keys a user may add by hand. Identity details and the resume come from the profile, so they are not here. */
 export const ADDABLE_KEYS = [
-  "current_ctc", "expected_ctc", "salary_expectation", "notice_period", "work_authorization", "needs_sponsorship", "willing_to_relocate",
+  "current_ctc", "expected_ctc", "salary_expectation", "notice_period", "work_authorization", "needs_sponsorship", "willing_to_relocate", "accept_acknowledgements",
   "employment_type", "preferred_location", "start_date", "how_heard", "gender", "race", "ethnicity", "veteran_status", "disability", "pronouns",
   "cover_letter", "free_text",
 ] as const;

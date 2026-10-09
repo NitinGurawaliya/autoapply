@@ -39,6 +39,9 @@ export const ANSWER_KEYS: AnswerKeyDef[] = [
   { key: "work_authorization", type: "select", policy: "bank_or_ask", synonyms: [/work\s*authorization/i, /legally\s*authorized/i, /authori[sz]ed\s*to\s*work/i] },
   { key: "needs_sponsorship", type: "select", policy: "bank_or_ask", synonyms: [/sponsorship/i] },
   { key: "willing_to_relocate", type: "select", policy: "bank_or_ask", synonyms: [/relocat/i] },
+  // Standing permission to tick required privacy / truthfulness / arbitration acknowledgements (modules/apply/acknowledgement.ts).
+  // No synonyms: it is never a form label, only asked once and read by the resolver.
+  { key: "accept_acknowledgements", type: "select", policy: "bank_or_ask", synonyms: [] },
 
   { key: "gender", type: "select", policy: "default_only", default: EEO_DEFAULT, synonyms: [/\bgender\b/i] },
   { key: "race", type: "select", policy: "default_only", default: EEO_DEFAULT, synonyms: [/\brace\b/i] },
