@@ -178,11 +178,11 @@ Done when: after a few runs the stats query returns correct counts, and a compan
 
 ### [~] T18 — Lever adapter (40 min) — Done when: a real Lever form reaches `submitted`. Un-hide Lever in `APPLY_BOARDS` only after this passes.
 
-Status: adapter built and dry-run verified on 8 live Lever forms (fills every field, reads each back, resume attached, nothing submitted). Waiting on one real submission with the owner's go-ahead, then add `lever` to `APPLY_BOARDS` in `src/modules/jobs/match.ts`.
+Status: adapter built and dry-run verified on 8 live Lever forms (fills every field, reads each back, resume attached, nothing submitted). `lever` is already in `APPLY_BOARDS` (`src/modules/jobs/match.ts`) although no real Lever form has reached `submitted` yet (as of 9 Oct: 0 submitted, 1 failed on the hCaptcha Submit button). Either get one real submission or take `lever` back out of the list before the demo.
 
-### [~] T19 — Ashby adapter (40 min) — Done when: a real Ashby form reaches `submitted`. Un-hide Ashby in `APPLY_BOARDS` only after this passes.
+### [x] T19 — Ashby adapter (40 min) — Done when: a real Ashby form reaches `submitted`. Un-hide Ashby in `APPLY_BOARDS` only after this passes.
 
-Status: adapter built and dry-run verified on 6 live Ashby forms (fills every field including Yes/No buttons, radios, checkbox groups and the date picker, reads each back, resume attached; a closed job is reported as closed). Waiting on one real submission with the owner's go-ahead, then add `ashby` to `APPLY_BOARDS`.
+Status: adapter built and dry-run verified on 6 live Ashby forms (fills every field including Yes/No buttons, radios, checkbox groups and the date picker, reads each back, resume attached; a closed job is reported as closed). Done: real Ashby applications reached `submitted` (3 by 9 Oct) and `ashby` is in `APPLY_BOARDS`. Most Ashby failures are its spam refusal (reCAPTCHA scoring), handed back to the user as "submit it yourself".
 
 ### [x] T20 — Scheduled ingest (pg-boss cron every 6 h) (15 min) — Done when: the cron is registered and visible in the worker logs.
 
@@ -262,3 +262,7 @@ Done when: the Playwright test and the smoke scripts pass in one command locally
 ### [x] T45 — Adapter hardening and many swipes at once
 Shared failure handling for the Greenhouse, Lever and Ashby adapters (cookie banners, named field errors, required-field checks before Submit, unsupported-question stop, Submit button fallbacks, failure screenshots), board-confirmed "closed" detection, one-worker-per-machine lock, retry delay, and a single race-safe swipe path with a queue cap that does not lose swipes. See ARCHITECTURE.md 6.16 and 6.17.
 **Done when:** `scripts/adapters-robust-test.ts`, `scripts/swipe-batch-test.ts`, `scripts/closed-test.ts` print PASS and live dry runs pass on 3 Ashby forms and 1 Lever form.
+
+### [x] T46 — Greenhouse form gaps (from the 9 Oct failure review)
+Checkbox fieldsets read as one question (no more unticking every box of a required group), one-box acknowledgements asked by their legend, radio groups, number inputs that only take a number, and a required-field check before Submit. See ARCHITECTURE.md 6.6 (Greenhouse).
+**Done when:** `scripts/greenhouse-form-test.ts` prints PASS. Live check still to do: one dry run (`scripts/ats-smoke.ts`) on the Stripe, Twilio and SingleStore forms that failed before.
