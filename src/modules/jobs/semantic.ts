@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { db } from "@/lib/db";
 import { z } from "zod";
 import { callJson, embed } from "@/lib/llm";
+import { seniorityOf } from "./functions";
+import { requiredYears } from "./tagging";
 
 /**
  * Matching by meaning (owner, 10 Oct): every job and every resume becomes a vector once (OpenAI embeddings, 512
@@ -110,23 +112,71 @@ export type Fit = "strong" | "good" | "stretch" | "no";
 export type Judgement = { fit: Fit; why: string };
 
 const judgeSchema = z.object({
-  results: z.array(z.object({ n: z.number().int(), fit: z.enum(["strong", "good", "stretch", "no"]), why: z.string() })),
+  results: z.array(z.object({ n: z.number().int(), field: z.enum(["same", "close", "related", "different"]), why: z.string() })),
 });
 const JUDGE_BATCH = 40;
 const JUDGE_PARALLEL = 4;
 
-// Part of the cache key: a change to the prompt judges every job again.
-const JUDGE_VERSION = "2";
-const JUDGE_SYSTEM = `You match one job seeker with job postings. You get the candidate's resume summary (with their years of experience) and numbered jobs (title and the start of what the job needs). For each job decide whether it is work this candidate does and can get now:
-- strong: their field and specialty, and the level they are at now.
-- good: their field, with a small stretch (a close specialty, or about one year more experience than they have).
-- stretch: a related field they could move into, or one clear level above them.
-- no: a different kind of work (for a developer: sales, recruiting, product or program management, design, writing, finance, operations), or far more senior than them (staff, principal, lead, architect or manager roles for someone with under 4 years), or clearly junior for someone with 5+ years (intern, graduate).
-Judge only from the summary; do not assume skills it does not list.
-"why": at most 12 words, spoken to the candidate as "you", about the work and the fit (e.g. "Node and React full-stack work at your level", "A sales role, not engineering", "Backend work; asks for a bit more experience").
-Return {"results":[{"n","fit","why"}]} with one entry per job.`;
+// Part of the cache key: a change to the prompt or the rules judges every job again.
+const JUDGE_VERSION = "6";
+// The model says only how close the work is (what it is good at); the level is code (levelFit), measured on
+// scripts/judge-test.ts: asked to apply years and levels itself, gpt-4o-mini got the arithmetic wrong.
+const JUDGE_SYSTEM = `You match one job seeker with job postings. You get the candidate's resume summary and numbered jobs (title and the start of what the job needs). For each job say only how close the WORK is to the candidate's own work, ignoring seniority and years:
+- same: the candidate's own field and specialty (a full-stack developer and a full-stack or web role; a data scientist and a data scientist or analytics role).
+- close: the same field, a neighbouring specialty (data science and ML engineering; backend and full-stack; SOC / detection and application or cloud security; frontend and mobile).
+- related: a different specialty they could move into with their skills (a developer and DevOps or QA automation; a data scientist and data engineering).
+- different: another kind of work (for a developer: sales, recruiting, product or program management, design, writing, finance, operations; for a data scientist: frontend or mobile engineering).
+Judge skills only from the summary; do not assume skills it does not list.
+"why": at most 10 words, spoken to the candidate as "you", about the work only (e.g. "React and Node full-stack work, like yours", "A sales role, not engineering").
+Return {"results":[{"n","field","why"}]} with one entry per job.`;
 
-const jobBrief = (job: { title: string; description: string }, n: number) => ({ n, title: job.title, needs: job.description.replace(/\s+/g, " ").slice(0, 600) });
+type JudgedJob = { title: string; description: string };
+const jobBrief = (job: JudgedJob, n: number) => ({ n, title: job.title, needs: job.description.replace(/\s+/g, " ").slice(0, 600) });
+
+const ORDER: Fit[] = ["no", "stretch", "good", "strong"];
+const atMost = (fit: Fit, cap: Fit) => ORDER[Math.min(ORDER.indexOf(fit), ORDER.indexOf(cap))];
+const FROM_FIELD: Record<"same" | "close" | "related" | "different", Fit> = { same: "strong", close: "good", related: "stretch", different: "no" };
+
+/**
+ * The verdict from how close the work is (the model) and the level (code): years asked over the candidate's cap it
+ * (1 more → good at best, 2 → stretch, 3+ → no); staff, lead or manager titles need 4+ years; senior titles need 3+
+ * (2 → stretch); intern and entry roles are not for 5+ years. Returns the fit and what to add to the reason.
+ */
+export function levelFit(field: keyof typeof FROM_FIELD, job: JudgedJob, years: number | null): { fit: Fit; note: string | null } {
+  let fit = FROM_FIELD[field];
+  if (fit === "no") return { fit, note: null };
+  const have = years ?? 0;
+  const asks = requiredYears(job.title, job.description);
+  const more = asks == null ? 0 : Math.round(asks - have);
+  const level = seniorityOf(job.title);
+  let note: string | null = null;
+  if (more >= 3) return { fit: "no", note: `asks ${more} more years than you have` };
+  if (more === 2) fit = atMost(fit, "stretch");
+  if (more === 1) fit = atMost(fit, "good");
+  if (more > 0) note = `asks ${more} more ${more === 1 ? "year" : "years"} than you have`;
+  if ((level === "staff" || level === "manager") && have < 4) return { fit: "no", note: `a ${level === "staff" ? "staff or lead" : "manager"} role` };
+  if (level === "staff" || level === "manager") fit = atMost(fit, "stretch");
+  if (level === "senior" && have < 2) return { fit: "no", note: "a senior role" };
+  if (level === "senior" && have < 3) fit = atMost(fit, "stretch");
+  if ((level === "intern" || level === "entry") && have >= 5) return { fit: "no", note: `an ${level === "intern" ? "intern" : "entry-level"} role` };
+  return { fit, note };
+}
+
+/** One call: the verdict on each of these jobs (by index) for this candidate. No cache (judgeJobs caches). */
+export async function judgeBatch(candidate: { summary: string; years: number | null }, jobs: JudgedJob[]): Promise<Map<number, Judgement>> {
+  const verdict = await callJson(judgeSchema, JUDGE_SYSTEM, JSON.stringify({ candidate: candidate.summary.slice(0, 2500), jobs: jobs.map(jobBrief) }));
+  const out = new Map<number, Judgement>();
+  for (const result of verdict.results) {
+    if (result.n < 0 || result.n >= jobs.length || out.has(result.n)) continue;
+    const { fit, note } = levelFit(result.field, jobs[result.n], candidate.years);
+    const why = result.why.trim().replace(/[.\s]+$/, "");
+    // A job kept despite a gap already says so in its score's reason ("Asks for about 3+ years, you have 1"); one
+    // left out says why instead of what the work is.
+    const reason = fit === "no" && note && result.field !== "different" ? `${note[0].toUpperCase()}${note.slice(1)}` : why;
+    out.set(result.n, { fit, why: reason.slice(0, 140) });
+  }
+  return out;
+}
 
 /**
  * The model's verdict for each job against this resume, cached in JobJudgement until the resume or the posting
@@ -140,7 +190,7 @@ export async function judgeJobs(
   const out = new Map<string, Judgement>();
   if (jobs.length === 0) return out;
   const summary = profileText(profile);
-  const fromHash = createHash("md5").update(`${JUDGE_VERSION}\n${summary}`).digest("hex");
+  const fromHash = createHash("md5").update(`${JUDGE_VERSION}\n${profile.yearsExperience ?? ""}\n${summary}`).digest("hex");
   const hashOf = (job: { contentHash: string | null }) => job.contentHash ?? "none";
   const cached = await db.jobJudgement.findMany({ where: { profileId: profile.id, jobId: { in: jobs.map((job) => job.id) } } });
   const valid = new Map(cached.map((row) => [row.jobId, row]));
@@ -159,11 +209,10 @@ export async function judgeJobs(
     await Promise.all(
       batches.slice(i, i + JUDGE_PARALLEL).map(async (batch) => {
         try {
-          const verdict = await callJson(judgeSchema, JUDGE_SYSTEM, JSON.stringify({ candidate: summary.slice(0, 2500), jobs: batch.map(jobBrief) }));
-          for (const result of verdict.results) {
-            const job = batch[result.n];
-            if (!job || out.has(job.id)) continue;
-            const judgement = { fit: result.fit, why: result.why.trim().slice(0, 140) };
+          const verdicts = await judgeBatch({ summary, years: profile.yearsExperience }, batch);
+          for (const [n, judgement] of verdicts) {
+            const job = batch[n];
+            if (out.has(job.id)) continue;
             out.set(job.id, judgement);
             fresh.push({ jobId: job.id, jobHash: hashOf(job), ...judgement });
           }
