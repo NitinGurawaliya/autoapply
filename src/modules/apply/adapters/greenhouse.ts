@@ -202,7 +202,9 @@ function bestOption(options: string[], wanted: string) {
  * What to type into a search box, best first: the answer, then simpler forms of it, because location pickers find
  * nothing for "Greater Delhi Area" or "Bengaluru, Karnataka, India" but do for "Delhi" and "Bengaluru" (10 Oct dry run).
  */
-export function searchTerms(value: string) {
+export function searchTerms(value: string, label = "") {
+  // A school is matched only by its full name: "Jaypee" alone would pick "Jaypee Institute", another school.
+  if (/\b(school|university|college|institut)/i.test(label)) return [...new Set([value.trim(), value.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim()])];
   const terms = [value.trim()];
   const plain = value.replace(/\b(greater|metropolitan|metro|area|region|district|urban|rural|ncr|city of)\b/gi, " ").replace(/\s+/g, " ").trim();
   terms.push(plain, plain.split(",")[0].trim(), value.split(",")[0].trim());
@@ -216,12 +218,20 @@ async function pickCombobox(page: Page, selector: string, value: string, label: 
   const options = await optionsFor(page, input);
   let texts: string[] = [];
   let choice: string | null = null;
-  for (const term of searchTerms(value)) {
+  for (const term of searchTerms(value, label)) {
     await input.fill(term);
     await options.first().waitFor({ timeout: 8000 }).catch(() => undefined);
     texts = (await options.allInnerTexts()).map((text) => text.trim());
     choice = bestOption(texts, term);
     if (choice) break;
+  }
+  // A school the list does not have: its own "Other" entry is the true answer (Greenhouse's list misses many Indian
+  // colleges, 11 Oct dry runs).
+  if (!choice && /\b(school|university|college|institut)/i.test(label)) {
+    await input.fill("Other");
+    await options.first().waitFor({ timeout: 8000 }).catch(() => undefined);
+    texts = (await options.allInnerTexts()).map((text) => text.trim());
+    choice = texts.find((text) => /^other\b/i.test(text)) ?? null;
   }
   if (!choice) {
     await closeMenu(page);
@@ -411,7 +421,13 @@ export const greenhouseAdapter: AtsAdapter = {
         if (value.type === "radio" || value.type === "checkbox-group") return pickInGroup(page, value);
         if (value.type === "select") await selectOption(page, value.selector, { label: value.value });
         else if (value.type === "checkbox") await setCheckbox(page, value.selector, value.value);
-        else await fillText(page, value.selector, value.value);
+        else if ((await page.locator(value.selector).getAttribute("type").catch(() => null)) === "number") {
+          // A number box takes only a number ("Start date year"); text there failed the whole run (SingleStore, 10 Oct).
+          const number = value.value.match(/-?\d+(\.\d+)?/)?.[0];
+          if (!number) throw new NeedsAnswerError({ key: customQuestionKey(value.label), label: value.label, type: "number", required: true });
+          await fillText(page, value.selector, number);
+          return number;
+        } else await fillText(page, value.selector, value.value);
         return value.value;
       });
       filled.push({ key: value.key, label: value.label, value: written, source: value.source, selector: value.selector });

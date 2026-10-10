@@ -4,6 +4,7 @@ import { ACKNOWLEDGEMENT_KEY, ACKNOWLEDGEMENT_QUESTION, acknowledgementValue } f
 import { abroadAnswer } from "./abroad";
 import type { FormField, PendingQuestion, ResolvedValue } from "./adapter";
 import { BEST_PROJECT_KEY, essayKind, ESSAY_PERMISSION_KEY, ESSAY_PERMISSION_QUESTION } from "./essay";
+import { historyValue } from "./history";
 import type { MemoryAnswer } from "./recall";
 import { outsideHome, SPONSORSHIP_ABROAD_KEY, SPONSORSHIP_ABROAD_OPTIONS, sponsorshipAbroadQuestion, standingSponsorship } from "./sponsorship";
 
@@ -22,6 +23,9 @@ type ProfileFacts = {
   currentTitle: string | null;
   currentCompany: string | null;
   resumeKey: string;
+  /** The resume's roles and degrees, for the work-history and education sections (history.ts). */
+  experience?: unknown;
+  education?: unknown;
 };
 
 function profileValue(profile: ProfileFacts, key: string) {
@@ -179,6 +183,14 @@ export function resolveValues(
       });
       return true;
     };
+
+    // Work history and education sections (company, title, dates, school, degree, discipline): from the resume,
+    // by the field's id, before any saved answer or key (history.ts). What the resume does not state goes on.
+    const history = historyValue(field.selector, profile);
+    if (history && push(key ?? questionKey, history.value, "resume")) {
+      values[values.length - 1].basis = history.basis;
+      continue;
+    }
 
     // A question about a particular country, company or place ("authorized to work in the country where this job is
     // located", "worked at MongoDB", "our London office") may only reuse an answer verified to be about the same one

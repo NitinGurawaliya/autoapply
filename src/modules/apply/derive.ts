@@ -59,6 +59,13 @@ function residence(label: string, profile: ProfileForDerive): { answer: string; 
   return { answer: "Yes", basis: `derived from your location: ${where}` };
 }
 
+/** "Please select the country where you currently reside." → the profile's country (the form's option is matched later). */
+function residenceCountry(label: string, profile: ProfileForDerive): { answer: string; basis: string } | null {
+  if (asksYesNo(label) || !profile.country) return null;
+  if (!/\b(which|what|select|choose|name|enter)\b.{0,40}\bcountry\b.{0,40}\b(reside|residing|live|living|located|based|residence)\b|\bcountry of (current )?residence\b/i.test(label)) return null;
+  return { answer: profile.country, basis: `derived from your location: ${profile.city ? `${profile.city}, ` : ""}${profile.country}` };
+}
+
 /** "What timezone do you reside in?" → India Standard Time for a profile in India (one time zone for the whole country). */
 function timeZone(label: string, profile: ProfileForDerive): { answer: string; basis: string } | null {
   if (!/\btime ?zones?\b/i.test(label) || /\b(overlap|work (in|during|across)|willing|able|comfortable|flexib)/i.test(label)) return null;
@@ -156,6 +163,11 @@ export async function deriveAnswers(input: { profile: ProfileForDerive; fields: 
     // Never pay, notice period, work authorization, sponsorship, relocation, office or EEO.
     const kind = detectConcept(label);
     if (kind && kind !== "residence" && kind !== "previously_employed_by") continue;
+    const homeCountry = kind === "residence" || !kind ? residenceCountry(label, input.profile) : null;
+    if (homeCountry) {
+      put(label, homeCountry);
+      continue;
+    }
     const zone = kind === "residence" || !kind ? timeZone(label, input.profile) : null;
     if (zone) {
       put(label, zone);

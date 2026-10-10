@@ -144,9 +144,14 @@ async function execute(applicationId: string) {
   // A saved answer only proves a loop when the user gave it in reply to THIS application's own prompt and the form
   // still refuses it. An older answer (the same question on another company's form, with other options, such as
   // "How did you hear about this job?") is simply asked again with this form's options; the new answer replaces it.
+  // A question the user already answered for this application that is still pending: the answer did not fit the form.
+  // It is asked again with the form's own choices (up to MAX_ASKS times in all); only then does the run give up, so a
+  // wording mismatch costs one more tap instead of the application (6 runs failed this way in the week to 10 Oct).
+  const MAX_ASKS = 3;
   const repeatedQuestion = async (pending: PendingQuestion[]) => {
-    const lastAsk = await db.applicationEvent.findFirst({ where: { applicationId, type: "ask_user" }, orderBy: { createdAt: "desc" }, select: { createdAt: true } });
-    return lastAsk ? pending.find((question) => answers.some((row) => row.key === question.key && row.updatedAt >= lastAsk.createdAt)) : undefined;
+    const asks = await db.applicationEvent.findMany({ where: { applicationId, type: "ask_user" }, orderBy: { createdAt: "desc" }, select: { createdAt: true } });
+    if (asks.length < MAX_ASKS) return undefined;
+    return pending.find((question) => answers.some((row) => row.key === question.key && row.updatedAt >= asks[0].createdAt));
   };
   try {
     // Ask before opening the form (T56): when the board publishes the form's questions, run the same answering chain on
@@ -158,7 +163,7 @@ async function execute(applicationId: string) {
       if (before.missing.length > 0) {
         const repeatedEarly = await repeatedQuestion(before.missing);
         if (repeatedEarly) {
-          const message = `Your saved answer for "${repeatedEarly.label.slice(0, 80)}" does not match this form's options`;
+          const message = `After ${MAX_ASKS} tries, your answer for "${repeatedEarly.label.slice(0, 80)}" still does not match this form's options`;
           await writeEvent(applicationId, "error", message);
           await setApp(applicationId, { status: "failed", error: message, attempt: application.attempt });
           return;
@@ -177,7 +182,7 @@ async function execute(applicationId: string) {
     await writeEvent(applicationId, "resolve", `Resolved ${resolved.values.length}, pending ${resolved.pending.length}`);
     const repeated = await repeatedQuestion(resolved.pending);
     if (repeated) {
-      const message = `Your saved answer for "${repeated.label.slice(0, 80)}" does not match this form's options`;
+      const message = `After ${MAX_ASKS} tries, your answer for "${repeated.label.slice(0, 80)}" still does not match this form's options`;
       await writeEvent(applicationId, "error", message);
       await setApp(applicationId, { status: "failed", error: message, attempt: application.attempt });
       return;
