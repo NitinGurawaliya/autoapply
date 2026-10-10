@@ -452,15 +452,17 @@ Do: gates (eligibility; the job's track is one of the user's tracks or an adjace
 **Done when:** `match-test` tier cases per track pass (a data scientist is not shown frontend roles, a security engineer sees SOC/AppSec roles, an ML engineer sees applied-AI roles as strong, a senior staff role for a 1-yr developer is out), `feed-sql-test` agreement holds, and the top 20 for each real profile plus ML, data-science and security test profiles are reviewed with the owner.
 Done 10 Oct, by meaning (owner's choice: embeddings + fact rules): jobs and resumes embedded (8,013 open jobs, 157 s), the 150 closest judged by the model against the resume and cached; tiers on the card. `match-test` (tier cases), `feed-sql-test`, `guards`, `results`, `ingest-contract`, `swipe-batch` PASS. Top 20 per real profile: `npx tsx scripts/feed-report.ts --titles` (for the owner's review).
 
-### [~] T83 — Onboarding and feed by track
+### [x] T83 — Onboarding and feed by track
 Do: onboarding shows the suggested tracks and level ("You look like: ML/AI · entry"), editable; Track chips in the feed with Company type and location; a dry run on an ML and a security Greenhouse form.
 **Done when:** ML, data-science and security test profiles go through onboarding, see only their tracks' India-eligible jobs with tiers, and one dry run per track passes (not submitted).
 Progress 10 Oct: "Your fields" on the confirm screen (suggested from the resume, editable, saved as `Profile.tracks`); "Your fields" filter chips in the feed. Answering chain checked read-only on ML, security and abroad Greenhouse forms (questions from the public API, nothing typed): handles them like software forms. Left: one live dry run per track (`ats-smoke`, types into the live form, not submitted) waits for the owner's OK.
+Done 11 Oct: live dry runs (owner's OK, Bangalore profile, not submitted) on StockX ML, Zenoti security and Thoughtworks London forms: PASS after two fixes (profile beats a stale saved city; location search retries simpler words). The country questions moved into onboarding (`onboarding-smoke` PASS).
 
 ### [~] T84 — Daily freshness numbers
 Do: per-run counts (new jobs, new India-eligible jobs, failing companies); `scripts/feed-report.ts` new Strong/Good matches per profile in 24 h.
 **Done when:** the report runs after a scheduled ingest and shows several new matches per profile per day.
 Progress 10 Oct: `scripts/feed-report.ts` (ingest runs, failing companies, India-eligible jobs first seen in 24 h, and per profile: feed by tier, fresher count, new strong/good in 24 h). First run: 553 India-eligible jobs new in 24 h (first full pull); the 6-yr profile has 10 strong + 7 good, the fresher profiles 2–9 cards and 0–2 new strong/good (they have swiped most of the rest). Not met for freshers: 12 open fresher tech jobs in India on Greenhouse. Next: more companies hiring freshers (Indian startups, often on Lever / Ashby, back to T78).
+Update 11 Oct: discovery batch 3 (87 Indian startups, unicorns, campus-hiring companies): only 5 have Greenhouse boards, 2 hire in India (IMC Trading, Tower Research Capital, added: 30 India jobs, 1 fresher). Fresher supply on Greenhouse cannot grow much; it waits on the Lever and Ashby adapters. Added: Early career (0-2 yrs) level, feeds warmed after each ingest, wider shortlist when the deck is short.
 
 ### [ ] T85 — Other fields (HR, finance, marketing, sales, operations...) — after T81–T83 are right for tech
 Do: add each field's functions and skill vocabulary to the same taxonomy; resume parse and onboarding for them; test profiles and dry runs per field.
