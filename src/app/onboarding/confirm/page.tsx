@@ -1,6 +1,7 @@
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getAll } from "@/modules/answers";
+import { TRACK_LABELS, TRACKS, tracksOf } from "@/modules/jobs";
 import { profileSchema } from "@/modules/profile";
 import { redirect } from "next/navigation";
 import { Screen } from "@/components/patterns/layout";
@@ -33,6 +34,7 @@ export default async function ConfirmPage() {
   return (
     <Screen>
       <ConfirmForm
+        trackOptions={TRACKS.map((id) => ({ id, label: TRACK_LABELS[id] }))}
         initial={{
           fullName: parsed.fullName,
           email: parsed.email,
@@ -48,6 +50,7 @@ export default async function ConfirmPage() {
           skills: parsed.skills.join(", "),
           experience: parsed.experience,
           education: parsed.education,
+          tracks: tracksOf(row),
           answers: answers.map((answer) => ({
             key: answer.key,
             question: answer.question,

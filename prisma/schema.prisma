@@ -80,6 +80,11 @@ model Profile {
   currentCompany  String?
   skills          Json
   experience      Json
+  // Tech tracks the candidate is matched on (modules/jobs/functions.ts), suggested from the resume, confirmed by the user.
+  tracks          String[] @default([])
+  // Meaning of the resume for matching (modules/jobs/semantic.ts), and the md5 of the text it was made from.
+  embedding       Unsupported("halfvec(512)")?
+  embeddedFrom    String?
   education       Json
   rawJson         Json
   updatedAt       DateTime @updatedAt
@@ -153,6 +158,12 @@ model Job {
   firstSeenAt   DateTime @default(now())
   // md5 of what ingest stores and tags from: an unchanged job is not written again.
   contentHash   String?
+  // What kind of job (modules/jobs/functions.ts classifyTitle): engineering | data_ai | non_tech, a tech track, a level.
+  function      String?
+  track         String?
+  seniority     String?
+  // Meaning of the posting for resume matching (modules/jobs/semantic.ts, raw SQL): title + start of the description.
+  embedding     Unsupported("halfvec(512)")?
   // The application form's questions read from the board's public API (modules/jobs/questions.ts), so the agent can
   // ask what it is missing before opening a browser. Null until fetched.
   questions          Json?
@@ -170,6 +181,7 @@ model Job {
   @@index([country])
   @@index([source, country, postedAt]) // the feed's filter
   @@index([source, eligibility, postedAt])
+  @@index([track])
   @@index([terms], type: Gin) // feedRows looks skills up here (migration job_terms_index)
 }
 
@@ -309,4 +321,18 @@ model IngestRun {
   createdEligible Int       @default(0)
 
   @@index([startedAt])
+}
+
+// The model's verdict on one job for one resume (modules/jobs/semantic.ts judgeJobs): strong | good | stretch | no, and
+// why. Valid while the resume text (fromHash) and the posting (jobHash = Job.contentHash) are unchanged.
+model JobJudgement {
+  profileId String
+  jobId     String
+  fromHash  String
+  jobHash   String
+  fit       String
+  why       String
+  createdAt DateTime @default(now())
+
+  @@id([profileId, jobId])
 }

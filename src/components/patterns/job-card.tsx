@@ -16,6 +16,9 @@ export type JobCardData = {
   asks: string | null;
   hint?: string | null;
   score: number;
+  tier?: "strong" | "good" | "stretch" | null;
+  /** "MNC", "Mid-size", "Startup"; null when the company is not tagged. */
+  stage?: string | null;
   applyUrl?: string;
 };
 
@@ -39,6 +42,7 @@ export function JobCard({ job, stamps }: { job: JobCardData; stamps?: ReactNode 
         <div className="mt-[18px] flex flex-wrap gap-2">
           <Tag>{job.where}</Tag>
           {job.asks ? <Tag>{job.asks}</Tag> : null}
+          {job.stage ? <Tag>{job.stage}</Tag> : null}
           {job.hint ? (
             <Tag className="gap-1.5">
               <Icon name="info" size={14} strokeWidth={2.25} />
@@ -60,7 +64,7 @@ export function JobCard({ job, stamps }: { job: JobCardData; stamps?: ReactNode 
         ) : null}
         {stamps}
       </div>
-      <MatchBadge score={job.score} className="absolute -top-[18px] right-3.5" />
+      <MatchBadge score={job.score} tier={job.tier} className="absolute -top-[18px] right-3.5" />
     </>
   );
 }

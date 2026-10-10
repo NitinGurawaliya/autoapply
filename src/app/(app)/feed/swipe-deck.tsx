@@ -20,6 +20,7 @@ const TOAST_MAX_MS = 8000;
 const TOAST_AFTER_SENT_MS = 1600;
 
 const REMOTE_LABEL: Record<string, string> = { remote: "Remote", hybrid: "Hybrid", onsite: "On-site" };
+const STAGE_LABEL: Record<string, string> = { startup: "Startup", midsize: "Mid-size", mnc: "MNC" };
 
 function cardData(job: FeedJob): JobCardData {
   const remote = REMOTE_LABEL[job.remoteType];
@@ -34,6 +35,8 @@ function cardData(job: FeedJob): JobCardData {
     asks,
     hint: job.hint,
     score: job.score,
+    tier: job.tier,
+    stage: job.stage ? STAGE_LABEL[job.stage] ?? null : null,
     applyUrl: job.applyUrl,
   };
 }

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { forgetFeed } from "@/lib/feed-cache";
+import { TRACKS } from "@/modules/jobs";
 import { profileSchema } from "@/modules/profile";
 
 function toJson(profile: {
@@ -50,13 +51,16 @@ export async function GET() {
 export async function PUT(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const parsed = profileSchema.safeParse(await req.json());
+  const raw = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+  const parsed = profileSchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ error: "invalid" }, { status: 400 });
 
   const existing = await db.profile.findUnique({ where: { userId: user.id } });
   if (!existing) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   const profile = parsed.data;
+  // The fields the user confirmed (onboarding); only known tracks, and only when the form sent them.
+  const tracks = Array.isArray(raw?.tracks) ? [...new Set((raw.tracks as unknown[]).filter((t): t is string => typeof t === "string" && (TRACKS as readonly string[]).includes(t)))] : null;
   const updated = await db.profile.update({
     where: { userId: user.id },
     data: {
@@ -74,6 +78,7 @@ export async function PUT(req: Request) {
       skills: profile.skills as Prisma.InputJsonValue,
       experience: profile.experience as Prisma.InputJsonValue,
       education: profile.education as Prisma.InputJsonValue,
+      ...(tracks ? { tracks } : {}),
     },
   });
   forgetFeed(user.id); // title, skills and years decide the feed's scores

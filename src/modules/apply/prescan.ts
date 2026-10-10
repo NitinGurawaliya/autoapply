@@ -5,6 +5,7 @@ import { customQuestionKey, detectConcept, RISKY } from "@/modules/answers";
 import type { PendingQuestion } from "./adapter";
 import { jobQuestions } from "./questions";
 import { resolveForm } from "./resolveForm";
+import { CITIZENSHIP_KEY, RELOCATE_ABROAD_KEY } from "./abroad";
 import { SPONSORSHIP_ABROAD_KEY } from "./sponsorship";
 
 /**
@@ -49,8 +50,9 @@ export async function scanJobs(userId: string, jobIds: string[]) {
     for (const question of missing) {
       // A question about the job's country ("authorized to work in the country where this job is located") is grouped
       // by that country and saved with it, so one answer serves every job there, in any wording (memory, recall.ts).
-      // The standing sponsorship question (sponsorship.ts) is one question for every country: never grouped by one.
-      const kind = question.key === SPONSORSHIP_ABROAD_KEY ? null : detectConcept(question.label);
+      // The standing questions (sponsorship.ts, abroad.ts) are one question for every country: never grouped by one.
+      const standing = [SPONSORSHIP_ABROAD_KEY, RELOCATE_ABROAD_KEY, CITIZENSHIP_KEY].includes(question.key);
+      const kind = standing ? null : detectConcept(question.label);
       const place = kind && RISKY[kind].parameter === "country" ? placeOf(job) : null;
       const plain = kind && place ? COUNTRY_QUESTIONS[kind]?.(place) : undefined;
       const grouped = plain ? { ...question, label: plain, key: customQuestionKey(plain) } : question;

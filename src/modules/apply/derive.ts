@@ -2,11 +2,14 @@ import { z } from "zod";
 import { callJson } from "@/lib/llm";
 import { detectConcept } from "@/modules/answers";
 import type { FormField } from "./adapter";
+import { countryCode, has, placesNamed, words } from "./places";
 import type { MemoryAnswer } from "./recall";
 
 /**
  * Answers worked out from what the profile and resume already prove (T54), each with the evidence it rests on:
- * - residence: "Do you reside in the US or Canada?" from the profile's country;
+ * - residence: "Do you reside in the US or Canada?", "Please confirm you're based in BC or Ontario", "Are you located in
+ *   Belarus, Cuba, Iran...?" from the profile's country (places.ts);
+ * - time zone: "What timezone do you reside in?" from the profile's country (India only: one time zone);
  * - worked at a named company: from the resume's employers;
  * - "N years of experience in X": "No" when total experience is under N, "Yes" when the resume's dated roles that
  *   involve X add up to N years (the model may only say WHICH existing roles involve X; the arithmetic is code).
@@ -24,39 +27,14 @@ export type ProfileForDerive = {
   experience: unknown;
 };
 
-const COUNTRIES: Record<string, string[]> = {
-  US: ["united states", "united states of america", "usa", "us", "u s", "america"],
-  CA: ["canada"],
-  UK: ["united kingdom", "uk", "u k", "great britain", "britain", "england", "scotland", "wales", "northern ireland"],
-  IN: ["india"],
-  IE: ["ireland"],
-  DE: ["germany"],
-  FR: ["france"],
-  NL: ["netherlands"],
-  ES: ["spain"],
-  SG: ["singapore"],
-  AU: ["australia"],
-  AE: ["united arab emirates", "uae"],
-};
-const EU = ["IE", "DE", "FR", "NL", "ES"];
-const REGIONS: Record<string, string[]> = { europe: [...EU, "UK"], eu: EU, "european union": EU, "north america": ["US", "CA"] };
-// Places inside a country: a question about one cannot be settled from the country alone unless the country differs.
-const SUB_REGIONS: Record<string, string> = { "northern ireland": "UK", scotland: "UK", wales: "UK", england: "UK", texas: "US", california: "US", "new york": "US", bangalore: "IN", bengaluru: "IN", delhi: "IN", mumbai: "IN" };
-
-const words = (text: string) => ` ${text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
-const has = (text: string, phrase: string) => words(text).includes(` ${phrase} `);
-
-function countryCode(name: string | null) {
-  if (!name) return null;
-  for (const [code, names] of Object.entries(COUNTRIES)) if (names.some((n) => words(name).trim() === n)) return code;
-  return null;
-}
-
 // Leading tags such as "[Relocation]" do not change what is asked.
 const opening = (question: string) => question.replace(/^\s*\[[^\]]*\]\s*/, "").trim();
 // A yes/no question, also when it opens with a statement and asks at the end ("... let us know if you're residing in X?").
-const asksYesNo = (question: string) =>
-  /^(are|do|does|did|have|has|had|is|was|were|will|would|can|could)\b/i.test(opening(question)) || /\b(if|whether) (you|you're|you are)\b[^.]*\?\s*$/i.test(question);
+// Also a request to confirm ("Please confirm you're based in BC or Ontario").
+export const asksYesNo = (question: string) =>
+  /^(are|do|does|did|have|has|had|is|was|were|will|would|can|could)\b/i.test(opening(question)) ||
+  /\b(if|whether) (you|you're|you are)\b[^.]*\?\s*$/i.test(question) ||
+  /\bconfirm (that )?(you|you're|you are)\b/i.test(question);
 
 /** "Do you reside in the US or Canada?" → "No" for a profile in India. */
 function residence(label: string, profile: ProfileForDerive): { answer: string; basis: string } | null {
@@ -64,17 +42,21 @@ function residence(label: string, profile: ProfileForDerive): { answer: string; 
   if (!/\b(reside|residing|resident|live|living|located|based)\b/i.test(label)) return null;
   const home = countryCode(profile.country);
   if (!home) return null;
-  const named = new Set<string>();
-  for (const [code, names] of Object.entries(COUNTRIES)) if (names.some((n) => has(label, n))) named.add(code);
-  for (const [region, codes] of Object.entries(REGIONS)) if (has(label, region)) codes.forEach((code) => named.add(code));
-  const subRegions = Object.entries(SUB_REGIONS).filter(([place]) => has(label, place));
-  for (const [, code] of subRegions) named.add(code);
+  const { codes: named, inside } = placesNamed(label);
   if (named.size === 0) return null;
   const where = profile.city ? `${profile.city}, ${profile.country}` : `${profile.country}`;
   if (!named.has(home)) return { answer: "No", basis: `derived from your location: ${where}` };
   // In the right country but asked about a smaller place in it: the country alone does not settle it.
-  if (subRegions.some(([, code]) => code === home)) return null;
+  if (inside.has(home)) return null;
   return { answer: "Yes", basis: `derived from your location: ${where}` };
+}
+
+/** "What timezone do you reside in?" → India Standard Time for a profile in India (one time zone for the whole country). */
+function timeZone(label: string, profile: ProfileForDerive): { answer: string; basis: string } | null {
+  if (!/\btime ?zones?\b/i.test(label) || /\b(overlap|work (in|during|across)|willing|able|comfortable|flexib)/i.test(label)) return null;
+  if (countryCode(profile.country) !== "IN") return null;
+  const where = profile.city ? `${profile.city}, ${profile.country}` : `${profile.country}`;
+  return { answer: "India Standard Time (IST, UTC+5:30)", basis: `derived from your location: ${where}` };
 }
 
 const normalCompany = (name: string) =>
@@ -166,6 +148,11 @@ export async function deriveAnswers(input: { profile: ProfileForDerive; fields: 
     // Never pay, notice period, work authorization, sponsorship, relocation, office or EEO.
     const kind = detectConcept(label);
     if (kind && kind !== "residence" && kind !== "previously_employed_by") continue;
+    const zone = kind === "residence" || !kind ? timeZone(label, input.profile) : null;
+    if (zone) {
+      put(label, zone);
+      continue;
+    }
     const lived = kind === "residence" || !kind ? residence(label, input.profile) : null;
     if (lived) {
       put(label, lived);

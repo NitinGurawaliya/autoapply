@@ -1,5 +1,5 @@
 // Offline checks for experience parsing and match scoring. npx tsx scripts/match-test.ts
-import { scoreJob } from "../src/modules/jobs";
+import { scoreJob, tierOf } from "../src/modules/jobs";
 import { requiredYears, titleYears } from "../src/modules/jobs/tagging";
 
 let failed = 0;
@@ -42,6 +42,23 @@ check("entry role scores well", entry.score >= 60, `${entry.score}%`);
 check("graduate role scores well", grad.score >= 60, `${grad.score}%`);
 check("2 yr ask is ok but below entry", twoYr.score >= 40 && twoYr.score <= entry.score, `${twoYr.score}%`);
 check("reason explains seniority", /years/i.test(senior.reason), senior.reason);
+
+// T82: tiers, by tracks (no vectors) and by meaning plus the model's verdict (semantic.ts).
+const dev = { ...junior, tracks: ["fullstack", "frontend", "backend"] };
+const ds = { currentTitle: "Data Scientist", skills: ["Python", "Pandas", "SQL", "Statistics"], yearsExperience: 2, preferredLocations: [], tracks: ["data_science"] };
+const tracked = (title: string, description: string, who: typeof dev | typeof ds) => scoreJob({ ...base, title, description }, who);
+check("by tracks: an entry full-stack role for a 1-yr MERN dev is strong or good", ["strong", "good"].includes(tierOf(tracked("Full Stack Engineer", `${stack} 0-2 years of experience.`, dev).score, 40) ?? ""), String(tracked("Full Stack Engineer", `${stack} 0-2 years.`, dev).score));
+check("by tracks: a frontend role is not shown to a data scientist", tracked("Senior Frontend Engineer", "React and CSS.", ds).score === 0);
+check("by tracks: a sales role is not shown to a developer", tracked("Account Executive", "Sell our product.", dev).score === 0);
+check("by tracks: a data scientist sees data science roles", (tierOf(tracked("Data Scientist", "Python, SQL, Pandas and statistics. 2+ years of experience.", ds).score, 40) ?? "") !== "");
+const meaning = (similarity: number, fit: "strong" | "good" | "stretch" | "no" | null, extra: Partial<{ title: string; description: string }> = {}) =>
+  scoreJob({ ...base, title: extra.title ?? "Software Engineer", description: extra.description ?? `${stack} 0-2 years of experience.`, similarity, judgement: fit ? { fit, why: "test" } : null }, dev);
+check("by meaning: close and judged strong → strong", tierOf(meaning(0.6, "strong").score, 40) === "strong", String(meaning(0.6, "strong").score));
+check("by meaning: judged no → out, whatever the closeness", meaning(0.65, "no").score === 0);
+check("by meaning: below the floor → out", meaning(0.3, "good").score === 0);
+check("by meaning: unjudged needs to be closer", meaning(0.4, null).score === 0 && meaning(0.5, null).score > 0);
+check("by meaning: a senior role for a 1-yr dev stays low even if close", meaning(0.6, "stretch", { title: "Senior Software Engineer", description: `${stack} 5+ years of experience required.` }).score < 40);
+check("by meaning: the verdict's reason is shown", /^Test/.test(meaning(0.6, "strong").reason), meaning(0.6, "strong").reason);
 
 console.log(failed === 0 ? "PASS match logic" : `FAIL match logic (${failed})`);
 process.exit(failed === 0 ? 0 : 1);

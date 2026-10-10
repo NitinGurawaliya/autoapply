@@ -3,21 +3,25 @@ import { db } from "@/lib/db";
 import { forgetFeed } from "@/lib/feed-cache";
 import { enqueueApply } from "@/lib/queue";
 import { check, historyFor, loadRules, writeEvent } from "@/modules/governance";
-import { APPLY_BOARDS, scoreJob } from "@/modules/jobs";
+import { APPLY_BOARDS, jobSimilarity, judgeJobs, profileVector, scoreJob, tracksOf } from "@/modules/jobs";
 
 export const CANCELLABLE = ["queued", "inspecting", "filling", "needs_input"];
 export const RETRYABLE = ["failed", "cancelled"];
 
-type ScoredProfile = { currentTitle: string | null; skills: unknown; yearsExperience: number | null };
-type ScoredJob = { title: string; description: string; country: string; remoteType: string; experienceMin: number | null };
+type ScoredProfile = { id: string; currentTitle: string | null; skills: unknown; experience: unknown; education: unknown; tracks: string[]; yearsExperience: number | null; embeddedFrom: string | null };
+type ScoredJob = { id: string; title: string; description: string; contentHash: string | null; country: string; remoteType: string; experienceMin: number | null };
 
-/** The match score the swipe-time rules use: the same for a first swipe and for a retry. */
-export function candidateScore(profile: ScoredProfile, job: ScoredJob) {
-  return scoreJob(job, {
+/** The match score the swipe-time rules use: the same for a first swipe and for a retry, and the same as the feed's. */
+export async function candidateScore(profile: ScoredProfile, job: ScoredJob) {
+  const similarity = await jobSimilarity(job.id, await profileVector(profile));
+  // The verdict the feed got for this job (cached), so a card the feed showed passes the same check.
+  const judgement = similarity == null ? null : (await judgeJobs(profile, [job])).get(job.id) ?? null;
+  return scoreJob({ ...job, similarity, judgement }, {
     currentTitle: profile.currentTitle,
     skills: Array.isArray(profile.skills) ? profile.skills.filter((item): item is string => typeof item === "string") : [],
     yearsExperience: profile.yearsExperience,
     preferredLocations: [],
+    tracks: tracksOf(profile),
   }).score;
 }
 
@@ -67,7 +71,7 @@ export async function retryApplication(applicationId: string, userId: string): P
   const decision = await check("swipe_right", {
     applicationId,
     profileExists: true,
-    score: candidateScore(profile, job),
+    score: await candidateScore(profile, job),
     applicationsToday: history.applicationsToday,
     duplicateRole: history.duplicateRole,
     companyWeekCount: history.companyWeekCount,
@@ -135,7 +139,7 @@ export async function swipeRight(userId: string, jobId: string, enqueue: (applic
   const decision = await check("swipe_right", {
     applicationId: application.id,
     profileExists: true,
-    score: candidateScore(profile, job),
+    score: await candidateScore(profile, job),
     applicationsToday: history.applicationsToday,
     duplicateRole: history.duplicateRole,
     companyWeekCount: history.companyWeekCount,

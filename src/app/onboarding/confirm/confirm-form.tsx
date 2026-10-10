@@ -4,7 +4,7 @@ import { forgetVisitedPages } from "@/lib/forget-pages";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { SkillTag } from "@/components/ui/chip";
+import { Chip, SkillTag } from "@/components/ui/chip";
 import { FieldError, FieldLabel, InputBox, TextAreaBox } from "@/components/ui/field";
 import { IconButton } from "@/components/ui/icon-button";
 import { Icon } from "@/components/ui/icons";
@@ -30,6 +30,8 @@ export type ConfirmValues = {
   skills: string;
   experience: Experience[];
   education: Education[];
+  /** Tech tracks suggested from the resume (modules/jobs/functions.ts), confirmed here. */
+  tracks: string[];
   answers: Answer[];
 };
 
@@ -134,7 +136,7 @@ function EditableRow({
 }
 
 /** Step 2 of onboarding (design/onboarding.html "Here's what we found"). Saves with the same two calls as before. */
-export function ConfirmForm({ initial }: { initial: ConfirmValues }) {
+export function ConfirmForm({ initial, trackOptions }: { initial: ConfirmValues; trackOptions: Array<{ id: string; label: string }> }) {
   const router = useRouter();
   const [values, setValues] = useState(initial);
   const [editing, setEditing] = useState<string | null>(null);
@@ -168,6 +170,7 @@ export function ConfirmForm({ initial }: { initial: ConfirmValues }) {
       skills: values.skills.split(",").map((item) => item.trim()).filter(Boolean),
       experience: values.experience,
       education: values.education,
+      tracks: values.tracks,
     };
     const answers = values.answers.map((row) => ({
       key: row.key,
@@ -296,6 +299,33 @@ export function ConfirmForm({ initial }: { initial: ConfirmValues }) {
               ))}
             </div>
           )}
+        </SectionCard>
+
+        <SectionCard title="Your fields" className="pb-4">
+          <p className="m-0 mb-3 text-sm text-muted-foreground">
+            Read from your resume. Matching reads your whole resume; these set the field filter in your feed.
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {trackOptions.map((option) => {
+              const selected = values.tracks.includes(option.id);
+              return (
+                <Chip
+                  key={option.id}
+                  type="button"
+                  selected={selected}
+                  aria-pressed={selected}
+                  onClick={() =>
+                    setValues((current) => ({
+                      ...current,
+                      tracks: selected ? current.tracks.filter((track) => track !== option.id) : [...current.tracks, option.id],
+                    }))
+                  }
+                >
+                  {option.label}
+                </Chip>
+              );
+            })}
+          </div>
         </SectionCard>
 
         <SectionCard title="Education">

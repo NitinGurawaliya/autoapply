@@ -53,18 +53,26 @@ export function CompanyMark({
 }
 
 /** The tilted lime "86 match" badge. */
-export function MatchBadge({ score, size = "lg", className }: { score: number; size?: "lg" | "md"; className?: string }) {
+const TIER_WORD = { strong: "Strong", good: "Good", stretch: "Stretch" } as const;
+
+/** The lime badge: the tier ("Strong match") when given (T82), else the score. */
+export function MatchBadge({ score, tier, size = "lg", className }: { score: number; tier?: keyof typeof TIER_WORD | null; size?: "lg" | "md"; className?: string }) {
+  const word = tier ? TIER_WORD[tier] : null;
   return (
     <span
       role="img"
-      aria-label={`Match score ${score} percent`}
+      aria-label={word ? `${word} match` : `Match score ${score} percent`}
       className={cn(
         "box-border flex -rotate-8 flex-col items-center justify-center rounded-full border-2 border-ink bg-primary leading-none text-ink",
         size === "lg" ? "size-21 shadow-hard" : "size-[66px] shadow-[0_4px_0_var(--ink)]",
         className,
       )}
     >
-      <span className={cn("font-display font-extrabold tracking-[-0.04em]", size === "lg" ? "text-[32px]" : "text-2xl")}>{score}</span>
+      {word ? (
+        <span className={cn("font-display font-extrabold tracking-[-0.03em]", size === "lg" ? "text-[19px]" : "text-[15px]")}>{word}</span>
+      ) : (
+        <span className={cn("font-display font-extrabold tracking-[-0.04em]", size === "lg" ? "text-[32px]" : "text-2xl")}>{score}</span>
+      )}
       <span className={cn("mt-0.5 font-bold tracking-[0.06em] uppercase", size === "lg" ? "text-[11px]" : "text-[9px]")}>match</span>
     </span>
   );

@@ -33,7 +33,7 @@ async function main() {
   await db.profile.create({ data: { userId: user.id, resumeKey: "x", resumeText: "x", fullName: "I", email: user.email, currentTitle: "Software Engineer", yearsExperience: 1, skills: ["Quixotlang"], experience: [], education: [], rawJson: {} } });
   const company = await db.company.create({ data: { source: "greenhouse", slug: `ing-${stamp}`, name: `Ing Co ${stamp}`, active: false } });
   const mk = (n: string) =>
-    db.job.create({ data: { source: "greenhouse", externalId: `ing-${n}-${stamp}`, companyId: company.id, title: `Software Engineer Quixotlang ${n}`, location: "Bengaluru, India", country: "IN", remoteType: "unknown", description: "Software Engineer, Quixotlang. 0-2 years of experience.", applyUrl: "https://job-boards.greenhouse.io/x/jobs/1", postedAt: new Date(), fetchedAt: new Date(), raw: {} } });
+    db.job.create({ data: { source: "greenhouse", externalId: `ing-${n}-${stamp}`, companyId: company.id, title: `Software Engineer Quixotlang ${n}`, location: "Bengaluru, India", country: "IN", eligibility: "india", function: "engineering", track: "software", remoteType: "unknown", description: "Software Engineer, Quixotlang. 0-2 years of experience.", applyUrl: "https://job-boards.greenhouse.io/x/jobs/1", postedAt: new Date(), fetchedAt: new Date(), raw: {} } });
   try {
     const [a, b] = [await mk("a"), await mk("b")];
     check("an empty listing closes nothing", (await markClosed(company.id, "greenhouse", [])) === 0 && (await db.job.count({ where: { companyId: company.id, closedAt: null } })) === 2);

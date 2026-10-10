@@ -29,7 +29,7 @@ async function main() {
   const companies = await Promise.all(["x", "y", "z"].map((n) => db.company.create({ data: { source: "greenhouse", slug: `results-${n}-${stamp}`, name: `Results ${n.toUpperCase()}`, active: false } })));
   const [X, Y, Z] = companies;
   const job = (companyId: string, n: string) =>
-    db.job.create({ data: { source: "greenhouse", externalId: `res-${n}-${stamp}`, companyId, title: "Quokka Wrangler", location: "Bengaluru, India", country: "IN", remoteType: "unknown", description: "Quokka Wrangler role. 0-2 years of experience.", applyUrl: "https://job-boards.greenhouse.io/x/jobs/1", postedAt: new Date(), fetchedAt: new Date(), raw: {} } });
+    db.job.create({ data: { source: "greenhouse", externalId: `res-${n}-${stamp}`, companyId, title: "Quokka Wrangler", location: "Bengaluru, India", country: "IN", eligibility: "india", function: "engineering", track: "software", remoteType: "unknown", description: "Quokka Wrangler role. 0-2 years of experience.", applyUrl: "https://job-boards.greenhouse.io/x/jobs/1", postedAt: new Date(), fetchedAt: new Date(), raw: {} } });
   const jobs = { x: await job(X.id, "x"), y: await job(Y.id, "y"), z: await job(Z.id, "z") };
   const run = async (jobId: string, status: string, codeAsked: boolean) => {
     const app = await db.application.create({ data: { userId: actor.id, jobId, status, fields: [], pendingQuestions: [] } });

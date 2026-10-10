@@ -59,6 +59,9 @@ export const ANSWER_KEYS: AnswerKeyDef[] = [
   { key: "essay_best_project", type: "long_text", policy: "ai_draft_ok", synonyms: [] },
   // One answer for visa sponsorship everywhere outside the home country (modules/apply/sponsorship.ts). The user's own.
   { key: "sponsorship_outside_home", type: "select", policy: "bank_or_ask", synonyms: [] },
+  // Standing answers for jobs abroad (modules/apply/abroad.ts): moving out of the home country, and citizenship.
+  { key: "relocate_outside_home", type: "select", policy: "bank_or_ask", synonyms: [] },
+  { key: "citizenship", type: "text", policy: "bank_or_ask", synonyms: [] },
 ];
 
 const BY_KEY = new Map(ANSWER_KEYS.map((def) => [def.key, def]));

@@ -12,7 +12,7 @@ const keySchema = z.object({
 // Keys the agent asks for itself (one-time permissions, the standing sponsorship answer, the saved best-project
 // story): a form's own question is never one of them, whatever its words ("Coinbase may use AI tools" is a notice,
 // not the user's permission to draft essays).
-const AGENT_KEYS = new Set(["accept_acknowledgements", "accept_ai_essays", "essay_best_project", "sponsorship_outside_home"]);
+const AGENT_KEYS = new Set(["accept_acknowledgements", "accept_ai_essays", "essay_best_project", "sponsorship_outside_home", "relocate_outside_home", "citizenship"]);
 const TEXT_TYPES = new Set(["text", "long_text"]);
 
 /** Whether a key picked by the model (now or in the cache) can be this field's key. */

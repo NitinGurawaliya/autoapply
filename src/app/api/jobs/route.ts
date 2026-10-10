@@ -12,6 +12,9 @@ export async function GET(req: Request) {
     country: url.searchParams.get("country") ?? undefined,
     expMax: url.searchParams.get("expMax") ?? undefined,
     days: url.searchParams.get("days") ?? undefined,
+    level: url.searchParams.get("level") ?? undefined,
+    stage: url.searchParams.get("stage") ?? undefined,
+    track: url.searchParams.get("track") ?? undefined,
   });
   const jobs = await listFeed(user.id, filters);
   return NextResponse.json({ jobs });

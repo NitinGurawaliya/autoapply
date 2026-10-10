@@ -86,8 +86,11 @@ async function complete(system: string, user: string, model = MODEL) {
 export const EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL?.trim() || "text-embedding-3-small";
 export const EMBEDDING_DIMENSIONS = 1536;
 
-/** One vector per text, in order. Used to find a user's past questions that mean the same thing (modules/answers). */
-export async function embed(texts: string[]): Promise<number[][]> {
+/**
+ * One vector per text, in order. Used to find a user's past questions that mean the same thing (modules/answers), and
+ * to match resumes with jobs by meaning (modules/jobs/semantic.ts, 512 dimensions).
+ */
+export async function embed(texts: string[], options?: { dimensions?: number }): Promise<number[][]> {
   if (texts.length === 0) return [];
   loadEnvKey();
   const apiKey = process.env.OPENAI_API_KEY;
@@ -100,7 +103,7 @@ export async function embed(texts: string[]): Promise<number[][]> {
     const response = await fetch("https://api.openai.com/v1/embeddings", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: EMBEDDING_MODEL, input: batch, dimensions: EMBEDDING_DIMENSIONS }),
+      body: JSON.stringify({ model: EMBEDDING_MODEL, input: batch, dimensions: options?.dimensions ?? EMBEDDING_DIMENSIONS }),
     });
     const body = (await response.json()) as {
       error?: { message?: string };

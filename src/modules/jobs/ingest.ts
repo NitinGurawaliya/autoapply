@@ -4,7 +4,9 @@ import { db } from "@/lib/db";
 import { fetchAshby } from "./fetchers/ashby";
 import { fetchGreenhouse } from "./fetchers/greenhouse";
 import { fetchLever } from "./fetchers/lever";
+import { classifyTitle } from "./functions";
 import type { FetchedJob } from "./normalize";
+import { embedPendingJobs, forgetJobVectors } from "./semantic";
 import { tagPosting } from "./tagging";
 
 // Hundreds of companies (T79): a few boards at a time, a pause between requests, one retry, and only the jobs that
@@ -64,6 +66,7 @@ async function ingestCompany(company: { id: string; source: string; slug: string
   const now = new Date();
   const fields = (job: FetchedJob) => {
     const tags = tagPosting(job);
+    const kind = classifyTitle(job.title);
     return {
       companyId: company.id,
       title: job.title,
@@ -72,6 +75,9 @@ async function ingestCompany(company: { id: string; source: string; slug: string
       remoteType: tags.remoteType,
       experienceMin: tags.experienceMin,
       eligibility: tags.eligibility,
+      function: kind.function,
+      track: kind.track,
+      seniority: kind.seniority,
       description: job.description,
       applyUrl: job.applyUrl,
       postedAt: job.postedAt,
@@ -92,6 +98,8 @@ async function ingestCompany(company: { id: string; source: string; slug: string
       changed.slice(i, i + 50).map((job) => db.job.update({ where: { source_externalId: { source: company.source, externalId: job.externalId } }, data: { ...fields(job), closedAt: null } })),
     );
   }
+  // A changed posting is embedded again (semantic.ts); new ones have no vector yet.
+  await forgetJobVectors(changed.map((job) => byExternalId.get(job.externalId)!.id));
   const closed = await markClosed(company.id, company.source, jobs.map((job) => job.externalId));
   return {
     fetched: jobs.length,
@@ -154,6 +162,12 @@ export async function ingestJobs(days: number) {
   try {
     await Promise.all(Array.from({ length: CONCURRENCY }, worker));
     totals.deleted = await deleteOldClosedJobs();
+    // New and changed jobs get their vectors for resume matching; a failure leaves them for the next run.
+    const embedded = await embedPendingJobs().catch((error) => {
+      console.error(`ingest: embedding failed (${error instanceof Error ? error.message.slice(0, 80) : "error"}); the next run retries`);
+      return 0;
+    });
+    console.log(`ingest: embedded ${embedded} jobs`);
   } finally {
     await db.ingestRun.update({ where: { id: runId }, data: { ...totals, finishedAt: new Date() } });
   }

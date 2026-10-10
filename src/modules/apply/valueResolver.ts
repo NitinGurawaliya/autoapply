@@ -1,6 +1,7 @@
 import { customQuestionKey, detectConcept, getAnswerKey, matchKeyBySynonym, RISKY } from "@/modules/answers";
 import { loadRules } from "@/modules/governance";
 import { ACKNOWLEDGEMENT_KEY, ACKNOWLEDGEMENT_QUESTION, acknowledgementValue } from "./acknowledgement";
+import { abroadAnswer } from "./abroad";
 import type { FormField, PendingQuestion, ResolvedValue } from "./adapter";
 import { BEST_PROJECT_KEY, essayKind, ESSAY_PERMISSION_KEY, ESSAY_PERMISSION_QUESTION } from "./essay";
 import type { MemoryAnswer } from "./recall";
@@ -193,6 +194,17 @@ export function resolveValues(
       const verified = memory?.get(field.label);
       if (verified && push(key ?? questionKey, verified.answer, verified.source ?? "matched")) {
         values[values.length - 1].basis = verified.basis;
+        continue;
+      }
+      // Relocating or working on site abroad, work authorization abroad, citizenship lists: from the user's standing
+      // answers, each asked once (abroad.ts).
+      const abroad = abroadAnswer({ kind, label: field.label, options: field.options, required: field.required, profile, jobCountry: job?.country, bank: (k) => bank.get(k) });
+      if (abroad && "ask" in abroad) {
+        if (!pending.some((q) => q.key === abroad.ask.key)) pending.push(abroad.ask);
+        continue;
+      }
+      if (abroad && push(key ?? questionKey, abroad.answer, abroad.source)) {
+        values[values.length - 1].basis = abroad.basis;
         continue;
       }
       // Sponsorship for a job outside the candidate's home country: their one answer for everywhere abroad, asked

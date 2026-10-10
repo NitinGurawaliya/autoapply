@@ -5,7 +5,7 @@
 // npx tsx scripts/feed-sql-test.ts
 import { db } from "../src/lib/db";
 import { companyKey, feedHistory, loadRules, roleKey } from "../src/modules/governance";
-import { companyResultsById, judge, listFeed, parseFeedFilters, scoreJob } from "../src/modules/jobs";
+import { ADJACENT_TRACKS, companyResultsById, judge, judgeJobs, listFeed, parseFeedFilters, profileVector, scoreJob, tracksOf } from "../src/modules/jobs";
 import { dedupeListings, feedRows } from "../src/modules/jobs/match";
 
 let failed = 0;
@@ -45,7 +45,7 @@ async function trickySkills() {
       },
     });
     const read = (skills: string[]) =>
-      feedRows({ userId: user.id, sources: ["mock"], countries: ["REMOTE"], cutoff: new Date(Date.now() - 864e5), expMax: null, skills, titleWords: [], prefilter: false }).then((rows) => rows.find((r) => r.id === job.id));
+      feedRows({ userId: user.id, sources: ["mock"], countries: ["REMOTE"], fresher: false, stages: null, tracks: null, vector: null, cutoff: new Date(Date.now() - 864e5), expMax: null, skills, titleWords: [], prefilter: false }).then((rows) => rows.find((r) => r.id === job.id));
     const row = await read(TRICKY);
     const sql = new Set(row?.hits ?? []);
     const js = new Set(TRICKY.map((skill, i) => (mentions(TITLE.toLowerCase(), skill) || mentions(DESCRIPTION.toLowerCase(), skill) ? i : -1)).filter((i) => i >= 0));
@@ -72,9 +72,14 @@ async function referenceFeed(userId: string) {
   const skills = Array.isArray(profile?.skills) ? (profile.skills as string[]) : [];
   const preferred = (answers[0]?.answer ?? "").split(",").map((item) => item.trim()).filter((item) => item === "India" || item === "US" || item === "Other");
   const sources = profile?.isTest ? [...new Set([...filters.boards, "mock"])] : filters.boards;
+  const tracks = profile ? tracksOf(profile) : [];
+  const reachable = [...new Set([...tracks, ...tracks.flatMap((track) => ADJACENT_TRACKS[track as keyof typeof ADJACENT_TRACKS] ?? [])])];
+  // With the resume's vector, closeness by meaning and the model's verdict decide the field; without, the tracks.
+  const vector = profile ? await profileVector(profile) : null;
   const [jobs, history, results] = await Promise.all([
     db.job.findMany({
-      where: { source: { in: sources }, country: { in: filters.countries }, postedAt: { gte: new Date(Date.now() - filters.days * 864e5) }, closedAt: null, id: { notIn: swipes.map((s) => s.jobId) } },
+      // India and remote-from-India by default (T80).
+      where: { source: { in: sources }, eligibility: { in: ["india", "remote_india"] }, ...(tracks.length > 0 && !vector ? { track: { in: reachable } } : {}), postedAt: { gte: new Date(Date.now() - filters.days * 864e5) }, closedAt: null, id: { notIn: swipes.map((s) => s.jobId) } },
       include: { company: { select: { name: true } } },
       orderBy: { id: "asc" }, // the same order feedRows reads, so ties break the same way
     }),
@@ -82,9 +87,24 @@ async function referenceFeed(userId: string) {
     companyResultsById().catch(() => new Map<string, never>()),
   ]);
   const minScore = loadRules().min_match_score;
+  // Each job's closeness, one query; then the same shortlist the feed judges (the 150 closest still open to apply).
+  const sims = new Map<string, number>();
+  if (vector) {
+    const rows = await db.$queryRaw<Array<{ id: string; s: number }>>`
+      SELECT id, (1 - (embedding <=> ${vector}::halfvec))::float8 AS s FROM "Job" WHERE id = ANY(${jobs.map((job) => job.id)}::text[]) AND embedding IS NOT NULL`;
+    for (const row of rows) sims.set(row.id, row.s);
+  }
+  const open = (job: (typeof jobs)[number]) => !history.roles.has(roleKey(companyKey(job.company.name), job.title)) && !history.companiesAtCap.has(companyKey(job.company.name));
+  const shortlist = jobs
+    .filter((job) => sims.has(job.id) && sims.get(job.id)! >= 0.35 && job.source !== "mock" && open(job))
+    .sort((a, b) => sims.get(b.id)! - sims.get(a.id)! || (a.id < b.id ? -1 : 1))
+    .slice(0, 150);
+  const kept = new Set(shortlist.map((job) => job.id));
+  const verdicts = profile && shortlist.length ? await judgeJobs(profile, shortlist) : new Map();
   const scored = jobs
+    .filter((job) => !sims.has(job.id) || (sims.get(job.id)! >= 0.35 && kept.has(job.id)))
     .map((job) => {
-      const match = scoreJob(job, { currentTitle: profile?.currentTitle ?? null, skills, yearsExperience: profile?.yearsExperience ?? null, preferredLocations: preferred });
+      const match = scoreJob({ ...job, similarity: sims.get(job.id) ?? null, judgement: verdicts.get(job.id) ?? null }, { currentTitle: profile?.currentTitle ?? null, skills, yearsExperience: profile?.yearsExperience ?? null, preferredLocations: preferred, tracks });
       const daysAgo = Math.max(0, Math.floor((Date.now() - job.postedAt.getTime()) / 864e5));
       return {
         id: job.id, company: job.company.name, location: job.location, source: job.source, daysAgo, score: match.score, reason: match.reason, skillHits: match.skillHits.slice(0, 4),

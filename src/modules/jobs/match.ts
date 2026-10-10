@@ -3,7 +3,9 @@ import { db } from "@/lib/db";
 import { daysAgoLabel } from "@/lib/days";
 import { cachedFeed, rememberFeed } from "@/lib/feed-cache";
 import { companyKey, feedHistory, loadRules, roleKey } from "@/modules/governance";
+import { ADJACENT, classifyTitle, TRACK_LABELS, TRACKS, trackFit, type Track, tracksOf } from "./functions";
 import { companyResultsById, judge } from "./results";
+import { judgeJobs, type Judgement, profileVector } from "./semantic";
 import { requiredYears } from "./tagging";
 
 export { daysAgoLabel };
@@ -13,7 +15,12 @@ export { daysAgoLabel };
 // (hCaptcha on Lever, reCAPTCHA spam refusals on Ashby); their jobs are still ingested. Add them back here to switch on.
 export const APPLY_BOARDS = ["greenhouse"] as const;
 const BOARDS = APPLY_BOARDS;
-const COUNTRIES = ["IN", "US", "REMOTE", "OTHER"] as const;
+// Where a job is, for the feed's Location filter (T80): IN = in India and REMOTE = remote and open to India (Job.eligibility,
+// tagging.ts); US and OTHER = jobs abroad, shown only when the user picks them.
+const COUNTRIES = ["IN", "REMOTE", "US", "OTHER"] as const;
+export const DEFAULT_PLACES = ["IN", "REMOTE"];
+export const STAGES = ["startup", "midsize", "mnc"] as const;
+export type Tier = "strong" | "good" | "stretch";
 
 const skillsSchema = z.array(z.string());
 
@@ -22,6 +29,12 @@ export type FeedFilters = {
   countries: string[];
   expMax: number | null;
   days: number;
+  /** "fresher": jobs for interns and freshers only (0-1 years, no mid or senior level in the title). */
+  level: "any" | "fresher";
+  /** Company types to show; empty = all. */
+  stages: string[];
+  /** Tracks to show, among the user's own and the adjacent ones; empty = all of them. */
+  tracks: string[];
 };
 
 export type FeedJob = {
@@ -34,10 +47,13 @@ export type FeedJob = {
   applyUrl: string;
   daysAgo: number;
   score: number;
+  tier: Tier | null;
   reason: string;
   remoteType: string;
   requiredYears: number | null;
   skillHits: string[];
+  stage: string | null;
+  track: string | null;
   /** What past applications to this company taught us, when it is worth saying. */
   hint: string | null;
 };
@@ -62,6 +78,9 @@ export function parseFeedFilters(input: {
   country?: string | string[];
   expMax?: string | string[];
   days?: string | string[];
+  level?: string | string[];
+  stage?: string | string[];
+  track?: string | string[];
 }): FeedFilters {
   const boards = listParam(input.boards)
     .map((item) => item.trim().toLowerCase())
@@ -73,11 +92,17 @@ export function parseFeedFilters(input: {
   const daysRaw = listParam(input.days)[0];
   const expMax = expRaw != null && expRaw !== "" && Number.isFinite(Number(expRaw)) ? Number(expRaw) : null;
   const daysNum = daysRaw != null && Number.isFinite(Number(daysRaw)) ? Number(daysRaw) : 30;
+  const stages = listParam(input.stage).map((item) => item.trim().toLowerCase()).filter((item) => (STAGES as readonly string[]).includes(item));
+  const tracks = listParam(input.track).map((item) => item.trim().toLowerCase()).filter((item) => (TRACKS as readonly string[]).includes(item));
   return {
     boards: boards.length > 0 ? boards : [...BOARDS],
-    countries: countries.length > 0 ? [...new Set(countries)] : [...COUNTRIES],
+    // In India and remote-from-India unless the user picks places abroad too.
+    countries: countries.length > 0 ? COUNTRIES.filter((country) => countries.includes(country)) : [...DEFAULT_PLACES],
     expMax,
     days: Math.min(Math.max(daysNum, 1), 365),
+    level: listParam(input.level)[0]?.trim().toLowerCase() === "fresher" ? "fresher" : "any",
+    stages: [...new Set(stages)],
+    tracks: [...new Set(tracks)],
   };
 }
 
@@ -111,7 +136,28 @@ type Candidate = {
   skills: string[];
   yearsExperience: number | null;
   preferredLocations: string[];
+  /** The candidate's tech tracks (functions.ts). With tracks, a job outside them is out; without, title words count. */
+  tracks?: string[];
 };
+
+// Closeness by meaning (cosine similarity of the resume and the job, semantic.ts). Measured 10 Oct on the real
+// profiles: their own kind of role 0.45-0.68, other work 0.30-0.55 (product, program and people roles come close),
+// so closeness ranks and shortlists, and the model's verdict on the shortlist decides the field. Below FLOOR a job is
+// left out; without a verdict (the model failed) it needs UNJUDGED_FLOOR.
+export const SIMILARITY_FLOOR = 0.35;
+const UNJUDGED_FLOOR = 0.45;
+const SIMILARITY_LOW = 0.35;
+const SIMILARITY_HIGH = 0.6;
+// The closest jobs the model judges per feed (cached per resume and posting, so mostly once).
+const SHORTLIST = 150;
+const FIT_POINTS = { strong: 30, good: 20, stretch: 8 } as const;
+
+/** Strong, good or stretch from the score; null below the minimum. */
+export function tierOf(score: number, minScore: number): Tier | null {
+  if (score >= 75) return "strong";
+  if (score >= 60) return "good";
+  return score >= minScore ? "stretch" : null;
+}
 
 export function scoreJob(
   job: {
@@ -120,6 +166,10 @@ export function scoreJob(
     country: string;
     remoteType: string;
     experienceMin: number | null;
+    /** Closeness to the resume by meaning (semantic.ts jobSimilarity); null or missing = match by tracks. */
+    similarity?: number | null;
+    /** The model's verdict on this job for this resume (semantic.ts judgeJobs). */
+    judgement?: Judgement | null;
   },
   candidate: Candidate,
 ) {
@@ -127,7 +177,7 @@ export function scoreJob(
   const description = job.description.toLowerCase();
   const skillHits = candidate.skills.filter((skill) => mentions(title, skill) || mentions(description, skill));
   // What the posting really asks for comes from its title and text, never from a stored guess.
-  return scoreFeatures({ title: job.title, country: job.country, remoteType: job.remoteType, requiredYears: requiredYears(job.title, job.description), skillHits }, candidate);
+  return scoreFeatures({ title: job.title, track: classifyTitle(job.title).track, similarity: job.similarity, judgement: job.judgement, country: job.country, remoteType: job.remoteType, requiredYears: requiredYears(job.title, job.description), skillHits }, candidate);
 }
 
 /**
@@ -135,10 +185,18 @@ export function scoreJob(
  * finds them in the description; the feed finds them in Postgres (feedRows) so descriptions never leave the database.
  */
 export function scoreFeatures(
-  job: { title: string; country: string; remoteType: string; requiredYears: number | null; skillHits: string[] },
+  job: { title: string; track?: string | null; similarity?: number | null; judgement?: Judgement | null; country: string; remoteType: string; requiredYears: number | null; skillHits: string[] },
   candidate: Candidate,
 ) {
   const title = job.title.toLowerCase();
+  if (job.similarity != null) return scoreByMeaning({ ...job, similarity: job.similarity, judgement: job.judgement ?? null }, candidate);
+  const tracks = candidate.tracks ?? [];
+  // T82: with tracks, the job's track is the gate and most of the title's weight: the same track 30, an adjacent one
+  // 18, plus skills named in the title; a job in no track of theirs (or not a tech job) is out.
+  const fit = tracks.length > 0 ? trackFit(job.track ?? null, tracks) : null;
+  if (fit === "none") {
+    return { score: 0, reason: job.track ? `Not your field (${TRACK_LABELS[job.track as Track] ?? job.track})` : "Not a tech role", requiredYears: job.requiredYears, skillHits: job.skillHits };
+  }
   const skillHits = job.skillHits;
   const jobTitleTokens = new Set(titleTokens(job.title));
   const candidateTitleTokens = [...new Set(titleTokens(candidate.currentTitle ?? ""))];
@@ -146,10 +204,12 @@ export function scoreFeatures(
   const skillsInTitle = candidate.skills.filter((skill) => mentions(title, skill));
   const titleHits = [...(titleOverlap.length > 0 && candidate.currentTitle ? [candidate.currentTitle] : []), ...skillsInTitle];
   const titleRatio = candidateTitleTokens.length === 0 ? 0 : titleOverlap.length / candidateTitleTokens.length;
-  const titleScore = Math.round(40 * Math.min(1, titleRatio + 0.5 * skillsInTitle.length));
+  const titleScore = fit
+    ? Math.min(40, (fit === "same" ? 30 : 18) + 5 * skillsInTitle.length)
+    : Math.round(40 * Math.min(1, titleRatio + 0.5 * skillsInTitle.length));
 
   const skillTarget = Math.min(candidate.skills.length, SKILLS_FOR_FULL_SCORE);
-  const skillScore = skillTarget === 0 ? 0 : Math.round(30 * Math.min(1, skillHits.length / skillTarget));
+  const skillScore = skillTarget === 0 ? 0 : Math.round((fit ? 40 : 30) * Math.min(1, skillHits.length / skillTarget));
 
   const asks = job.requiredYears;
   const have = candidate.yearsExperience ?? 0;
@@ -169,7 +229,10 @@ export function scoreFeatures(
   }
 
   const parts: string[] = [];
-  if (titleHits.length > 0) parts.push(`Title matches ${titleHits.slice(0, 2).join(", ")}`);
+  const trackName = job.track ? TRACK_LABELS[job.track as Track] ?? job.track : null;
+  if (fit === "same" && trackName) parts.push(`${trackName} role`);
+  else if (fit === "adjacent" && trackName) parts.push(`Close to your field: ${trackName}`);
+  else if (titleHits.length > 0) parts.push(`Title matches ${titleHits.slice(0, 2).join(", ")}`);
   if (skillHits.length > 0) parts.push(`Skills: ${skillHits.slice(0, 3).join(", ")}`);
   if (gap >= 2 && asks != null) parts.unshift(`Asks for about ${asks}+ years, you have ${have}`);
   else if (asks != null && gap <= 0) parts.push("Experience fits");
@@ -178,11 +241,62 @@ export function scoreFeatures(
 
   return {
     score: Math.min(ceiling, clamp(titleScore + skillScore + experienceScore + locationScore)),
-    reason: parts.slice(0, 2).join(". ") || "Little overlap with your profile.",
+    reason: parts.slice(0, fit ? 3 : 2).join(". ") || "Little overlap with your profile.",
     requiredYears: asks,
     skillHits,
   };
 }
+
+/**
+ * The score when the job and the resume both have vectors (semantic.ts): the model's verdict (no = out; strong 30,
+ * good 20, stretch 8), closeness by meaning up to 30, the candidate's skills named in the job up to 10, experience 20
+ * (a big gap caps the total, as in scoreFeatures) and location 10.
+ */
+function scoreByMeaning(
+  job: { title: string; track?: string | null; similarity: number; judgement: Judgement | null; country: string; remoteType: string; requiredYears: number | null; skillHits: string[] },
+  candidate: Candidate,
+) {
+  const trackName = job.track ? TRACK_LABELS[job.track as Track] ?? null : null;
+  const verdict = job.judgement;
+  if (verdict?.fit === "no") return { score: 0, reason: sentence(verdict.why) || "Not your kind of role", requiredYears: job.requiredYears, skillHits: job.skillHits };
+  if (job.similarity < (verdict ? SIMILARITY_FLOOR : UNJUDGED_FLOOR)) {
+    return { score: 0, reason: "Not close to your experience", requiredYears: job.requiredYears, skillHits: job.skillHits };
+  }
+  const closeness = Math.min(1, Math.max(0, (job.similarity - SIMILARITY_LOW) / (SIMILARITY_HIGH - SIMILARITY_LOW)));
+  const meaningScore = Math.round(30 * closeness) + (verdict ? FIT_POINTS[verdict.fit] : 12);
+  const skillTarget = Math.min(candidate.skills.length, SKILLS_FOR_FULL_SCORE);
+  const skillScore = skillTarget === 0 ? 0 : Math.round(10 * Math.min(1, job.skillHits.length / skillTarget));
+
+  const asks = job.requiredYears;
+  const have = candidate.yearsExperience ?? 0;
+  const gap = asks == null ? 0 : asks - have;
+  const experienceScore = asks == null ? 14 : gap <= 0 ? 20 : gap === 1 ? 16 : gap === 2 ? 8 : gap === 3 ? 2 : 0;
+  const ceiling = gap >= 4 ? 25 : gap === 3 ? 35 : gap === 2 ? 50 : 100;
+
+  const prefs = candidate.preferredLocations;
+  let locationScore = 10;
+  if (prefs.length > 0 && job.country !== "REMOTE" && job.remoteType !== "remote") {
+    const fits = (prefs.includes("India") && job.country === "IN") || (prefs.includes("US") && job.country === "US") || (prefs.includes("Other") && job.country === "OTHER");
+    locationScore = fits ? 10 : 0;
+  }
+
+  const parts: string[] = [];
+  const close = closeness >= 0.6 ? "Very close to your experience" : "Close to your experience";
+  parts.push(verdict ? sentence(verdict.why) : trackName ? `${close} (${trackName})` : close);
+  if (job.skillHits.length > 0) parts.push(`Skills: ${job.skillHits.slice(0, 3).join(", ")}`);
+  if (gap >= 2 && asks != null) parts.unshift(`Asks for about ${asks}+ years, you have ${have}`);
+  else if (asks != null && gap <= 0) parts.push("Experience fits");
+  else if (asks != null) parts.push("Experience is close");
+
+  return {
+    score: Math.min(ceiling, clamp(meaningScore + skillScore + experienceScore + locationScore)),
+    reason: parts.slice(0, 3).join(". "),
+    requiredYears: asks,
+    skillHits: job.skillHits,
+  };
+}
+
+const sentence = (text: string) => text.trim().replace(/[.\s]+$/, "").replace(/^./, (c) => c.toUpperCase());
 
 function daysAgo(postedAt: Date) {
   const elapsed = Date.now() - postedAt.getTime();
@@ -219,6 +333,9 @@ type FeedRow = {
   postedAt: Date;
   companyId: string;
   company: string;
+  stage: string | null;
+  track: string | null;
+  similarity: number | null;
   hits: number[];
 };
 
@@ -239,6 +356,11 @@ export async function feedRows(input: {
   userId: string;
   sources: string[];
   countries: string[];
+  fresher: boolean;
+  stages: string[] | null;
+  tracks: string[] | null;
+  /** The resume's vector (semantic.ts): each job's closeness to it is read, and jobs below the floor are left out. */
+  vector: string | null;
   cutoff: Date;
   expMax: number | null;
   skills: string[];
@@ -270,12 +392,24 @@ export async function feedRows(input: {
     ),
     candidates AS (
       SELECT j.id, j.title, j.location, j.source, j.country, j."remoteType", j."experienceMin", j."applyUrl", j."postedAt",
-             j."companyId", c.name AS company, coalesce(h.hits, '{}') AS hits
+             j."companyId", c.name AS company, c.stage, j.track, coalesce(h.hits, '{}') AS hits,
+             CASE WHEN ${input.vector}::text IS NULL OR j.embedding IS NULL THEN NULL
+                  ELSE (1 - (j.embedding <=> ${input.vector}::halfvec))::float8 END AS similarity
       FROM "Job" j
       JOIN "Company" c ON c.id = j."companyId"
       LEFT JOIN hit h ON h.id = j.id
       WHERE j.source = ANY(${input.sources}::text[])
-        AND j.country = ANY(${input.countries}::text[])
+        AND (j.source = 'mock' OR
+             ('IN' = ANY(${input.countries}::text[]) AND j.eligibility = 'india') OR
+             ('REMOTE' = ANY(${input.countries}::text[]) AND j.eligibility = 'remote_india') OR
+             ('US' = ANY(${input.countries}::text[]) AND j.eligibility NOT IN ('india', 'remote_india') AND j.country = 'US') OR
+             ('OTHER' = ANY(${input.countries}::text[]) AND j.eligibility NOT IN ('india', 'remote_india') AND j.country <> 'US'))
+        AND (NOT ${input.fresher} OR j.source = 'mock' OR
+             ((j.seniority IN ('intern', 'entry') OR j.seniority IS NULL) AND j."experienceMin" IS NOT NULL AND j."experienceMin" <= 1) OR
+             (j.seniority IN ('intern', 'entry') AND j."experienceMin" IS NULL))
+        AND (${input.stages}::text[] IS NULL OR c.stage = ANY(${input.stages}::text[]))
+        AND (${input.tracks}::text[] IS NULL OR j.source = 'mock' OR j.track = ANY(${input.tracks}::text[]))
+        AND (${input.vector}::text IS NULL OR j.embedding IS NULL OR 1 - (j.embedding <=> ${input.vector}::halfvec) >= ${SIMILARITY_FLOOR})
         AND j."postedAt" >= ${input.cutoff}
         AND j."closedAt" IS NULL
         AND (${input.expMax}::int IS NULL OR j."experienceMin" IS NULL OR j."experienceMin" <= ${input.expMax}::int)
@@ -322,31 +456,59 @@ async function scoreFeed(userId: string, filters: FeedFilters): Promise<FeedJob[
   const minScore = loadRules().min_match_score;
   const cutoff = new Date(Date.now() - filters.days * 24 * 60 * 60 * 1000);
   const sources = profile?.isTest ? [...new Set([...filters.boards, "mock"])] : filters.boards;
+  // The candidate's tracks and the adjacent ones are the only jobs that can score (T82), so only those are read; the
+  // Track filter narrows them further.
+  const tracks = profile ? tracksOf(profile) : [];
+  const reachable = [...new Set([...tracks, ...tracks.flatMap((track) => ADJACENT[track as Track] ?? [])])];
+  // With the resume's vector, closeness by meaning decides the field (semantic.ts); the tracks are then only the
+  // optional Track filter. Without it (no API key, the API down), the tracks are the gate.
+  const vector = profile ? await profileVector(profile) : null;
+  const shown = filters.tracks.length > 0 ? (vector ? filters.tracks : reachable.filter((track) => filters.tracks.includes(track))) : vector ? null : reachable;
   const [jobs, history, results] = await Promise.all([
     feedRows({
       userId,
       sources,
       countries: filters.countries,
+      fresher: filters.level === "fresher",
+      stages: filters.stages.length > 0 ? filters.stages : null,
+      tracks: tracks.length > 0 || filters.tracks.length > 0 ? shown : null,
+      vector,
       cutoff,
       expMax: filters.expMax,
       skills,
       titleWords: titleWordsFor(profile?.currentTitle ?? null),
-      prefilter: minScore > 30,
+      // Every job in a reachable track can reach the minimum on its track alone, so none is left out early.
+      prefilter: minScore > 30 && tracks.length === 0 && !vector,
     }),
     feedHistory(userId, loadRules().max_per_company_per_week),
     companyResultsById().catch(() => new Map<string, never>()),
   ]);
 
+  // The closest jobs (by meaning) that the user can still apply to are judged by the model against the resume
+  // (semantic.ts, cached); jobs further away are left out. Mock jobs and jobs without a vector are scored by tracks.
+  const open = (job: FeedRow) => !history.roles.has(roleKey(companyKey(job.company), job.title)) && !history.companiesAtCap.has(companyKey(job.company));
+  const shortlist = jobs
+    .filter((job) => job.similarity != null && job.source !== "mock" && open(job))
+    .sort((a, b) => b.similarity! - a.similarity! || (a.id < b.id ? -1 : 1))
+    .slice(0, SHORTLIST);
+  const kept = new Set(shortlist.map((job) => job.id));
+  const judgements =
+    profile && shortlist.length > 0
+      ? await judgeJobs(profile, await db.job.findMany({ where: { id: { in: [...kept] } }, select: { id: true, title: true, description: true, contentHash: true } }))
+      : new Map<string, Judgement>();
+
   const scored = jobs
+    .filter((job) => job.similarity == null || kept.has(job.id))
     .map((job) => {
       const hits = new Set(job.hits);
       const match = scoreFeatures(
-        { title: job.title, country: job.country, remoteType: job.remoteType, requiredYears: job.experienceMin, skillHits: skills.filter((_, index) => hits.has(index)) },
+        { title: job.title, track: job.track, similarity: job.similarity, judgement: judgements.get(job.id) ?? null, country: job.country, remoteType: job.remoteType, requiredYears: job.experienceMin, skillHits: skills.filter((_, index) => hits.has(index)) },
         {
           currentTitle: profile?.currentTitle ?? null,
           skills,
           yearsExperience: profile?.yearsExperience ?? null,
           preferredLocations: preferred,
+          tracks,
         },
       );
       return {
@@ -363,6 +525,8 @@ async function scoreFeed(userId: string, filters: FeedFilters): Promise<FeedJob[
         requiredYears: match.requiredYears,
         skillHits: match.skillHits.slice(0, 4),
         remoteType: job.remoteType,
+        stage: job.stage,
+        track: job.track,
         roleKey: roleKey(companyKey(job.company), job.title),
         verdict: judge(results.get(job.companyId)),
         mock: job.source === "mock",
@@ -385,10 +549,13 @@ async function scoreFeed(userId: string, filters: FeedFilters): Promise<FeedJob[
       applyUrl: job.applyUrl,
       daysAgo: job.daysAgo,
       score: job.score,
+      tier: tierOf(job.score, minScore),
       reason: job.reason,
       remoteType: job.remoteType,
       requiredYears: job.requiredYears,
       skillHits: job.skillHits,
+      stage: job.stage,
+      track: job.track,
       hint: job.verdict.hint,
       // Ranking only: the number the user sees stays the honest match score.
       rank: job.score + job.verdict.nudge,
