@@ -279,6 +279,11 @@ Do: `Job.terms` (distinct words, kept by a trigger) and `feedRows` in `modules/j
 **Done when:** `scripts/feed-sql-test.ts` PASS (same 40 cards, order, scores and reasons as the old feed for every real profile), the feed smokes pass, and the feed load is re-measured.
 Done 10 Oct: `feed-sql-test` PASS for all 5 real profiles (identical cards; feed 0.9–2 s, was 8–27 s; under 0.5 MB per load, was 24 MB). `match-test`, `guards-test`, `results-test` (its test jobs now use a title no real job has), `ingest-contract-test`, `lifecycle-smoke`, `gaps-test` and `swipe-batch-test` PASS. `feed-smoke` fails at the Filters sheet, which Phase G is rebuilding (T62, uncommitted at the time); the cards themselves render. Found on the way and fixed: swipe-time counts were read before the per-user lock, so a burst passed the daily cap (24 of 20); `swipe-batch-test` now checks whichever of the queue and daily caps is lower.
 
+### [x] T71 — One query to sign in (audit decision 5, light option)
+Do: `getSessionAndUser` in `lib/auth.ts` as one SQL join returning the session, the user and whether a profile exists; the proxy and `getCurrentUser` read that instead of querying again. Database sessions kept (the owner's choice: the test scripts sign in with them).
+**Done when:** sign-in costs one query per request, pages are re-measured, and `security-test`, `onboarding-smoke`, `answers-smoke`, `infra-smoke` pass.
+Done 10 Oct: query log shows one session query per request (was four); `/answers` and `/account` 1.6–2.2 s → 0.8–1.1 s warm on the dev server. All four checks PASS.
+
 
 ## Phase F — Smarter answers (ask only what we cannot know)
 

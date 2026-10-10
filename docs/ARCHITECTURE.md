@@ -92,7 +92,7 @@ swipeapply/
 
 ## 4. Data model (Prisma, Postgres)
 
-Auth.js adds `Account`, `Session`, `VerificationToken` via its Prisma adapter; keep them as generated.
+Auth.js adds `Account`, `Session`, `VerificationToken` via its Prisma adapter; keep them as generated. Sessions stay in the database (`lib/auth.ts`), but each request reads its session with one SQL join that also returns whether the user has a profile (`session.user.hasProfile`): the proxy routes on that flag and `getCurrentUser` returns the id, email and name from it, so signing in costs one query per request instead of four (Prisma's `include` was three round trips, plus a profile read in the proxy and a user read on the page). Measured 10 Oct on the dev server: `/answers` and `/account` 1.6–2.2 s → 0.8–1.1 s. Cookie (JWT) sessions were not chosen: the test scripts sign in with database sessions.
 
 ```prisma
 model User { id String @id @default(cuid()); email String @unique; emailVerified DateTime?; name String?; image String?

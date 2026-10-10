@@ -1,5 +1,4 @@
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
 
 export default auth(async (req) => {
@@ -16,10 +15,8 @@ export default auth(async (req) => {
     return NextResponse.redirect(url);
   }
 
-  const profile = await db.profile.findUnique({
-    where: { userId: req.auth!.user!.id },
-    select: { id: true },
-  });
+  // The session read already says whether a profile exists (lib/auth.ts getSessionAndUser): no query here.
+  const profile = req.auth!.user!.hasProfile;
   const home = profile ? "/feed" : "/onboarding/resume";
 
   if (pathname === "/sign-in" || pathname === "/") {
