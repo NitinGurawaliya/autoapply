@@ -1,10 +1,13 @@
-// Dry run of an ATS adapter on a live form: inspect, map, resolve, fill, then read every field back. Never submits.
+// Dry run of an ATS adapter on a live form: inspect, resolve with the same chain a real run uses (resolveForm: saved
+// answers, verified reuse, worked-out answers, option mapping; essays are not drafted), fill, then read every field
+// back. Never submits, and saves nothing.
 // npx tsx scripts/ats-smoke.ts --user <end of the user id> <jobId> [--fill-pending] [--screenshot <path>]
 // --user is required: there can be several real profiles, and this must never run as the wrong person.
 import { writeFile } from "node:fs/promises";
 import { db } from "../src/lib/db";
 import { storage } from "../src/lib/storage";
-import { mapFields, openBrowser, pickAdapter, resolveValues } from "../src/modules/apply";
+import { openBrowser, pickAdapter } from "../src/modules/apply";
+import { resolveForm } from "../src/modules/apply/resolveForm";
 import type { ResolvedValue } from "../src/modules/apply";
 
 const IDENTITY = new Set(["first_name", "last_name", "full_name", "email", "phone", "linkedin", "github", "portfolio", "current_company", "city"]);
@@ -34,8 +37,17 @@ async function main() {
   let ok = false;
   try {
     const fields = await adapter.inspect(session.page);
-    const mapped = await mapFields(adapter.source, fields);
-    const { values, pending } = resolveValues(mapped, profile, answers);
+    const { resolved, missing } = await resolveForm({
+      userId: profile.userId,
+      source: adapter.source,
+      fields,
+      profile,
+      answers,
+      job: { company: job.company.name, title: job.title, location: job.location, country: job.country, description: job.description },
+      draftEssays: false,
+    });
+    const values = resolved.values;
+    const pending = missing;
     console.log(`inspect: ${fields.length} fields (${fields.filter((f) => f.required).length} required)`);
     console.log(`resolve: ${values.length} values, ${pending.length} pending`);
     for (const v of values) console.log(`  fill  ${v.source.padEnd(8)} ${v.key.padEnd(18)} ${v.type.padEnd(14)} ${v.label.slice(0, 50)} = ${IDENTITY.has(v.key) ? "<hidden>" : v.value.slice(0, 40)}`);

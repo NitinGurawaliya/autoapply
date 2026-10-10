@@ -1,6 +1,6 @@
 import { matchKeyBySynonym } from "../src/modules/answers";
 
-const cases: Array<[string, string]> = [
+const cases: Array<[string, string | null]> = [
   ["Notice period (in days)", "notice_period"],
   ["Current CTC", "current_ctc"],
   ["LinkedIn Profile", "linkedin"],
@@ -12,6 +12,10 @@ const cases: Array<[string, string]> = [
   ["Will you now or in the future require sponsorship for employment visa status in the country where the job is located?", "needs_sponsorship"],
   ["Country", "country"],
   ["Which country do you currently live in?", "country"],
+  // Work and education history: the dates of a past job or degree, not when the candidate can start.
+  ["Earliest start date", "start_date"],
+  ["Start date month", null],
+  ["Start date year", null],
 ];
 
 let failed = false;

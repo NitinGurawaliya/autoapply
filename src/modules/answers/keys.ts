@@ -29,7 +29,8 @@ export const ANSWER_KEYS: AnswerKeyDef[] = [
   { key: "current_title", type: "text", policy: "deterministic", synonyms: [/current\s*title/i, /job\s*title/i] },
   { key: "current_company", type: "text", policy: "deterministic", synonyms: [/current\s*(company|employer)/i] },
   { key: "employment_type", type: "select", policy: "bank_or_ask", synonyms: [/employment\s*type/i] },
-  { key: "start_date", type: "text", policy: "deterministic", synonyms: [/start\s*date/i, /available\s*(from|to\s*start)/i] },
+  // "Start date month / year" belong to a past job or degree (work and education history), not to when you can start.
+  { key: "start_date", type: "text", policy: "deterministic", synonyms: [/start\s*date(?!\s*(month|year|of\s*(employment|study)))/i, /available\s*(from|to\s*start)/i] },
   { key: "preferred_location", type: "multi", policy: "bank_or_ask", synonyms: [/preferred\s*location/i, /preferred\s*countr/i] },
 
   { key: "current_ctc", type: "text", policy: "bank_or_ask", synonyms: [/current\s*ctc/i, /current\s*salary/i, /present\s*ctc/i] },

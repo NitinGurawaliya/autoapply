@@ -10,7 +10,7 @@ export const ACKNOWLEDGEMENT_QUESTION =
   "Forms often require you to tick a privacy-notice acknowledgement, a \"my answers are true\" certification or an arbitration-agreement acknowledgement before they accept an application. May SwipeApply tick these for you on every form? (Marketing opt-ins and questions about you, such as work authorization, are always asked.)";
 
 const ACKNOWLEDGE =
-  /acknowledg|privacy (policy|notice|statement)|candidate privacy|data (protection|processing)|personal (data|information)|\bgdpr\b|\bconsent\b|i (have )?read|read and (agree|understood|understand)|i agree|agree to|terms (and|&) conditions|\bcertify\b|\bcertification\b|\battest\b|arbitration|true and (correct|complete|accurate)|accurate and complete|not knowingly withheld/i;
+  /acknowledg|privacy (policy|notice|statement)|candidate privacy|data (protection|processing)|personal (data|information)|\bgdpr\b|\bconsent\b|i (have )?read|read and (agree|understood|understand)|\bi understand\b|i agree|agree to|terms (and|&) conditions|\bcertify\b|\bcertification\b|\battest\b|arbitration|true and (correct|complete|accurate)|accurate and complete|not knowingly withheld/i;
 
 // Opt-ins are a real choice, and these are claims about the candidate dressed as a certification: never auto-ticked.
 const NOT_ACKNOWLEDGEMENT =

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { daysAgoLabel } from "@/lib/days";
 import { cachedFeed, rememberFeed } from "@/lib/feed-cache";
-import { appliedRoleKeys, companyKey, loadRules, roleKey } from "@/modules/governance";
+import { companyKey, feedHistory, loadRules, roleKey } from "@/modules/governance";
 import { companyResultsById, judge } from "./results";
 import { requiredYears } from "./tagging";
 
@@ -322,7 +322,7 @@ async function scoreFeed(userId: string, filters: FeedFilters): Promise<FeedJob[
   const minScore = loadRules().min_match_score;
   const cutoff = new Date(Date.now() - filters.days * 24 * 60 * 60 * 1000);
   const sources = profile?.isTest ? [...new Set([...filters.boards, "mock"])] : filters.boards;
-  const [jobs, applied, results] = await Promise.all([
+  const [jobs, history, results] = await Promise.all([
     feedRows({
       userId,
       sources,
@@ -333,7 +333,7 @@ async function scoreFeed(userId: string, filters: FeedFilters): Promise<FeedJob[
       titleWords: titleWordsFor(profile?.currentTitle ?? null),
       prefilter: minScore > 30,
     }),
-    appliedRoleKeys(userId),
+    feedHistory(userId, loadRules().max_per_company_per_week),
     companyResultsById().catch(() => new Map<string, never>()),
   ]);
 
@@ -369,7 +369,9 @@ async function scoreFeed(userId: string, filters: FeedFilters): Promise<FeedJob[
       };
     })
     .filter((job) => job.mock || job.score >= minScore)
-    .filter((job) => !applied.has(job.roleKey))
+    .filter((job) => !history.roles.has(job.roleKey))
+    // A company already at its weekly limit: a swipe would be blocked, so its jobs wait until the week is over.
+    .filter((job) => !history.companiesAtCap.has(companyKey(job.company)))
     .filter((job) => filters.expMax == null || job.requiredYears == null || job.requiredYears <= filters.expMax);
 
   return dedupeListings(scored)

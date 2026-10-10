@@ -47,6 +47,25 @@ export async function appliedRoleKeys(userId: string) {
   return new Set(apps.map((app) => roleKey(companyKey(app.companyName), app.title)));
 }
 
+/**
+ * What the feed must leave out, from one read of the counted applications: roles already applied to, and companies
+ * that already have max_per_company_per_week applications in the last 7 days (a swipe there would be blocked, and the
+ * check before the run would ask questions for a job that cannot be sent).
+ */
+export async function feedHistory(userId: string, perCompanyPerWeek: number, now = new Date()) {
+  const apps = await countedApplications(userId);
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const roles = new Set<string>();
+  const thisWeek = new Map<string, number>();
+  for (const app of apps) {
+    const company = companyKey(app.companyName);
+    roles.add(roleKey(company, app.title));
+    if (app.createdAt >= weekAgo) thisWeek.set(company, (thisWeek.get(company) ?? 0) + 1);
+  }
+  const companiesAtCap = new Set([...thisWeek].filter(([, count]) => count >= perCompanyPerWeek).map(([company]) => company));
+  return { roles, companiesAtCap };
+}
+
 /** What the swipe-time rules need to know about this user's history with one job's role and company. */
 export async function historyFor(userId: string, job: { title: string; companyId: string }, now = new Date(), client: Reader = db) {
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);

@@ -1,5 +1,6 @@
 const INDIA = [
   "india",
+  "ind",
   "bengaluru",
   "bangalore",
   "hyderabad",
@@ -16,8 +17,20 @@ const INDIA = [
   "kochi",
   "indore",
   "chandigarh",
+  "mohali",
+  "lucknow",
+  "coimbatore",
+  "thiruvananthapuram",
+  "trivandrum",
+  "bhubaneswar",
+  "nagpur",
+  "vadodara",
+  "visakhapatnam",
+  "mysuru",
+  "mysore",
 ];
 
+// Cities often written without their state, and every state's name (Georgia is left out: it is also a country).
 const US = [
   "united states",
   "u.s.",
@@ -31,8 +44,32 @@ const US = [
   "los angeles",
   "denver",
   "atlanta",
-  "california",
+  "houston",
+  "dallas",
+  "miami",
+  "san mateo",
+  "palo alto",
+  "mountain view",
+  "san jose",
+  "sunnyvale",
+  "santa clara",
+  "bay area",
+  "silicon valley",
+  "washington, d.c.",
+  "washington dc",
+  "alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut", "delaware", "florida", "hawaii",
+  "idaho", "illinois", "indiana", "iowa", "kansas", "kentucky", "louisiana", "maine", "maryland", "massachusetts",
+  "michigan", "minnesota", "mississippi", "missouri", "montana", "nebraska", "nevada", "new hampshire", "new jersey",
+  "new mexico", "north carolina", "north dakota", "ohio", "oklahoma", "oregon", "pennsylvania", "rhode island",
+  "south carolina", "south dakota", "tennessee", "texas", "utah", "vermont", "virginia", "washington", "west virginia",
+  "wisconsin", "wyoming",
 ];
+
+// "Palo Alto, CA", "Houston, TX": a two-letter state code after a comma, in capitals as the posting writes it.
+const US_STATE_CODE =
+  /,\s*(AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\b/;
+// Places that make such a code mean something else ("Toronto, ON, CA" is in Canada).
+const NOT_US = /canada|ontario|toronto|vancouver|montreal|quebec|alberta|british columbia/i;
 
 export type JobTags = {
   country: "IN" | "US" | "REMOTE" | "OTHER";
@@ -78,8 +115,9 @@ export function requiredYears(title: string, description: string): number | null
   return Math.max(fromTitle, fromText);
 }
 
+/** Whole words only: "india" must not match "Indiana". */
 function includesAny(text: string, words: string[]) {
-  return words.some((word) => text.includes(word));
+  return words.some((word) => new RegExp(`(^|[^a-z])${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^a-z])`).test(text));
 }
 
 export function tagPosting(input: {
@@ -92,7 +130,7 @@ export function tagPosting(input: {
   const remoteHint = Boolean(input.isRemote) || /remote|work from home|\bwfh\b|anywhere|worldwide/.test(place);
   let country: JobTags["country"] = "OTHER";
   if (includesAny(place, INDIA)) country = "IN";
-  else if (includesAny(place, US) || /\b(us|u\.s\.)\b/.test(place)) country = "US";
+  else if (includesAny(place, US) || /\b(us|u\.s\.)\b/.test(place) || (US_STATE_CODE.test(input.location) && !NOT_US.test(input.location))) country = "US";
   else if (remoteHint) country = "REMOTE";
 
   let remoteType: JobTags["remoteType"] = "unknown";

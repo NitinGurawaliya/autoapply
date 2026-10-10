@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { db } from "@/lib/db";
 import { callJson } from "@/lib/llm";
 import { CONCEPT_IDS, detectConcept, grounded, recall, RISKY, sameParam } from "@/modules/answers";
 import type { Recalled } from "@/modules/answers";
@@ -71,6 +72,32 @@ const isYesNo = (answer: string) => /^(yes|no|y|n|true|false)\b/i.test(answer.tr
 const asksYesNo = (question: string) => /^(are|do|does|did|have|has|had|is|was|were|will|would|can|could|should|may|might)\b/i.test(opening(question));
 const asksOpen = (question: string) => /^(what|which|when|where|who|whom|whose|how|why|please (list|provide|describe|enter|share|specify|select)|list|describe|enter|share|specify)\b/i.test(opening(question));
 
+/**
+ * Newest wins: a later answer of the user's about the same country (and the same place, for "other" countries), to a
+ * question of the same kind, that says something else. Read from all their answers saved for that country, not only
+ * the closest wordings recall offered ("authorized in the United States?" is far in wording from "in the country
+ * where this position is located?"). Null when there is none.
+ */
+async function newestSamePlace(userId: string, candidate: Candidate, kind: string | null) {
+  const place = candidate.context;
+  if (!place?.country) return null;
+  const norm = (text: string | undefined | null) => (text ?? "").trim().toLowerCase();
+  const rows = await db.answer.findMany({
+    where: { userId, source: "user", updatedAt: { gt: candidate.updatedAt }, context: { path: ["country"], equals: place.country } },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true, key: true, question: true, answer: true, source: true, context: true, updatedAt: true },
+  });
+  const later = rows.find((row) => {
+    const context = row.context as { country?: string; location?: string; company?: string } | null;
+    return (
+      detectConcept(row.question) === kind &&
+      (place.country !== "OTHER" || norm(context?.location) === norm(place.location)) &&
+      norm(row.answer) !== norm(candidate.answer)
+    );
+  });
+  return later ? ({ ...later, context: later.context as Candidate["context"], score: candidate.score, n: 0 } as Candidate) : null;
+}
+
 export async function answerFromMemory(input: {
   userId: string;
   job: JobContext | null;
@@ -100,7 +127,8 @@ export async function answerFromMemory(input: {
         question: candidate.question,
         answer: candidate.answer.slice(0, 200),
         answeredFor: candidate.context,
-        savedOn: new Date(candidate.updatedAt).toISOString().slice(0, 10),
+        // To the minute: two answers saved the same day must still be told apart (newest wins).
+        savedOn: new Date(candidate.updatedAt).toISOString().slice(0, 16),
       })),
     })),
   };
@@ -160,8 +188,12 @@ export async function answerFromMemory(input: {
         }
       }
     }
-    const where = candidate.context?.company ? ` (${candidate.context.company})` : "";
-    answers.set(label, { key: candidate.key, answer: candidate.answer, basis: `your answer to "${candidate.question.slice(0, 120)}"${where}`, score: candidate.score });
+    // Newest wins (the owner's rule for conflicting answers): for a question about one country, a later answer of the
+    // user's about that same country (and place, for "other" countries) that says something else replaces this one.
+    const chosen = (concept && RISKY[concept].parameter === "country" && (await newestSamePlace(input.userId, candidate, oldKind))) || candidate;
+    const where = chosen.context?.company ? ` (${chosen.context.company})` : "";
+    const newer = chosen !== candidate ? ", your newest answer" : "";
+    answers.set(label, { key: chosen.key, answer: chosen.answer, basis: `your answer to "${chosen.question.slice(0, 120)}"${where}${newer}`, score: chosen.score });
   }
   return { answers, considered: questions.length, rejected };
 }
