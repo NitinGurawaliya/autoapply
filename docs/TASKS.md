@@ -425,9 +425,10 @@ Do: the fetcher keeps `offices` and decodes Greenhouse's HTML-escaped `content`;
 **Done when:** `scripts/eligibility-test.ts` (30+ real samples) PASS and the backfill prints counts per eligibility.
 Done 10 Oct: `eligibility-test` PASS (57 checks from real boards, including the misses the first rules made: "CRI - Remote", "Remote, AMER", "Remote - CA", "São Paulo"). Backfill: offices fetched from each Greenhouse board; 3,561 jobs re-tagged and their descriptions un-escaped (Greenhouse markup had been stored as text). Open Greenhouse jobs: 317 india, 18 remote_india, 2,307 abroad, 2 unknown; spot check of 30 per bucket: one miss (UAE, fixed). `feed-sql-test`, `match-test`, `ingest-contract-test`, `results-test`, `guards-test` PASS.
 
-### [ ] T78 — Company list: compile, validate, approve
+### [~] T78 — Company list: compile, validate, approve
 Do: the list moves to `prisma/companies.ts` with `stage`; `Company.stage`; `scripts/discover-greenhouse.ts` checks candidates on the public API (open jobs, India-eligible jobs, suggested stage) into a CSV the owner approves; seed the approved list.
 **Done when:** the discovery report exists and the approved list is seeded, with totals of companies and India-eligible open jobs.
+Progress 10 Oct: batch 1 (508 candidates): 113 on Greenhouse, 65 with India-eligible jobs, 1,380 such jobs open (only 335 were stored, because ingest keeps the last 7 days of postings: T79). The owner kept all 65; `prisma/companies.ts` + `Company.stage` seeded: 66 Greenhouse companies (45 MNC, 19 mid-size, 2 startup). Batch 2 (323 more candidates) running.
 
 ### [ ] T79 — Fast, safe ingest at hundreds of companies
 Do: per company one transaction (create new, update changed, close the rest); 4 companies at a time with pauses, timeout and one retry; `lastError` on failures; a singleton run guard; every 3 hours.

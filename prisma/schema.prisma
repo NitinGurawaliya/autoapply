@@ -123,6 +123,7 @@ model Company {
   slug           String
   name           String
   active         Boolean   @default(true)
+  stage          String?   // startup | midsize | mnc (prisma/companies.ts); the feed's Company type filter
   lastFetchedAt  DateTime?
   lastFetchCount Int?
   jobs           Job[]

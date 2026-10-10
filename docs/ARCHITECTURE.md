@@ -34,7 +34,7 @@ swipeapply/
   config/rules.json
   scripts/                       # ingest.ts, clear-queue.ts, ats-smoke.ts (live dry run), *-test.ts / *-smoke.ts checks
   prisma/schema.prisma
-  prisma/seed.ts                 # seeds Company rows (source, slug, name)
+  prisma/seed.ts                 # seeds Company rows from prisma/companies.ts (source, slug, name, stage)
   src/
     proxy.ts                     # Next.js 16 renamed middleware to proxy. Same redirects.
     app/
@@ -117,7 +117,7 @@ model Answer { id String @id @default(cuid()); userId String
   user User @relation(fields:[userId], references:[id]); @@unique([userId, key]) }
 
 model Company { id String @id @default(cuid()); source String; slug String; name String
-  active Boolean @default(true); lastFetchedAt DateTime?; lastFetchCount Int?
+  active Boolean @default(true); stage String? /* startup | midsize | mnc */; lastFetchedAt DateTime?; lastFetchCount Int?
   jobs Job[]; @@unique([source, slug]) }
 
 model Job { id String @id @default(cuid()); source String; externalId String
@@ -187,7 +187,7 @@ Each key: `{key, type, synonyms: RegExp[], default?, policy: deterministic | ban
 3. Questions screen writes `current_ctc expected_ctc notice_period employment_type preferred_location` (`source=user`), plus `work_authorization needs_sponsorship` if a non-India country is chosen.
 
 ### 6.2 Job ingest (worker job `ingest`, payload `{days}`)
-1. Load `Company where active`.
+1. Load `Company where active`. The list lives in `prisma/companies.ts` (`npm run seed`). Greenhouse companies are found with `scripts/discover-greenhouse.ts` (candidates in `scripts/greenhouse-candidates*.ts`): it checks each candidate's public board and counts its India-eligible open jobs, writes `docs/greenhouse-review*.csv`, and the owner approves which to keep and each `stage`. 10 Oct: 508 candidates, 113 on Greenhouse, 65 with India-eligible jobs (1,380 open: 1,172 in India, 208 remote); all 65 kept, 66 Greenhouse companies active (45 MNC, 19 mid-size, 2 startup).
 2. Per company, call its fetcher:
    - Greenhouse `GET https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true` (date: `first_published` else `updated_at`)
    - Lever `GET https://api.lever.co/v0/postings/{slug}?mode=json` (date: `createdAt` ms)
