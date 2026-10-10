@@ -142,6 +142,8 @@ async function main() {
     const deadApp = await makeApp({ status: "filling", heartbeatAt: old });
     const liveApp = await makeApp({ status: "filling", heartbeatAt: new Date() });
     const idleApp = await makeApp({ status: "needs_input", heartbeatAt: old }); // waiting for answers: no active job, must stay
+    // Answered after the check before the run, minutes later: re-queued with its old heartbeat, its new job just started.
+    const resumedApp = await makeApp({ status: "queued", heartbeatAt: old });
     const addActive = async (applicationId: string, startedAt: Date) => {
       const rows = await db.$queryRaw<Array<{ id: string }>>`
         INSERT INTO pgboss.job (name, data, state, started_on) VALUES ('apply', ${JSON.stringify({ applicationId })}::jsonb, 'active', ${startedAt}) RETURNING id::text AS id`;
@@ -150,9 +152,10 @@ async function main() {
     };
     const deadJob = await addActive(deadApp.id, old);
     await addActive(liveApp.id, old);
+    await addActive(resumedApp.id, new Date());
     await db.$executeRaw`INSERT INTO "SubmitLock" ("userId", "holderId", "expiresAt") VALUES (${userId("reap")}, ${deadApp.id}, now() + interval '1 minute')`;
     const reaped = await reapStaleRuns();
-    const [d, l, i] = await Promise.all([deadApp, liveApp, idleApp].map((a) => db.application.findUnique({ where: { id: a.id } })));
+    const [d, l, i, r] = await Promise.all([deadApp, liveApp, idleApp, resumedApp].map((a) => db.application.findUnique({ where: { id: a.id } })));
     const jobState = await db.$queryRaw<Array<{ state: string }>>`SELECT state FROM pgboss.job WHERE id = ${deadJob}::uuid`;
     const lockLeft = await db.$queryRaw<Array<{ n: bigint }>>`SELECT count(*) AS n FROM "SubmitLock" WHERE "holderId" = ${deadApp.id}`;
     check("reaper fails a run whose heartbeat stopped", d?.status === "failed" && d.error === STALE_MESSAGE, `${d?.status}; reaped ${reaped}`);
@@ -160,6 +163,7 @@ async function main() {
     check("reaper frees that run's submit lock", Number(lockLeft[0].n) === 0);
     check("reaper leaves a run with a fresh heartbeat alone", l?.status === "filling");
     check("reaper leaves an application waiting for answers alone", i?.status === "needs_input");
+    check("reaper leaves a run that just resumed (old heartbeat, new job) alone", r?.status === "queued", r?.status);
   } finally {
     if (jobIdsToClean.length) await db.$executeRaw`DELETE FROM pgboss.job WHERE id::text = ANY(${jobIdsToClean})`;
     await db.applicationEvent.deleteMany({ where: { applicationId: { in: created } } });

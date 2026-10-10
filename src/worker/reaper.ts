@@ -18,7 +18,9 @@ export async function reapStaleRuns(staleMinutes = STALE_AFTER_MINUTES) {
     FROM "Application" a
     JOIN pgboss.job j ON j.name = 'apply' AND j.state = 'active' AND j.data->>'applicationId' = a."id"
     WHERE a."status" IN ('queued', 'inspecting', 'filling', 'needs_input')
-      AND COALESCE(a."heartbeatAt", j.started_on) < now() - (${staleMinutes}::int * interval '1 minute')`;
+      -- The newer of the last heartbeat and this queue job's start: a run that resumes after the user answered keeps the
+      -- heartbeat of its earlier attempt until its first beat, and must not be reaped in those first seconds.
+      AND GREATEST(a."heartbeatAt", j.started_on) < now() - (${staleMinutes}::int * interval '1 minute')`;
 
   let reaped = 0;
   for (const row of stale) {

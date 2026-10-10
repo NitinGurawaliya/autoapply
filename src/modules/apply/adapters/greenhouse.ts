@@ -135,7 +135,10 @@ async function readFields(page: Page): Promise<FormField[]> {
         const options = boxes.map((box) =>
           ((box.id ? document.querySelector(`label[for="${CSS.escape(box.id)}"]`)?.textContent : "") || box.closest("label")?.textContent || box.value || "").replace(/\s+/g, " ").trim(),
         );
-        const groupRequired = boxes.some((box) => box.required || box.getAttribute("aria-required") === "true") || fieldset?.getAttribute("aria-required") === "true";
+        // Greenhouse's demographic-data consent box says it is optional, but Greenhouse refuses the submission without it
+        // once the demographic questions are answered (and they always are: "Decline to self-identify").
+        const groupRequired =
+          boxes.some((box) => box.required || box.getAttribute("aria-required") === "true") || fieldset?.getAttribute("aria-required") === "true" || name === "gdpr_demographic_data_consent_given";
         if (type === "radio" || boxes.length > 1) {
           rows.push({ id: el.id, name, label: legend || label, kind: type === "radio" ? "radio" : "checkbox-group", required: groupRequired, options });
         } else if (el.id) {
@@ -251,7 +254,7 @@ export async function missingRequired(page: Page): Promise<string[]> {
       if (/^(g-recaptcha|iti-|security-input-)/.test(el.id)) return;
       const fieldset = el.closest("fieldset");
       const box = type === "checkbox" || type === "radio";
-      const required = el.required || el.getAttribute("aria-required") === "true" || (box && fieldset?.getAttribute("aria-required") === "true");
+      const required = el.required || el.getAttribute("aria-required") === "true" || (box && fieldset?.getAttribute("aria-required") === "true") || el.name === "gdpr_demographic_data_consent_given";
       if (!required) return;
       if (el.getClientRects().length === 0 && (!fieldset || fieldset.getClientRects().length === 0)) return;
       let label = (el.id ? document.querySelector(`label[for="${CSS.escape(el.id)}"]`)?.textContent : "") ?? "";

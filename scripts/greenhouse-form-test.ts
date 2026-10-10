@@ -37,6 +37,7 @@ const FORM = `<form id="application-form">
   <label id="q_combo-label" for="q_combo">Office preference*</label>
   <div class="select__control"><div class="select__value-container"><div class="select__placeholder">Select...</div><input id="q_combo" role="combobox" type="text" aria-required="true" aria-labelledby="q_combo-label" /></div></div>
   <div style="display:none"><label for="question_6">Which visa do you hold?*</label><input id="question_6" type="text" aria-required="true" /></div>
+  <div class="checkbox--full-width checkbox" id="gdpr_demographic_data_consent_given"><div class="checkbox__wrapper"><div class="checkbox__input"><input aria-required="false" class="checkbox--full-width" type="checkbox" id="gdpr_demographic_data_consent_given_1" name="gdpr_demographic_data_consent_given" value="1"></div><label for="gdpr_demographic_data_consent_given_1">By checking this box, I consent to Stripe collecting, storing, and processing my responses to the demographic data surveys above.</label></div></div>
   <button type="submit" onclick="event.preventDefault(); window.clicked = true">Submit application</button>
 </form>`;
 
@@ -78,6 +79,10 @@ async function main() {
     check("the acknowledgement is ticked under the candidate's standing permission", value("By clicking")?.value === "Yes" && value("By clicking")?.key === "accept_acknowledgements" && !asked("By clicking"));
     check("a number field takes the number out of the answer", value("Total years")?.value === "3");
     check("an optional number field skips a non-number answer instead of typing it", !value("Start date year") && !asked("Start date year"));
+    // Stripe, 10 Oct: the box says it is optional, but Greenhouse refused the submission without it.
+    const consent = byLabel("By checking this box, I consent to Stripe");
+    check("Greenhouse's demographic-data consent is a required box", consent?.type === "checkbox" && consent.required === true, JSON.stringify(consent));
+    check("and is ticked under the standing permission", value("By checking this box, I consent")?.value === "Yes" && value("By checking this box, I consent")?.key === "accept_acknowledgements");
 
     // Before anything is filled: every empty required question is named, hidden ones are not.
     const before = await missingRequired(page);
@@ -99,7 +104,7 @@ async function main() {
     const toFill = [...values, ...answered].filter((v) => v.type !== "combobox");
     const filled = await greenhouseAdapter.fill(page, toFill);
     const ticked = await page.evaluate(() => Array.from(document.querySelectorAll("input:checked")).map((el) => (el as HTMLInputElement).name + ":" + (el as HTMLInputElement).value));
-    check("only the chosen box of each group is ticked", ticked.sort().join(" ") === ["question_1[]:1", "question_2[]:1", "question_3[]:0", "question_4:1"].sort().join(" "), ticked.join(" "));
+    check("only the chosen box of each group is ticked", ticked.sort().join(" ") === ["gdpr_demographic_data_consent_given:1", "question_1[]:1", "question_2[]:1", "question_3[]:0", "question_4:1"].sort().join(" "), ticked.join(" "));
     check("the filled list records the option label", filled.find((f) => f.label.startsWith("Please select the country"))?.value === "India" && filled.find((f) => f.label.startsWith("Are you 18"))?.value === "Yes");
     check("the number field holds the number", (await page.locator("#question_5").inputValue()) === "3");
 

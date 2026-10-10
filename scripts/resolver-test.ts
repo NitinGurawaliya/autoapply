@@ -36,6 +36,15 @@ const mockField = field("Why do you want this job?", { selector: "#free_text" })
 const mockSaved = resolveValues([{ field: mockField, key: "free_text" }], profile, [{ key: "free_text", answer: "From the bank", source: "user" }]);
 check("a field whose id is the canonical key keeps using it (the mock form)", mockSaved.values[0]?.value === "From the bank");
 
+// "The country where you currently reside" is about the candidate, not the job: their answer to that wording is reused.
+// "The country where the job is located" is about the job, so even the same wording needs the verified memory answer.
+const reside = field("Please select the country where you currently reside.", { type: "select", options: ["India", "Singapore", "Other"] });
+const resided = resolveValues([{ field: reside, key: null }], profile, [{ key: customQuestionKey(reside.label), answer: "India", source: "user" }], undefined, undefined, { company: "Stripe", country: "OTHER" });
+check("the country where you reside reuses your answer to that wording", resided.values[0]?.value === "India" && resided.pending.length === 0, JSON.stringify(resided.pending[0] ?? resided.values[0]));
+const jobCountry = field("Are you authorized to work in the country where the job is located?", { type: "select", options: ["Yes", "No"] });
+const notReused = resolveValues([{ field: jobCountry, key: null }], profile, [{ key: customQuestionKey(jobCountry.label), answer: "Yes", source: "user" }], undefined, undefined, { company: "Stripe", country: "OTHER" });
+check("the country where the job is still needs the verified answer", notReused.values.length === 0 && notReused.pending.length === 1);
+
 const select = field("Notice Period", { type: "select", options: ["Immediate", "7 - 15 days", "30 days"] });
 const fit = resolveValues([{ field: select, key: "notice_period" }], profile, [{ key: "notice_period", answer: "7", source: "user" }]);
 check("a plain number picks the option range that holds it", fit.values[0]?.value === "7 - 15 days", fit.values[0]?.value);

@@ -110,7 +110,11 @@ function sensitiveOrEeo(key: string, label: string) {
 
 /** Words that make a question depend on the job it appears on. "We / our / us" only in lower case ("US" is a country). */
 function refersToTheJob(label: string) {
-  return /\b(this|the) (job|role|position|opportunity|company|team|location)\b|country (where|in which)|you are applying|you('| a)re applying|\bthe office\b/i.test(label) || /\b(we|our|us)\b/.test(label);
+  // "The country where you will be working" points at the job; "the country where you currently reside" does not.
+  return (
+    /\b(this|the) (job|role|position|opportunity|company|team|location)\b|country (where|in which) (you (will|would) (be )?work|you'll (be )?work)|you are applying|you('| a)re applying|\bthe office\b/i.test(label) ||
+    /\b(we|our|us)\b/.test(label)
+  );
 }
 
 export function resolveValues(

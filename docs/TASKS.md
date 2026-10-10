@@ -305,6 +305,11 @@ Do: the feed leaves out companies at the weekly limit; country tagging by whole 
 **Done when:** the weekly-limit reproduction shows 0 cards at the limit, 23 sample locations tag right, and the Coinbase dry run (nitin, not submitted) passes with work authorization No.
 Done 10 Oct: Rubrik 4 cards with 2 applications this week, 0 at 3; locations 23/23; dry run PASS (34 fields, 30 filled, none empty, resume attached; work authorization No from the newest answer; Start date year asked instead of "na"). See the checks listed in the commit.
 
+### [x] T76 — A real Greenhouse application end to end
+Do: send one real application with the presenter's profile and fix what it finds: the reaper failing resumed runs, "the country where you reside" treated as the job's country, Greenhouse's demographic-data consent box read as optional.
+**Done when:** a real Greenhouse application reaches `submitted`.
+Done 10 Oct: Stripe, Software Engineer New Grad (Singapore), nitin: 5 facts asked before opening the form, 27 fields, 21 answered, consent ticked, security code entered, `submitted` (confirmation page reached). `queue-smoke` (resumed run left alone), `greenhouse-form-test` (consent box), `resolver-test` (residence wording) and the answering checks PASS.
+
 ## Phase F — Smarter answers (ask only what we cannot know)
 
 Plan (v2, agreed 9 Oct): retrieve, then verify. Every answered question is stored with its embedding (pgvector in the same Neon database) and the job it was answered for. For each form question: exact/canonical answer → recall the user's 5 closest past questions → one AI verify per form ("same question, same company/city/country/skill?") → hard parameter checks in code for risky questions (work authorization and sponsorship per country, worked-at per company, office per city, sensitive, EEO) → derive with evidence → essay draft (one-time permission) → fit to the form's options → ask, preferably before the run. Similarity alone never fills an answer. Reused/derived answers on by default, each with a badge and its reason. Every step re-runs the replay scoreboard (auto-answer rate up, wrong sensitive answers = 0).
