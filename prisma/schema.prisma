@@ -145,6 +145,10 @@ model Job {
   postedAt      DateTime
   fetchedAt     DateTime
   closedAt      DateTime? // set when the company's board stops listing the job; cleared if it comes back
+  // india | remote_india | abroad | unknown (modules/jobs/tagging.ts eligibility): the feed shows india and remote_india.
+  eligibility   String   @default("unknown")
+  // When ingest first saw the job ("new for you today").
+  firstSeenAt   DateTime @default(now())
   // The application form's questions read from the board's public API (modules/jobs/questions.ts), so the agent can
   // ask what it is missing before opening a browser. Null until fetched.
   questions          Json?
@@ -161,6 +165,7 @@ model Job {
   @@index([postedAt])
   @@index([country])
   @@index([source, country, postedAt]) // the feed's filter
+  @@index([source, eligibility, postedAt])
   @@index([terms], type: Gin) // feedRows looks skills up here (migration job_terms_index)
 }
 

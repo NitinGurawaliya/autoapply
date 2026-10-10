@@ -6,6 +6,7 @@ const jobSchema = z.object({
   title: z.string(),
   absolute_url: z.string().optional(),
   location: z.object({ name: z.string().optional() }).optional(),
+  offices: z.array(z.object({ name: z.string().nullish(), location: z.string().nullish() })).optional(),
   content: z.string().optional(),
   first_published: z.string().optional(),
   updated_at: z.string().optional(),
@@ -24,6 +25,7 @@ export async function fetchGreenhouse(slug: string): Promise<FetchedJob[]> {
     const postedAt = asDate(parsed.data.first_published) ?? asDate(parsed.data.updated_at);
     const applyUrl = parsed.data.absolute_url;
     if (!postedAt || !applyUrl) continue;
+    const offices = (parsed.data.offices ?? []).map((office) => [office.name, office.location].filter(Boolean).join(" @ ")).filter(Boolean);
     jobs.push({
       externalId: String(parsed.data.id),
       title: parsed.data.title,
@@ -31,10 +33,12 @@ export async function fetchGreenhouse(slug: string): Promise<FetchedJob[]> {
       description: plainText(parsed.data.content ?? ""),
       applyUrl,
       postedAt,
+      offices,
       raw: {
         id: parsed.data.id,
         title: parsed.data.title,
         location: parsed.data.location?.name ?? "",
+        offices,
         absolute_url: applyUrl,
         first_published: parsed.data.first_published ?? null,
         updated_at: parsed.data.updated_at ?? null,

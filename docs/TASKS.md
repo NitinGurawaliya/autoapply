@@ -415,3 +415,40 @@ Done 10 Oct: the four profile-menu pages rebuilt from the same parts (title bar,
 Do: delete legacy status tokens and dead components; loading, empty and error states everywhere; keyboard and screen-reader pass; desktop centring.
 Done when: every smoke and `contrast-check` pass and a screenshot set covers all 36 boards.
 Done 10 Oct: removed the old status badge, company avatar, logo, nav tabs, user menu, bell, and the unused dialog, card, tabs, progress, select and badge primitives; the old coloured status tokens; the legacy button variants (only `default` stays, for the mock ATS form); the starter home page is now a redirect. Every screen has loading, empty and error states (`patterns/states.tsx`); one 480 px column centred at every width. DESIGN.md and ARCHITECTURE.md describe the new build. Typecheck, lint, `ui-lint` (no legacy files left) and `contrast-check` PASS. After clearing fixtures left by an interrupted run, `shell`, `feed`, `ui`, `applications`, `lifecycle`, `answers`, `governance`, `notify`, `theme`, `onboarding` smokes and `security-test` all PASS. Screenshots were compared with all 36 boards screen by screen in T59–T68. Not done: an automated axe accessibility audit (no axe in the stack); keyboard use is covered by the smokes (arrow keys, Escape, focus rings on every control).
+
+## Phase H — Greenhouse India jobs: many companies, fresh daily, eligibility-first matching
+
+Greenhouse only (other boards later: the "SwipeApply mid-term plan" doc). Decisions 10 Oct: Claude compiles 300–500 companies hiring in India and a script validates them, the owner approves; only jobs in India or remote and open to India are shown (a bare "Remote" needs an India signal; jobs abroad are never shown); companies tagged Startup / Mid-size / MNC; matches shown as Strong / Good / Stretch with the reason, not a %. **Generic for every field** (owner, 10 Oct): any job seeker (tech, HR, finance, marketing, sales, operations...) uploads a resume and is matched; every job is stored and classified by job function; closed jobs are deleted 30 days after closing unless swiped or applied to. Later only new job boards remain. Plan: `ok-so-include-these-joyful-leaf.md`.
+
+### [x] T77 — Eligibility tag on every job
+Do: the fetcher keeps `offices` and decodes Greenhouse's HTML-escaped `content`; `tagging.ts eligibility()` → `india` · `remote_india` · `abroad` · `unknown`; migration `Job.eligibility` (indexed) and `Job.firstSeenAt`; backfill stored jobs.
+**Done when:** `scripts/eligibility-test.ts` (30+ real samples) PASS and the backfill prints counts per eligibility.
+Done 10 Oct: `eligibility-test` PASS (57 checks from real boards, including the misses the first rules made: "CRI - Remote", "Remote, AMER", "Remote - CA", "São Paulo"). Backfill: offices fetched from each Greenhouse board; 3,561 jobs re-tagged and their descriptions un-escaped (Greenhouse markup had been stored as text). Open Greenhouse jobs: 317 india, 18 remote_india, 2,307 abroad, 2 unknown; spot check of 30 per bucket: one miss (UAE, fixed). `feed-sql-test`, `match-test`, `ingest-contract-test`, `results-test`, `guards-test` PASS.
+
+### [ ] T78 — Company list: compile, validate, approve
+Do: the list moves to `prisma/companies.ts` with `stage`; `Company.stage`; `scripts/discover-greenhouse.ts` checks candidates on the public API (open jobs, India-eligible jobs, suggested stage) into a CSV the owner approves; seed the approved list.
+**Done when:** the discovery report exists and the approved list is seeded, with totals of companies and India-eligible open jobs.
+
+### [ ] T79 — Fast, safe ingest at hundreds of companies
+Do: per company one transaction (create new, update changed, close the rest); 4 companies at a time with pauses, timeout and one retry; `lastError` on failures; a singleton run guard; every 3 hours.
+**Done when:** a full ingest of the approved list finishes well inside its limit (measured), `ingest-contract-test` passes, and a second run only touches changed rows.
+
+### [ ] T80 — Feed shows only India-eligible jobs, with company type
+Do: feed and swipe check use the same eligibility rule (`not_eligible`); location chips In India / Remote; Company type chips; stage tag on the card.
+**Done when:** `feed-sql-test`, `feed-smoke`, `navigation-cache-smoke` (build) pass and no real profile's feed holds an abroad job.
+
+### [ ] T81 — Job functions for every job and every user (all fields)
+Do: `modules/jobs/functions.ts` taxonomy (Engineering with sub-functions, Data & AI, Product, Design, Marketing, Sales, Customer success, HR & people, Finance & accounting, Operations, Legal, Admin, Other) plus seniority; jobs classified at ingest by title rules, the LLM (cached per distinct title) for the rest, stored as `Job.function`, `Job.subFunction`, `Job.seniority`; the resume parse returns the candidate's functions, seniority and skills for any field.
+**Done when:** `scripts/functions-test.ts` classifies 100+ real titles across fields (sampled, reviewed), the backfill reports counts per function, and 5 kinds of resume (engineer, HR, finance, marketing, sales) parse into the right function and skills.
+
+### [ ] T82 — Scoring v2, generic: gates, fit, tiers
+Do: gates (eligibility; the job's function is one the user targets; experience gap of 3+ years = out), then fit from the user's own skills found in the job (weighted in the requirements part), title similarity within the function, seniority fit and freshness; Strong / Good / Stretch with the reason in that field's words; the minimum match becomes a minimum tier; the swipe check uses the same code.
+**Done when:** `match-test` tier cases for several fields pass, `feed-sql-test` agreement holds, and the top 20 for each real profile plus HR and finance test profiles are reviewed with the owner.
+
+### [ ] T83 — Onboarding and feed for any field
+Do: onboarding confirms the suggested functions and level (editable); engineer-only questions become optional; Function chips in the feed with Company type and location; a dry run on an HR and a finance Greenhouse form.
+**Done when:** HR and finance test profiles go through onboarding, see only their field's India-eligible jobs with tiers, and one dry run per field passes (not submitted).
+
+### [ ] T84 — Daily freshness numbers
+Do: per-run counts (new jobs, new India-eligible jobs, failing companies); `scripts/feed-report.ts` new Strong/Good matches per profile in 24 h.
+**Done when:** the report runs after a scheduled ingest and shows several new matches per profile per day.

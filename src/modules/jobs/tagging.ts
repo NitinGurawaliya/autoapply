@@ -71,11 +71,84 @@ const US_STATE_CODE =
 // Places that make such a code mean something else ("Toronto, ON, CA" is in Canada).
 const NOT_US = /canada|ontario|toronto|vancouver|montreal|quebec|alberta|british columbia/i;
 
+export type Eligibility = "india" | "remote_india" | "abroad" | "unknown";
+
 export type JobTags = {
   country: "IN" | "US" | "REMOTE" | "OTHER";
   remoteType: "remote" | "hybrid" | "onsite" | "unknown";
   experienceMin: number | null;
+  /** Whether a candidate in India can take the job (the feed shows india and remote_india only). */
+  eligibility: Eligibility;
 };
+
+// Countries and regions other than India, for remote roles restricted to them ("Remote - US", "Remote, EMEA") and
+// for places a job is located in. Whole words, lower case.
+const ABROAD = [
+  "canada", "mexico", "brazil", "argentina", "colombia", "chile", "peru", "costa rica", "uruguay",
+  "uk", "united kingdom", "england", "scotland", "london", "manchester", "ireland", "dublin", "cork",
+  "germany", "berlin", "munich", "hamburg", "france", "paris", "spain", "madrid", "barcelona", "portugal", "lisbon",
+  "netherlands", "amsterdam", "belgium", "luxembourg", "switzerland", "zurich", "zürich", "geneva", "austria", "vienna",
+  "italy", "milan", "poland", "warsaw", "krakow", "romania", "bucharest", "czech", "czech republic", "prague",
+  "sweden", "stockholm", "denmark", "copenhagen", "norway", "oslo", "finland", "helsinki", "estonia", "latvia",
+  "lithuania", "hungary", "budapest", "bulgaria", "sofia", "serbia", "belgrade", "croatia", "greece", "athens",
+  "turkey", "istanbul", "ukraine", "israel", "tel aviv", "uae", "united arab emirates", "emirates", "dubai", "abu dhabi", "saudi arabia", "riyadh",
+  "egypt", "cairo", "nigeria", "lagos", "kenya", "nairobi", "south africa", "cape town", "johannesburg",
+  "australia", "sydney", "melbourne", "new zealand", "auckland", "japan", "tokyo", "korea", "south korea", "seoul",
+  "china", "beijing", "shanghai", "shenzhen", "hong kong", "taiwan", "taipei", "singapore", "malaysia", "kuala lumpur",
+  "indonesia", "jakarta", "philippines", "manila", "thailand", "bangkok", "vietnam", "pakistan", "bangladesh",
+  "sri lanka", "emea", "europe", "eu", "americas", "latam", "north america", "nordics", "dach", "benelux", "anz",
+  "toronto", "vancouver", "montreal", "ottawa", "calgary", "ontario", "quebec", "alberta", "british columbia",
+  "amer", "nyc", "cri", "european union", "eea", "sao paulo", "são paulo", "brasil", "bogota", "buenos aires", "santiago", "lima", "montevideo",
+  "edinburgh", "glasgow", "belfast", "northern ireland", "wales", "bristol", "cambridge", "oxford", "haifa",
+  "osaka", "kyoto", "busan", "taichung", "chengdu", "guangzhou", "hangzhou", "macau", "cebu", "penang",
+  "ho chi minh", "hanoi", "karachi", "lahore", "dhaka", "colombo", "perth", "brisbane", "adelaide", "canberra",
+  "wellington", "doha", "qatar", "bahrain", "oman", "kuwait", "accra", "ghana", "casablanca", "morocco",
+];
+
+// A remote role open to someone in India: Asia-Pacific, Indian time, or no place limit at all.
+const OPEN_TO_INDIA = /\b(apac|apj|asia|asia[- ]pacific|anywhere|worldwide|global(ly)?|any location|all locations|work from anywhere)\b/i;
+// What a posting must say before a bare "Remote" counts as open to India. Not "global": companies use it for anything.
+const DESCRIPTION_OPEN = /\bindia\b|\bIST\b|indian standard time|anywhere in the world|work from anywhere/i;
+// Location words that say nothing about where ("Hybrid", "N/A"): the offices or the description must decide.
+const PLACE_WORDS = /\b(remote|hybrid|work from home|wfh|on-?site|in-?office|n\/a|location|locations|distributed|multiple|flexible|tbd|only|first|based|full[- ]?time)\b/g;
+// "Remote - CA", "CA-British Columbia-Remote", "US-VA-Remote": a two-letter US (or Canadian) code standing alone.
+// Read only on places that are not India, where "IN" never means Indiana anyway.
+const US_CODE_ALONE = /(?:^|[\s,(/-])(AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|BC|ON|QC|AB)(?=$|[\s,)/-])/;
+
+const abroadIn = (text: string, original: string) =>
+  includesAny(text, ABROAD) || includesAny(text, US) || /\b(us|u\.s\.|usa)\b/.test(text) || US_CODE_ALONE.test(original);
+
+/**
+ * Can a candidate in India take this job? The location line decides first; the board's offices only when the line
+ * says nothing about where ("Remote", "Hybrid"); the description only for a bare "Remote". Located in India → india;
+ * remote and in India, Asia-Pacific or anywhere → remote_india; another named place, or remote limited to other
+ * countries → abroad; a place we cannot read, or nothing to go on → unknown (not shown: when unsure, leave it out).
+ */
+export function eligibility(input: { location: string; offices?: string[]; description: string; remote: boolean }): Eligibility {
+  const location = input.location.toLowerCase();
+  const offices = (input.offices ?? []).join(" ; ");
+  const remoteIn = (text: string) => /\b(remote|work from home|wfh)\b/.test(text);
+  // 1. India named in the location. "Bangalore, India; Remote, Poland": the India part decides whether it is remote.
+  const indiaParts = location.split(/;|\||\bor\b|\/|\n/).filter((part) => includesAny(part, INDIA));
+  if (indiaParts.length > 0) return indiaParts.some(remoteIn) ? "remote_india" : "india";
+  // 2. The location opens it to India ("Remote, APAC", "Remote (Anywhere)", "Remote, Global").
+  if (OPEN_TO_INDIA.test(location)) return "remote_india";
+  // 3. The location names other countries or cities.
+  if (abroadIn(location, input.location)) return "abroad";
+  const named = location.replace(PLACE_WORDS, " ").replace(/[^a-z0-9]+/g, " ").trim();
+  // 4. A place we cannot read ("CRI", a city not in our lists): an office job there is abroad; a remote one, unknown.
+  if (named) return input.remote ? "unknown" : "abroad";
+  // 5. The location says nothing about where: the offices decide.
+  if (offices) {
+    const lower = offices.toLowerCase();
+    if (includesAny(lower, INDIA)) return input.remote ? "remote_india" : "india";
+    if (input.remote && OPEN_TO_INDIA.test(lower)) return "remote_india";
+    if (abroadIn(lower, offices)) return "abroad";
+  }
+  // 6. A bare "Remote": shown only when the posting itself opens it to India.
+  if (input.remote && DESCRIPTION_OPEN.test(input.description)) return "remote_india";
+  return "unknown";
+}
 
 const ENTRY_TITLE = /\b(intern(ship)?s?|trainee|apprentice|graduate|fresher|new grad|campus|vapasi)\b/i;
 
@@ -125,6 +198,7 @@ export function tagPosting(input: {
   location: string;
   description: string;
   isRemote?: boolean;
+  offices?: string[];
 }): JobTags {
   const place = `${input.location}`.toLowerCase();
   const remoteHint = Boolean(input.isRemote) || /remote|work from home|\bwfh\b|anywhere|worldwide/.test(place);
@@ -139,6 +213,7 @@ export function tagPosting(input: {
   else if (/on-?site|in-?office/.test(place)) remoteType = "onsite";
 
   const experienceMin = requiredYears(input.title, input.description);
+  const tagged = eligibility({ location: input.location, offices: input.offices, description: input.description, remote: remoteType === "remote" });
 
-  return { country, remoteType, experienceMin };
+  return { country, remoteType, experienceMin, eligibility: tagged };
 }
