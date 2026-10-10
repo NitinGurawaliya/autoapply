@@ -467,3 +467,25 @@ Update 11 Oct: discovery batch 3 (87 Indian startups, unicorns, campus-hiring co
 ### [ ] T85 — Other fields (HR, finance, marketing, sales, operations...) — after T81–T83 are right for tech
 Do: add each field's functions and skill vocabulary to the same taxonomy; resume parse and onboarding for them; test profiles and dry runs per field.
 **Done when:** HR and finance test profiles see only their field's India-eligible jobs with tiers, and one dry run per field passes (not submitted).
+
+## Phase I — Greenhouse end to end, fresh jobs and the retention hook (owner, 11 Oct)
+
+Decision: make Greenhouse work end to end first (fetch → match → alert → apply); the same framework then takes Lever and Ashby (their fetchers already exist; their adapters need the captcha handoff).
+
+### [x] T86 — Application reliability on Greenhouse
+Do: from the week's failures (57 submitted, 30 failed of 87 real runs): work history and education from the resume, number boxes, schools, country of residence, re-ask unmatched answers.
+**Done when:** dry runs on the forms that failed pass or ask instead of failing.
+Done 11 Oct: Stripe Revenue and Scale AI New Grad pass (not submitted); Coinbase asks 8 questions instead of 17 and asks its school from the list. Left: re-measure the success rate on a week of real runs (target 90% of runs that start).
+
+### [x] T87 — New-match alerts by browser push
+Do: Web Push subscription from the Notifications switch, `sw.js`, `/api/push`, `lib/push.ts`; after each ingest one push per user with new Strong / Good matches; "needs you" pushed too; "New" on fresh cards.
+**Done when:** a real browser subscribes, shows a server push and a new-match push, and the same jobs are not alerted twice.
+Done 11 Oct: `push-smoke` PASS in Chrome (Google's push service); Edge and Chromium subscribe too.
+
+### [ ] T88 — Always-on worker
+Do: run `npm run worker` on a host (Railway, Render or a VM); an application cut off by a restart picks up again instead of failing (11 of the week's 30 failures).
+**Done when:** ingest runs every 3 hours for a week with the laptop off, and no application fails with "the worker stopped".
+
+### [ ] T89 — Company list grows by itself
+Do: a weekly discovery job on a growing candidate list; companies on Greenhouse with India or remote jobs go to a review list (or are added by a rule, e.g. 3+ India jobs); companies failing or posting nothing for 60 days are switched off.
+**Done when:** a week's run adds reviewed companies without a manual batch.

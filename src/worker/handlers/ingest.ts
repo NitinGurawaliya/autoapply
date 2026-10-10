@@ -9,7 +9,7 @@ export async function handleIngest(jobs: Job<{ days: number }>[]) {
     // The new jobs are judged for active users now, so their next feed opens without waiting (warm.ts).
     if (totals) {
       const warm = await warmFeeds().catch(() => null);
-      if (warm) console.log(`ingest: warmed the feeds of ${warm.warmed} of ${warm.active} active users`);
+      if (warm) console.log(`ingest: warmed the feeds of ${warm.warmed} of ${warm.active} users; new-match push to ${warm.alerted}`);
     }
   }
 }

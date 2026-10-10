@@ -37,9 +37,11 @@ async function main() {
     // ---- card contents
     const text = await card.innerText();
     check("the card shows role, company, a posted line and why it fits", (await card.locator("h2").innerText()).length > 0 && /\bPosted\b/.test(text) && /WHY IT FITS/i.test(text), text.split("\n").slice(0, 3).join(" | "));
-    check("the card shows a company tile with initials", /^[A-Z?]{1,2}$/.test((await card.locator("[data-company-mark]").first().innerText()).trim()));
+    const mark = (await card.locator("[data-company-mark]").first().innerText()).trim();
+    check("the card shows a company tile with initials", /^[A-Z0-9?]{1,2}$/.test(mark), mark);
     const ring = await card.locator('[role="img"]').getAttribute("aria-label");
-    check("the match badge has a readable label", /^Match score \d+ percent$/.test(ring ?? ""), String(ring));
+    // The tier since T82 ("Strong match"); the score for jobs scored without one.
+    check("the match badge has a readable label", /^(Strong|Good|Stretch) match$|^Match score \d+ percent$/.test(ring ?? ""), String(ring));
     check("the card shows its place tag and the View job link", (await card.locator("span.rounded-full").count()) >= 1 && (await card.getByRole("link", { name: /View job/ }).isVisible()));
 
     // ---- drag overlays

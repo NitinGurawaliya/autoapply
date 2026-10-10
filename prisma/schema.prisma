@@ -16,6 +16,8 @@ model User {
   image         String?
   autoReadOtp   Boolean   @default(false) // user consented to the email-code agent reading their mailbox
   createdAt     DateTime  @default(now())
+  // The newest job a "new matches" push has covered (lib/push.ts, modules/jobs/warm.ts): later ones are new.
+  matchesAlertedAt DateTime?
 
   profile      Profile?
   answers      Answer[]
@@ -23,6 +25,21 @@ model User {
   applications Application[]
   accounts     Account[]
   sessions     Session[]
+  pushSubscriptions PushSubscription[]
+}
+
+// A browser's Web Push subscription (lib/push.ts): one per browser the user turned notifications on in.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Account {

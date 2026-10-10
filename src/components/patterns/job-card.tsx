@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Eyebrow } from "@/components/ui/eyebrow";
 import { Icon } from "@/components/ui/icons";
-import { Tag } from "@/components/ui/chip";
+import { AccentPill, Tag } from "@/components/ui/chip";
 import { CompanyMark, MatchBadge } from "@/components/ui/marks";
 
 export type JobCardData = {
@@ -19,6 +19,8 @@ export type JobCardData = {
   tier?: "strong" | "good" | "stretch" | null;
   /** "MNC", "Mid-size", "Startup"; null when the company is not tagged. */
   stage?: string | null;
+  /** First seen in the last 24 hours. */
+  isNew?: boolean;
   applyUrl?: string;
 };
 
@@ -40,6 +42,7 @@ export function JobCard({ job, stamps }: { job: JobCardData; stamps?: ReactNode 
           <p className="m-0 type-lead text-pretty">{job.why}</p>
         </div>
         <div className="mt-[18px] flex flex-wrap gap-2">
+          {job.isNew ? <AccentPill className="h-[34px] px-3 text-sm">New</AccentPill> : null}
           <Tag>{job.where}</Tag>
           {job.asks ? <Tag>{job.asks}</Tag> : null}
           {job.stage ? <Tag>{job.stage}</Tag> : null}

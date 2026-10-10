@@ -44,8 +44,46 @@ function useNotificationState() {
   return useSyncExternalStore(subscribe, current, () => SERVER_STATE);
 }
 
+// Browser push (lib/push.ts, public/sw.js): reaches the user with the app closed, for new matching jobs and for
+// applications waiting on them. Where the browser has no push, the in-page notifications below still work.
+function pushSupported() {
+  return "serviceWorker" in navigator && "PushManager" in window;
+}
+
+function keyBytes(base64: string) {
+  const padded = (base64 + "=".repeat((4 - (base64.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/");
+  return Uint8Array.from(atob(padded), (char) => char.charCodeAt(0));
+}
+
+/** Registers the service worker, subscribes this browser and saves the subscription for the user. Fails quietly. */
+async function startPush() {
+  if (!pushSupported()) return;
+  try {
+    const registration = await navigator.serviceWorker.register("/sw.js");
+    const { publicKey } = (await (await fetch("/api/push", { cache: "no-store" })).json()) as { publicKey: string | null };
+    if (!publicKey) return;
+    const subscription = (await registration.pushManager.getSubscription()) ?? (await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) }));
+    await fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(subscription.toJSON()) });
+  } catch {
+    // No push in this browser (or the user blocked it): the in-page notifications still work.
+  }
+}
+
+async function stopPush() {
+  if (!pushSupported()) return;
+  try {
+    const registration = await navigator.serviceWorker.getRegistration();
+    const subscription = await registration?.pushManager.getSubscription();
+    if (!subscription) return;
+    await fetch("/api/push", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: subscription.endpoint }) });
+    await subscription.unsubscribe();
+  } catch {
+    // Nothing to undo.
+  }
+}
+
 /**
- * Tells the user when an application is waiting for them: the tab title always shows the count, and, once the user
+ * Tells the user when an application is waiting for them (and keeps browser push on for new matching jobs): the tab title always shows the count, and, once the user
  * turns notifications on and the browser allows it, a notification names the company. One per prompt, remembered
  * across reloads, so polling never repeats it. Reads the shell's shared poller (applications-summary.tsx).
  * Mounted once by the signed-in layout; renders nothing (the switch lives in the profile menu).
@@ -72,6 +110,12 @@ export function NeedsInputNotifier() {
 
   useEffect(() => () => setBadge(0), []);
 
+  // Keeps this browser's push subscription saved while notifications are on (also for users who turned them on
+  // before push existed).
+  useEffect(() => {
+    if (enabled && "Notification" in window && Notification.permission === "granted") void startPush();
+  }, [enabled]);
+
   useEffect(() => {
     if (!waiting) return;
     setBadge(waiting.length);
@@ -85,7 +129,8 @@ export function NeedsInputNotifier() {
         row.waitingFor === "code"
           ? { title: `${row.company}: enter the security code`, body: `${row.title}. Greenhouse emailed you a code to finish this application.` }
           : { title: `${row.company} needs an answer`, body: `${row.title}. Your application is paused until you answer.` };
-      const note = new Notification(text.title, { body: text.body, tag: key });
+      // The same tag as the push for this application (lib/notify.ts), so the browser shows one, not two.
+      const note = new Notification(text.title, { body: text.body, tag: `app-${row.id}` });
       note.onclick = () => {
         window.focus();
         routerRef.current.push(`/applications/${row.id}`);
@@ -107,6 +152,7 @@ export function NotificationsToggle() {
     if (enabled) {
       localStorage.setItem(OPT_IN, "0");
       update({ enabled: false });
+      void stopPush();
       return;
     }
     const result = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
@@ -114,6 +160,7 @@ export function NotificationsToggle() {
     if (result === "granted") {
       localStorage.setItem(OPT_IN, "1");
       update({ enabled: true });
+      void startPush();
     }
   }
 
@@ -123,7 +170,7 @@ export function NotificationsToggle() {
     ? "Notifications are blocked in your browser settings"
     : enabled
       ? "Notifications on. Click to turn off"
-      : "Turn on notifications for applications that need you";
+      : "Turn on notifications for new matching jobs and applications that need you";
 
   return (
     <button
@@ -138,7 +185,7 @@ export function NotificationsToggle() {
       <Icon name="bell" size={20} />
       <span className="flex flex-1 flex-col gap-0.5">
         <span>Notifications</span>
-        <span className="text-[13px] font-normal text-muted-foreground">{blocked ? "Blocked in your browser settings" : "When an application needs you"}</span>
+        <span className="text-[13px] font-normal text-muted-foreground">{blocked ? "Blocked in your browser settings" : "New jobs for you, and applications that need you"}</span>
       </span>
       <span
         aria-hidden="true"

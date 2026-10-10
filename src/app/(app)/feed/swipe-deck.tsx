@@ -37,6 +37,7 @@ function cardData(job: FeedJob): JobCardData {
     score: job.score,
     tier: job.tier,
     stage: job.stage ? STAGE_LABEL[job.stage] ?? null : null,
+    isNew: job.isNew,
     applyUrl: job.applyUrl,
   };
 }

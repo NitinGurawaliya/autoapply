@@ -55,6 +55,8 @@ export type FeedJob = {
   skillHits: string[];
   stage: string | null;
   track: string | null;
+  /** First seen by ingest in the last 24 hours: the card says "New". */
+  isNew: boolean;
   /** What past applications to this company taught us, when it is worth saying. */
   hint: string | null;
 };
@@ -342,6 +344,7 @@ type FeedRow = {
   stage: string | null;
   track: string | null;
   similarity: number | null;
+  firstSeenAt: Date;
   hits: number[];
 };
 
@@ -399,7 +402,7 @@ export async function feedRows(input: {
     ),
     candidates AS (
       SELECT j.id, j.title, j.location, j.source, j.country, j."remoteType", j."experienceMin", j."applyUrl", j."postedAt",
-             j."companyId", c.name AS company, c.stage, j.track, coalesce(h.hits, '{}') AS hits,
+             j."companyId", c.name AS company, c.stage, j.track, j."firstSeenAt", coalesce(h.hits, '{}') AS hits,
              CASE WHEN ${input.vector}::text IS NULL OR j.embedding IS NULL THEN NULL
                   ELSE (1 - (j.embedding <=> ${input.vector}::halfvec))::float8 END AS similarity
       FROM "Job" j
@@ -529,6 +532,7 @@ async function scoreFeed(userId: string, filters: FeedFilters): Promise<FeedJob[
         remoteType: job.remoteType,
         stage: job.stage,
         track: job.track,
+        isNew: Date.now() - job.firstSeenAt.getTime() < 24 * 60 * 60 * 1000,
         roleKey: roleKey(companyKey(job.company), job.title),
         verdict: judge(results.get(job.companyId)),
         mock: job.source === "mock",
@@ -572,6 +576,7 @@ async function scoreFeed(userId: string, filters: FeedFilters): Promise<FeedJob[
       skillHits: job.skillHits,
       stage: job.stage,
       track: job.track,
+      isNew: job.isNew,
       hint: job.verdict.hint,
       // Ranking only: the number the user sees stays the honest match score.
       rank: job.score + job.verdict.nudge,
