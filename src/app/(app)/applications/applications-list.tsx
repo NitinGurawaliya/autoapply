@@ -72,6 +72,9 @@ export function ApplicationsList() {
   const [first, setFirst] = useState<Page | null>(null);
   const [more, setMore] = useState<{ rows: Row[]; cursor: string | null } | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  // True after switching to a tab that pages another group, until its own first page arrives: the rows already loaded
+  // are filtered at once meanwhile, but Show more waits (the old cursor belongs to the other group).
+  const [stale, setStale] = useState(false);
   const [failed, setFailed] = useState(false);
   const [tab, setTab] = useState<Tab>("all");
   // Bumped after a cancel or retry so the list reloads and starts polling again.
@@ -89,6 +92,7 @@ export function ApplicationsList() {
         const body = (await response.json()) as Page;
         if (stopped) return;
         setFirst(body);
+        setStale(false);
         setFailed(false);
         // Keep polling only while something is still running; pages loaded with Show more are kept.
         if (body.applications.some((row) => RUNNING.includes(row.status))) timer = window.setTimeout(load, 3000);
@@ -104,11 +108,11 @@ export function ApplicationsList() {
     };
   }, [version, group]);
 
-  // A tab that pages a different group starts again from its first page (the loading state shows meanwhile).
+  // A tab that pages a different group starts again from its first page; the rows on screen filter instantly meanwhile.
   function selectTab(next: Tab) {
     if (pageGroup(next) !== group) {
-      setFirst(null);
       setMore(null);
+      setStale(true);
     }
     setTab(next);
   }
@@ -253,7 +257,7 @@ export function ApplicationsList() {
               <ul className="m-0 flex list-none flex-col gap-2.5 p-0">{groups[group].map(rowFor)}</ul>
             </section>
           ))}
-          {nextCursor && tab !== "needs" && tab !== "progress" ? (
+          {nextCursor && !stale && tab !== "needs" && tab !== "progress" ? (
             <Button variant="line" size="lg" className="w-full" disabled={loadingMore} onClick={() => void showMore()}>
               {loadingMore ? "Loading…" : "Show more"}
             </Button>

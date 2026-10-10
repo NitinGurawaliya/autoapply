@@ -55,7 +55,8 @@ async function main() {
     await page.waitForTimeout(4000); // one poll (the queued one keeps the list polling)
     check("a poll keeps the pages already loaded", (await rowCount()) === 51, String(await rowCount()));
     await page.locator('[role=group][aria-label=Show] button', { hasText: /^Sent/ }).click();
-    await page.waitForFunction(() => document.querySelectorAll("section h2").length === 1 && document.querySelectorAll("section li").length > 0, null, { timeout: 30000 });
+    // The loaded rows filter at once; the Sent tab's own first page (and its Show more) follows.
+    await page.getByRole("button", { name: "Show more" }).waitFor({ timeout: 30000 });
     check("the Sent tab pages its own rows", (await rowCount()) === 25 && (await page.locator("section h2").innerText()).includes("40") && (await page.getByRole("button", { name: "Show more" }).isVisible()), String(await rowCount()));
 
     // ---------- detail
