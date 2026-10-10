@@ -27,24 +27,30 @@ export type QuestionValues = {
   notice_period: string;
   employment_type: string;
   preferred_location: string[];
-  work_authorization: string;
-  needs_sponsorship: string;
+  citizenship: string;
+  relocate_outside_home: string;
+  sponsorship_outside_home: string;
 };
 
-function needsCountryQuestions(locations: string[]) {
-  return locations.includes("US") || locations.includes("Other");
-}
+export type StandingQuestions = {
+  home: string;
+  citizenship: string;
+  relocate: { question: string; options: string[] };
+  sponsorship: { question: string; options: string[] };
+};
 
 /**
  * Step 3 of onboarding (design/onboarding.html): pay and notice, then what and where. The same answers as before,
  * saved together at the end with one PUT /api/answers.
  */
-export function QuestionsForm({ initial }: { initial: QuestionValues }) {
+export function QuestionsForm({ initial, standing }: { initial: QuestionValues; standing: StandingQuestions }) {
   const router = useRouter();
   const [values, setValues] = useState(initial);
   const [screen, setScreen] = useState<"money" | "where">("money");
   const [status, setStatus] = useState<"idle" | "saving" | "error" | "failed">("idle");
-  const extra = needsCountryQuestions(values.preferred_location);
+  // Citizenship: the home country in one tap, or any other typed in.
+  const homeCitizen = values.citizenship.trim().toLowerCase() === standing.home.toLowerCase();
+  const [otherCitizenship, setOtherCitizenship] = useState(!!initial.citizenship.trim() && !homeCitizen);
 
   function set<K extends keyof QuestionValues>(key: K, value: QuestionValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
@@ -69,14 +75,15 @@ export function QuestionsForm({ initial }: { initial: QuestionValues }) {
 
   async function save() {
     const preferred = LOCATIONS.filter((location) => values.preferred_location.includes(location));
-    const askCountry = needsCountryQuestions(preferred);
     if (
       !values.current_ctc.trim() ||
       !values.expected_ctc.trim() ||
       !values.notice_period.trim() ||
       !values.employment_type ||
       preferred.length === 0 ||
-      (askCountry && (!values.work_authorization || !values.needs_sponsorship))
+      !values.citizenship.trim() ||
+      !values.relocate_outside_home ||
+      !values.sponsorship_outside_home
     ) {
       setStatus("error");
       return;
@@ -88,13 +95,10 @@ export function QuestionsForm({ initial }: { initial: QuestionValues }) {
       { key: "notice_period", question: "Notice period", answer: values.notice_period.trim() },
       { key: "employment_type", question: "Employment type", answer: values.employment_type },
       { key: "preferred_location", question: "Preferred location", answer: preferred.join(",") },
+      { key: "citizenship", question: standing.citizenship, answer: values.citizenship.trim().slice(0, 200) },
+      { key: "relocate_outside_home", question: standing.relocate.question, answer: values.relocate_outside_home },
+      { key: "sponsorship_outside_home", question: standing.sponsorship.question, answer: values.sponsorship_outside_home },
     ];
-    if (askCountry) {
-      answers.push(
-        { key: "work_authorization", question: "Work authorization", answer: values.work_authorization },
-        { key: "needs_sponsorship", question: "Needs sponsorship", answer: values.needs_sponsorship },
-      );
-    }
 
     setStatus("saving");
     const response = await fetch("/api/answers", {
@@ -158,28 +162,39 @@ export function QuestionsForm({ initial }: { initial: QuestionValues }) {
           legend="Where · pick any"
           options={LOCATIONS.map((location) => ({ label: location, selected: values.preferred_location.includes(location), onSelect: () => toggleLocation(location) }))}
         />
-        {extra ? (
-          <div className="box-border flex flex-col gap-3.5 rounded-panel border-2 border-edge bg-surface p-4 shadow-hard">
-            <span className="text-base font-semibold">Working abroad</span>
-            <ChipGroup
-              shape="block"
-              legend="Are you authorized to work there?"
-              legendClassName="mb-2 font-normal text-muted-foreground"
-              options={["Authorized", "Not authorized"].map((option) => ({
-                label: option,
-                selected: values.work_authorization === option,
-                onSelect: () => set("work_authorization", option),
-              }))}
-            />
-            <ChipGroup
-              shape="block"
-              legend="Do you need visa sponsorship?"
-              legendClassName="mb-2 font-normal text-muted-foreground"
-              options={["Yes", "No"].map((option) => ({ label: option, selected: values.needs_sponsorship === option, onSelect: () => set("needs_sponsorship", option) }))}
-            />
-            <p className="m-0 text-[13px] leading-[1.45] text-muted-foreground">We never answer visa questions for you. These go out exactly as you set them.</p>
-          </div>
-        ) : null}
+        <div className="box-border flex flex-col gap-3.5 rounded-panel border-2 border-edge bg-surface p-4 shadow-hard">
+          <span className="text-base font-semibold">Country questions</span>
+          <ChipGroup
+            shape="block"
+            legend="Which country are you a citizen of?"
+            legendClassName="mb-2 font-normal text-muted-foreground"
+            options={[
+              { label: standing.home, selected: !otherCitizenship && homeCitizen, onSelect: () => { setOtherCitizenship(false); set("citizenship", standing.home); } },
+              { label: "Another country", selected: otherCitizenship, onSelect: () => { setOtherCitizenship(true); if (homeCitizen) set("citizenship", ""); } },
+            ]}
+          />
+          {otherCitizenship ? (
+            <div className="flex flex-col gap-2">
+              <FieldLabel tone="small" htmlFor="citizenship">Country (several: separate with commas)</FieldLabel>
+              <InputBox id="citizenship" value={values.citizenship} onChange={(event) => set("citizenship", event.target.value)} />
+            </div>
+          ) : null}
+          <ChipGroup
+            shape="block"
+            legend={`Are you open to moving out of ${standing.home} for a job?`}
+            legendClassName="mb-2 font-normal text-muted-foreground"
+            options={standing.relocate.options.map((option) => ({ label: option, selected: values.relocate_outside_home === option, onSelect: () => set("relocate_outside_home", option) }))}
+          />
+          <ChipGroup
+            shape="block"
+            legend={`Do you need visa sponsorship to work outside ${standing.home}?`}
+            legendClassName="mb-2 font-normal text-muted-foreground"
+            options={standing.sponsorship.options.map((option) => ({ label: option, selected: values.sponsorship_outside_home === option, onSelect: () => set("sponsorship_outside_home", option) }))}
+          />
+          <p className="m-0 text-[13px] leading-[1.45] text-muted-foreground">
+            Forms ask these in many wordings (based in the US? authorized to work in Canada? citizen of one of these countries?). We answer each from these, and never guess.
+          </p>
+        </div>
         {status === "error" ? <FieldError>Answer every question before saving.</FieldError> : null}
         {status === "failed" ? <FieldError>Could not save your answers. Try again.</FieldError> : null}
       </ScreenBody>

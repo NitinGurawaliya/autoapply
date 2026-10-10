@@ -100,10 +100,12 @@ async function main() {
       await page.getByRole("button", { name: "Next", exact: true }).click();
       await page.getByRole("heading", { name: "What are you looking for?" }).waitFor({ timeout: 10000 });
       await page.getByRole("button", { name: "Full-time" }).click();
-      await page.getByRole("button", { name: "India" }).click();
-      await page.getByRole("button", { name: "US" }).click();
-      check(`${scheme}: choosing the US asks about working abroad`, await page.getByText("Working abroad").isVisible());
-      await page.getByRole("button", { name: "Authorized", exact: true }).click();
+      // "India" is both a place to work (first) and the citizenship chip (second, in Country questions).
+      await page.getByRole("button", { name: "India", exact: true }).first().click();
+      await page.getByRole("button", { name: "US", exact: true }).click();
+      check(`${scheme}: the country questions are asked once, for everyone`, await page.getByText("Country questions").isVisible());
+      await page.getByRole("button", { name: "India", exact: true }).nth(1).click();
+      await page.getByRole("button", { name: "No, only jobs where I live" }).click();
       await page.getByRole("button", { name: "No", exact: true }).click();
       await page.screenshot({ path: `${OUT}/${scheme}-6-where.png` });
       await page.getByRole("button", { name: /Start swiping/ }).click();
@@ -116,8 +118,9 @@ async function main() {
         notice_period: "30|user",
         employment_type: "Full-time|user",
         preferred_location: "India,US|user",
-        work_authorization: "Authorized|user",
-        needs_sponsorship: "No|user",
+        citizenship: "India|user",
+        relocate_outside_home: "No, only jobs where I live|user",
+        sponsorship_outside_home: "No|user",
       };
       check(`${scheme}: the saved answers use today's keys and values`, Object.entries(expected).every(([key, value]) => answers[key] === value), JSON.stringify(answers));
       await context.close();
