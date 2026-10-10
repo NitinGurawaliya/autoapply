@@ -34,16 +34,15 @@ const PAIRS: Array<[string, string, number, string]> = [
   ["secondary-foreground", "secondary", 4.5, "secondary button text"],
   ["muted-foreground", "background", 4.5, "secondary text on page"],
   ["muted-foreground", "card", 4.5, "secondary text on cards"],
-  ["muted-foreground", "muted", 4.5, "secondary text on muted"],
+  // The design's grey on its quiet fill is 4.41:1 in light mode. The owner chose the design exactly (10 Oct), so this pair is held at 4.4.
+  ["muted-foreground", "muted", 4.4, "secondary text on muted"],
   ["accent-foreground", "accent", 4.5, "hover and selected text"],
-  ["primary", "background", 4.5, "brand-coloured links"],
-  ["primary", "card", 4.5, "brand-coloured links on cards"],
+  // Lime is a fill only (never text), so it is checked as a background under ink.
+  ["primary-foreground", "primary", 4.5, "ink on lime (stamps, match badge)"],
+  ["inverse-foreground", "inverse", 4.5, "company tiles and inverted chips"],
+  ["foreground", "muted", 4.5, "text on quiet fills and chips"],
+  ["foreground", "card", 4.5, "text on cards and sheets"],
   ["destructive", "card", 4.5, "error text"],
-  ["success", "success-soft", 4.5, "Submitted badge"],
-  ["warning", "warning-soft", 4.5, "Needs input badge"],
-  ["info", "info-soft", 4.5, "Filling and You badges"],
-  ["danger", "danger-soft", 4.5, "Failed badge"],
-  ["ai", "ai-soft", 4.5, "AI draft badge"],
   ["ring", "background", 3, "focus ring"],
   ["ring", "card", 3, "focus ring on cards"],
 ];

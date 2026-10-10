@@ -2,6 +2,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getAll } from "@/modules/answers";
 import { redirect } from "next/navigation";
+import { Screen } from "@/components/patterns/layout";
 import { QuestionsForm, type QuestionValues } from "./questions-form";
 
 const LOCATIONS = ["India", "US", "Other"];
@@ -32,19 +33,9 @@ export default async function QuestionsPage() {
     work_authorization: valueOf(map, "work_authorization"),
     needs_sponsorship: valueOf(map, "needs_sponsorship"),
   };
-  const saved = answers.some((row) =>
-    ["current_ctc", "expected_ctc", "notice_period", "employment_type", "preferred_location"].includes(row.key),
-  );
-
   return (
-    <main className="mx-auto flex w-full max-w-[480px] flex-1 flex-col gap-6 px-4 py-10">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Common questions</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {saved ? "Your saved answers are filled in." : "Nothing saved yet. These stay in your answer bank."}
-        </p>
-      </div>
+    <Screen>
       <QuestionsForm initial={initial} />
-    </main>
+    </Screen>
   );
 }

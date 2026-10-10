@@ -9,7 +9,7 @@ export function SignOutForm() {
         await signOut({ redirectTo: "/sign-in" });
       }}
     >
-      <Button type="submit" variant="outline">
+      <Button type="submit" variant="plain" size="row" className="w-full">
         Sign out
       </Button>
     </form>

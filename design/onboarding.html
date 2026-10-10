@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Onboarding</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&amp;family=Geist:wght@400..700&amp;display=swap">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; padding-top: 54px; position: relative; overflow: hidden; display: flex; flex-direction: column; font-family: 'Geist', system-ui, -apple-system, sans-serif; color: {{t.text}}; background: {{t.bg}}">
+
+  <header style="display: flex; align-items: center; gap: 12px; padding: 0 16px 0 12px; height: 44px; flex: none">
+    <button onClick="{{back}}" aria-label="Back" style="width: 44px; height: 44px; flex: none; padding: 0; border: none; border-radius: 50%; background: transparent; color: inherit; display: flex; align-items: center; justify-content: center; cursor: pointer">
+      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round"><path d="M15 5l-7 7 7 7"></path></svg>
+    </button>
+    <div style="flex: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px">
+      <sc-for list="{{segs}}" as="s" hint-placeholder-count="3">
+        <span style="display: block; height: 6px; border-radius: 99px; background: {{s.bg}}; transition: background 300ms"></span>
+      </sc-for>
+    </div>
+    <span style="font-size: 13px; font-weight: 600; color: {{t.muted}}; font-variant-numeric: tabular-nums">{{stepNo}} of 3</span>
+  </header>
+
+  <sc-if value="{{is.upload}}" hint-placeholder-val="{{ true }}">
+    <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 20px 24px 28px">
+      <h1 style="margin: 0; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 34px; line-height: 1.04; letter-spacing: -0.04em">Start with your resume</h1>
+      <p style="margin: 10px 0 0; font-size: 16px; line-height: 1.5; color: {{t.muted}}">We read it once, so you never retype your details again.</p>
+      <sc-if value="{{noFile}}" hint-placeholder-val="{{ true }}">
+        <button onClick="{{pick}}" style="margin-top: 28px; height: 280px; box-sizing: border-box; border: 2px dashed {{t.strong}}; border-radius: 24px; background: {{t.surface}}; color: inherit; font-family: inherit; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; cursor: pointer">
+          <span style="width: 72px; height: 72px; box-sizing: border-box; border-radius: 50%; border: 2px solid {{t.accentEdge}}; background: #C6F432; color: #16171A; display: flex; align-items: center; justify-content: center">
+            <svg width="30" height="30" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path><path d="M14 3v5h5"></path><path d="M12 17v-6M9.5 13.5L12 11l2.5 2.5"></path></svg>
+          </span>
+          <span style="font-size: 18px; font-weight: 600; margin-top: 4px">Upload your resume</span>
+          <span style="font-size: 14px; color: {{t.muted}}">PDF, up to 5 MB</span>
+        </button>
+      </sc-if>
+      <sc-if value="{{hasFile}}" hint-placeholder-val="{{ false }}">
+        <div style="margin-top: 28px; padding: 16px; box-sizing: border-box; border: 2px solid {{t.strong}}; border-radius: 20px; background: {{t.surface}}; box-shadow: {{t.cardShadow}}; display: flex; align-items: center; gap: 14px">
+          <span aria-hidden="true" style="width: 48px; height: 48px; flex: none; border-radius: 12px; background: {{t.inv}}; color: {{t.onInv}}; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; letter-spacing: 0.04em">PDF</span>
+          <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Aarav_Kumar_Resume.pdf</span>
+            <span style="font-size: 13px; color: {{t.muted}}">182 KB · Ready to read</span>
+          </div>
+          <button onClick="{{pick}}" style="height: 44px; padding: 0 4px; border: none; background: none; color: inherit; font-family: inherit; font-size: 14px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer">Replace</button>
+        </div>
+      </sc-if>
+      <div style="margin-top: 18px; display: flex; align-items: center; gap: 10px; font-size: 14px; line-height: 1.4; color: {{t.muted}}">
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style="flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+        <span>Private to you. Used only for jobs you swipe right on.</span>
+      </div>
+      <button onClick="{{startRead}}" disabled="{{noFile}}" style="margin-top: auto; height: 56px; box-sizing: border-box; border-radius: 16px; border: 2px solid {{readBtn.edge}}; background: {{readBtn.bg}}; color: {{readBtn.fg}}; box-shadow: {{readBtn.shadow}}; font-family: inherit; font-size: 17px; font-weight: 600; cursor: pointer">Read my resume</button>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{is.reading}}" hint-placeholder-val="{{ false }}">
+    <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 20px 24px 28px">
+      <h1 style="margin: 0; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 34px; line-height: 1.04; letter-spacing: -0.04em">{{readTitle}}</h1>
+      <p style="margin: 10px 0 0; font-size: 16px; line-height: 1.5; color: {{t.muted}}">{{readSub}}</p>
+      <div aria-hidden="true" style="margin: 24px auto 0; width: 136px; height: 172px; box-sizing: border-box; position: relative; overflow: hidden; border-radius: 12px; border: 2px solid {{t.strong}}; background: {{t.surface}}; box-shadow: {{t.cardShadow}}; padding: 14px 12px; display: flex; flex-direction: column; gap: 7px">
+        <span style="display: block; height: 9px; width: 60%; border-radius: 3px; background: {{t.text}}"></span>
+        <span style="display: block; height: 5px; width: 80%; border-radius: 3px; background: {{t.lineStrong}}"></span>
+        <span style="display: block; height: 5px; width: 100%; margin-top: 6px; border-radius: 3px; background: {{t.lineStrong}}"></span>
+        <span style="display: block; height: 5px; width: 92%; border-radius: 3px; background: {{t.lineStrong}}"></span>
+        <span style="display: block; height: 5px; width: 70%; border-radius: 3px; background: {{t.lineStrong}}"></span>
+        <span style="display: block; height: 5px; width: 100%; margin-top: 6px; border-radius: 3px; background: {{t.lineStrong}}"></span>
+        <span style="display: block; height: 5px; width: 85%; border-radius: 3px; background: {{t.lineStrong}}"></span>
+        <span style="display: block; height: 5px; width: 60%; border-radius: 3px; background: {{t.lineStrong}}"></span>
+        <span style="display: block; height: 5px; width: 95%; margin-top: 6px; border-radius: 3px; background: {{t.lineStrong}}"></span>
+        <span style="display: block; height: 5px; width: 75%; border-radius: 3px; background: {{t.lineStrong}}"></span>
+        <span style="position: absolute; left: 0; right: 0; height: 26px; top: {{bandTop}}px; background: #C6F432; opacity: 0.55; transition: top 1100ms cubic-bezier(.45,0,.55,1)"></span>
+      </div>
+      <ul style="list-style: none; margin: 24px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px">
+        <sc-for list="{{finds}}" as="f" hint-placeholder-count="5">
+          <li style="display: flex; align-items: center; gap: 12px; min-height: 48px; opacity: {{f.op}}; transform: translateY({{f.y}}px); transition: opacity 360ms ease-out, transform 420ms cubic-bezier(.2,.9,.3,1.2)">
+            <span aria-hidden="true" style="width: 28px; height: 28px; flex: none; box-sizing: border-box; border-radius: 50%; border: 2px solid {{f.edge}}; background: {{f.bg}}; color: #16171A; display: flex; align-items: center; justify-content: center">
+              <sc-if value="{{f.ok}}" hint-placeholder-val="{{ true }}"><svg width="14" height="14" viewBox="0 0 24 24" style="fill: none; stroke: currentColor; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></sc-if>
+              <sc-if value="{{f.miss}}" hint-placeholder-val="{{ false }}"><span style="font-size: 14px; font-weight: 800; color: {{t.text}}">!</span></sc-if>
+            </span>
+            <div style="display: flex; flex-direction: column; gap: 1px">
+              <span style="font-size: 13px; color: {{t.muted}}">{{f.label}}</span>
+              <span style="font-size: 15px; font-weight: 600">{{f.value}}</span>
+            </div>
+          </li>
+        </sc-for>
+      </ul>
+      <sc-if value="{{readDone}}" hint-placeholder-val="{{ false }}">
+        <button onClick="{{toProfile}}" style="margin-top: auto; height: 56px; box-sizing: border-box; border-radius: 16px; border: 2px solid {{t.accentEdge}}; background: #C6F432; color: #16171A; box-shadow: {{t.btnShadow}}; font-family: inherit; font-size: 17px; font-weight: 600; cursor: pointer">Check what we found</button>
+      </sc-if>
+      <sc-if value="{{reading}}" hint-placeholder-val="{{ true }}">
+        <div style="margin-top: auto; display: flex; flex-direction: column; gap: 10px">
+          <div aria-hidden="true" style="height: 6px; border-radius: 99px; background: {{t.track}}; overflow: hidden"><div style="height: 100%; width: {{readPct}}%; border-radius: 99px; background: {{t.bar}}; transition: width 900ms cubic-bezier(.2,.9,.3,1)"></div></div>
+          <span style="font-size: 14px; color: {{t.muted}}; text-align: center">Found {{readIdx}} of 5 · keep this screen open</span>
+        </div>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{is.profile}}" hint-placeholder-val="{{ false }}">
+    <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 20px 24px 20px; display: flex; flex-direction: column; gap: 16px">
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <h1 style="margin: 0; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 34px; line-height: 1.04; letter-spacing: -0.04em">Here's what we found</h1>
+        <p style="margin: 0; font-size: 16px; line-height: 1.5; color: {{t.muted}}">Tap anything to fix it. We only ever use what's on this page.</p>
+      </div>
+
+      <div style="padding: 16px; border: 2px dashed {{t.strong}}; border-radius: 20px; background: {{t.surface}}; display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; align-items: center; gap: 10px">
+          <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style="flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4M12 16h.01"></path></svg>
+          <span style="font-size: 15px; font-weight: 600">We couldn't find your phone number</span>
+        </div>
+        <label for="ph" style="font-size: 13px; color: {{t.muted}}">Phone</label>
+        <div style="display: flex; align-items: center; height: 52px; box-sizing: border-box; margin-top: -6px; border: 2px solid {{t.chipEdge}}; border-radius: 14px; background: {{t.bg}}; padding: 0 14px; gap: 10px">
+          <span style="font-size: 16px; color: {{t.muted}}">+91</span>
+          <input id="ph" inputmode="numeric" placeholder="10-digit mobile" value="{{phone}}" onChange="{{onPhone}}" style="flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: inherit; font-family: inherit; font-size: 16px; font-weight: 600">
+        </div>
+      </div>
+
+      <section style="border: 1.5px solid {{t.line}}; border-radius: 20px; background: {{t.surface}}; padding: 6px 16px 8px">
+        <div style="display: flex; align-items: center; justify-content: space-between; height: 40px">
+          <h2 style="margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: {{t.muted}}">Basics</h2>
+          <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: {{t.muted}}"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path><path d="M14 3v5h5"></path></svg>From your resume</span>
+        </div>
+        <sc-for list="{{basics}}" as="r" hint-placeholder-count="3">
+          <div style="display: flex; align-items: center; gap: 8px; min-height: 56px; border-top: 1px solid {{t.line}}">
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+              <span style="font-size: 13px; color: {{t.muted}}">{{r.label}}</span>
+              <span style="font-size: 16px; font-weight: 600">{{r.value}}</span>
+            </div>
+            <button aria-label="{{r.edit}}" style="width: 44px; height: 44px; flex: none; padding: 0; border: none; border-radius: 50%; background: transparent; color: {{t.muted}}; display: flex; align-items: center; justify-content: center; cursor: pointer">
+              <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><path d="M4 20h4L19 9l-4-4L4 16z"></path><path d="M13.5 6.5l4 4"></path></svg>
+            </button>
+          </div>
+        </sc-for>
+      </section>
+
+      <section style="border: 1.5px solid {{t.line}}; border-radius: 20px; background: {{t.surface}}; padding: 6px 16px 8px">
+        <div style="display: flex; align-items: center; height: 40px"><h2 style="margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: {{t.muted}}">Experience · 3 years</h2></div>
+        <sc-for list="{{jobs}}" as="r" hint-placeholder-count="2">
+          <div style="display: flex; align-items: center; gap: 8px; min-height: 60px; border-top: 1px solid {{t.line}}">
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+              <span style="font-size: 16px; font-weight: 600">{{r.value}}</span>
+              <span style="font-size: 13px; color: {{t.muted}}">{{r.label}}</span>
+            </div>
+            <button aria-label="{{r.edit}}" style="width: 44px; height: 44px; flex: none; padding: 0; border: none; border-radius: 50%; background: transparent; color: {{t.muted}}; display: flex; align-items: center; justify-content: center; cursor: pointer">
+              <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><path d="M4 20h4L19 9l-4-4L4 16z"></path><path d="M13.5 6.5l4 4"></path></svg>
+            </button>
+          </div>
+        </sc-for>
+      </section>
+
+      <section style="border: 1.5px solid {{t.line}}; border-radius: 20px; background: {{t.surface}}; padding: 6px 16px 16px">
+        <div style="display: flex; align-items: center; justify-content: space-between; height: 44px">
+          <h2 style="margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: {{t.muted}}">Skills · 12</h2>
+          <button style="height: 44px; padding: 0; border: none; background: none; color: inherit; font-family: inherit; font-size: 14px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer">Edit</button>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px">
+          <sc-for list="{{skills}}" as="s" hint-placeholder-count="10">
+            <span style="height: 30px; padding: 0 10px; border-radius: 8px; background: {{t.subtle}}; display: flex; align-items: center; font-size: 13px; font-weight: 500">{{s}}</span>
+          </sc-for>
+        </div>
+      </section>
+
+      <section style="border: 1.5px solid {{t.line}}; border-radius: 20px; background: {{t.surface}}; padding: 6px 16px 8px">
+        <div style="display: flex; align-items: center; height: 40px"><h2 style="margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: {{t.muted}}">Education</h2></div>
+        <div style="display: flex; flex-direction: column; gap: 2px; min-height: 56px; justify-content: center; border-top: 1px solid {{t.line}}">
+          <span style="font-size: 16px; font-weight: 600">B.Tech, Computer Science</span>
+          <span style="font-size: 13px; color: {{t.muted}}">Graduated 2022</span>
+        </div>
+      </section>
+    </div>
+    <div style="flex: none; padding: 12px 24px 28px; border-top: 1px solid {{t.line}}; background: {{t.bg}}">
+      <button onClick="{{toMoney}}" style="width: 100%; height: 56px; box-sizing: border-box; border-radius: 16px; border: 2px solid {{t.accentEdge}}; background: #C6F432; color: #16171A; box-shadow: {{t.btnShadow}}; font-family: inherit; font-size: 17px; font-weight: 600; cursor: pointer">Looks right</button>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{is.money}}" hint-placeholder-val="{{ false }}">
+    <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 20px 24px 20px; display: flex; flex-direction: column; gap: 20px">
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <span style="font-size: 13px; font-weight: 600; color: {{t.muted}}">Questions 1 of 2</span>
+        <h1 style="margin: 0; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 34px; line-height: 1.04; letter-spacing: -0.04em">A few answers every form asks</h1>
+      </div>
+      <div style="display: flex; gap: 12px; padding: 14px 16px; border-radius: 18px; background: {{t.subtle}}">
+        <span aria-hidden="true" style="width: 32px; height: 32px; flex: none; border-radius: 50%; background: {{t.inv}}; color: {{t.onInv}}; display: flex; align-items: center; justify-content: center">
+          <svg width="16" height="16" viewBox="0 0 24 24" style="fill: none; stroke: currentColor; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+        </span>
+        <p style="margin: 0; font-size: 14px; line-height: 1.5">We never guess these. They only go to jobs you swipe right on, and if a form asks something new, we'll pause and ask you.</p>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <label for="ctc-now" style="font-size: 14px; font-weight: 600">Current CTC</label>
+        <div style="display: flex; align-items: center; gap: 10px; height: 56px; box-sizing: border-box; padding: 0 16px; border: 2px solid {{t.strong}}; border-radius: 14px; background: {{t.surface}}">
+          <span style="font-size: 17px; color: {{t.muted}}">₹</span>
+          <input id="ctc-now" inputmode="decimal" value="{{ctcNow}}" onChange="{{onNow}}" style="flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: inherit; font-family: inherit; font-size: 18px; font-weight: 600">
+          <span style="font-size: 14px; color: {{t.muted}}">lakh a year</span>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <label for="ctc-exp" style="font-size: 14px; font-weight: 600">Expected CTC</label>
+        <div style="display: flex; align-items: center; gap: 10px; height: 56px; box-sizing: border-box; padding: 0 16px; border: 2px solid {{t.strong}}; border-radius: 14px; background: {{t.surface}}">
+          <span style="font-size: 17px; color: {{t.muted}}">₹</span>
+          <input id="ctc-exp" inputmode="decimal" value="{{ctcExp}}" onChange="{{onExp}}" style="flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: inherit; font-family: inherit; font-size: 18px; font-weight: 600">
+          <span style="font-size: 14px; color: {{t.muted}}">lakh a year</span>
+        </div>
+      </div>
+      <fieldset style="border: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px">
+        <legend style="padding: 0; margin-bottom: 10px; font-size: 14px; font-weight: 600">Notice period</legend>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px">
+          <sc-for list="{{notice}}" as="c" hint-placeholder-count="5">
+            <button aria-pressed="{{c.on}}" onClick="{{c.toggle}}" style="height: 44px; padding: 0 16px; box-sizing: border-box; border-radius: 999px; border: 2px solid {{c.edge}}; background: {{c.bg}}; color: {{c.fg}}; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer">{{c.label}}</button>
+          </sc-for>
+        </div>
+      </fieldset>
+    </div>
+    <div style="flex: none; padding: 12px 24px 28px; border-top: 1px solid {{t.line}}; background: {{t.bg}}">
+      <button onClick="{{toWhere}}" style="width: 100%; height: 56px; box-sizing: border-box; border-radius: 16px; border: 2px solid {{t.accentEdge}}; background: #C6F432; color: #16171A; box-shadow: {{t.btnShadow}}; font-family: inherit; font-size: 17px; font-weight: 600; cursor: pointer">Next</button>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{is.where}}" hint-placeholder-val="{{ false }}">
+    <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 20px 24px 20px; display: flex; flex-direction: column; gap: 22px">
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <span style="font-size: 13px; font-weight: 600; color: {{t.muted}}">Questions 2 of 2</span>
+        <h1 style="margin: 0; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 34px; line-height: 1.04; letter-spacing: -0.04em">What are you looking for?</h1>
+      </div>
+      <fieldset style="border: none; margin: 0; padding: 0">
+        <legend style="padding: 0; margin-bottom: 10px; font-size: 14px; font-weight: 600">Roles · pick any</legend>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px">
+          <sc-for list="{{roles}}" as="c" hint-placeholder-count="6">
+            <button aria-pressed="{{c.on}}" onClick="{{c.toggle}}" style="height: 44px; padding: 0 16px; box-sizing: border-box; border-radius: 999px; border: 2px solid {{c.edge}}; background: {{c.bg}}; color: {{c.fg}}; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer">{{c.label}}</button>
+          </sc-for>
+        </div>
+      </fieldset>
+      <fieldset style="border: none; margin: 0; padding: 0">
+        <legend style="padding: 0; margin-bottom: 10px; font-size: 14px; font-weight: 600">Kind of job</legend>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px">
+          <sc-for list="{{kinds}}" as="c" hint-placeholder-count="3">
+            <button aria-pressed="{{c.on}}" onClick="{{c.toggle}}" style="height: 44px; padding: 0 16px; box-sizing: border-box; border-radius: 999px; border: 2px solid {{c.edge}}; background: {{c.bg}}; color: {{c.fg}}; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer">{{c.label}}</button>
+          </sc-for>
+        </div>
+      </fieldset>
+      <fieldset style="border: none; margin: 0; padding: 0">
+        <legend style="padding: 0; margin-bottom: 10px; font-size: 14px; font-weight: 600">Where · pick any</legend>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px">
+          <sc-for list="{{places}}" as="c" hint-placeholder-count="3">
+            <button aria-pressed="{{c.on}}" onClick="{{c.toggle}}" style="height: 44px; padding: 0 16px; box-sizing: border-box; border-radius: 999px; border: 2px solid {{c.edge}}; background: {{c.bg}}; color: {{c.fg}}; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer">{{c.label}}</button>
+          </sc-for>
+        </div>
+      </fieldset>
+      <sc-if value="{{abroad}}" hint-placeholder-val="{{ false }}">
+        <div style="padding: 16px; border: 2px solid {{t.strong}}; border-radius: 20px; background: {{t.surface}}; box-shadow: {{t.cardShadow}}; display: flex; flex-direction: column; gap: 14px">
+          <span style="font-size: 16px; font-weight: 600">Working abroad</span>
+          <fieldset style="border: none; margin: 0; padding: 0">
+            <legend style="padding: 0; margin-bottom: 8px; font-size: 14px; color: {{t.muted}}">Do you need visa sponsorship?</legend>
+            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+              <sc-for list="{{sponsor}}" as="c" hint-placeholder-count="2">
+                <button aria-pressed="{{c.on}}" onClick="{{c.toggle}}" style="height: 44px; box-sizing: border-box; border-radius: 12px; border: 2px solid {{c.edge}}; background: {{c.bg}}; color: {{c.fg}}; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer">{{c.label}}</button>
+              </sc-for>
+            </div>
+          </fieldset>
+          <div style="display: flex; flex-direction: column; gap: 8px">
+            <label for="visa" style="font-size: 14px; color: {{t.muted}}">Current visa status</label>
+            <select id="visa" style="height: 48px; box-sizing: border-box; padding: 0 12px; border: 2px solid {{t.chipEdge}}; border-radius: 12px; background: {{t.bg}}; color: inherit; font-family: inherit; font-size: 15px; font-weight: 600">
+              <option>No work visa yet</option>
+              <option>H-1B</option>
+              <option>Skilled worker visa</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <p style="margin: 0; font-size: 13px; line-height: 1.45; color: {{t.muted}}">We never answer visa questions for you. These go out exactly as you set them.</p>
+        </div>
+      </sc-if>
+    </div>
+    <div style="flex: none; padding: 12px 24px 28px; border-top: 1px solid {{t.line}}; background: {{t.bg}}">
+      <a href="{{L.feed}}" style="height: 56px; box-sizing: border-box; border-radius: 16px; border: 2px solid {{t.accentEdge}}; background: #C6F432; color: #16171A; box-shadow: {{t.btnShadow}}; display: flex; align-items: center; justify-content: center; gap: 10px; text-decoration: none; font-size: 17px; font-weight: 600">Start swiping
+        <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></a>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"step":{"editor":"enum","options":["upload","reading","profile","money","where"],"default":"upload"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const step = props.step || "upload";
+    const after = step !== "upload" && step !== "reading";
+    this.state = {
+      step: step,
+      file: step !== "upload",
+      readIdx: after ? 5 : 0,
+      phone: "",
+      ctcNow: "12.5",
+      ctcExp: "18",
+      notice: "30 days",
+      roles: ["Backend", "Platform / DevOps"],
+      kind: "Full-time",
+      places: step === "where" ? ["India", "Remote", "Abroad"] : ["India", "Remote"],
+      sponsor: "Yes"
+    };
+    this.timers = [];
+  }
+  componentDidMount() { if (this.state.step === "reading") this.read(); }
+  componentWillUnmount() { this.timers.forEach((t) => clearTimeout(t)); }
+  later(fn, ms) { this.timers.push(setTimeout(fn, ms)); }
+  read() {
+    this.setState({ step: "reading", readIdx: 0, file: true });
+    for (let i = 1; i <= 5; i++) this.later(() => this.setState({ readIdx: i }), 900 + i * 1300);
+  }
+  th() {
+    const d = !!this.props.dark;
+    return d
+      ? { d, bg: "#0E0F11", surface: "#1A1B1F", subtle: "#24252A", text: "#F2F2F3", muted: "#A1A4AB", line: "#2A2B30", lineStrong: "#3A3B41", strong: "#4A4B52", chipEdge: "#3A3B41", inv: "#F2F2F3", onInv: "#16171A", bar: "#C6F432", track: "#2C2D33", accentEdge: "#C6F432", btnShadow: "none", cardShadow: "0 4px 0 #000000" }
+      : { d, bg: "#F6F6F7", surface: "#FFFFFF", subtle: "#EEEEF1", text: "#16171A", muted: "#6B6E75", line: "#E6E6EA", lineStrong: "#DCDCE1", strong: "#16171A", chipEdge: "#CFCFD4", inv: "#16171A", onInv: "#FFFFFF", bar: "#16171A", track: "#E4E4E7", accentEdge: "#16171A", btnShadow: "0 4px 0 #16171A", cardShadow: "0 4px 0 #16171A" };
+  }
+  chips(t, labels, isOn, onPick) {
+    return labels.map((label) => {
+      const on = isOn(label);
+      return {
+        label, on,
+        bg: on ? "#C6F432" : t.surface,
+        fg: on ? "#16171A" : t.text,
+        edge: on ? t.accentEdge : t.chipEdge,
+        toggle: () => onPick(label)
+      };
+    });
+  }
+  toggleIn(key, label) {
+    const cur = this.state[key];
+    this.setState({ [key]: cur.indexOf(label) >= 0 ? cur.filter((x) => x !== label) : cur.concat([label]) });
+  }
+  renderVals() {
+    const t = this.th();
+    const s = this.state;
+    const order = ["upload", "reading", "profile", "money", "where"];
+    const stepNo = s.step === "upload" || s.step === "reading" ? 1 : (s.step === "profile" ? 2 : 3);
+    const segs = [1, 2, 3].map((n) => ({ bg: n <= stepNo ? t.bar : t.track }));
+    const findData = [
+      { label: "Name", value: "Aarav Kumar" },
+      { label: "Experience", value: "3 years across 2 roles" },
+      { label: "Skills", value: "Go, Postgres, Kafka and 9 more" },
+      { label: "Education", value: "B.Tech, Computer Science" },
+      { label: "Phone", value: "Not found. You can add it next", miss: true }
+    ];
+    const finds = findData.map((f, i) => {
+      const got = s.readIdx > i;
+      return {
+        label: f.label, value: got ? f.value : "Looking…",
+        ok: got && !f.miss, miss: got && !!f.miss,
+        op: got ? "1" : "0.4", y: got ? 0 : 6,
+        bg: got && !f.miss ? "#C6F432" : "transparent",
+        edge: got ? (f.miss ? t.text : t.accentEdge) : t.lineStrong
+      };
+    });
+    const done = s.readIdx >= 5;
+    const go = (step) => () => this.setState({ step });
+    return {
+      t,
+      is: { upload: s.step === "upload", reading: s.step === "reading", profile: s.step === "profile", money: s.step === "money", where: s.step === "where" },
+      stepNo, segs,
+      noFile: !s.file, hasFile: s.file,
+      readBtn: s.file
+        ? { bg: "#C6F432", fg: "#16171A", edge: t.accentEdge, shadow: t.btnShadow }
+        : { bg: t.subtle, fg: t.muted, edge: t.subtle, shadow: "none" },
+      pick: () => this.setState({ file: true }),
+      startRead: () => { if (this.state.file) this.read(); },
+      readTitle: done ? "Got it" : "Reading your resume",
+      readSub: done ? "Five things found, one to add. Have a quick look before we start." : "Usually takes 5 to 15 seconds.",
+      bandTop: 8 + (s.readIdx % 6) * 26,
+      finds, readIdx: s.readIdx, readPct: s.readIdx * 20,
+      readDone: done, reading: !done,
+      toProfile: go("profile"),
+      toMoney: go("money"),
+      toWhere: go("where"),
+      back: () => { const i = order.indexOf(s.step); const prev = i <= 0 ? "upload" : (order[i - 1] === "reading" ? "upload" : order[i - 1]); this.setState({ step: prev }); },
+      phone: s.phone,
+      onPhone: (e) => this.setState({ phone: e.target.value }),
+      basics: [
+        { label: "Full name", value: "Aarav Kumar", edit: "Edit full name" },
+        { label: "Email", value: "aarav.kumar@email.com", edit: "Edit email" },
+        { label: "City", value: "Bengaluru", edit: "Edit city" }
+      ],
+      jobs: [
+        { value: "Backend Engineer · Finch Labs", label: "Jun 2022 to now · Bengaluru", edit: "Edit Backend Engineer at Finch Labs" },
+        { value: "Software Engineer Intern · Corvo", label: "Jan to Jun 2022 · Remote", edit: "Edit Software Engineer Intern at Corvo" }
+      ],
+      skills: ["Go", "Postgres", "Kafka", "Docker", "Kubernetes", "gRPC", "Redis", "Python", "AWS", "Terraform", "React", "Linux"],
+      ctcNow: s.ctcNow, ctcExp: s.ctcExp,
+      onNow: (e) => this.setState({ ctcNow: e.target.value }),
+      onExp: (e) => this.setState({ ctcExp: e.target.value }),
+      notice: this.chips(t, ["Immediate", "15 days", "30 days", "60 days", "90 days"], (l) => s.notice === l, (l) => this.setState({ notice: l })),
+      roles: this.chips(t, ["Backend", "Full stack", "Platform / DevOps", "Frontend", "Data engineering", "Mobile"], (l) => s.roles.indexOf(l) >= 0, (l) => this.toggleIn("roles", l)),
+      kinds: this.chips(t, ["Full-time", "Internship", "Contract"], (l) => s.kind === l, (l) => this.setState({ kind: l })),
+      places: this.chips(t, ["India", "Remote", "Abroad"], (l) => s.places.indexOf(l) >= 0, (l) => this.toggleIn("places", l)),
+      abroad: s.places.indexOf("Abroad") >= 0,
+      sponsor: this.chips(t, ["Yes", "No"], (l) => s.sponsor === l, (l) => this.setState({ sponsor: l })),
+      L: { feed: t.d ? "FeedDark.dc.html" : "Feed.dc.html" }
+    };
+  }
+}
+</script>
+</body>
+</html>

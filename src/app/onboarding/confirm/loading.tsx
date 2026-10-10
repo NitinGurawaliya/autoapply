@@ -1,7 +1,10 @@
-export default function ConfirmLoading() {
+import { Screen } from "@/components/patterns/layout";
+import { PageLoading } from "@/components/patterns/states";
+
+export default function Loading() {
   return (
-    <main className="mx-auto w-full max-w-[480px] px-4 py-10 text-sm text-muted-foreground">
-      Loading profile…
-    </main>
+    <Screen>
+      <PageLoading label="Loading your profile" />
+    </Screen>
   );
 }

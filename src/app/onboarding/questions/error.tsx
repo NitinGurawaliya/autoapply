@@ -1,11 +1,12 @@
 "use client";
 
-export default function QuestionsError() {
+import { Screen } from "@/components/patterns/layout";
+import { PageError } from "@/components/patterns/states";
+
+export default function OnboardingError({ reset }: { reset: () => void }) {
   return (
-    <main className="mx-auto w-full max-w-[480px] px-4 py-10">
-      <p className="rounded-lg border border-destructive/40 px-3 py-2 text-sm text-destructive">
-        Could not load questions.
-      </p>
-    </main>
+    <Screen>
+      <PageError title="Could not load the questions" reset={reset} />
+    </Screen>
   );
 }

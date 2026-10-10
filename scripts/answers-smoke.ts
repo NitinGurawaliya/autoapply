@@ -60,7 +60,10 @@ async function main() {
     check("a question from an application shows the question itself", text.includes(label) && text.includes("Because the product is interesting."));
     check("sensitive answers say they are never written by AI", (await page.getByText("never written by AI").count()) === 2);
     check("each answer shows where it came from", ["You", "Default", "Resume"].every((s) => text.includes(s)));
-    check("the navigation has an Answers tab, active on this page", (await page.locator('nav[aria-label="Main"] a[aria-current="page"]').last().innerText()).includes("Answers"));
+    check(
+      "Saved answers is a profile-menu page: its title shows and neither tab is active",
+      (await page.locator("h1").first().innerText()).includes("Saved answers") && (await page.locator('nav[aria-label="Main"] a[aria-current="page"]').count()) === 0,
+    );
     await page.screenshot({ path: `${process.env.TEMP ?? "."}/answers-page.png`, fullPage: true });
 
     // ---- edit

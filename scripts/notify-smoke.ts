@@ -55,14 +55,20 @@ async function main() {
     await context.addInitScript(FAKE_NOTIFICATION);
     const page = await context.newPage();
     await page.goto(`${BASE}/applications`, { timeout: 90000 });
-    const bell = page.locator('button[aria-pressed]').first();
+    // The switch lives in the profile menu (the design has no bell in the top bar).
+    async function toggle() {
+      const menu = page.getByRole("menu");
+      if (!(await menu.isVisible().catch(() => false))) await page.getByRole("button", { name: "Your profile and sign out" }).click();
+      return menu.locator("button[aria-pressed]");
+    }
+    const bell = await toggle();
     await bell.waitFor({ timeout: 30000 });
     const baseTitle = (await page.title()).replace(/^\(\d+\)\s*/, "");
 
     // Opting in
-    check("the bell starts off", (await bell.getAttribute("aria-pressed")) === "false");
+    check("the notifications switch starts off", (await bell.getAttribute("aria-pressed")) === "false");
     await bell.click();
-    check("clicking the bell turns notifications on", (await bell.getAttribute("aria-pressed")) === "true");
+    check("clicking the switch turns notifications on", (await bell.getAttribute("aria-pressed")) === "true");
 
     // A waiting application: one notification naming the company, and the title badge
     const first = await makeWaiting(false);
@@ -78,7 +84,7 @@ async function main() {
 
     // And none after a reload (the prompt was already notified)
     await page.reload({ timeout: 90000 });
-    await page.locator('button[aria-pressed]').first().waitFor({ timeout: 30000 });
+    await page.locator('nav[aria-label="Main"]').waitFor({ timeout: 30000 });
     await sleep(9000);
     list = await notes(page);
     check("a reload does not notify again for the same prompt", list.length === 0, `${list.length} shown`);
@@ -98,8 +104,9 @@ async function main() {
     );
 
     // Opting out: no notification, but the badge still shows
-    await page.locator('button[aria-pressed]').first().click();
-    check("clicking the bell again turns notifications off", (await page.locator('button[aria-pressed]').first().getAttribute("aria-pressed")) === "false");
+    const again = await toggle();
+    await again.click();
+    check("clicking the switch again turns notifications off", (await again.getAttribute("aria-pressed")) === "false");
     const before = (await notes(page)).length;
     await makeWaiting(false);
     await sleep(9000);

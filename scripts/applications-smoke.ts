@@ -67,53 +67,55 @@ async function main() {
     await page.goto(`${BASE}/applications`, { timeout: 90000 });
     await page.locator(`li:has(a[href="/applications/${sent.id}"])`).waitFor({ timeout: 30000 });
     await page.screenshot({ path: `${OUT}/list.png`, fullPage: true });
-    const tile = (name: RegExp) => page.getByRole("button", { name });
+    // Filter chips with counts (design/applications.html): All, Needs you, In progress, Sent, Didn't go through.
+    const chips = page.getByRole("group", { name: "Show" });
+    const chip = (name: RegExp) => chips.getByRole("button", { name });
     const total = async (statuses: string[]) => db.application.count({ where: { userId: user.id, status: { in: statuses } } });
-    const tileCount = async (name: RegExp) => Number((await tile(name).innerText()).replace(/\D+/g, " ").trim().split(" ").pop());
-    check("the Submitted tile counts submitted applications", (await tileCount(/^Submitted/)) === (await total(["submitted"])));
-    check("the In progress tile counts queued, reading and filling", (await tileCount(/^In progress/)) === (await total(["queued", "inspecting", "filling"])));
-    check("the Failed tile counts failed, blocked and cancelled", (await tileCount(/^Failed/)) === (await total(["failed", "blocked", "cancelled"])));
+    const chipCount = async (name: RegExp) => Number((await chip(name).innerText()).replace(/\D+/g, " ").trim().split(" ").pop());
+    check("the Sent chip counts submitted applications", (await chipCount(/^Sent/)) === (await total(["submitted"])));
+    check("the In progress chip counts queued, reading and filling", (await chipCount(/^In progress/)) === (await total(["queued", "inspecting", "filling"])));
+    check("the Didn't go through chip counts failed, blocked and cancelled", (await chipCount(/^Didn.t go through/)) === (await total(["failed", "blocked", "cancelled"])));
 
     const failedRow = page.locator(`li:has(a[href="/applications/${failedApp.id}"])`);
     const blockedRow = page.locator(`li:has(a[href="/applications/${blockedApp.id}"])`);
     const failedText = await failedRow.innerText();
-    check("a failed row says what went wrong in plain words and what to do", /The form rejected some answers\./.test(failedText) && /Phone, Email/.test(failedText) && !/Greenhouse rejected the form:/.test(failedText), failedText.replace(/\s+/g, " ").slice(0, 120));
-    check("a blocked row names the rule in plain words", /Match too low\./.test(await blockedRow.innerText()));
+    check("a failed row says what went wrong in plain words", /The form rejected some answers/.test(failedText) && !/Greenhouse rejected the form:/.test(failedText), failedText.replace(/\s+/g, " ").slice(0, 120));
+    check("a blocked row names the rule in plain words and has nothing to do", /Match too low/.test(await blockedRow.innerText()) && /Nothing to do/.test(await blockedRow.innerText()));
     check("a failed row offers Retry", await failedRow.getByRole("button", { name: "Retry" }).isVisible());
-    check("rows show a company avatar", (await failedRow.locator("span.size-10").count()) === 1);
+    check("rows show a company tile", (await failedRow.locator("[data-company-mark]").count()) === 1);
+    check("a sent row shows the ink check and says Sent", /Sent/.test(await page.locator(`li:has(a[href="/applications/${sent.id}"])`).innerText()));
 
-    await tile(/^Failed/).click();
-    check("tapping a tile marks it pressed and filters the list", (await tile(/^Failed/).getAttribute("aria-pressed")) === "true" && (await page.locator("ul li").count()) === (await total(["failed", "blocked", "cancelled"])));
-    const onlyProblems = (await page.locator("ul li").allInnerTexts()).every((t) => /Failed|Blocked|Cancelled/.test(t));
-    check("only failed, blocked or cancelled rows remain", onlyProblems);
-    await page.getByRole("button", { name: "Show all" }).first().click();
-    check("Show all brings every application back", (await page.locator("ul li").count()) === (await db.application.count({ where: { userId: user.id } })));
-    await tile(/^Submitted/).click();
-    await tile(/^Submitted/).click();
-    check("tapping the same tile again clears the filter", (await tile(/^Submitted/).getAttribute("aria-pressed")) === "false");
+    await chip(/^Didn.t go through/).click();
+    check("tapping a chip marks it pressed and filters the list", (await chip(/^Didn.t go through/).getAttribute("aria-pressed")) === "true" && (await page.locator("ul li").count()) === (await total(["failed", "blocked", "cancelled"])));
+    check("only didn't-go-through rows remain", (await page.locator("li[data-row]").evaluateAll((els) => els.every((el) => el.getAttribute("data-row") === "failed"))));
+    await chip(/^All/).click();
+    check("All brings every application back", (await page.locator("ul li").count()) === (await db.application.count({ where: { userId: user.id } })));
+    check("All is pressed again", (await chip(/^All/).getAttribute("aria-pressed")) === "true");
 
     // ---------- detail: submitted
     await page.goto(`${BASE}/applications/${sent.id}`, { timeout: 90000 });
-    await page.getByText("What was filled in").first().waitFor({ timeout: 30000 });
+    await page.locator('section[aria-label="What was filled in"]').waitFor({ timeout: 30000 });
     await page.screenshot({ path: `${OUT}/detail-submitted.png`, fullPage: true });
     const main = await page.locator("main").innerText();
     check("fields are grouped under plain headings", ["CONTACT", "LINKS", "DOCUMENTS", "YOUR ANSWERS", "EQUAL OPPORTUNITY"].every((h) => main.toUpperCase().includes(h)));
-    check("the field count is shown", /9 fields/.test(main));
+    check("the field count is shown", /9 fields/i.test(main));
     check("every filled value shows its source", ["You", "Resume", "AI draft", "Default"].every((s) => main.includes(s)));
     check("reused and worked-out answers show their badge and why", main.includes("You · reused") && main.includes("Worked out") && main.includes('Why: your answer to "How did you hear about this job?" (OpenAI)') && main.includes("Why: derived from your location: Pune, India"));
-    const stepNames = await page.locator('section[aria-label="Progress"] li p').allInnerTexts();
-    check("the timeline shows the steps, all done, ending in Submitted", ["Rules checked", "Application form read", "Answers prepared", "Form filled in", "Submitted"].every((s) => stepNames.join("|").includes(s)));
+    const stepNames = await page.locator('section[aria-label="Progress"] [data-step-title]').allInnerTexts();
+    check("the story shows the steps, all done, ending in Submitted", ["You swiped right", "Rules checked", "Application form read", "Answers prepared", "Form filled in", "Submitted"].every((s) => stepNames.join("|").includes(s)) && (await page.locator('section[aria-label="Progress"] li[data-step="end"]').count()) === 1);
     check("the confirmation appears under the Submitted step", main.includes('Confirmation: text "Thank you for applying"'));
     check("a submitted application has no problem callout", (await page.locator('section[aria-label="Where this stands"]').count()) === 0);
+    check("the trust panel says nothing was made up", main.includes("Nothing here was made up"));
+    // The design shows the screenshot in its browser frame straight away, with a full-size link.
     const shotImg = page.locator('img[alt="The filled application form"]');
-    check("the screenshot is collapsed until opened", !(await shotImg.isVisible()));
-    await page.getByText("Form before submitting").click();
+    await shotImg.scrollIntoViewIfNeeded();
     await shotImg.waitFor({ state: "visible", timeout: 10000 });
+    check("a full-size link opens the screenshot", (await page.getByRole("link", { name: "View full size" }).getAttribute("href")) === `/api/files/screenshots/${sent.id}/1.png`);
     const served = await page.evaluate(async (key) => { const r = await fetch(`/api/files/${key}`); return { status: r.status, type: r.headers.get("content-type") }; }, `screenshots/${sent.id}/1.png`);
     check("the screenshot file is served to its owner as an image", served.status === 200 && served.type === "image/png", `${served.status} ${served.type}`);
     await page.waitForFunction(() => { const img = document.querySelector('img[alt="The filled application form"]') as HTMLImageElement | null; return Boolean(img && img.complete && img.naturalWidth > 0); }, undefined, { timeout: 15000 }).then(
-      () => check("opening it shows the screenshot, and it loads", true),
-      () => check("opening it shows the screenshot, and it loads", false),
+      () => check("the screenshot shows and loads", true),
+      () => check("the screenshot shows and loads", false),
     );
     check("technical details are collapsed by default", !(await page.getByText("swipe_right: swipe_right passed").isVisible().catch(() => false)));
 

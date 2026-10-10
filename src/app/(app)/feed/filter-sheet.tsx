@@ -1,28 +1,58 @@
 "use client";
 
-import { SlidersHorizontal } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import type { ReactNode } from "react";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/icon-button";
+import { Icon } from "@/components/ui/icons";
+import { Sheet, SheetClose, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
-/** The filter chips are server-rendered links; this only provides the bottom sheet they open in. */
-export function FilterSheet({ activeCount, children }: { activeCount: number; children: React.ReactNode }) {
+type Opener = "icon" | "edit" | "widen";
+
+/**
+ * The filter chips are server-rendered links (choosing one reloads the feed); this is only the bottom sheet they
+ * open in (design/feed.html "Filters"). It opens from the top bar, or from the empty states' buttons.
+ */
+export function FilterSheet({
+  activeCount = 0,
+  opener = "icon",
+  resetHref,
+  children,
+}: {
+  activeCount?: number;
+  opener?: Opener;
+  resetHref: string;
+  children: ReactNode;
+}) {
   return (
-    <Dialog>
-      <DialogTrigger className="inline-flex h-10 items-center gap-2 rounded-full border border-border bg-card px-4 text-sm font-medium shadow-card outline-none transition-colors hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring">
-        <SlidersHorizontal className="size-4" aria-hidden />
-        Filters
-        {activeCount > 0 ? (
-          <span className="grid min-w-5 place-items-center rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-5 text-primary-foreground">
-            {activeCount}
-          </span>
-        ) : null}
-      </DialogTrigger>
-      <DialogContent className="top-auto bottom-0 max-h-[85vh] max-w-[480px] translate-y-0 overflow-y-auto rounded-b-none rounded-t-2xl p-5 sm:max-w-[480px]">
-        <DialogHeader>
-          <DialogTitle>Filter jobs</DialogTitle>
-          <DialogDescription>Pick what you want to see. The page reloads with your choice.</DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-col gap-5">{children}</div>
-      </DialogContent>
-    </Dialog>
+    <Sheet>
+      {opener === "icon" ? (
+        <SheetTrigger
+          render={<IconButton variant="line" aria-label={activeCount > 0 ? `Filters, ${activeCount} on` : "Filters"} className="relative" />}
+        >
+          <Icon name="filters" size={20} />
+          {activeCount > 0 ? (
+            <span className="absolute -top-1 -right-1 box-border flex h-5 min-w-5 items-center justify-center rounded-full border-[1.5px] border-primary-edge bg-primary px-[5px] text-[11px] font-bold text-ink">
+              {activeCount}
+            </span>
+          ) : null}
+        </SheetTrigger>
+      ) : (
+        <SheetTrigger render={<Button variant="line" size="lg" className="w-full" />}>
+          {opener === "edit" ? "Edit filters" : "Widen my filters"}
+        </SheetTrigger>
+      )}
+      <SheetContent aria-label="Filters">
+        <div className="mt-2.5 flex h-11 items-center justify-between">
+          <SheetTitle className="m-0 type-display-sm">Filters</SheetTitle>
+          <a href={resetHref} className={buttonVariants({ variant: "underline", size: "text" })}>
+            Reset
+          </a>
+        </div>
+        <SheetDescription className="sr-only">Pick what you want to see. The page reloads with your choice.</SheetDescription>
+        {children}
+        <SheetClose render={<Button variant="primary" size="xl" className="mt-[26px] w-full" />}>Show jobs</SheetClose>
+      </SheetContent>
+    </Sheet>
   );
 }
+

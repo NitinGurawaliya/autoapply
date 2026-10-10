@@ -3,16 +3,20 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { cn } from "cn";
 import { Button } from "@/components/ui/button";
+import { explainOutcome } from "@/lib/explain";
 
 const CANCELLABLE = ["queued", "inspecting", "filling", "needs_input"];
 const RETRYABLE = ["failed", "cancelled"];
 // A waiting-in-line application is harmless to stop; one that has a browser open gets an "are you sure".
 const NEEDS_CONFIRM = ["inspecting", "filling", "needs_input"];
 
-type Props = { id: string; status: string; company: string; onChanged?: () => void };
+// "inline": underlined text on list rows (design/applications.html). "panel": full-width buttons in the detail
+// page's "What you can do" card (design/detail.html).
+type Props = { id: string; status: string; company: string; onChanged?: () => void; look?: "inline" | "panel"; className?: string };
 
-export function ApplicationActions({ id, status, company, onChanged }: Props) {
+export function ApplicationActions({ id, status, company, onChanged, look = "inline", className }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState<"cancel" | "retry" | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -39,7 +43,7 @@ export function ApplicationActions({ id, status, company, onChanged }: Props) {
         if (onChanged) onChanged();
         else router.refresh();
       } else if (response.status === 403 && body.blocked) {
-        toast.error(`${company}: blocked by rule ${body.blocked}`);
+        toast.error(`${company}: ${explainOutcome("blocked", body.blocked).headline}`, { description: `Rule: ${body.blocked}` });
       } else if (response.status === 409) {
         toast.message("That application already changed. Refreshing.");
         if (onChanged) onChanged();
@@ -54,9 +58,13 @@ export function ApplicationActions({ id, status, company, onChanged }: Props) {
     }
   }
 
+  const panel = look === "panel";
+  const main = panel ? { variant: "primary" as const, size: "lg" as const, className: "w-full rounded-field" } : { variant: "underline" as const, size: "text" as const, className: "h-9 text-sm" };
+  const second = panel ? { variant: "plain" as const, size: "md" as const, className: "w-full rounded-field" } : { variant: "quiet" as const, size: "text" as const, className: "h-9 text-sm" };
+
   if (canRetry) {
     return (
-      <Button type="button" size="sm" disabled={busy !== null} onClick={() => void call("retry")}>
+      <Button type="button" variant={main.variant} size={main.size} className={cn(main.className, className)} disabled={busy !== null} onClick={() => void call("retry")}>
         {busy === "retry" ? "Retrying..." : "Retry"}
       </Button>
     );
@@ -64,11 +72,18 @@ export function ApplicationActions({ id, status, company, onChanged }: Props) {
 
   if (confirming) {
     return (
-      <span className="flex items-center gap-2" role="group" aria-label={`Confirm cancelling ${company}`}>
-        <Button type="button" size="sm" variant="destructive" disabled={busy !== null} onClick={() => void call("cancel")}>
+      <span className={cn(panel ? "flex w-full flex-col gap-2.5" : "flex items-center gap-3", className)} role="group" aria-label={`Confirm cancelling ${company}`}>
+        <Button
+          type="button"
+          variant={panel ? "strong" : "underline"}
+          size={panel ? "lg" : "text"}
+          className={panel ? "w-full rounded-field" : "h-9 text-sm"}
+          disabled={busy !== null}
+          onClick={() => void call("cancel")}
+        >
           {busy === "cancel" ? "Cancelling..." : "Yes, cancel"}
         </Button>
-        <Button type="button" size="sm" variant="outline" onClick={() => setConfirming(false)}>
+        <Button type="button" variant={second.variant} size={second.size} className={second.className} onClick={() => setConfirming(false)}>
           Keep running
         </Button>
       </span>
@@ -78,8 +93,9 @@ export function ApplicationActions({ id, status, company, onChanged }: Props) {
   return (
     <Button
       type="button"
-      size="sm"
-      variant="outline"
+      variant={second.variant}
+      size={second.size}
+      className={cn(second.className, className)}
       disabled={busy !== null}
       onClick={() => (NEEDS_CONFIRM.includes(status) ? setConfirming(true) : void call("cancel"))}
     >

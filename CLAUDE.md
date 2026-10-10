@@ -56,11 +56,12 @@ npx playwright test
 ## UI rules
 
 - Mobile-first at 390px; centered, max-width 480px on desktop for feed and onboarding.
-- shadcn/ui components, tokens in `src/app/globals.css`, one accent color, no gradients, no emoji in UI.
+- The owner's design in `design/` is the spec: every screen matches it exactly, light and dark (colours, type, sizes, radii, shadows, motion). See `docs/DESIGN.md`.
+- shadcn/ui components, tokens in `src/app/globals.css`, one accent color (lime, a fill only), no gradients, no emoji in UI.
 - Every screen has loading, empty and error states.
-- Feed card: title, company, location, "x days ago", match % badge, 2-line reason. Right = apply, left = skip, keyboard ← → too.
-- Status badges: queued (gray) · inspecting/filling (blue, animated) · needs_input (amber) · submitted (green) · failed (red) · blocked (red outline).
-- Source badges: resume (gray) · you (blue) · you · reused (blue outline) · worked out (gray outline) · AI draft (purple) · default (outline). Reused, worked-out and drafted answers also show why (their basis).
+- Feed card as in `design/feed.html`: company tile and name, posted time, role, "Why it fits", location and experience chips, lime match badge. Right = apply, left = skip, keyboard ← → too.
+- Status in ink and lime only, as the design shows it: in progress = segmented progress plus the stage in words (animated); needs_input = lime "Needs you"; submitted = ink check, "Sent"; failed, blocked, cancelled = "Didn't go through", dashed outline with the reason.
+- Source badges as in `design/detail.html` (icon plus outline): resume · you · you · reused · worked out · default solid, AI draft dashed. Reused, worked-out and drafted answers also show why (their basis).
 
 ## Testing
 

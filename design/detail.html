@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Application detail</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&amp;family=Geist:wght@400..700&amp;display=swap">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 390px; height: {{rootH}}px; box-sizing: border-box; padding: 54px 0 40px; position: relative; overflow: hidden; display: flex; flex-direction: column; font-family: 'Geist', system-ui, -apple-system, sans-serif; color: {{t.text}}; background: {{t.bg}}">
+
+  <div style="display: flex; align-items: center; gap: 4px; height: 44px; padding: 0 12px">
+    <a href="{{L.apps}}" aria-label="Back to applications" style="width: 44px; height: 44px; border-radius: 50%; color: inherit; display: flex; align-items: center; justify-content: center">
+      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round"><path d="M15 5l-7 7 7 7"></path></svg>
+    </a>
+    <span style="font-size: 16px; font-weight: 600">Application</span>
+  </div>
+
+  <div style="padding: 0 20px; display: flex; flex-direction: column">
+    <header style="padding-top: 14px; display: flex; flex-direction: column; gap: 6px">
+      <span aria-hidden="true" style="width: 56px; height: 56px; border-radius: 16px; background: {{t.inv}}; color: {{t.onInv}}; display: flex; align-items: center; justify-content: center; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 19px">{{d.ini}}</span>
+      <h1 style="margin: 10px 0 0; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 32px; line-height: 1.04; letter-spacing: -0.04em">{{d.role}}</h1>
+      <span style="font-size: 15px; color: {{t.muted}}">{{d.co}} · {{d.where}}</span>
+      <span style="align-self: flex-start; margin-top: 8px; height: 34px; padding: 0 12px 0 6px; box-sizing: border-box; border-radius: 999px; background: {{t.subtle}}; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600">
+        <span aria-hidden="true" style="width: 22px; height: 22px; border-radius: 50%; background: {{t.inv}}; color: {{t.onInv}}; display: flex; align-items: center; justify-content: center">
+          <sc-if value="{{ok}}" hint-placeholder-val="{{ true }}"><svg width="12" height="12" viewBox="0 0 24 24" style="fill: none; stroke: currentColor; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></sc-if>
+          <sc-if value="{{bad}}" hint-placeholder-val="{{ false }}"><span style="font-size: 13px; font-weight: 800">!</span></sc-if>
+        </span>{{d.status}}</span>
+    </header>
+
+    <sc-if value="{{bad}}" hint-placeholder-val="{{ false }}">
+      <section aria-labelledby="what" style="margin-top: 24px; padding: 18px; border: 2px solid {{t.strong}}; border-radius: 22px; background: {{t.surface}}; box-shadow: 0 5px 0 {{t.shadow}}; display: flex; flex-direction: column; gap: 10px">
+        <span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: {{t.muted}}">What happened</span>
+        <h2 id="what" style="margin: 0; font-size: 20px; line-height: 1.25; font-weight: 600; letter-spacing: -0.01em">Their form rejected your phone number</h2>
+        <p style="margin: 0; font-size: 15px; line-height: 1.5">It wanted 10 digits with no country code. We sent <strong>+91 98450 12345</strong>, exactly as you gave it.</p>
+        <span style="margin-top: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: {{t.muted}}">What you can do</span>
+        <button style="height: 52px; box-sizing: border-box; border-radius: 14px; border: 2px solid {{t.accentEdge}}; background: #C6F432; color: #16171A; box-shadow: {{t.btnShadow}}; font-family: inherit; font-size: 16px; font-weight: 600; cursor: pointer">Retry with 98450 12345</button>
+        <button style="height: 48px; border-radius: 14px; border: 1.5px solid {{t.line}}; background: transparent; color: inherit; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer">Leave it</button>
+        <p style="margin: 0; font-size: 13px; line-height: 1.45; color: {{t.muted}}">If you leave it, we won't try again. Nothing was sent to Arcwise.</p>
+      </section>
+    </sc-if>
+
+    <section style="margin-top: 20px; padding: 16px; border-radius: 20px; background: {{t.subtle}}; display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em">Nothing here was made up</h2>
+      <p style="margin: 0; font-size: 14px; line-height: 1.5">{{d.trust}}</p>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px">
+        <sc-for list="{{counts}}" as="c" hint-placeholder-count="4">
+          <span style="height: 30px; padding: 0 10px; box-sizing: border-box; border-radius: 999px; border: 1.5px {{c.dash}} {{t.chipEdge}}; background: {{t.surface}}; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600">{{c.label}} <span style="font-variant-numeric: tabular-nums; color: {{t.muted}}">{{c.n}}</span></span>
+        </sc-for>
+      </div>
+    </section>
+
+    <section aria-labelledby="story" style="margin-top: 32px">
+      <h2 id="story" style="margin: 0 0 14px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: {{t.muted}}">The story</h2>
+      <ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column">
+        <sc-for list="{{story}}" as="s" hint-placeholder-count="6">
+          <li style="display: grid; grid-template-columns: 48px 24px minmax(0, 1fr); column-gap: 10px; min-height: 62px">
+            <span style="font-size: 13px; color: {{t.muted}}; font-variant-numeric: tabular-nums; padding-top: 2px">{{s.time}}</span>
+            <span aria-hidden="true" style="position: relative; display: flex; justify-content: center">
+              <span style="position: absolute; top: 18px; bottom: -2px; width: 2px; background: {{s.lineBg}}"></span>
+              <span style="position: relative; width: 18px; height: 18px; box-sizing: border-box; margin-top: 1px; border-radius: 50%; border: 2px solid {{s.edge}}; background: {{s.fill}}; color: {{s.ink}}; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800">{{s.mark}}<sc-if value="{{s.isEnd}}" hint-placeholder-val="{{ false }}"><svg width="10" height="10" viewBox="0 0 24 24" style="fill: none; stroke: currentColor; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></sc-if></span>
+            </span>
+            <span style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 16px">
+              <span style="font-size: 15px; font-weight: 600">{{s.title}}</span>
+              <span style="font-size: 13px; line-height: 1.45; color: {{t.muted}}">{{s.sub}}</span>
+            </span>
+          </li>
+        </sc-for>
+      </ol>
+    </section>
+
+    <section aria-labelledby="vals" style="margin-top: 24px">
+      <h2 id="vals" style="margin: 0 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: {{t.muted}}">{{d.valsTitle}}</h2>
+      <dl style="margin: 0; display: flex; flex-direction: column">
+        <sc-for list="{{vals}}" as="v" hint-placeholder-count="8">
+          <div style="padding: 12px 0; border-bottom: 1px solid {{t.line}}; display: flex; flex-direction: column; gap: 8px">
+            <div style="display: flex; align-items: flex-start; gap: 10px">
+              <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+                <dt style="font-size: 13px; color: {{t.muted}}">{{v.label}}</dt>
+                <sc-if value="{{v.plain}}" hint-placeholder-val="{{ true }}"><dd style="margin: 0; font-size: 16px; font-weight: 600">{{v.value}}</dd></sc-if>
+              </div>
+              <span style="flex: none; height: 26px; padding: 0 9px; box-sizing: border-box; border-radius: 999px; border: 1.5px {{v.dash}} {{t.chipEdge}}; display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: {{t.text}}">
+                <sc-if value="{{v.isResume}}" hint-placeholder-val="{{ true }}"><svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path><path d="M14 3v5h5"></path></svg></sc-if>
+                <sc-if value="{{v.isYou}}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"></path></svg></sc-if>
+                <sc-if value="{{v.isDefault}}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path></svg></sc-if>
+                <sc-if value="{{v.isAi}}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round"><path d="M4 20h4L19 9l-4-4L4 16z"></path></svg></sc-if>
+                {{v.src}}</span>
+            </div>
+            <sc-if value="{{v.isAi}}" hint-placeholder-val="{{ false }}">
+              <dd style="margin: 0; padding: 12px 14px; border-radius: 14px; border: 1.5px dashed {{t.lineStrong}}; display: flex; flex-direction: column; gap: 8px">
+                <span style="font-size: 15px; line-height: 1.5">{{v.value}}</span>
+                <a href="#full-draft" style="align-self: flex-start; min-height: 32px; display: flex; align-items: center; font-size: 14px; font-weight: 600; color: {{t.text}}; text-underline-offset: 3px">Read the full draft</a>
+              </dd>
+            </sc-if>
+            <sc-if value="{{v.flag}}" hint-placeholder-val="{{ false }}">
+              <span style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600">
+                <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" style="flex: none; fill: none; stroke: currentColor; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4M12 16h.01"></path></svg>Their form rejected this one</span>
+            </sc-if>
+          </div>
+        </sc-for>
+      </dl>
+    </section>
+
+    <section aria-labelledby="shot" style="margin-top: 32px; display: flex; flex-direction: column; gap: 12px">
+      <h2 id="shot" style="margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: {{t.muted}}">{{d.shotTitle}}</h2>
+      <figure role="img" aria-label="{{d.shotAlt}}" style="margin: 0; border: 2px solid {{t.strong}}; border-radius: 18px; overflow: hidden; background: #FFFFFF; box-shadow: 0 4px 0 {{t.shadow}}">
+        <div style="height: 34px; padding: 0 12px; display: flex; align-items: center; gap: 8px; background: #EDEDF0; border-bottom: 1px solid #DCDCE0">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #C4C5CB"></span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #C4C5CB"></span>
+          <span style="flex: 1; height: 20px; border-radius: 6px; background: #FFFFFF; display: flex; align-items: center; padding: 0 8px; font-size: 11px; color: #5F6269">{{d.url}}</span>
+        </div>
+        <div style="padding: 16px; display: flex; flex-direction: column; gap: 10px; color: #16171A">
+          <span style="font-size: 15px; font-weight: 700">Apply: {{d.role}}</span>
+          <sc-for list="{{shotFields}}" as="f" hint-placeholder-count="6">
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <span style="font-size: 10px; color: #5F6269">{{f.label}}</span>
+              <span style="height: 26px; box-sizing: border-box; padding: 0 8px; border: 1px solid {{f.edge}}; border-radius: 5px; display: flex; align-items: center; font-size: 11px">{{f.value}}</span>
+              <sc-if value="{{f.err}}" hint-placeholder-val="{{ false }}"><span style="font-size: 10px; font-weight: 700">! Enter a valid 10-digit phone number</span></sc-if>
+            </div>
+          </sc-for>
+          <span style="align-self: flex-start; margin-top: 4px; height: 26px; padding: 0 14px; border-radius: 5px; background: #2B2C31; color: #FFFFFF; display: flex; align-items: center; font-size: 11px; font-weight: 600">Submit application</span>
+        </div>
+      </figure>
+      <span style="font-size: 13px; color: {{t.muted}}">{{d.shotCaption}}</span>
+      <button style="height: 48px; border-radius: 14px; border: 1.5px solid {{t.line}}; background: {{t.surface}}; color: inherit; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer">View full size</button>
+    </section>
+
+    <a href="#original-posting" style="margin-top: 24px; height: 48px; display: flex; align-items: center; gap: 8px; color: {{t.text}}; font-size: 15px; font-weight: 600; text-underline-offset: 3px">Open the original posting
+      <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"></path></svg></a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"kind":{"editor":"enum","options":["done","failed"],"default":"done"},"$preview":{"width":390,"height":2600}}'>
+class Component extends DCLogic {
+  th() {
+    const d = !!this.props.dark;
+    return d
+      ? { d, bg: "#0E0F11", surface: "#1A1B1F", subtle: "#24252A", text: "#F2F2F3", muted: "#A1A4AB", line: "#2A2B30", lineStrong: "#5A5B62", strong: "#4A4B52", chipEdge: "#4A4B52", shadow: "#000000", inv: "#F2F2F3", onInv: "#16171A", accentEdge: "#C6F432", btnShadow: "none" }
+      : { d, bg: "#F6F6F7", surface: "#FFFFFF", subtle: "#EEEEF1", text: "#16171A", muted: "#6B6E75", line: "#E6E6EA", lineStrong: "#9A9BA2", strong: "#16171A", chipEdge: "#BDBEC4", shadow: "#16171A", inv: "#16171A", onInv: "#FFFFFF", accentEdge: "#16171A", btnShadow: "0 4px 0 #16171A" };
+  }
+  renderVals() {
+    const t = this.th();
+    const bad = this.props.kind === "failed";
+    const srcName = { r: "Resume", y: "You", f: "Default", a: "AI draft" };
+    const mk = (label, value, src, flag) => ({
+      label, value, src: srcName[src], flag: !!flag,
+      isResume: src === "r", isYou: src === "y", isDefault: src === "f", isAi: src === "a",
+      plain: src !== "a", dash: src === "a" ? "dashed" : "solid"
+    });
+    const common = [
+      mk("Full name", "Aarav Kumar", "r"),
+      mk("Email", "aarav.kumar@email.com", "r"),
+      mk("Phone", "+91 98450 12345", "y", bad),
+      mk("Current role", "Backend Engineer, Finch Labs", "r"),
+      mk("Years of experience", "3", "r"),
+      mk("Current CTC", "₹12.5 lakh a year", "y"),
+      mk("Expected CTC", "₹18 lakh a year", "y"),
+      mk("Notice period", "30 days", "y")
+    ];
+    const vals = bad ? common : common.concat([
+      mk("Can you work from our Bengaluru office 3 days a week?", "Yes", "y"),
+      mk("How did you hear about us?", "Job board", "f"),
+      mk("Why do you want to join Tidewave? (optional)", "I've spent three years building payment services in Go and Postgres at Finch Labs, and Tidewave's work on real-time settlement is the problem I most want to work on next…", "a")
+    ]);
+    const n = (k) => vals.filter((v) => v.src === srcName[k]).length;
+    const counts = [
+      { label: "Resume", n: n("r"), dash: "solid" },
+      { label: "You", n: n("y"), dash: "solid" },
+      { label: "Default", n: n("f"), dash: "solid" },
+      { label: "AI draft", n: n("a"), dash: "dashed" }
+    ].filter((c) => c.n > 0);
+    const node = (kind) => kind === "end"
+      ? { edge: t.accentEdge, fill: "#C6F432", mark: "", ink: "#16171A", isEnd: true }
+      : kind === "stop"
+        ? { edge: t.text, fill: t.bg, mark: "!", ink: t.text, isEnd: false }
+        : { edge: t.text, fill: t.text, mark: "", ink: t.text, isEnd: false };
+    const st = (time, title, sub, kind, last) => Object.assign({ time, title, sub, lineBg: last ? "transparent" : t.line }, node(kind));
+    const story = bad
+      ? [
+          st("09:58", "You swiped right", "86 match", "step"),
+          st("10:02", "Read the form", "8 questions on Arcwise's careers page", "step"),
+          st("10:04", "Filled 8 of 8", "From your resume and your answers", "step"),
+          st("10:05", "Stopped at submit", "The form said: Enter a valid 10-digit phone number", "stop", true)
+        ]
+      : [
+          st("10:31", "You swiped right", "86 match", "step"),
+          st("10:31", "Waiting in line", "Started after 4 minutes", "step"),
+          st("10:35", "Read the form", "9 questions on Tidewave's careers page", "step"),
+          st("10:37", "Filled 8 of 9", "From your resume and saved answers", "step"),
+          st("10:38", "Asked you one question", "Office 3 days a week? You said Yes at 10:41", "step"),
+          st("10:42", "Sent", "Their page showed: Application received", "end", true)
+        ];
+    const shotFields = (bad
+      ? [["Full name", "Aarav Kumar"], ["Email", "aarav.kumar@email.com"], ["Phone", "+91 98450 12345", true], ["Current CTC (LPA)", "12.5"], ["Expected CTC (LPA)", "18"], ["Notice period", "30 days"]]
+      : [["Full name", "Aarav Kumar"], ["Email", "aarav.kumar@email.com"], ["Phone", "+91 98450 12345"], ["Expected CTC (LPA)", "18"], ["Notice period", "30 days"], ["Office 3 days a week?", "Yes"]]
+    ).map((f) => ({ label: f[0], value: f[1], err: !!f[2], edge: f[2] ? "#16171A" : "#C9CACF" }));
+    return {
+      t, ok: !bad, bad, vals, counts, story, shotFields,
+      rootH: bad ? 2440 : 2600,
+      d: bad
+        ? { ini: "AR", role: "Backend Developer", co: "Arcwise", where: "Remote, India", status: "Didn't go through", valsTitle: "What we filled in before it stopped", trust: "Every answer came from your resume or from you. The one their form rejected is marked below.", shotTitle: "The form when it stopped", shotAlt: "Screenshot of Arcwise's application form showing a phone number error", url: "careers.arcwise.example/apply", shotCaption: "Taken at 10:05:12, right after their form showed the error." }
+        : { ini: "TW", role: "Backend Engineer", co: "Tidewave", where: "Bengaluru · Hybrid", status: "Sent today, 10:42", valsTitle: "Everything we filled in", trust: "Every answer came from your resume, from you, or a standard default. The one open-text answer is an AI draft, marked below.", shotTitle: "The form just before we sent it", shotAlt: "Screenshot of Tidewave's filled application form", url: "careers.tidewave.example/apply", shotCaption: "Taken at 10:42:07, a second before we pressed Submit." },
+      L: { apps: t.d ? "AppsDark.dc.html" : "Apps.dc.html" }
+    };
+  }
+}
+</script>
+</body>
+</html>

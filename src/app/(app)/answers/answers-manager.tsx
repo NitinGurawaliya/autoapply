@@ -3,9 +3,13 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { SourceBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Eyebrow } from "@/components/ui/eyebrow";
+import { FieldLabel, InputBox, NativeSelect } from "@/components/ui/field";
+import { Icon } from "@/components/ui/icons";
+import { SourceBadge } from "@/components/ui/source-badge";
+import { EmptyState } from "@/components/patterns/content";
+import { DeckEmptyArt } from "@/components/patterns/drawings";
 import { ADDABLE_KEYS, ANSWER_LABELS, SENSITIVE_KEYS } from "@/lib/answer-labels";
 import { groupOf, GROUP_ORDER } from "@/lib/field-groups";
 
@@ -84,54 +88,60 @@ export function AnswersManager({ initial }: { initial: Row[] }) {
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-[22px] px-5 pt-4 pb-6">
       {groups.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-card px-6 py-10 text-center shadow-card">
-          <h2 className="text-base font-semibold">Nothing saved yet</h2>
-          <p className="mx-auto mt-1 max-w-[32ch] text-sm text-muted-foreground">Answers you give in onboarding or when an application asks will show up here.</p>
-        </div>
+        <EmptyState
+          art={<DeckEmptyArt />}
+          title="Nothing saved yet"
+          text="Answers you give in onboarding or when an application asks will show up here."
+          headingLevel="h2"
+          className="py-6"
+        />
       ) : (
         groups.map((group) => (
-          <section key={group.name} className="flex flex-col gap-1.5" aria-label={group.name}>
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.name}</h2>
-            <ul className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-card">
-              {group.rows.map((row) => (
-                <li key={row.key} className="flex flex-col gap-2 px-3 py-3" data-answer-key={row.key}>
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="text-sm font-medium">{titleOf(row)}</span>
+          <section key={group.name} className="flex flex-col gap-2.5" aria-label={group.name}>
+            <Eyebrow as="h2">{group.name}</Eyebrow>
+            <ul className="m-0 flex list-none flex-col rounded-panel border-[1.5px] border-line bg-surface px-4 py-1">
+              {group.rows.map((row, index) => (
+                <li key={row.key} className={index > 0 ? "flex flex-col gap-2 border-t border-line py-3" : "flex flex-col gap-2 py-3"} data-answer-key={row.key}>
+                  <div className="flex items-start justify-between gap-2.5">
+                    <span className="text-[13px] text-muted-foreground">{titleOf(row)}</span>
                     <SourceBadge source={row.source} />
                   </div>
-                  {SENSITIVE_KEYS.has(row.key) ? (
-                    <span className="text-xs text-muted-foreground">Sensitive: only ever filled from what you typed, never written by AI.</span>
-                  ) : null}
                   {editing === row.key ? (
                     <form
-                      className="flex flex-col gap-2"
+                      className="flex flex-col gap-2.5"
                       onSubmit={async (event) => {
                         event.preventDefault();
                         if (draft.trim() && (await save(row, draft.trim()))) setEditing(null);
                       }}
                     >
-                      <Input value={draft} onChange={(event) => setDraft(event.target.value)} aria-label={`New value for ${titleOf(row)}`} maxLength={2000} autoFocus />
-                      <div className="flex gap-2">
-                        <Button type="submit" size="sm" disabled={busy || !draft.trim()}>
+                      <InputBox tone="soft" value={draft} onChange={(event) => setDraft(event.target.value)} aria-label={`New value for ${titleOf(row)}`} maxLength={2000} autoFocus />
+                      <div className="flex items-center gap-4">
+                        <Button type="submit" variant="primary" size="row" className="shadow-none" disabled={busy || !draft.trim()}>
                           Save
                         </Button>
-                        <Button type="button" size="sm" variant="outline" onClick={() => setEditing(null)}>
+                        <Button type="button" variant="quiet" size="text" onClick={() => setEditing(null)}>
                           Cancel
                         </Button>
                       </div>
                     </form>
                   ) : (
                     <>
-                      <p className="whitespace-pre-wrap break-words text-sm">{row.answer}</p>
-                      <div className="flex flex-wrap gap-2">
+                      <p className="m-0 text-base font-semibold break-words whitespace-pre-wrap">{row.answer}</p>
+                      {SENSITIVE_KEYS.has(row.key) ? (
+                        <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+                          <Icon name="lock" size={14} className="flex-none" />
+                          Sensitive: only ever filled from what you typed, never written by AI.
+                        </span>
+                      ) : null}
+                      <div className="flex flex-wrap items-center gap-4">
                         {confirming === row.key ? (
                           <>
-                            <Button type="button" size="sm" variant="destructive" disabled={busy} onClick={() => void remove(row)}>
+                            <Button type="button" variant="strong" size="row" disabled={busy} onClick={() => void remove(row)}>
                               Yes, delete
                             </Button>
-                            <Button type="button" size="sm" variant="outline" onClick={() => setConfirming(null)}>
+                            <Button type="button" variant="quiet" size="text" onClick={() => setConfirming(null)}>
                               Keep it
                             </Button>
                           </>
@@ -139,8 +149,9 @@ export function AnswersManager({ initial }: { initial: Row[] }) {
                           <>
                             <Button
                               type="button"
-                              size="sm"
-                              variant="outline"
+                              variant="underline"
+                              size="text"
+                              className="h-9 text-sm"
                               onClick={() => {
                                 setEditing(row.key);
                                 setDraft(row.answer);
@@ -151,8 +162,9 @@ export function AnswersManager({ initial }: { initial: Row[] }) {
                             </Button>
                             <Button
                               type="button"
-                              size="sm"
-                              variant="outline"
+                              variant="quiet"
+                              size="text"
+                              className="h-9 text-sm"
                               onClick={() => {
                                 setConfirming(row.key);
                                 setEditing(null);
@@ -172,40 +184,45 @@ export function AnswersManager({ initial }: { initial: Row[] }) {
         ))
       )}
 
-      <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 shadow-card" aria-label="Add an answer">
+      <section className="flex flex-col gap-3" aria-label="Add an answer">
         {adding ? (
           <form
-            className="flex flex-col gap-2"
+            className="box-border flex flex-col gap-3.5 rounded-panel border-2 border-edge bg-surface p-4 shadow-hard"
             onSubmit={(event) => {
               event.preventDefault();
               void add();
             }}
           >
-            <label className="flex flex-col gap-1 text-sm">
-              Which answer
-              <select value={newKey} onChange={(event) => setNewKey(event.target.value)} className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm">
+            <span className="text-base font-semibold">Add an answer</span>
+            <div className="flex flex-col gap-2">
+              <FieldLabel tone="muted" htmlFor="add-key">
+                Which answer
+              </FieldLabel>
+              <NativeSelect id="add-key" value={newKey} onChange={(event) => setNewKey(event.target.value)}>
                 {ADDABLE_KEYS.map((key) => (
                   <option key={key} value={key}>
                     {ANSWER_LABELS[key]}
                   </option>
                 ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              Your answer
-              <Input value={newValue} onChange={(event) => setNewValue(event.target.value)} maxLength={2000} />
-            </label>
-            <div className="flex gap-2">
-              <Button type="submit" size="sm" disabled={busy || !newValue.trim()}>
+              </NativeSelect>
+            </div>
+            <div className="flex flex-col gap-2">
+              <FieldLabel tone="muted" htmlFor="add-value">
+                Your answer
+              </FieldLabel>
+              <InputBox id="add-value" tone="soft" value={newValue} onChange={(event) => setNewValue(event.target.value)} maxLength={2000} />
+            </div>
+            <div className="flex items-center gap-4">
+              <Button type="submit" variant="primary" size="row" className="shadow-none" disabled={busy || !newValue.trim()}>
                 Save answer
               </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => setAdding(false)}>
+              <Button type="button" variant="quiet" size="text" onClick={() => setAdding(false)}>
                 Cancel
               </Button>
             </div>
           </form>
         ) : (
-          <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => setAdding(true)}>
+          <Button type="button" variant="line" size="lg" className="w-full" onClick={() => setAdding(true)}>
             Add an answer
           </Button>
         )}

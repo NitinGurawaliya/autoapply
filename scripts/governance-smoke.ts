@@ -105,7 +105,10 @@ async function main() {
       check("a block links to its application", (await blockRow.locator("a").getAttribute("href")) === `/applications/${blocked.id}`);
       check("the decisions list is capped at 20", (await page.locator("[data-event-type]").count()) === 20);
       check("another user's event text is not on the page", !(await page.locator("main").innerText()).includes("B-SECRET-EVENT"));
-      check("the bottom bar has a Governance tab, active here", (await page.locator('nav[aria-label="Main"] a[aria-current="page"]').last().innerText()).includes("Governance"));
+      check(
+        "Governance is a profile-menu page: its title shows and neither tab is active",
+        (await page.locator("h1").first().innerText()).includes("Governance") && (await page.locator('nav[aria-label="Main"] a[aria-current="page"]').count()) === 0,
+      );
 
       const empty = await open(C.token);
       const emptyText = await empty.locator("main").innerText();

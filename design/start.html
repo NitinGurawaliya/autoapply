@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Opening and sign in</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&amp;family=Geist:wght@400..700&amp;display=swap">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; font-family: 'Geist', system-ui, -apple-system, sans-serif; color: {{t.text}}; background: {{rootBg}}">
+
+  <sc-if value="{{isSplash}}" hint-placeholder-val="{{ true }}">
+    <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; padding-bottom: 40px">
+      <div aria-hidden="true" style="position: relative; width: 170px; height: 150px">
+        <div style="position: absolute; left: 40px; top: 18px; width: 76px; height: 100px; box-sizing: border-box; border-radius: 18px; border: 3px solid {{m.backEdge}}; background: {{m.backBg}}; transform: {{m.backTf}}; opacity: {{m.backOp}}; transition: transform 560ms cubic-bezier(.34,1.56,.64,1), opacity 220ms ease-out"></div>
+        <div style="position: absolute; left: 52px; top: 26px; width: 76px; height: 100px; box-sizing: border-box; border-radius: 18px; border: 3px solid {{m.frontEdge}}; background: {{m.frontBg}}; display: flex; align-items: center; justify-content: center; transform: {{m.frontTf}}; opacity: {{m.frontOp}}; transition: transform 620ms cubic-bezier(.34,1.56,.64,1), opacity 220ms ease-out">
+          <svg width="40" height="40" viewBox="0 0 24 24" style="fill: none; stroke: {{m.check}}; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; transform: {{m.wordTf}}; opacity: {{m.wordOp}}; transition: transform 480ms cubic-bezier(.2,.9,.3,1), opacity 380ms ease-out">
+        <span style="font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 44px; letter-spacing: -0.045em; line-height: 1">swipeapply</span>
+        <span style="font-size: 17px; font-weight: 500">Swipe right. We apply.</span>
+      </div>
+    </div>
+    <button onClick="{{toSignIn}}" style="position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%); height: 44px; padding: 0 18px; border: none; background: none; font-family: inherit; color: inherit; font-size: 15px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer">Continue</button>
+  </sc-if>
+
+  <sc-if value="{{isSignIn}}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; box-sizing: border-box; padding: 58px 24px 28px; display: flex; flex-direction: column">
+      <div style="display: flex; align-items: center; gap: 10px">
+        <div aria-hidden="true" style="position: relative; width: 30px; height: 30px">
+          <div style="position: absolute; left: 3px; top: 2px; width: 17px; height: 23px; box-sizing: border-box; border-radius: 5px; border: 2px solid {{t.strong}}; background: {{t.surface}}; transform: rotate(-10deg)"></div>
+          <div style="position: absolute; left: 9px; top: 4px; width: 17px; height: 23px; box-sizing: border-box; border-radius: 5px; border: 2px solid #16171A; background: #C6F432; transform: rotate(10deg)"></div>
+        </div>
+        <span style="font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 22px; letter-spacing: -0.04em">swipeapply</span>
+      </div>
+
+      <div aria-hidden="true" style="position: relative; height: 290px; margin-top: 26px">
+        <div style="position: absolute; left: 70px; top: 26px; width: 210px; height: 240px; box-sizing: border-box; border-radius: 24px; border: 2px solid {{t.strong}}; background: {{t.surface}}; box-shadow: 0 5px 0 {{t.shadow}}; transform: rotate(-11deg)"></div>
+        <div style="position: absolute; left: 80px; top: 18px; width: 210px; height: 240px; box-sizing: border-box; border-radius: 24px; border: 2px solid {{t.strong}}; background: {{t.surface}}; box-shadow: 0 5px 0 {{t.shadow}}; transform: rotate(6deg)"></div>
+        <div style="position: absolute; left: 66px; top: 22px; width: 210px; height: 240px; box-sizing: border-box; border-radius: 24px; border: 2px solid {{t.strong}}; background: {{t.surface}}; box-shadow: 0 5px 0 {{t.shadow}}; transform: rotate(-2deg); padding: 18px; display: flex; flex-direction: column; gap: 14px">
+          <div style="display: flex; align-items: center; gap: 10px">
+            <div style="width: 36px; height: 36px; border-radius: 11px; background: {{t.inv}}; color: {{t.onInv}}; display: flex; align-items: center; justify-content: center; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 13px">LP</div>
+            <span style="font-size: 13px; font-weight: 600">Lumen Pay</span>
+          </div>
+          <span style="font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 25px; line-height: 1.02; letter-spacing: -0.035em">Backend Engineer</span>
+          <div style="display: flex; flex-direction: column; gap: 7px; margin-top: 4px">
+            <span style="display: block; height: 8px; width: 100%; border-radius: 99px; background: {{t.subtle}}"></span>
+            <span style="display: block; height: 8px; width: 82%; border-radius: 99px; background: {{t.subtle}}"></span>
+            <span style="display: block; height: 8px; width: 64%; border-radius: 99px; background: {{t.subtle}}"></span>
+          </div>
+          <span style="position: absolute; left: 14px; bottom: 22px; padding: 2px 12px; border: 2px solid #16171A; border-radius: 10px; background: #C6F432; color: #16171A; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 22px; transform: rotate(-9deg)">APPLY</span>
+          <span style="position: absolute; top: -16px; right: -14px; width: 66px; height: 66px; box-sizing: border-box; border-radius: 50%; border: 2px solid #16171A; background: #C6F432; color: #16171A; box-shadow: 0 4px 0 #16171A; transform: rotate(-8deg); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1">
+            <span style="font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 24px">86</span>
+            <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase">match</span>
+          </span>
+        </div>
+      </div>
+
+      <h1 style="margin: 24px 0 0; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 44px; line-height: 1; letter-spacing: -0.045em">Swipe right.<br>We'll apply.</h1>
+      <p style="margin: 14px 0 0; font-size: 16px; line-height: 1.5; color: {{t.muted}}; text-wrap: pretty">Upload your resume once. Our agent fills each form with your real details, and never makes anything up.</p>
+
+      <a href="{{L.onb}}" style="margin-top: auto; height: 56px; box-sizing: border-box; border-radius: 16px; border: 2px solid {{t.strong}}; background: {{t.surface}}; color: {{t.text}}; box-shadow: 0 4px 0 {{t.shadow}}; display: flex; align-items: center; justify-content: center; gap: 12px; text-decoration: none; font-size: 16px; font-weight: 600">
+        <span aria-hidden="true" style="width: 24px; height: 24px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid {{t.muted}}; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700">G</span>
+        Continue with Google</a>
+      <p style="margin: 16px 0 0; text-align: center; font-size: 13px; line-height: 1.5; color: {{t.muted}}">By continuing you agree to the <a href="#terms" style="color: {{t.text}}">Terms</a> and <a href="#privacy" style="color: {{t.text}}">Privacy Policy</a>.</p>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"view":{"editor":"enum","options":["splash","signin"],"default":"splash"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { view: props.view || "splash", phase: 0 };
+    this.timers = [];
+  }
+  componentDidMount() { if (this.state.view === "splash") this.run(); }
+  componentWillUnmount() { this.clear(); }
+  clear() { this.timers.forEach((t) => clearTimeout(t)); this.timers = []; }
+  later(fn, ms) { this.timers.push(setTimeout(fn, ms)); }
+  run() {
+    this.setState({ phase: 0 });
+    this.later(() => this.setState({ phase: 1 }), 250);
+    this.later(() => this.setState({ phase: 2 }), 1050);
+    this.later(() => this.setState({ phase: 3 }), 1500);
+    this.later(() => this.run(), 4600);
+  }
+  th() {
+    const d = !!this.props.dark;
+    return d
+      ? { d, bg: "#0E0F11", surface: "#1A1B1F", subtle: "#2A2B30", text: "#F2F2F3", muted: "#A1A4AB", strong: "#4A4B52", shadow: "#000000", inv: "#F2F2F3", onInv: "#16171A" }
+      : { d, bg: "#F6F6F7", surface: "#FFFFFF", subtle: "#ECECEF", text: "#16171A", muted: "#6B6E75", strong: "#16171A", shadow: "#16171A", inv: "#16171A", onInv: "#FFFFFF" };
+  }
+  renderVals() {
+    const t = this.th();
+    const p = this.state.phase;
+    const splash = this.state.view === "splash";
+    const m = t.d
+      ? { backBg: "#1A1B1F", backEdge: "#F2F2F3", frontBg: "#C6F432", frontEdge: "#C6F432", check: "#16171A" }
+      : { backBg: "#FFFFFF", backEdge: "#16171A", frontBg: "#16171A", frontEdge: "#16171A", check: "#C6F432" };
+    m.backTf = p >= 1 ? "rotate(-10deg)" : "scale(0.6) rotate(-10deg)";
+    m.backOp = p >= 1 ? "1" : "0";
+    m.frontTf = p >= 2 ? "translateX(30px) rotate(14deg)" : (p >= 1 ? "rotate(0deg)" : "scale(0.6)");
+    m.frontOp = p >= 1 ? "1" : "0";
+    m.wordTf = p >= 3 ? "none" : "translateY(14px)";
+    m.wordOp = p >= 3 ? "1" : "0";
+    return {
+      t, m,
+      isSplash: splash,
+      isSignIn: !splash,
+      rootBg: splash ? (t.d ? "#0E0F11" : "#C6F432") : t.bg,
+      L: { onb: t.d ? "OnbUploadDark.dc.html" : "Onboarding.dc.html" },
+      toSignIn: () => { this.clear(); this.setState({ view: "signin" }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

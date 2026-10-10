@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { FieldError, InputBox, NativeSelect } from "@/components/ui/field";
+import { Icon } from "@/components/ui/icons";
 
 type Gap = { key: string; label: string; type: string; options: string[] | null; jobs: number };
 
@@ -38,23 +39,30 @@ export function GapsForm({ gaps }: { gaps: Gap[] }) {
   }
 
   return (
-    <ul className="flex flex-col gap-3">
+    <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
       {gaps.map((gap) => (
-        <li key={gap.key} className="rounded-2xl border border-border bg-card p-4 shadow-card">
-          <p className="text-sm font-medium">{gap.label}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Asked by {gap.jobs} {gap.jobs === 1 ? "job" : "jobs"} in your feed
-          </p>
+        <li key={gap.key} className="box-border flex flex-col gap-3 rounded-panel border-2 border-edge bg-surface p-4 shadow-hard">
+          <div className="flex flex-col gap-1">
+            <p className="m-0 type-lead font-semibold">{gap.label}</p>
+            <p className="m-0 text-[13px] text-muted-foreground">
+              Asked by {gap.jobs} {gap.jobs === 1 ? "job" : "jobs"} in your feed
+            </p>
+          </div>
           {saved[gap.key] ? (
-            <p className="mt-3 text-sm text-success">Saved. We will use it from now on.</p>
+            <p className="m-0 flex items-center gap-2 text-[15px] font-semibold">
+              <span aria-hidden="true" className="flex size-[22px] items-center justify-center rounded-full bg-primary text-ink">
+                <Icon name="check" size={12} strokeWidth={3.5} />
+              </span>
+              Saved. We will use it from now on.
+            </p>
           ) : (
-            <div className="mt-3 flex flex-col gap-2">
+            <div className="flex flex-col gap-2.5">
               {gap.options && gap.options.length > 0 ? (
-                <select
+                <NativeSelect
                   aria-label={gap.label}
+                  className="w-full"
                   value={values[gap.key] ?? ""}
                   onChange={(event) => setValues((current) => ({ ...current, [gap.key]: event.target.value }))}
-                  className="h-9 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
                 >
                   <option value="">Select</option>
                   {gap.options.map((option) => (
@@ -62,12 +70,12 @@ export function GapsForm({ gaps }: { gaps: Gap[] }) {
                       {option}
                     </option>
                   ))}
-                </select>
+                </NativeSelect>
               ) : (
-                <Input aria-label={gap.label} value={values[gap.key] ?? ""} onChange={(event) => setValues((current) => ({ ...current, [gap.key]: event.target.value }))} />
+                <InputBox tone="soft" aria-label={gap.label} value={values[gap.key] ?? ""} onChange={(event) => setValues((current) => ({ ...current, [gap.key]: event.target.value }))} />
               )}
-              {error[gap.key] ? <p className="text-sm text-destructive">{error[gap.key]}</p> : null}
-              <Button type="button" size="sm" className="self-start" disabled={saving === gap.key} onClick={() => void save(gap)}>
+              {error[gap.key] ? <FieldError>{error[gap.key]}</FieldError> : null}
+              <Button type="button" variant="primary" size="row" className="w-full shadow-none" disabled={saving === gap.key} onClick={() => void save(gap)}>
                 {saving === gap.key ? "Saving…" : "Save"}
               </Button>
             </div>

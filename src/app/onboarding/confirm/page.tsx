@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getAll } from "@/modules/answers";
 import { profileSchema } from "@/modules/profile";
 import { redirect } from "next/navigation";
+import { Screen } from "@/components/patterns/layout";
 import { ConfirmForm } from "./confirm-form";
 
 export default async function ConfirmPage() {
@@ -30,11 +31,7 @@ export default async function ConfirmPage() {
   const answers = await getAll(user.id);
 
   return (
-    <main className="mx-auto flex w-full max-w-[480px] flex-1 flex-col gap-6 px-4 py-10">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Confirm profile</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Edit anything that is wrong, then save.</p>
-      </div>
+    <Screen>
       <ConfirmForm
         initial={{
           fullName: parsed.fullName,
@@ -59,9 +56,6 @@ export default async function ConfirmPage() {
           })),
         }}
       />
-      <a href="/onboarding/questions" className="text-sm font-medium underline underline-offset-4">
-        Continue to questions
-      </a>
-    </main>
+    </Screen>
   );
 }

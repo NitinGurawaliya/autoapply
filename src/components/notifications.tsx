@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, BellOff, BellRing } from "lucide-react";
 import { useApplicationsSummary } from "@/components/applications-summary";
+import { Icon } from "@/components/ui/icons";
+import { cn } from "cn";
 
 const OPT_IN = "swipeapply:notify";
 const SEEN = "swipeapply:notified";
@@ -16,28 +17,45 @@ function readSeen(): string[] {
   }
 }
 
+// Opt-in and permission, shared by the always-mounted notifier and the toggle in the profile menu.
+type State = { permission: NotificationPermission | "unsupported"; enabled: boolean };
+const SERVER_STATE: State = { permission: "default", enabled: false };
+let state: State | null = null;
+const listeners = new Set<() => void>();
+
+function current(): State {
+  if (state === null) {
+    state = {
+      permission: "Notification" in window ? Notification.permission : "unsupported",
+      enabled: localStorage.getItem(OPT_IN) === "1",
+    };
+  }
+  return state;
+}
+function update(next: Partial<State>) {
+  state = { ...current(), ...next };
+  listeners.forEach((listener) => listener());
+}
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+function useNotificationState() {
+  return useSyncExternalStore(subscribe, current, () => SERVER_STATE);
+}
+
 /**
  * Tells the user when an application is waiting for them: the tab title always shows the count, and, once the user
- * turns the bell on and the browser allows it, a notification names the company. One per prompt, remembered across
- * reloads, so polling never repeats it. Reads the shell's shared poller (applications-summary.tsx).
+ * turns notifications on and the browser allows it, a notification names the company. One per prompt, remembered
+ * across reloads, so polling never repeats it. Reads the shell's shared poller (applications-summary.tsx).
+ * Mounted once by the signed-in layout; renders nothing (the switch lives in the profile menu).
  */
 export function NeedsInputNotifier() {
-  const [permission, setPermission] = useState<NotificationPermission | "unsupported">("default");
-  const [enabled, setEnabled] = useState(false);
+  const { enabled } = useNotificationState();
   const router = useRouter();
   const routerRef = useRef(router);
   const baseTitle = useRef<string | null>(null);
-  const enabledRef = useRef(false);
-
-  useEffect(() => {
-    // Reading browser-only state after mount; the first render must match the server's.
-    /* eslint-disable react-hooks/set-state-in-effect */
-    setPermission("Notification" in window ? Notification.permission : "unsupported");
-    const on = localStorage.getItem(OPT_IN) === "1";
-    setEnabled(on);
-    /* eslint-enable react-hooks/set-state-in-effect */
-    enabledRef.current = on;
-  }, []);
+  const enabledRef = useRef(enabled);
 
   useEffect(() => {
     enabledRef.current = enabled;
@@ -77,18 +95,25 @@ export function NeedsInputNotifier() {
     localStorage.setItem(SEEN, JSON.stringify(seen.slice(-200)));
   }, [waiting]);
 
+  return null;
+}
+
+/** The notifications switch, a row in the profile menu. Hidden where the browser has no notifications. */
+export function NotificationsToggle() {
+  const { permission, enabled } = useNotificationState();
+
   async function toggle() {
     if (!("Notification" in window)) return;
     if (enabled) {
       localStorage.setItem(OPT_IN, "0");
-      setEnabled(false);
+      update({ enabled: false });
       return;
     }
     const result = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
-    setPermission(result);
+    update({ permission: result });
     if (result === "granted") {
       localStorage.setItem(OPT_IN, "1");
-      setEnabled(true);
+      update({ enabled: true });
     }
   }
 
@@ -99,23 +124,31 @@ export function NeedsInputNotifier() {
     : enabled
       ? "Notifications on. Click to turn off"
       : "Turn on notifications for applications that need you";
-  const Icon = blocked ? BellOff : enabled ? BellRing : Bell;
 
   return (
     <button
       type="button"
-      onClick={() => void toggle()}
-      disabled={blocked}
-      aria-label={label}
       aria-pressed={enabled}
+      aria-label={label}
       title={label}
-      className={
-        enabled
-          ? "grid size-9 place-items-center rounded-full bg-accent text-accent-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          : "grid size-9 place-items-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-      }
+      disabled={blocked}
+      onClick={() => void toggle()}
+      className="flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-tile px-2 text-left text-[15px] font-semibold outline-none hover:bg-subtle focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60"
     >
-      <Icon className="size-[18px]" aria-hidden />
+      <Icon name="bell" size={20} />
+      <span className="flex flex-1 flex-col gap-0.5">
+        <span>Notifications</span>
+        <span className="text-[13px] font-normal text-muted-foreground">{blocked ? "Blocked in your browser settings" : "When an application needs you"}</span>
+      </span>
+      <span
+        aria-hidden="true"
+        className={cn(
+          "box-border flex h-[26px] w-[44px] flex-none items-center rounded-full border-2 px-0.5 transition-colors",
+          enabled ? "justify-end border-primary-edge bg-primary" : "justify-start border-input bg-surface",
+        )}
+      >
+        <span className={cn("block size-[18px] rounded-full", enabled ? "bg-ink" : "bg-line-strong")} />
+      </span>
     </button>
   );
 }

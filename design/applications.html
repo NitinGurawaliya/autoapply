@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Applications</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&amp;family=Geist:wght@400..700&amp;display=swap">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; padding-top: 54px; position: relative; overflow: hidden; display: flex; flex-direction: column; font-family: 'Geist', system-ui, -apple-system, sans-serif; color: {{t.text}}; background: {{t.bg}}">
+
+  <header style="flex: none; padding: 0 20px; display: flex; flex-direction: column; gap: 4px">
+    <div style="display: flex; align-items: center; height: 44px">
+      <h1 style="flex: 1; margin: 0; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 34px; letter-spacing: -0.04em">Applications</h1>
+      <button aria-label="Your profile and sign out" style="width: 44px; height: 44px; flex: none; padding: 0; border: none; border-radius: 50%; background: {{t.subtle}}; color: inherit; font-family: inherit; font-weight: 600; font-size: 14px; cursor: pointer">AK</button>
+    </div>
+    <span style="font-size: 14px; color: {{t.muted}}">19 sent today · 81 left · Your agent is working on 3</span>
+  </header>
+
+  <div role="group" aria-label="Show" style="flex: none; display: flex; gap: 8px; padding: 16px 20px 12px; overflow-x: auto">
+    <sc-for list="{{tabs}}" as="c" hint-placeholder-count="5">
+      <button aria-pressed="{{c.on}}" onClick="{{c.pick}}" style="height: 40px; flex: none; padding: 0 14px; box-sizing: border-box; border-radius: 999px; border: 2px solid {{c.edge}}; background: {{c.bg}}; color: {{c.fg}}; font-family: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer">{{c.label}} <span style="font-variant-numeric: tabular-nums; opacity: 0.75">{{c.n}}</span></button>
+    </sc-for>
+  </div>
+
+  <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 4px 20px 24px; display: flex; flex-direction: column; gap: 22px">
+
+    <sc-if value="{{show.needs}}" hint-placeholder-val="{{ true }}">
+      <section style="display: flex; flex-direction: column; gap: 10px">
+        <h2 style="margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: {{t.muted}}">Needs you · 2</h2>
+        <sc-for list="{{needs}}" as="r" hint-placeholder-count="2">
+          <div style="padding: 14px; border: 2px solid {{t.strong}}; border-radius: 20px; background: {{t.surface}}; box-shadow: 0 4px 0 {{t.shadow}}; display: flex; flex-direction: column; gap: 12px">
+            <div style="display: flex; gap: 12px; align-items: center">
+              <span aria-hidden="true" style="width: 44px; height: 44px; flex: none; border-radius: 13px; background: {{t.inv}}; color: {{t.onInv}}; display: flex; align-items: center; justify-content: center; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 15px">{{r.ini}}</span>
+              <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+                <span style="font-size: 15px; font-weight: 600">{{r.role}}</span>
+                <span style="font-size: 13px; color: {{t.muted}}">{{r.co}} · paused {{r.when}}</span>
+              </div>
+            </div>
+            <p style="margin: 0; font-size: 15px; line-height: 1.4">{{r.ask}}</p>
+            <a href="{{r.href}}" style="height: 44px; box-sizing: border-box; border-radius: 12px; border: 2px solid {{t.accentEdge}}; background: #C6F432; color: #16171A; display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 15px; font-weight: 600">{{r.cta}}</a>
+          </div>
+        </sc-for>
+      </section>
+    </sc-if>
+
+    <sc-if value="{{show.progress}}" hint-placeholder-val="{{ true }}">
+      <section style="display: flex; flex-direction: column; gap: 10px">
+        <h2 style="margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: {{t.muted}}">In progress · 3</h2>
+        <sc-for list="{{progress}}" as="r" hint-placeholder-count="3">
+          <a href="{{L.detail}}" style="padding: 14px; border: 1.5px solid {{t.line}}; border-radius: 18px; background: {{t.surface}}; color: inherit; text-decoration: none; display: flex; flex-direction: column; gap: 12px">
+            <div style="display: flex; gap: 12px; align-items: center">
+              <span aria-hidden="true" style="width: 40px; height: 40px; flex: none; border-radius: 12px; background: {{t.subtle}}; display: flex; align-items: center; justify-content: center; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 14px">{{r.ini}}</span>
+              <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+                <span style="font-size: 15px; font-weight: 600">{{r.role}}</span>
+                <span style="font-size: 13px; color: {{t.muted}}">{{r.co}}</span>
+              </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px">
+              <div aria-hidden="true" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px">
+                <sc-for list="{{r.segs}}" as="g" hint-placeholder-count="4">
+                  <span style="display: block; height: 5px; border-radius: 99px; background: {{g}}; transition: background 400ms"></span>
+                </sc-for>
+              </div>
+              <span style="font-size: 13px; font-weight: 500">{{r.label}}</span>
+            </div>
+          </a>
+        </sc-for>
+      </section>
+    </sc-if>
+
+    <sc-if value="{{show.done}}" hint-placeholder-val="{{ true }}">
+      <section style="display: flex; flex-direction: column; gap: 8px">
+        <h2 style="margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: {{t.muted}}">Sent · 18</h2>
+        <sc-for list="{{done}}" as="r" hint-placeholder-count="3">
+          <a href="{{L.detail}}" style="min-height: 64px; padding: 10px 12px 10px 14px; box-sizing: border-box; border: 1.5px solid {{t.line}}; border-radius: 18px; background: {{t.surface}}; color: inherit; text-decoration: none; display: flex; gap: 12px; align-items: center">
+            <span aria-hidden="true" style="width: 40px; height: 40px; flex: none; border-radius: 12px; background: {{t.subtle}}; display: flex; align-items: center; justify-content: center; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 14px">{{r.ini}}</span>
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+              <span style="font-size: 15px; font-weight: 600">{{r.role}}</span>
+              <span style="font-size: 13px; color: {{t.muted}}">{{r.co}} · {{r.when}}</span>
+            </div>
+            <span aria-hidden="true" style="width: 26px; height: 26px; flex: none; border-radius: 50%; background: {{t.inv}}; color: {{t.onInv}}; display: flex; align-items: center; justify-content: center">
+              <svg width="14" height="14" viewBox="0 0 24 24" style="fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+            </span>
+            <span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Sent</span>
+          </a>
+        </sc-for>
+      </section>
+    </sc-if>
+
+    <sc-if value="{{show.failed}}" hint-placeholder-val="{{ true }}">
+      <section style="display: flex; flex-direction: column; gap: 8px">
+        <h2 style="margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: {{t.muted}}">Didn't go through · 3</h2>
+        <sc-for list="{{failed}}" as="r" hint-placeholder-count="3">
+          <a href="{{L.failed}}" style="min-height: 64px; padding: 12px 12px 12px 14px; box-sizing: border-box; border: 1.5px dashed {{t.lineStrong}}; border-radius: 18px; background: transparent; color: inherit; text-decoration: none; display: flex; gap: 12px; align-items: center">
+            <span aria-hidden="true" style="width: 40px; height: 40px; flex: none; box-sizing: border-box; border-radius: 12px; border: 1.5px solid {{t.lineStrong}}; display: flex; align-items: center; justify-content: center; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 14px; color: {{t.muted}}">{{r.ini}}</span>
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+              <span style="font-size: 15px; font-weight: 600">{{r.role}} · {{r.co}}</span>
+              <span style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: {{t.muted}}">
+                <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" style="flex: none; fill: none; stroke: currentColor; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4M12 16h.01"></path></svg>{{r.reason}}</span>
+            </div>
+            <span style="flex: none; font-size: 13px; font-weight: 600; color: {{r.ctaColor}}; text-decoration: {{r.ctaDeco}}; text-underline-offset: 3px">{{r.cta}}</span>
+          </a>
+        </sc-for>
+      </section>
+    </sc-if>
+  </div>
+
+  <nav aria-label="Main" style="height: 82px; flex: none; box-sizing: border-box; padding: 6px 0 24px; background: {{t.surface}}; border-top: 1px solid {{t.line}}; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))">
+    <a href="{{L.feed}}" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; text-decoration: none; color: {{t.muted}}; font-size: 12px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><rect x="5" y="3" width="14" height="18" rx="3"></rect></svg>Discover</a>
+    <a href="{{L.apps}}" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; text-decoration: none; font-size: 12px; font-weight: 600; color: {{t.text}}">
+      <span style="position: relative; display: flex">
+        <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"></path></svg>
+        <span style="position: absolute; top: -5px; right: -11px; min-width: 20px; height: 20px; box-sizing: border-box; padding: 0 5px; border-radius: 999px; border: 1.5px solid {{t.accentEdge}}; background: #C6F432; color: #16171A; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center">2</span>
+      </span>Applications<span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">, 2 need you</span></a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"tab":{"editor":"enum","options":["all","needs","progress","done","failed"],"default":"all"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { tab: props.tab || "all", tick: 0 };
+    this.timer = null;
+  }
+  componentDidMount() { this.timer = setInterval(() => this.setState({ tick: this.state.tick + 1 }), 1800); }
+  componentWillUnmount() { clearInterval(this.timer); }
+  th() {
+    const d = !!this.props.dark;
+    return d
+      ? { d, bg: "#0E0F11", surface: "#1A1B1F", subtle: "#24252A", text: "#F2F2F3", muted: "#A1A4AB", line: "#2A2B30", lineStrong: "#4A4B52", strong: "#4A4B52", chipEdge: "#3A3B41", shadow: "#000000", inv: "#F2F2F3", onInv: "#16171A", bar: "#C6F432", track: "#2C2D33", accentEdge: "#C6F432" }
+      : { d, bg: "#F6F6F7", surface: "#FFFFFF", subtle: "#EEEEF1", text: "#16171A", muted: "#6B6E75", line: "#E6E6EA", lineStrong: "#B9BAC0", strong: "#16171A", chipEdge: "#CFCFD4", shadow: "#16171A", inv: "#16171A", onInv: "#FFFFFF", bar: "#16171A", track: "#E4E4E7", accentEdge: "#16171A" };
+  }
+  renderVals() {
+    const t = this.th();
+    const s = this.state;
+    const L = t.d
+      ? { feed: "FeedDark.dc.html", apps: "AppsDark.dc.html", detail: "DetailDark.dc.html", failed: "DetailFailedDark.dc.html", question: "NeedsQuestionDark.dc.html", code: "NeedsCodeDark.dc.html" }
+      : { feed: "Feed.dc.html", apps: "Apps.dc.html", detail: "Detail.dc.html", failed: "DetailFailed.dc.html", question: "NeedsQuestion.dc.html", code: "NeedsCode.dc.html" };
+    const tabDefs = [["all", "All", 26], ["needs", "Needs you", 2], ["progress", "In progress", 3], ["done", "Sent", 18], ["failed", "Didn't go through", 3]];
+    const tabs = tabDefs.map((d) => {
+      const on = s.tab === d[0];
+      return { label: d[1], n: d[2], on, bg: on ? t.inv : t.surface, fg: on ? t.onInv : t.text, edge: on ? t.inv : t.chipEdge, pick: () => this.setState({ tab: d[0] }) };
+    });
+    const all = s.tab === "all";
+    const stageLabels = ["Waiting in line · 2 ahead", "Reading the form", "Filling it in · 6 of 9 answers"];
+    const prog = [
+      { ini: "LP", co: "Lumen Pay", role: "Backend Engineer, Payments", base: 1 },
+      { ini: "OR", co: "Orbitly", role: "Frontend Engineer", base: 2 },
+      { ini: "QB", co: "Quillbase", role: "Platform Engineer", base: 0 }
+    ].map((r) => {
+      const st = (r.base + s.tick) % 3;
+      return Object.assign({}, r, { label: stageLabels[st], segs: [0, 1, 2, 3].map((k) => (k <= st ? t.bar : t.track)) });
+    });
+    return {
+      t, L, tabs,
+      show: { needs: all || s.tab === "needs", progress: all || s.tab === "progress", done: all || s.tab === "done", failed: all || s.tab === "failed" },
+      needs: [
+        { ini: "KL", co: "Kestrel Labs", role: "SDE II, Platform", when: "4m ago", ask: "Can you work from our Pune office 3 days a week?", cta: "Answer", href: L.question },
+        { ini: "NH", co: "Northwind Health", role: "Full Stack Engineer", when: "just now", ask: "Their job board emailed you a 6-digit code.", cta: "Enter code", href: L.code }
+      ],
+      progress: prog,
+      done: [
+        { ini: "TW", co: "Tidewave", role: "Backend Engineer", when: "today, 10:42" },
+        { ini: "MC", co: "Mintcart", role: "SDE I, Payments", when: "today, 9:15" },
+        { ini: "BL", co: "Brightline", role: "Software Engineer, Backend", when: "yesterday" }
+      ],
+      failed: [
+        { ini: "AR", co: "Arcwise", role: "Backend Developer", reason: "Their form rejected your phone format", cta: "Retry", ctaColor: t.text, ctaDeco: "underline" },
+        { ini: "PF", co: "Pixelfold", role: "Go Engineer", reason: "The job closed before we could apply", cta: "Nothing to do", ctaColor: t.muted, ctaDeco: "none" },
+        { ini: "CV", co: "Corvane", role: "Platform Engineer", reason: "Skipped: you applied here on 2 Oct", cta: "Nothing to do", ctaColor: t.muted, ctaDeco: "none" }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -4,11 +4,15 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Design tokens. Source: design/*.html (the owner's design, 10 Oct). See docs/DESIGN.md.
+   Change a value here and nowhere else; components use the names, never raw colours. */
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-bricolage);
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -39,18 +43,44 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --color-success: var(--success);
-  --color-success-soft: var(--success-soft);
-  --color-warning: var(--warning);
-  --color-warning-soft: var(--warning-soft);
-  --color-info: var(--info);
-  --color-info-soft: var(--info-soft);
-  --color-danger: var(--danger);
-  --color-danger-soft: var(--danger-soft);
-  --color-ai: var(--ai);
-  --color-ai-soft: var(--ai-soft);
+
+  /* Design-system names (aliases of the shadcn names where they mean the same thing). */
+  --color-surface: var(--card);
+  --color-subtle: var(--muted);
+  --color-line: var(--border);
+  --color-line-strong: var(--line-strong);
+  --color-edge: var(--edge);
+  --color-primary-edge: var(--primary-edge);
+  --color-inverse: var(--inverse);
+  --color-inverse-foreground: var(--inverse-foreground);
+  --color-bar: var(--bar);
+  --color-track: var(--track);
+  --color-scrim: var(--scrim);
+  --color-ink: var(--ink);
+  --color-sketch-line: var(--sketch-line);
+  --color-sketch-fill: var(--sketch-fill);
+  --color-dash: var(--dash);
+  --color-draft-dash: var(--draft-dash);
+  --color-badge-edge: var(--badge-edge);
+  --color-toast-seg-on: var(--toast-seg-on);
+  --color-toast-seg-off: var(--toast-seg-off);
+  --color-splash: var(--splash);
+  --color-splash-card: var(--splash-card);
+  --color-splash-card-ink: var(--splash-card-ink);
+  --color-frame: var(--frame);
+  --color-frame-bar: var(--frame-bar);
+  --color-frame-line: var(--frame-line);
+  --color-frame-dot: var(--frame-dot);
+  --color-frame-text: var(--frame-text);
+
   --shadow-card: var(--shadow-card);
   --shadow-pop: var(--shadow-pop);
+  --shadow-hard: var(--shadow-hard);
+  --shadow-hard-lg: var(--shadow-hard-lg);
+  --shadow-button: var(--shadow-button);
+  --shadow-float: var(--shadow-float);
+  --shadow-soft: var(--shadow-soft);
+
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -58,104 +88,224 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  /* Named radii from the design: swipe card and sheets, section cards, buttons, inputs, company tiles. */
+  --radius-card: 1.75rem;
+  --radius-panel: 1.25rem;
+  --radius-control: 1rem;
+  --radius-field: 0.875rem;
+  --radius-tile: 0.75rem;
+
+  /* Motion curves (mirrored in src/lib/motion.ts for Framer Motion). */
+  --ease-pop: cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  --ease-settle: cubic-bezier(0.2, 0.9, 0.3, 1);
+  --ease-spring: cubic-bezier(0.2, 0.9, 0.3, 1.15);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 :root {
-  --background: #f6f7fb;
-  --foreground: #12152e;
+  --background: #f6f6f7;
+  --foreground: #16171a;
   --card: #ffffff;
-  --card-foreground: #12152e;
+  --card-foreground: #16171a;
   --popover: #ffffff;
-  --popover-foreground: #12152e;
-  --primary: #4f46e5;
-  --primary-foreground: #ffffff;
-  --secondary: #eceefa;
-  --secondary-foreground: #2a2f5c;
-  --muted: #eceefa;
-  --muted-foreground: #5a607c;
-  --accent: #e8eaff;
-  --accent-foreground: #3730a3;
-  --destructive: #c81e1e;
-  --border: #dfe2ef;
-  --input: #d4d8e8;
-  --ring: #6366f1;
-  --chart-1: #4f46e5;
-  --chart-2: #7c74f0;
-  --chart-3: #a9a4f6;
-  --chart-4: #1e40af;
+  --popover-foreground: #16171a;
+  /* The one accent. Lime is a fill only: always lime behind ink text, never lime text. */
+  --primary: #c6f432;
+  --primary-foreground: #16171a;
+  --primary-edge: #16171a;
+  --secondary: #eeeef1;
+  --secondary-foreground: #16171a;
+  --muted: #eeeef1;
+  --muted-foreground: #6b6e75;
+  --accent: #eeeef1;
+  --accent-foreground: #16171a;
+  --destructive: #b42318;
+  --border: #e6e6ea;
+  --line-strong: #d4d4da;
+  --input: #cfcfd4;
+  --edge: #16171a;
+  --inverse: #16171a;
+  --inverse-foreground: #ffffff;
+  --bar: #16171a;
+  --track: #e4e4e7;
+  --scrim: rgb(22 23 26 / 48%);
+  /* Ink that never flips: borders and text on lime (stamps, match badge) in both themes. */
+  --ink: #16171a;
+  /* Greys the design uses for one job each; kept separate so every screen matches exactly. */
+  --sketch-line: #dcdce1; /* onboarding: resume sketch lines, "Looking…" circles */
+  --sketch-fill: #ececef; /* sign-in: lines on the illustrated card */
+  --dash: #b9bac0; /* applications: dashed "Didn't go through" rows */
+  --draft-dash: #9a9ba2; /* detail: dashed AI-draft box */
+  --badge-edge: #bdbec4; /* detail: source badges and count chips */
+  --toast-seg-on: #c6f432; /* after-swipe toast progress (the toast is inverse) */
+  --toast-seg-off: rgb(255 255 255 / 20%);
+  --splash: #c6f432; /* opening animation background */
+  --splash-card: #16171a; /* the front card of the opening mark and its check */
+  --splash-card-ink: #c6f432;
+  /* The screenshot's browser frame (detail page): always light, like the form it shows. */
+  --frame: #ffffff;
+  --frame-bar: #ededf0;
+  --frame-line: #dcdce0;
+  --frame-dot: #c4c5cb;
+  --frame-text: #5f6269;
+  --ring: #16171a;
+  --chart-1: #16171a;
+  --chart-2: #6b6e75;
+  --chart-3: #c6f432;
+  --chart-4: #d4d4da;
   --chart-5: #166534;
-  --radius: 0.75rem;
+  --radius: 1rem;
   --sidebar: #ffffff;
-  --sidebar-foreground: #12152e;
-  --sidebar-primary: #4f46e5;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e8eaff;
-  --sidebar-accent-foreground: #3730a3;
-  --sidebar-border: #dfe2ef;
-  --sidebar-ring: #6366f1;
+  --sidebar-foreground: #16171a;
+  --sidebar-primary: #c6f432;
+  --sidebar-primary-foreground: #16171a;
+  --sidebar-accent: #eeeef1;
+  --sidebar-accent-foreground: #16171a;
+  --sidebar-border: #e6e6ea;
+  --sidebar-ring: #16171a;
 
-  /* Status and source colours: soft background plus a strong text colour, always used as a pair. */
-  --success: #166534;
-  --success-soft: #dcfce7;
-  --warning: #92400e;
-  --warning-soft: #fef3c7;
-  --info: #1e40af;
-  --info-soft: #dbeafe;
-  --danger: #991b1b;
-  --danger-soft: #fee2e2;
-  --ai: #6b21a8;
-  --ai-soft: #f3e8ff;
-
-  --shadow-card: 0 1px 2px rgb(18 21 46 / 6%), 0 6px 20px rgb(18 21 46 / 6%);
-  --shadow-pop: 0 4px 12px rgb(18 21 46 / 10%), 0 16px 40px rgb(18 21 46 / 14%);
+  /* The design's depth: a solid ink shadow straight down, no blur. */
+  --shadow-color: #16171a;
+  --shadow-hard: 0 4px 0 #16171a;
+  --shadow-hard-lg: 0 6px 0 #16171a;
+  --shadow-button: 0 4px 0 #16171a;
+  --shadow-float: 0 12px 30px rgb(0 0 0 / 28%);
+  --shadow-soft: 0 6px 16px rgb(0 0 0 / 8%);
+  --shadow-card: 0 1px 2px rgb(22 23 26 / 6%), 0 6px 20px rgb(22 23 26 / 6%);
+  --shadow-pop: 0 4px 12px rgb(22 23 26 / 10%), 0 16px 40px rgb(22 23 26 / 14%);
 }
 
 .dark {
-  --background: #0d0f1f;
-  --foreground: #eceefc;
-  --card: #151833;
-  --card-foreground: #eceefc;
-  --popover: #151833;
-  --popover-foreground: #eceefc;
-  --primary: #818cf8;
-  --primary-foreground: #0d0f1f;
-  --secondary: #1f2347;
-  --secondary-foreground: #dfe2ff;
-  --muted: #1f2347;
-  --muted-foreground: #a3a9c8;
-  --accent: #262b57;
-  --accent-foreground: #c7ccff;
-  --destructive: #f87171;
-  --border: #2a2e57;
-  --input: #333865;
-  --ring: #818cf8;
-  --chart-1: #818cf8;
-  --chart-2: #a5b0fb;
-  --chart-3: #c7ccff;
-  --chart-4: #93c5fd;
+  --background: #0e0f11;
+  --foreground: #f2f2f3;
+  --card: #1a1b1f;
+  --card-foreground: #f2f2f3;
+  --popover: #1a1b1f;
+  --popover-foreground: #f2f2f3;
+  --primary: #c6f432;
+  --primary-foreground: #16171a;
+  --primary-edge: #c6f432;
+  --secondary: #24252a;
+  --secondary-foreground: #f2f2f3;
+  --muted: #24252a;
+  --muted-foreground: #a1a4ab;
+  --accent: #24252a;
+  --accent-foreground: #f2f2f3;
+  --destructive: #fca5a5;
+  --border: #2a2b30;
+  --line-strong: #3a3b41;
+  --input: #3a3b41;
+  --edge: #4a4b52;
+  --inverse: #f2f2f3;
+  --inverse-foreground: #16171a;
+  --bar: #c6f432;
+  --track: #2c2d33;
+  --scrim: rgb(0 0 0 / 62%);
+  --ink: #16171a;
+  --sketch-line: #3a3b41;
+  --sketch-fill: #2a2b30;
+  --dash: #4a4b52;
+  --draft-dash: #5a5b62;
+  --badge-edge: #4a4b52;
+  --toast-seg-on: #16171a;
+  --toast-seg-off: rgb(22 23 26 / 18%);
+  --splash: #0e0f11;
+  --splash-card: #c6f432;
+  --splash-card-ink: #16171a;
+  /* The screenshot's browser frame (detail page): always light, like the form it shows. */
+  --frame: #ffffff;
+  --frame-bar: #ededf0;
+  --frame-line: #dcdce0;
+  --frame-dot: #c4c5cb;
+  --frame-text: #5f6269;
+  --ring: #c6f432;
+  --chart-1: #f2f2f3;
+  --chart-2: #a1a4ab;
+  --chart-3: #c6f432;
+  --chart-4: #3a3b41;
   --chart-5: #86efac;
-  --sidebar: #151833;
-  --sidebar-foreground: #eceefc;
-  --sidebar-primary: #818cf8;
-  --sidebar-primary-foreground: #0d0f1f;
-  --sidebar-accent: #262b57;
-  --sidebar-accent-foreground: #c7ccff;
-  --sidebar-border: #2a2e57;
-  --sidebar-ring: #818cf8;
+  --sidebar: #1a1b1f;
+  --sidebar-foreground: #f2f2f3;
+  --sidebar-primary: #c6f432;
+  --sidebar-primary-foreground: #16171a;
+  --sidebar-accent: #24252a;
+  --sidebar-accent-foreground: #f2f2f3;
+  --sidebar-border: #2a2b30;
+  --sidebar-ring: #c6f432;
 
-  --success: #86efac;
-  --success-soft: #14351f;
-  --warning: #fcd34d;
-  --warning-soft: #3b2a0b;
-  --info: #93c5fd;
-  --info-soft: #14284d;
-  --danger: #fca5a5;
-  --danger-soft: #3d1414;
-  --ai: #d8b4fe;
-  --ai-soft: #2e1a47;
-
+  --shadow-color: #000000;
+  --shadow-hard: 0 4px 0 #000000;
+  --shadow-hard-lg: 0 6px 0 #000000;
+  --shadow-button: none;
+  --shadow-float: 0 12px 30px rgb(0 0 0 / 28%);
+  --shadow-soft: 0 6px 16px rgb(0 0 0 / 8%);
   --shadow-card: 0 1px 2px rgb(0 0 0 / 30%), 0 6px 20px rgb(0 0 0 / 25%);
   --shadow-pop: 0 4px 12px rgb(0 0 0 / 40%), 0 16px 40px rgb(0 0 0 / 45%);
+}
+
+/* Type scale. Display styles use Bricolage Grotesque 800; the rest is Geist.
+   Named type-* (not text-*) so class merging never mistakes them for colours. */
+@utility type-display-2xl {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 2.75rem;
+  line-height: 1;
+  letter-spacing: -0.045em;
+}
+@utility type-display-xl {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 2.375rem;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+}
+@utility type-display-lg {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 2.125rem;
+  line-height: 1.04;
+  letter-spacing: -0.04em;
+}
+@utility type-display-md {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 2rem;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+@utility type-display-sm {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.625rem;
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+}
+@utility type-title {
+  font-size: 1.4375rem;
+  line-height: 1.25;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+@utility type-lead {
+  font-size: 1.0625rem;
+  line-height: 1.45;
+}
+@utility type-callout {
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+@utility type-caption {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+@utility type-eyebrow {
+  font-size: 0.75rem;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
 }
 
 @layer base {

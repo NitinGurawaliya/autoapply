@@ -1,24 +1,29 @@
+import { cookies } from "next/headers";
 import { signIn } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { SignInScreen } from "./sign-in-screen";
+import { SPLASH_COOKIE } from "./splash-cookie";
 
-export default function SignInPage() {
+export default async function SignInPage() {
+  const seen = (await cookies()).get(SPLASH_COOKIE)?.value === "1";
   return (
-    <main className="mx-auto flex w-full max-w-[480px] flex-1 flex-col justify-center px-4 py-10">
-      <h1 className="text-2xl font-semibold tracking-tight">SwipeApply</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Sign in with Google. A governed agent applies only after you swipe right.
-      </p>
-      <form
-        className="mt-8"
-        action={async () => {
-          "use server";
-          await signIn("google", { redirectTo: "/" });
-        }}
-      >
-        <Button type="submit" size="lg" className="w-full">
-          Continue with Google
-        </Button>
-      </form>
-    </main>
+    <SignInScreen
+      showSplash={!seen}
+      signIn={
+        <form
+          action={async () => {
+            "use server";
+            await signIn("google", { redirectTo: "/" });
+          }}
+        >
+          <Button type="submit" variant="strong" size="xl" className="w-full gap-3 text-base shadow-hard">
+            <span aria-hidden="true" className="flex size-6 items-center justify-center rounded-full border-[1.5px] border-muted-foreground text-xs font-bold">
+              G
+            </span>
+            Continue with Google
+          </Button>
+        </form>
+      }
+    />
   );
 }

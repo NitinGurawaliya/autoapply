@@ -1,45 +1,29 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Logo } from "@/components/logo";
-import { NavTabs } from "@/components/nav-tabs";
 import { NeedsInputDialog } from "@/components/needs-input-dialog";
-import { NeedsInputNotifier } from "@/components/needs-input-notifier";
+import { NeedsInputNotifier } from "@/components/notifications";
 import { SignOutForm } from "@/components/sign-out-form";
-import { UserMenu } from "@/components/user-menu";
 import { getCurrentUser } from "@/lib/auth";
 import { ApplicationsSummaryProvider } from "@/components/applications-summary";
+import { ShellProvider } from "@/components/patterns/shell-context";
+import { TabBar } from "@/components/patterns/tab-bar";
 
-// One shell for every signed-in page: header, navigation, account menu, and the input popup.
+// One shell for every signed-in page (design/feed.html, applications.html): each page draws its own top bar
+// (Discover, a title, or a back arrow) with the profile menu; the two-tab bar, the notifier and the input popup
+// are mounted here once.
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
-  // The pending badge comes from the shared poller (first poll on mount); no count query on every navigation.
-  const pending = 0;
 
   return (
     <ApplicationsSummaryProvider>
-    <div className="flex min-h-full flex-1 flex-col">
-      <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
-        <div className="mx-auto flex h-14 w-full max-w-[480px] items-center justify-between gap-3 px-4">
-          <Link href="/feed" aria-label="SwipeApply home">
-            <Logo />
-          </Link>
-          <NavTabs variant="top" initialPending={pending} />
-          <div className="flex items-center gap-1">
-            <NeedsInputNotifier />
-            <UserMenu name={user.name} email={user.email}>
-              <Link href="/account" className="mb-2 block rounded-lg px-1 py-1.5 text-sm hover:bg-accent/50">
-                Account and data
-              </Link>
-              <SignOutForm />
-            </UserMenu>
-          </div>
-        </div>
-      </header>
-      <main className="mx-auto flex w-full max-w-[480px] flex-1 flex-col gap-6 px-4 pb-28 pt-6 md:pb-12">{children}</main>
-      <NavTabs variant="bottom" initialPending={pending} />
-      <NeedsInputDialog />
-    </div>
+      <ShellProvider value={{ name: user.name, email: user.email, signOut: <SignOutForm /> }}>
+        <main className="mx-auto flex min-h-dvh w-full max-w-[480px] flex-1 flex-col bg-background pt-[max(12px,env(safe-area-inset-top))] pb-[calc(82px+max(0px,env(safe-area-inset-bottom)-24px))]">
+          {children}
+        </main>
+        <TabBar />
+        <NeedsInputNotifier />
+        <NeedsInputDialog />
+      </ShellProvider>
     </ApplicationsSummaryProvider>
   );
 }

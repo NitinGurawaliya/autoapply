@@ -1,7 +1,5 @@
+import { PageLoading } from "@/components/patterns/states";
+
 export default function ApplicationLoading() {
-  return (
-    <div className="text-sm text-muted-foreground">
-      Loading application…
-    </div>
-  );
+  return <PageLoading label="Loading application" rows={4} />;
 }

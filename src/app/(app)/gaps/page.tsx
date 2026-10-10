@@ -4,6 +4,9 @@ import { AutoRefresh } from "@/components/auto-refresh";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { enqueuePrescan } from "@/lib/queue";
+import { Eyebrow } from "@/components/ui/eyebrow";
+import { ProgressBar } from "@/components/ui/segmented-progress";
+import { TitleTopBar } from "@/components/patterns/top-bar";
 import { GapsForm } from "./gaps-form";
 
 // The few facts still missing for the user's top feed jobs (modules/apply/prescan.ts), ranked by how many jobs each one
@@ -22,35 +25,41 @@ export default async function GapsPage() {
 
   return (
     <>
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Fill your gaps</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          The questions your top feed jobs ask that we cannot answer from your resume or saved answers. Answer them once and those applications run without asking.
-        </p>
-      </div>
-
-      {!scan ? (
-        <div className="rounded-2xl border border-border bg-card p-5 text-sm text-muted-foreground shadow-card" aria-busy="true">
-          Reading the application questions of your top jobs. This takes a minute.
-          <AutoRefresh active everyMs={5000} />
-        </div>
-      ) : (
-        <>
-          <div className="rounded-2xl border border-border bg-card p-5 shadow-card">
-            <p className="text-3xl font-semibold tracking-tight">{percent === null ? "–" : `${percent}%`}</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {scan.scanned === 0
-                ? "None of your top jobs publish their questions yet; they will ask while applying."
-                : `${scan.covered} of ${scan.scanned} jobs in your feed can be answered in full right now.`}
-            </p>
+      <TitleTopBar
+        title="Fill your gaps"
+        sub="The questions your top feed jobs ask that we cannot answer from your resume or saved answers. Answer them once and those applications run without asking."
+      />
+      <div className="flex flex-col gap-5 px-5 pt-4 pb-6">
+        {!scan ? (
+          <div className="flex flex-col gap-3 rounded-panel bg-subtle p-4" aria-busy="true">
+            <p className="m-0 text-[15px] font-semibold">Reading the application questions of your top jobs</p>
+            <p className="m-0 text-sm text-muted-foreground">This takes a minute.</p>
+            <div className="h-1.5 animate-pulse rounded-full bg-track" />
+            <AutoRefresh active everyMs={5000} />
           </div>
-          {gaps.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nothing missing. Every scanned job can be answered without asking you.</p>
-          ) : (
-            <GapsForm gaps={gaps.map((gap) => ({ key: gap.key, label: gap.label, type: gap.type, options: optionsSchema.parse(gap.options), jobs: gap.jobs }))} />
-          )}
-        </>
-      )}
+        ) : (
+          <>
+            <div className="flex flex-col gap-2.5 rounded-panel bg-subtle p-4">
+              <Eyebrow>Ready to apply without asking</Eyebrow>
+              <p className="m-0 font-display text-[44px] leading-none font-extrabold tracking-[-0.045em]">{percent === null ? "–" : `${percent}%`}</p>
+              {percent !== null ? <ProgressBar value={percent} /> : null}
+              <p className="m-0 text-sm leading-normal">
+                {scan.scanned === 0
+                  ? "None of your top jobs publish their questions yet; they will ask while applying."
+                  : `${scan.covered} of ${scan.scanned} jobs in your feed can be answered in full right now.`}
+              </p>
+            </div>
+            {gaps.length === 0 ? (
+              <p className="m-0 text-sm text-muted-foreground">Nothing missing. Every scanned job can be answered without asking you.</p>
+            ) : (
+              <section className="flex flex-col gap-2.5" aria-label="Missing answers">
+                <Eyebrow as="h2">Missing answers · {gaps.length}</Eyebrow>
+                <GapsForm gaps={gaps.map((gap) => ({ key: gap.key, label: gap.label, type: gap.type, options: optionsSchema.parse(gap.options), jobs: gap.jobs }))} />
+              </section>
+            )}
+          </>
+        )}
+      </div>
     </>
   );
 }

@@ -1,49 +1,66 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Check, CircleDot, ExternalLink, Minus, X } from "lucide-react";
 import { z } from "zod";
 import { ApplicationActions } from "@/components/application-actions";
 import { AutoRefresh } from "@/components/auto-refresh";
-import { CompanyAvatar } from "@/components/company-avatar";
-import { SourceBadge, StatusBadge } from "@/components/status-badge";
+import { buttonVariants } from "@/components/ui/button";
+import { Eyebrow } from "@/components/ui/eyebrow";
+import { Icon } from "@/components/ui/icons";
+import { CompanyMark, StatusPill } from "@/components/ui/marks";
+import { EmptyState, TrustPanel } from "@/components/patterns/content";
+import { FailureCard, FieldList, ScreenshotFrame, Timeline, type StoryStep } from "@/components/patterns/detail";
+import { DeckEmptyArt } from "@/components/patterns/drawings";
+import { BackTopBar } from "@/components/patterns/top-bar";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { EVENT_LABEL } from "@/lib/event-labels";
-import { explainOutcome, type Tone } from "@/lib/explain";
+import { explainOutcome } from "@/lib/explain";
 import { groupFields } from "@/lib/field-groups";
-import { buildSteps, type StepState } from "@/lib/steps";
+import { statusMeta } from "@/lib/status-meta";
+import { buildSteps } from "@/lib/steps";
 
 const fieldsSchema = z.array(
   z.object({ key: z.string(), label: z.string(), value: z.string(), source: z.string(), selector: z.string().optional(), basis: z.string().optional() }),
 );
 
 const RUNNING = ["queued", "inspecting", "filling", "needs_input"];
+const STOPPED = ["failed", "blocked", "cancelled"];
+const ZONE = "Asia/Kolkata";
 
-const CALLOUT: Record<Tone, string> = {
-  success: "border-success/30 bg-success-soft text-success",
-  info: "border-info/30 bg-info-soft text-info",
-  warning: "border-warning/30 bg-warning-soft text-warning",
-  danger: "border-danger/30 bg-danger-soft text-danger",
-  neutral: "border-border bg-muted text-muted-foreground",
-};
-
-const STEP_DOT: Record<StepState, string> = {
-  done: "bg-success text-success-soft",
-  current: "bg-primary text-primary-foreground ring-4 ring-accent animate-pulse",
-  stopped: "bg-danger text-danger-soft",
-  todo: "border border-border bg-card text-muted-foreground",
-};
-
-function StepIcon({ state }: { state: StepState }) {
-  const className = "size-3.5";
-  if (state === "done") return <Check className={className} aria-hidden />;
-  if (state === "stopped") return <X className={className} aria-hidden />;
-  if (state === "current") return <CircleDot className={className} aria-hidden />;
-  return <Minus className={className} aria-hidden />;
+function clock(date: Date, seconds = false) {
+  return date.toLocaleTimeString("en-IN", { timeZone: ZONE, hour: "2-digit", minute: "2-digit", ...(seconds ? { second: "2-digit" } : {}), hour12: false });
 }
 
+/** "today, 10:42", "yesterday, 9:15", "8 Oct, 18:02" in India time. */
 function when(date: Date) {
-  return date.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
+  const day = (value: Date) => value.toLocaleDateString("en-CA", { timeZone: ZONE });
+  const now = new Date();
+  const time = clock(date);
+  if (day(date) === day(now)) return `today, ${time}`;
+  if (day(date) === day(new Date(now.getTime() - 86_400_000))) return `yesterday, ${time}`;
+  return `${date.toLocaleDateString("en-IN", { timeZone: ZONE, day: "numeric", month: "short" })}, ${time}`;
+}
+
+// Which audit event marks each step of buildSteps(), for the time beside it in the story.
+const STEP_EVENT: Record<string, (event: { type: string; message: string }) => boolean> = {
+  checks: (event) => event.type === "rule_check",
+  read: (event) => event.type === "inspect",
+  prepared: (event) => event.type === "resolve" && !/security code/i.test(event.message),
+  asked: (event) => event.type === "ask_user" && !/security code/i.test(event.message),
+  filled: (event) => event.type === "fill",
+  code: (event) => event.type === "resolve" && /security code received/i.test(event.message),
+  submitted: (event) => event.type === "submit",
+};
+
+const SOURCE_WORDS: Record<string, string> = { resume: "your resume", user: "you", matched: "you", derived: "your profile", default: "a standard default" };
+
+function trustText(sources: string[]) {
+  const words = [...new Set(Object.keys(SOURCE_WORDS).filter((source) => sources.includes(source)).map((source) => SOURCE_WORDS[source]))];
+  const list = words.length <= 1 ? words.join("") : `${words.slice(0, -1).join(", ")} or ${words[words.length - 1]}`;
+  const base = list ? `Every answer came from ${list}.` : "";
+  const drafts = sources.filter((source) => source === "ai_draft").length;
+  const draftText = drafts === 0 ? "" : drafts === 1 ? " The one open-text answer is an AI draft, marked below." : " The open-text answers are AI drafts, marked below.";
+  return `${base}${draftText}`.trim();
 }
 
 export default async function ApplicationPage({ params }: { params: Promise<{ id: string }> }) {
@@ -63,13 +80,19 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
 
   if (!application) {
     return (
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-card px-6 py-10 text-center shadow-card">
-        <h1 className="text-base font-semibold">Application not found</h1>
-        <p className="text-sm text-muted-foreground">It may have been removed, or it belongs to another account.</p>
-        <Link href="/applications" className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
-          Back to applications
-        </Link>
-      </div>
+      <>
+        <BackTopBar href="/applications" label="Application" backLabel="Back to applications" />
+        <EmptyState
+          art={<DeckEmptyArt />}
+          title="Application not found"
+          text="It may have been removed, or it belongs to another account."
+          actions={
+            <Link href="/applications" className={buttonVariants({ variant: "primary", size: "xl", className: "w-full" })}>
+              Back to applications
+            </Link>
+          }
+        />
+      </>
     );
   }
 
@@ -78,153 +101,148 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
   const groups = groupFields(fields);
   const asksForCode = Array.isArray(application.pendingQuestions) && application.pendingQuestions.some((q) => (q as { key?: string })?.key === "security_code");
   const outcome = explainOutcome(application.status, application.error, application.status === "needs_input" ? (asksForCode ? "code" : "answers") : null);
-  const steps = buildSteps(application.events, application.status);
   const company = job?.company.name ?? "Unknown company";
-  const showCallout = application.status !== "submitted";
+  const role = job?.title ?? "Application";
+  const sent = application.status === "submitted";
+  const stopped = STOPPED.includes(application.status);
+
+  // The story: the swipe, then each step that has happened (or is happening) with the time of its event.
+  // Like the design, steps still to come are not listed.
+  const story: StoryStep[] = [
+    { key: "swiped", time: clock(application.createdAt), title: "You swiped right", state: "done" as const },
+    ...buildSteps(application.events, application.status).map((step): StoryStep => {
+      const event = application.events.find((item) => STEP_EVENT[step.key]?.(item));
+      const sub = step.state === "current" ? "in progress" : step.state === "stopped" ? "stopped here" : (step.note ?? null);
+      const state: StoryStep["state"] = step.key === "submitted" && step.state === "done" ? "end" : step.state;
+      return { key: step.key, time: event && step.state !== "todo" ? clock(event.createdAt) : "", title: step.label, sub, state };
+    }),
+  ].filter((step) => step.state !== "todo");
+
+  const counts = ["resume", "user", "matched", "derived", "default", "ai_draft"]
+    .map((source) => ({ source, count: fields.filter((field) => field.source === source).length }))
+    .filter((item) => item.count > 0);
+  const shot = application.events.find((event) => event.type === "screenshot");
+  const address = (() => {
+    try {
+      return job?.applyUrl ? new URL(job.applyUrl).host + new URL(job.applyUrl).pathname : company;
+    } catch {
+      return company;
+    }
+  })();
 
   return (
     <>
+      <BackTopBar href="/applications" label="Application" backLabel="Back to applications" />
       <AutoRefresh active={RUNNING.includes(application.status)} />
-      <div className="flex flex-col gap-3">
-        <Link href="/applications" className="text-xs text-muted-foreground underline underline-offset-4">
-          All applications
-        </Link>
-        <div className="flex items-start gap-3">
-          <CompanyAvatar name={company} />
-          <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-semibold leading-snug">{job?.title ?? "Application"}</h1>
-            <p className="truncate text-sm text-muted-foreground">{company}</p>
-          </div>
-          <StatusBadge status={application.status} />
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {job?.location ? `${job.location} · ` : ""}
-          {application.submittedAt ? `Submitted ${when(application.submittedAt)}` : `Started ${when(application.createdAt)}`}
-        </p>
+      <div className="flex flex-col px-5 pb-10">
+        <header className="flex flex-col gap-1.5 pt-3.5">
+          <CompanyMark name={company} size={56} />
+          <h1 className="m-0 mt-2.5 type-display-md">{role}</h1>
+          <span className="text-[15px] text-muted-foreground">
+            {company}
+            {job?.location ? ` · ${job.location}` : ""}
+          </span>
+          <span className="mt-2 flex">
+            <StatusPill kind={stopped ? "stop" : "ok"}>
+              {sent && application.submittedAt ? `Sent ${when(application.submittedAt)}` : statusMeta(application.status).label}
+            </StatusPill>
+          </span>
+        </header>
+
+        {!sent ? (
+          <FailureCard
+            eyebrow={stopped ? "What happened" : application.status === "needs_input" ? "What it needs" : "Where it is"}
+            headline={outcome.headline}
+            text={outcome.next}
+            actions={
+              [...RUNNING, "failed", "cancelled"].includes(application.status) ? (
+                <ApplicationActions id={application.id} status={application.status} company={company} look="panel" />
+              ) : undefined
+            }
+            note={application.status === "blocked" ? "Nothing was sent. The rule stopped it before the form was opened." : undefined}
+          />
+        ) : null}
+
+        {fields.length > 0 ? <TrustPanel className="mt-5" text={trustText(fields.map((field) => field.source))} counts={counts} /> : null}
+
+        <section aria-label="Progress" className="mt-8">
+          <Eyebrow as="h2" className="mb-3.5">
+            The story
+          </Eyebrow>
+          <Timeline steps={story} />
+        </section>
+
+        <section aria-label="What was filled in" className="mt-6">
+          <Eyebrow as="h2" className="mb-1.5">
+            {sent ? "Everything we filled in" : stopped ? "What we filled in before it stopped" : "What we have filled in so far"}
+            {fields.length > 0 ? ` · ${fields.length} fields` : ""}
+          </Eyebrow>
+          {fields.length === 0 ? (
+            <p className="m-0 py-3 text-sm text-muted-foreground">
+              {sent ? "No field list was saved for this application." : "The list appears here once the form has been filled in and sent."}
+            </p>
+          ) : (
+            <FieldList groups={groups} />
+          )}
+        </section>
+
+        {application.screenshotKey ? (
+          <section aria-label="Screenshot" className="mt-8 flex flex-col gap-3">
+            <Eyebrow as="h2">{sent ? "The form just before we sent it" : "The form when it stopped"}</Eyebrow>
+            <ScreenshotFrame src={`/api/files/${application.screenshotKey}`} alt="The filled application form" address={address} />
+            {shot ? (
+              <span className="text-[13px] text-muted-foreground">
+                Taken at {clock(shot.createdAt, true)}
+                {sent ? ", right before we pressed Submit." : "."}
+              </span>
+            ) : null}
+            <a
+              href={`/api/files/${application.screenshotKey}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonVariants({ variant: "line", size: "md", className: "w-full rounded-field" })}
+            >
+              View full size
+            </a>
+          </section>
+        ) : null}
+
         {job?.applyUrl ? (
           <a
             href={job.applyUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 self-start text-sm font-medium text-primary underline-offset-4 hover:underline"
+            className="mt-6 flex h-12 items-center gap-2 self-start text-[15px] font-semibold text-foreground underline underline-offset-3"
           >
-            View job posting
-            <ExternalLink className="size-3.5" aria-hidden />
+            Open the original posting
+            <Icon name="external" size={16} />
           </a>
         ) : null}
-      </div>
 
-      {showCallout ? (
-        <section className={`flex flex-col gap-2 rounded-2xl border p-4 ${CALLOUT[outcome.tone]}`} aria-label="Where this stands">
-          <p className="text-sm font-semibold">{outcome.headline}</p>
-          {outcome.next ? <p className="text-sm text-foreground/80">{outcome.next}</p> : null}
-          <div className="pt-1">
-            <ApplicationActions id={application.id} status={application.status} company={company} />
-          </div>
-        </section>
-      ) : null}
-
-      <section className="flex flex-col gap-3" aria-label="Progress">
-        <h2 className="text-sm font-semibold">What happened</h2>
-        <ol className="flex flex-col">
-          {steps.map((step, index) => (
-            <li key={step.key} className="flex gap-3">
-              <div className="flex flex-col items-center">
-                <span className={`grid size-6 shrink-0 place-items-center rounded-full ${STEP_DOT[step.state]}`}>
-                  <StepIcon state={step.state} />
-                </span>
-                {index < steps.length - 1 ? <span className={`my-1 w-px flex-1 ${step.state === "done" ? "bg-success/40" : "bg-border"}`} /> : null}
-              </div>
-              <div className="pb-4">
-                <p className={`text-sm ${step.state === "todo" ? "text-muted-foreground" : "font-medium"}`}>
-                  {step.label}
-                  {step.state === "current" ? <span className="ml-2 text-xs font-normal text-primary">in progress</span> : null}
-                  {step.state === "stopped" ? <span className="ml-2 text-xs font-normal text-danger">stopped here</span> : null}
-                </p>
-                {step.note ? <p className="break-words text-xs text-muted-foreground">{step.note}</p> : null}
-              </div>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <section className="flex flex-col gap-3" aria-label="What was filled in">
-        <h2 className="text-sm font-semibold">
-          What was filled in
-          {fields.length > 0 ? <span className="ml-2 text-xs font-normal text-muted-foreground">{fields.length} fields</span> : null}
-        </h2>
-        {fields.length === 0 ? (
-          <p className="rounded-xl border border-border bg-card px-3 py-4 text-sm text-muted-foreground">
-            {application.status === "submitted"
-              ? "No field list was saved for this application."
-              : "The list appears here once the form has been filled in and sent."}
-          </p>
-        ) : (
-          groups.map((group) => (
-            <div key={group.name} className="flex flex-col gap-1.5">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.name}</h3>
-              <ul className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-card">
-                {group.fields.map((field, index) => (
-                  <li key={`${field.key}-${index}`} className="flex flex-col gap-1 px-3 py-2.5">
-                    <div className="flex items-start justify-between gap-3">
-                      <span className="text-xs text-muted-foreground">{field.label}</span>
-                      <SourceBadge source={field.source} />
-                    </div>
-                    <span className="break-words text-sm">{field.value || "—"}</span>
-                    {field.basis ? <span className="text-xs text-muted-foreground">Why: {field.basis}</span> : null}
+        <details className="group mt-4 rounded-[18px] border-[1.5px] border-line bg-surface">
+          <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-4 text-[15px] font-semibold marker:hidden">
+            Technical details
+            <span className="text-[13px] font-normal text-muted-foreground group-open:hidden">for debugging</span>
+          </summary>
+          <div className="flex flex-col gap-3 px-4 pb-4">
+            {application.error ? <p className="m-0 text-[13px] break-words text-muted-foreground">Raw error: {application.error}</p> : null}
+            <ol className="m-0 flex list-none flex-col gap-1.5 p-0 text-[13px]">
+              {application.events
+                .filter((event) => event.type !== "fill")
+                .map((event) => (
+                  <li key={event.id} className="flex gap-2">
+                    <span className="w-16 shrink-0 text-muted-foreground tabular-nums">{clock(event.createdAt, true)}</span>
+                    <span className="w-24 shrink-0 font-semibold">{EVENT_LABEL[event.type] ?? event.type}</span>
+                    <span className="break-words text-muted-foreground">
+                      {event.rule ? `${event.rule}: ` : ""}
+                      {event.message}
+                    </span>
                   </li>
                 ))}
-              </ul>
-            </div>
-          ))
-        )}
-      </section>
-
-      {application.screenshotKey ? (
-        <details className="group rounded-xl border border-border bg-card shadow-card">
-          <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold marker:hidden">
-            Form before submitting
-            <span className="ml-2 text-xs font-normal text-muted-foreground group-open:hidden">tap to show</span>
-          </summary>
-          <div className="px-4 pb-4">
-            <a href={`/api/files/${application.screenshotKey}`} target="_blank" rel="noopener noreferrer">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`/api/files/${application.screenshotKey}`}
-                alt="The filled application form"
-                className="w-full rounded-lg border border-border"
-                loading="lazy"
-              />
-            </a>
+            </ol>
           </div>
         </details>
-      ) : null}
-
-      <details className="group rounded-xl border border-border bg-card">
-        <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold marker:hidden">
-          Technical details
-          <span className="ml-2 text-xs font-normal text-muted-foreground group-open:hidden">for debugging</span>
-        </summary>
-        <div className="flex flex-col gap-3 px-4 pb-4">
-          {application.error ? <p className="break-words text-xs text-muted-foreground">Raw error: {application.error}</p> : null}
-          <ol className="flex flex-col gap-1 text-xs">
-            {application.events
-              .filter((event) => event.type !== "fill")
-              .map((event) => (
-                <li key={event.id} className="flex gap-2">
-                  <span className="w-16 shrink-0 text-muted-foreground">
-                    {event.createdAt.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                  </span>
-                  <span className="w-24 shrink-0 font-medium">{EVENT_LABEL[event.type] ?? event.type}</span>
-                  <span className="break-words text-muted-foreground">
-                    {event.rule ? `${event.rule}: ` : ""}
-                    {event.message}
-                  </span>
-                </li>
-              ))}
-          </ol>
-        </div>
-      </details>
+      </div>
     </>
   );
 }

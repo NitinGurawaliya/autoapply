@@ -56,17 +56,17 @@ async function main() {
 
     // 1. Applications list
     await page.goto("http://localhost:3000/applications", { timeout: 90000 });
-    await page.getByText("Submitted", { exact: true }).first().waitFor({ timeout: 20000 });
+    await page.locator('li[data-row="sent"]').first().waitFor({ timeout: 20000 });
     const listText = await page.locator("main").innerText();
     check("list shows company and role", listText.includes(mock.company.name) && listText.includes(mock.title), mock.company.name);
-    await page.getByRole("button", { name: /^Submitted/ }).click();
+    await page.getByRole("group", { name: "Show" }).getByRole("button", { name: /^Sent/ }).click();
     const rowsShown = await page.locator("ul li").count();
-    const badgesShown = await page.locator("ul li").getByText("Submitted", { exact: true }).count();
-    check("Submitted filter shows only submitted", rowsShown >= 1 && badgesShown === rowsShown, `${rowsShown} rows, ${badgesShown} badged Submitted`);
+    const sentShown = await page.locator('ul li[data-row="sent"]').count();
+    check("Sent filter shows only sent applications", rowsShown >= 1 && sentShown === rowsShown, `${rowsShown} rows, ${sentShown} sent`);
 
     // 2. Detail
     await page.goto(`http://localhost:3000/applications/${submitted.id}`, { timeout: 90000 });
-    await page.getByText("What was filled in").waitFor({ timeout: 20000 });
+    await page.locator('section[aria-label="What was filled in"]').waitFor({ timeout: 20000 });
     const detail = await page.locator("main").innerText();
     check("detail shows each filled field", ["First Name", "Test", "Resume", "resume.pdf", "Decline to answer"].every((t) => detail.includes(t)));
     check("detail shows source badges", ["You", "Resume", "Default", "AI draft"].every((t) => detail.includes(t)));

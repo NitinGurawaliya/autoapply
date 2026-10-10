@@ -1,12 +1,7 @@
 "use client";
 
-export default function GovernanceError({ reset }: { reset: () => void }) {
-  return (
-    <div>
-      <p className="text-sm text-destructive">Could not load governance.</p>
-      <button type="button" onClick={reset} className="mt-3 rounded-full border border-border px-3 py-1 text-xs">
-        Try again
-      </button>
-    </div>
-  );
+import { PageError } from "@/components/patterns/states";
+
+export default function PageErrorBoundary({ reset }: { reset: () => void }) {
+  return <PageError title="Could not load governance" reset={reset} />;
 }

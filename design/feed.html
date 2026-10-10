@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Discover</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&amp;family=Geist:wght@400..700&amp;display=swap">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; padding-top: 54px; position: relative; overflow: hidden; display: flex; flex-direction: column; font-family: 'Geist', system-ui, -apple-system, sans-serif; color: {{t.text}}; background: {{t.bg}}">
+
+  <header style="display: flex; align-items: center; gap: 10px; padding: 0 20px; height: 44px; flex: none">
+    <button aria-label="Your profile and sign out" style="width: 44px; height: 44px; flex: none; padding: 0; border: none; border-radius: 50%; background: {{t.subtle}}; color: inherit; font-family: inherit; font-weight: 600; font-size: 14px; cursor: pointer">AK</button>
+    <div style="flex: 1"></div>
+    <div style="height: 36px; box-sizing: border-box; padding: 0 12px; border-radius: 999px; background: {{t.surface}}; border: 1.5px solid {{t.line}}; display: flex; align-items: center; gap: 8px">
+      <span style="font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums">{{used}}<span style="color: {{t.muted}}; font-weight: 500">/100</span></span>
+      <span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">applications sent today</span>
+      <span aria-hidden="true" style="display: block; width: 32px; height: 4px; border-radius: 99px; background: {{t.track}}; overflow: hidden"><span style="display: block; height: 100%; width: {{used}}%; background: {{t.bar}}; transition: width 400ms cubic-bezier(.2,.9,.3,1)"></span></span>
+    </div>
+    <button onClick="{{openFilters}}" aria-label="Filters" style="width: 44px; height: 44px; flex: none; padding: 0; border: 1.5px solid {{t.line}}; border-radius: 50%; background: {{t.surface}}; color: inherit; display: flex; align-items: center; justify-content: center; cursor: pointer">
+      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"></path><circle cx="16" cy="7" r="2"></circle><circle cx="10" cy="17" r="2"></circle></svg>
+    </button>
+  </header>
+
+  <sc-if value="{{mode.cards}}" hint-placeholder-val="{{ true }}">
+    <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: 24px; padding: 0 20px 8px">
+      <div style="display: grid; position: relative; margin-top: 18px">
+        <sc-for list="{{items}}" as="item" hint-placeholder-count="2">
+          <article onPointerDown="{{item.down}}" onPointerMove="{{item.move}}" onPointerUp="{{item.up}}" onPointerCancel="{{item.up}}" style="position: relative; grid-area: 1 / 1; touch-action: none; user-select: none; cursor: grab; will-change: transform; z-index: {{item.z}}; transform: {{item.tf}}; transition: {{item.tr}}">
+            <div style="height: 100%; box-sizing: border-box; background: {{t.surface}}; border: 2px solid {{t.strong}}; border-radius: 28px; box-shadow: 0 6px 0 {{t.shadow}}; padding: 22px; display: flex; flex-direction: column; position: relative">
+              <div style="display: flex; align-items: center; gap: 12px">
+                <div aria-hidden="true" style="width: 48px; height: 48px; flex: none; border-radius: 14px; background: {{t.inv}}; color: {{t.onInv}}; display: flex; align-items: center; justify-content: center; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 17px">{{item.j.ini}}</div>
+                <div style="display: flex; flex-direction: column; gap: 2px">
+                  <span style="font-size: 16px; font-weight: 600">{{item.j.co}}</span>
+                  <span style="font-size: 14px; color: {{t.muted}}">Posted {{item.j.fresh}}</span>
+                </div>
+              </div>
+              <h2 style="margin: 24px 0 0; max-width: 290px; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 38px; line-height: 1.02; letter-spacing: -0.035em; text-wrap: balance">{{item.j.role}}</h2>
+              <div style="margin-top: 22px; display: flex; flex-direction: column; gap: 6px">
+                <span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: {{t.muted}}">Why it fits</span>
+                <p style="margin: 0; font-size: 17px; line-height: 1.45; text-wrap: pretty">{{item.j.why}}</p>
+              </div>
+              <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px">
+                <span style="height: 34px; padding: 0 12px; border-radius: 999px; border: 2px solid {{t.strong}}; display: flex; align-items: center; font-size: 14px; font-weight: 600">{{item.j.loc}}</span>
+                <span style="height: 34px; padding: 0 12px; border-radius: 999px; border: 2px solid {{t.strong}}; display: flex; align-items: center; font-size: 14px; font-weight: 600">Asks {{item.j.exp}}</span>
+              </div>
+              <span aria-hidden="true" style="position: absolute; top: 92px; left: 18px; padding: 4px 14px; border: 2px solid #16171A; border-radius: 12px; background: #C6F432; color: #16171A; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 28px; transform: rotate(-8deg); opacity: {{item.ap}}">APPLY</span>
+              <span aria-hidden="true" style="position: absolute; top: 92px; right: 18px; padding: 4px 14px; border: 2px solid {{t.strong}}; border-radius: 12px; background: {{t.surface}}; color: {{t.text}}; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 28px; transform: rotate(8deg); opacity: {{item.sp}}">SKIP</span>
+            </div>
+            <div style="position: absolute; top: -18px; right: 14px; width: 84px; height: 84px; box-sizing: border-box; border-radius: 50%; background: #C6F432; border: 2px solid #16171A; box-shadow: 0 4px 0 {{t.shadow}}; transform: rotate(-8deg); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; color: #16171A">
+              <span style="font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 32px; letter-spacing: -0.04em">{{item.j.score}}</span>
+              <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin-top: 2px">match</span>
+            </div>
+          </article>
+        </sc-for>
+      </div>
+      <div style="display: flex; justify-content: center; align-items: center; gap: 32px">
+        <button onClick="{{skip}}" aria-label="Skip" style="width: 64px; height: 64px; padding: 0; border: 1.5px solid {{t.line}}; border-radius: 50%; background: {{t.surface}}; color: inherit; box-shadow: 0 6px 16px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: center; transform: scale({{skipScale}}); transition: transform 200ms cubic-bezier(.2,.9,.3,1.2); cursor: pointer">
+          <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+        </button>
+        <button onClick="{{apply}}" aria-label="Apply" style="width: 72px; height: 72px; padding: 0; border: 2px solid {{t.accentEdge}}; border-radius: 50%; background: #C6F432; color: #16171A; box-shadow: {{t.btnShadow}}; display: flex; align-items: center; justify-content: center; transform: scale({{applyScale}}); transition: transform 200ms cubic-bezier(.2,.9,.3,1.2); cursor: pointer">
+          <svg width="30" height="30" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+        </button>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{mode.empty}}" hint-placeholder-val="{{ false }}">
+    <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 28px 16px; text-align: center">
+      <div aria-hidden="true" style="position: relative; width: 150px; height: 150px">
+        <div style="position: absolute; left: 30px; top: 30px; width: 96px; height: 116px; box-sizing: border-box; border-radius: 20px; border: 2px solid {{t.strong}}; background: {{t.surface}}"></div>
+        <div style="position: absolute; left: 22px; top: 20px; width: 96px; height: 116px; box-sizing: border-box; border-radius: 20px; border: 2px solid {{t.strong}}; background: {{t.surface}}"></div>
+        <div style="position: absolute; left: 14px; top: 10px; width: 96px; height: 116px; box-sizing: border-box; border-radius: 20px; border: 2px solid {{t.strong}}; background: {{t.surface}}; box-shadow: 0 5px 0 {{t.shadow}}; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+          <span style="display: block; width: 26px; height: 26px; border-radius: 8px; background: {{t.inv}}"></span>
+          <span style="display: block; height: 7px; width: 90%; border-radius: 99px; background: {{t.subtle}}"></span>
+          <span style="display: block; height: 7px; width: 65%; border-radius: 99px; background: {{t.subtle}}"></span>
+        </div>
+        <span style="position: absolute; right: 4px; top: 0; width: 52px; height: 52px; box-sizing: border-box; border-radius: 50%; border: 2px solid #16171A; background: #C6F432; color: #16171A; box-shadow: 0 4px 0 {{t.shadow}}; display: flex; align-items: center; justify-content: center">
+          <svg width="26" height="26" viewBox="0 0 24 24" style="fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+        </span>
+      </div>
+      <h1 style="margin: 24px 0 0; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 32px; line-height: 1.05; letter-spacing: -0.04em">You're all caught up</h1>
+      <p style="margin: 10px 0 0; font-size: 16px; line-height: 1.5; color: {{t.muted}}; text-wrap: pretty">You've seen every match for now. New jobs land through the day, and we'll let you know.</p>
+      <div style="margin-top: 18px; display: flex; gap: 8px">
+        <span style="height: 34px; padding: 0 12px; border-radius: 999px; background: {{t.subtle}}; display: flex; align-items: center; font-size: 14px; font-weight: 600">19 sent today</span>
+        <span style="height: 34px; padding: 0 12px; border-radius: 999px; background: {{t.subtle}}; display: flex; align-items: center; font-size: 14px; font-weight: 600">3 in progress</span>
+      </div>
+      <div style="margin-top: 28px; width: 100%; display: flex; flex-direction: column; gap: 10px">
+        <a href="{{L.apps}}" style="height: 56px; box-sizing: border-box; border-radius: 16px; border: 2px solid {{t.accentEdge}}; background: #C6F432; color: #16171A; box-shadow: {{t.btnShadow}}; display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 17px; font-weight: 600">See my applications</a>
+        <button onClick="{{openFilters}}" style="height: 52px; border-radius: 16px; border: 1.5px solid {{t.line}}; background: {{t.surface}}; color: inherit; font-family: inherit; font-size: 16px; font-weight: 600; cursor: pointer">Widen my filters</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{mode.nomatch}}" hint-placeholder-val="{{ false }}">
+    <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 28px 16px; text-align: center">
+      <div aria-hidden="true" style="position: relative; width: 150px; height: 150px">
+        <div style="position: absolute; left: 22px; top: 14px; width: 96px; height: 116px; box-sizing: border-box; border-radius: 20px; border: 2px dashed {{t.strong}}; background: transparent"></div>
+        <span style="position: absolute; right: 8px; bottom: 6px; width: 64px; height: 64px; box-sizing: border-box; border-radius: 50%; border: 2px solid {{t.strong}}; background: {{t.surface}}; box-shadow: 0 4px 0 {{t.shadow}}; color: {{t.text}}; display: flex; align-items: center; justify-content: center">
+          <svg width="28" height="28" viewBox="0 0 24 24" style="fill: none; stroke: currentColor; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round"><circle cx="11" cy="11" r="6"></circle><path d="M20 20l-4.5-4.5"></path></svg>
+        </span>
+      </div>
+      <h1 style="margin: 24px 0 0; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 32px; line-height: 1.05; letter-spacing: -0.04em">No jobs match these filters</h1>
+      <p style="margin: 10px 0 0; font-size: 16px; line-height: 1.5; color: {{t.muted}}; text-wrap: pretty">Each one is fine on its own. Together they're very narrow, so try removing one.</p>
+      <div style="margin-top: 18px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px">
+        <sc-for list="{{activeFilters}}" as="f" hint-placeholder-count="3">
+          <button onClick="{{f.remove}}" aria-label="{{f.aria}}" style="height: 40px; padding: 0 10px 0 14px; border-radius: 999px; border: 2px solid {{t.strong}}; background: {{t.surface}}; color: inherit; font-family: inherit; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer">{{f.label}}
+            <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round"><path d="M7 7l10 10M17 7L7 17"></path></svg></button>
+        </sc-for>
+      </div>
+      <div style="margin-top: 28px; width: 100%; display: flex; flex-direction: column; gap: 10px">
+        <button onClick="{{clearFilters}}" style="height: 56px; box-sizing: border-box; border-radius: 16px; border: 2px solid {{t.accentEdge}}; background: #C6F432; color: #16171A; box-shadow: {{t.btnShadow}}; font-family: inherit; font-size: 17px; font-weight: 600; cursor: pointer">Clear all filters</button>
+        <button onClick="{{openFilters}}" style="height: 52px; border-radius: 16px; border: 1.5px solid {{t.line}}; background: {{t.surface}}; color: inherit; font-family: inherit; font-size: 16px; font-weight: 600; cursor: pointer">Edit filters</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <nav aria-label="Main" style="height: 82px; flex: none; box-sizing: border-box; padding: 6px 0 24px; background: {{t.surface}}; border-top: 1px solid {{t.line}}; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))">
+    <a href="{{L.feed}}" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; text-decoration: none; color: {{t.text}}; font-size: 12px; font-weight: 600">
+      <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><rect x="5" y="3" width="14" height="18" rx="3"></rect></svg>Discover</a>
+    <a href="{{L.apps}}" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; text-decoration: none; font-size: 12px; font-weight: 500; color: {{t.muted}}">
+      <span style="position: relative; display: flex">
+        <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"></path></svg>
+        <span style="position: absolute; top: -5px; right: -11px; min-width: 20px; height: 20px; box-sizing: border-box; padding: 0 5px; border-radius: 999px; border: 1.5px solid {{t.accentEdge}}; background: #C6F432; color: #16171A; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center">2</span>
+      </span>Applications<span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">, 2 need you</span></a>
+  </nav>
+
+  <a href="{{L.apps}}" aria-live="polite" style="position: absolute; top: 104px; left: 16px; right: 16px; z-index: 40; box-sizing: border-box; padding: 12px 14px 14px; border-radius: 20px; background: {{t.inv}}; color: {{t.onInv}}; text-decoration: none; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 12px 30px rgba(0,0,0,0.28); transform: {{toast.tf}}; opacity: {{toast.op}}; pointer-events: {{toast.pe}}; transition: transform 380ms cubic-bezier(.2,.9,.3,1.2), opacity 240ms ease-out">
+    <div style="display: flex; align-items: center; gap: 12px">
+      <span aria-hidden="true" style="width: 36px; height: 36px; flex: none; box-sizing: border-box; border-radius: 10px; border: 1.5px solid #16171A; background: #C6F432; color: #16171A; display: flex; align-items: center; justify-content: center; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 13px">{{toast.ini}}</span>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+        <span style="font-size: 15px; font-weight: 600">{{toast.co}}</span>
+        <span style="font-size: 13px; opacity: 0.8">{{toast.label}}</span>
+      </div>
+      <span style="font-size: 13px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px">View</span>
+    </div>
+    <div aria-hidden="true" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px">
+      <sc-for list="{{toast.segs}}" as="g" hint-placeholder-count="4">
+        <span style="display: block; height: 4px; border-radius: 99px; background: {{g}}; transition: background 300ms"></span>
+      </sc-for>
+    </div>
+  </a>
+
+  <sc-if value="{{sheet.any}}" hint-placeholder-val="{{ false }}">
+    <div aria-hidden="true" style="position: absolute; inset: 0; z-index: 50; background: {{t.scrim}}"></div>
+    <div role="dialog" aria-modal="true" aria-label="{{sheet.label}}" style="position: absolute; left: 0; right: 0; bottom: 0; z-index: 60; box-sizing: border-box; padding: 10px 20px 30px; border-radius: 28px 28px 0 0; background: {{t.surface}}; border-top: 2px solid {{t.strong}}; display: flex; flex-direction: column">
+      <span aria-hidden="true" style="align-self: center; width: 40px; height: 5px; border-radius: 99px; background: {{t.lineStrong}}"></span>
+
+      <sc-if value="{{sheet.filters}}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 10px; height: 44px">
+          <h2 style="margin: 0; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 26px; letter-spacing: -0.035em">Filters</h2>
+          <button onClick="{{resetFilters}}" style="height: 44px; padding: 0 4px; border: none; background: none; color: inherit; font-family: inherit; font-size: 15px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer">Reset</button>
+        </div>
+        <sc-for list="{{filterGroups}}" as="grp" hint-placeholder-count="3">
+          <fieldset style="border: none; margin: 16px 0 0; padding: 0">
+            <legend style="padding: 0; margin-bottom: 10px; font-size: 14px; font-weight: 600">{{grp.title}}</legend>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px">
+              <sc-for list="{{grp.chips}}" as="c" hint-placeholder-count="4">
+                <button aria-pressed="{{c.on}}" onClick="{{c.toggle}}" style="height: 44px; padding: 0 16px; box-sizing: border-box; border-radius: 999px; border: 2px solid {{c.edge}}; background: {{c.bg}}; color: {{c.fg}}; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer">{{c.label}}</button>
+              </sc-for>
+            </div>
+          </fieldset>
+        </sc-for>
+        <button onClick="{{closeSheet}}" style="margin-top: 26px; height: 56px; box-sizing: border-box; border-radius: 16px; border: 2px solid {{t.accentEdge}}; background: #C6F432; color: #16171A; box-shadow: {{t.btnShadow}}; font-family: inherit; font-size: 17px; font-weight: 600; cursor: pointer">Show {{jobCount}} jobs</button>
+      </sc-if>
+
+      <sc-if value="{{sheet.question}}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; align-items: center; margin-top: 12px; height: 44px">
+          <span style="height: 30px; padding: 0 12px; box-sizing: border-box; border-radius: 999px; border: 1.5px solid {{t.accentEdge}}; background: #C6F432; color: #16171A; display: flex; align-items: center; font-size: 13px; font-weight: 700">Needs you · 1 of 2</span>
+          <span style="flex: 1"></span>
+          <button onClick="{{closeSheet}}" style="height: 44px; padding: 0 4px; border: none; background: none; color: {{t.muted}}; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer">Later</button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px; margin-top: 10px">
+          <span aria-hidden="true" style="width: 44px; height: 44px; flex: none; border-radius: 13px; background: {{t.inv}}; color: {{t.onInv}}; display: flex; align-items: center; justify-content: center; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 15px">KL</span>
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 15px; font-weight: 600">Kestrel Labs · SDE II, Platform</span>
+            <span style="font-size: 13px; color: {{t.muted}}">Paused at question 7 of 9</span>
+          </div>
+        </div>
+        <p style="margin: 22px 0 0; font-size: 23px; line-height: 1.25; font-weight: 600; letter-spacing: -0.015em; text-wrap: balance">Can you work from our Pune office 3 days a week?</p>
+        <div style="margin-top: 20px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+          <sc-for list="{{answers}}" as="a" hint-placeholder-count="2">
+            <button aria-pressed="{{a.on}}" onClick="{{a.pick}}" style="height: 56px; box-sizing: border-box; border-radius: 16px; border: 2px solid {{a.edge}}; background: {{a.bg}}; color: {{a.fg}}; box-shadow: {{a.shadow}}; font-family: inherit; font-size: 17px; font-weight: 600; cursor: pointer">{{a.label}}</button>
+          </sc-for>
+        </div>
+        <label style="margin-top: 18px; display: flex; align-items: center; gap: 12px; min-height: 44px; cursor: pointer">
+          <input type="checkbox" checked="{{remember}}" onChange="{{toggleRemember}}" style="width: 22px; height: 22px; margin: 0; flex: none; accent-color: #16171A">
+          <span style="display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 15px; font-weight: 600">Remember for similar questions</span>
+            <span style="font-size: 13px; color: {{t.muted}}">So you're never asked this twice.</span>
+          </span>
+        </label>
+        <p style="margin: 14px 0 0; display: flex; align-items: center; gap: 8px; font-size: 13px; color: {{t.muted}}">
+          <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" style="flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+          The agent never answers questions like this without you.</p>
+      </sc-if>
+
+      <sc-if value="{{sheet.code}}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; align-items: center; margin-top: 12px; height: 44px">
+          <span style="height: 30px; padding: 0 12px; box-sizing: border-box; border-radius: 999px; border: 1.5px solid {{t.accentEdge}}; background: #C6F432; color: #16171A; display: flex; align-items: center; font-size: 13px; font-weight: 700">Needs you · 2 of 2</span>
+          <span style="flex: 1"></span>
+          <button onClick="{{closeSheet}}" style="height: 44px; padding: 0 4px; border: none; background: none; color: {{t.muted}}; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer">Later</button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px; margin-top: 10px">
+          <span aria-hidden="true" style="width: 44px; height: 44px; flex: none; border-radius: 13px; background: {{t.inv}}; color: {{t.onInv}}; display: flex; align-items: center; justify-content: center; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 15px">NH</span>
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 15px; font-weight: 600">Northwind Health · Full Stack Engineer</span>
+            <span style="font-size: 13px; color: {{t.muted}}">Their job board emailed you a code</span>
+          </div>
+        </div>
+        <p style="margin: 22px 0 0; font-size: 23px; line-height: 1.25; font-weight: 600; letter-spacing: -0.015em">Enter the 6-digit code</p>
+        <p style="margin: 6px 0 0; font-size: 14px; color: {{t.muted}}">Sent to aarav.k•••@email.com · just now</p>
+        <div style="position: relative; margin-top: 18px; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px">
+          <sc-for list="{{boxes}}" as="b" hint-placeholder-count="6">
+            <span aria-hidden="true" style="height: 58px; box-sizing: border-box; border-radius: 14px; border: {{b.border}}; background: {{t.bg}}; display: flex; align-items: center; justify-content: center; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 26px; font-variant-numeric: tabular-nums">{{b.ch}}</span>
+          </sc-for>
+          <input aria-label="6-digit code" autocomplete="one-time-code" inputmode="numeric" maxlength="6" value="{{code}}" onChange="{{onCode}}" style="position: absolute; inset: 0; width: 100%; height: 100%; box-sizing: border-box; opacity: 0.01; border: none; font-size: 16px; cursor: text">
+        </div>
+        <span style="margin-top: 10px; min-height: 20px; font-size: 14px; color: {{t.muted}}">{{codeNote}}</span>
+        <div style="margin-top: 10px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+          <button onClick="{{pasteCode}}" style="height: 52px; border-radius: 16px; border: 2px solid {{t.strong}}; background: {{t.surface}}; color: inherit; font-family: inherit; font-size: 16px; font-weight: 600; cursor: pointer">Paste code</button>
+          <a href="#open-email" style="height: 52px; box-sizing: border-box; border-radius: 16px; border: 1.5px solid {{t.line}}; color: inherit; display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 16px; font-weight: 600">Open email</a>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{sheet.thanks}}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; align-items: center; text-align: center; padding: 20px 4px 0">
+          <span aria-hidden="true" style="width: 72px; height: 72px; box-sizing: border-box; border-radius: 50%; border: 2px solid #16171A; background: #C6F432; color: #16171A; box-shadow: 0 4px 0 {{t.shadow}}; display: flex; align-items: center; justify-content: center">
+            <svg width="34" height="34" viewBox="0 0 24 24" style="fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+          </span>
+          <h2 style="margin: 18px 0 0; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 28px; letter-spacing: -0.035em">All sorted</h2>
+          <p style="margin: 8px 0 0; font-size: 16px; line-height: 1.5; color: {{t.muted}}">Both applications are moving again. We'll let you know when they're sent.</p>
+          <button onClick="{{closeSheet}}" style="margin-top: 24px; width: 100%; height: 56px; box-sizing: border-box; border-radius: 16px; border: 2px solid {{t.accentEdge}}; background: #C6F432; color: #16171A; box-shadow: {{t.btnShadow}}; font-family: inherit; font-size: 17px; font-weight: 600; cursor: pointer">Back to swiping</button>
+        </div>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isPush}}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; z-index: 80; background: {{push.bg}}; padding: 120px 12px 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px">
+      <sc-for list="{{push.items}}" as="n" hint-placeholder-count="2">
+        <a href="{{n.href}}" style="display: flex; gap: 12px; padding: 14px; border-radius: 22px; background: {{push.card}}; color: {{push.text}}; text-decoration: none; box-shadow: 0 6px 20px rgba(0,0,0,0.18)">
+          <span aria-hidden="true" style="position: relative; width: 40px; height: 40px; flex: none; border-radius: 11px; background: #C6F432; overflow: hidden">
+            <span style="position: absolute; left: 9px; top: 8px; width: 13px; height: 18px; box-sizing: border-box; border-radius: 4px; border: 2px solid #16171A; background: #FFFFFF; transform: rotate(-10deg)"></span>
+            <span style="position: absolute; left: 17px; top: 10px; width: 13px; height: 18px; box-sizing: border-box; border-radius: 4px; border: 2px solid #16171A; background: #16171A; transform: rotate(10deg)"></span>
+          </span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+            <span style="display: flex; justify-content: space-between; font-size: 13px; color: {{push.muted}}"><span style="font-weight: 600">SwipeApply</span><span>{{n.when}}</span></span>
+            <span style="font-size: 15px; font-weight: 600">{{n.title}}</span>
+            <span style="font-size: 14px; line-height: 1.4">{{n.body}}</span>
+          </span>
+        </a>
+      </sc-for>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"view":{"editor":"enum","options":["live","after","filters","empty","nomatch","question","code","push"],"default":"live"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const v = props.view || "live";
+    this.state = {
+      view: v,
+      mode: v === "empty" ? "empty" : (v === "nomatch" ? "nomatch" : "cards"),
+      sheet: v === "filters" ? "filters" : (v === "question" ? "question" : (v === "code" ? "code" : null)),
+      i: v === "after" ? 1 : 0, dx: 0, drag: false, leaving: 0, swap: false,
+      used: v === "after" ? 19 : 18,
+      toast: null, toastId: 0,
+      loc: ["India", "Remote"], exp: ["1–3 yrs", "3–5 yrs"], posted: "This week",
+      narrow: ["US", "0–1 yrs", "Last 24 hours"],
+      answer: null, remember: true,
+      code: v === "code" ? "48" : ""
+    };
+    this.startX = 0; this.scale = 1; this.timers = [];
+  }
+  componentDidMount() { if (this.state.view === "after") this.runToast("Lumen Pay", "LP", 1, true); }
+  componentWillUnmount() { this.timers.forEach((t) => clearTimeout(t)); }
+  later(fn, ms) { this.timers.push(setTimeout(fn, ms)); }
+  th() {
+    const d = !!this.props.dark;
+    return d
+      ? { d, bg: "#0E0F11", surface: "#1A1B1F", subtle: "#24252A", text: "#F2F2F3", muted: "#A1A4AB", line: "#2A2B30", lineStrong: "#3A3B41", strong: "#4A4B52", chipEdge: "#3A3B41", shadow: "#000000", inv: "#F2F2F3", onInv: "#16171A", bar: "#C6F432", track: "#2C2D33", accentEdge: "#C6F432", btnShadow: "none", scrim: "rgba(0,0,0,0.62)", segOn: "#16171A", segOff: "rgba(22,23,26,0.18)" }
+      : { d, bg: "#F6F6F7", surface: "#FFFFFF", subtle: "#EEEEF1", text: "#16171A", muted: "#6B6E75", line: "#E6E6EA", lineStrong: "#D4D4DA", strong: "#16171A", chipEdge: "#CFCFD4", shadow: "#16171A", inv: "#16171A", onInv: "#FFFFFF", bar: "#16171A", track: "#E4E4E7", accentEdge: "#16171A", btnShadow: "0 4px 0 #16171A", scrim: "rgba(22,23,26,0.48)", segOn: "#C6F432", segOff: "rgba(255,255,255,0.2)" };
+  }
+  jobs() {
+    return [
+      { co: "Lumen Pay", ini: "LP", role: "Backend Engineer, Payments", score: 86, fresh: "3h ago", why: "Your Go, Postgres and Kafka work lines up, and your 3 years fits their 2–4.", loc: "Bengaluru · Hybrid", exp: "2–4 yrs" },
+      { co: "Orbitly", ini: "OR", role: "Frontend Engineer", score: 78, fresh: "1d ago", why: "Your React and TypeScript work matches, including the design-system project.", loc: "Remote, India", exp: "1–3 yrs" },
+      { co: "Kestrel Labs", ini: "KL", role: "SDE II, Platform", score: 71, fresh: "5h ago", why: "Go and Kubernetes match. They ask for a little more experience than you have.", loc: "Pune · On-site", exp: "3–5 yrs" },
+      { co: "Northwind Health", ini: "NH", role: "Full Stack Engineer", score: 82, fresh: "2h ago", why: "Node.js, React and AWS all overlap with your last two roles.", loc: "Hyderabad · Hybrid", exp: "1–3 yrs" }
+    ];
+  }
+  runToast(co, ini, from, loop) {
+    const id = this.state.toastId + 1;
+    this.setState({ toast: { co, ini, stage: from }, toastId: id });
+    const at = (ms, fn) => this.later(() => { if (this.state.toastId === id) fn(); }, ms);
+    let ms = 0;
+    for (let st = from + 1; st <= 3; st++) { ms += 1300; const s2 = st; at(ms, () => this.setState({ toast: Object.assign({}, this.state.toast, { stage: s2 }) })); }
+    at(ms + 1600, () => this.setState({ toast: null }));
+    if (loop) at(ms + 3600, () => this.runToast(co, ini, 0, true));
+  }
+  commit(dir) {
+    const s = this.state;
+    if (s.leaving) return;
+    const jobs = this.jobs();
+    const job = jobs[s.i % jobs.length];
+    this.setState({ drag: false, leaving: dir, used: dir > 0 ? Math.min(100, s.used + 1) : s.used });
+    if (dir > 0) this.runToast(job.co, job.ini, 0, false);
+    this.later(() => {
+      this.setState({ i: this.state.i + 1, leaving: 0, dx: 0, swap: true });
+      this.later(() => this.setState({ swap: false }), 50);
+    }, 260);
+  }
+  down(e) {
+    if (this.state.leaving) return;
+    const el = e.currentTarget;
+    const r = el.getBoundingClientRect();
+    this.scale = el.offsetWidth ? r.width / el.offsetWidth : 1;
+    this.startX = e.clientX;
+    try { el.setPointerCapture(e.pointerId); } catch (err) {}
+    this.setState({ drag: true, dx: 0 });
+  }
+  move(e) { if (this.state.drag) this.setState({ dx: (e.clientX - this.startX) / (this.scale || 1) }); }
+  up() {
+    if (!this.state.drag) return;
+    const dx = this.state.dx;
+    if (dx > 90) this.commit(1); else if (dx < -90) this.commit(-1); else this.setState({ drag: false, dx: 0 });
+  }
+  chips(t, labels, isOn, onPick) {
+    return labels.map((label) => {
+      const on = isOn(label);
+      return { label, on, bg: on ? "#C6F432" : t.surface, fg: on ? "#16171A" : t.text, edge: on ? t.accentEdge : t.chipEdge, toggle: () => onPick(label) };
+    });
+  }
+  toggleIn(key, label) {
+    const cur = this.state[key];
+    this.setState({ [key]: cur.indexOf(label) >= 0 ? cur.filter((x) => x !== label) : cur.concat([label]) });
+  }
+  renderVals() {
+    const t = this.th();
+    const s = this.state;
+    const jobs = this.jobs();
+    const n = jobs.length;
+    const p = s.leaving ? s.leaving : Math.max(-1, Math.min(1, s.dx / 90));
+    const x = s.leaving ? s.leaving * 520 : s.dx;
+    const rot = s.leaving ? s.leaving * 10 : s.dx / 24;
+    const frozen = s.drag || s.swap;
+    const trTop = frozen ? "none" : (s.leaving ? "transform 260ms cubic-bezier(.4,0,1,1)" : "transform 420ms cubic-bezier(.2,.9,.3,1.15)");
+    const bs = s.leaving ? 1 : 0.95 + 0.05 * Math.abs(p);
+    const by = s.leaving ? 0 : 10 * (1 - Math.abs(p));
+    const trBack = frozen ? "none" : "transform 300ms cubic-bezier(.2,.9,.3,1)";
+    const noop = () => {};
+    const items = [
+      { j: jobs[(s.i + 1) % n], z: 1, tf: "translateY(" + by.toFixed(1) + "px) scale(" + bs.toFixed(3) + ")", tr: trBack, ap: "0", sp: "0", down: noop, move: noop, up: noop },
+      { j: jobs[s.i % n], z: 2, tf: "translateX(" + x.toFixed(1) + "px) rotate(" + rot.toFixed(2) + "deg)", tr: trTop, ap: String(Math.max(0, p)), sp: String(Math.max(0, -p)), down: (e) => this.down(e), move: (e) => this.move(e), up: (e) => this.up(e) }
+    ];
+    const stages = ["Waiting in line", "Reading the form", "Filling it in", "Submitted"];
+    const tst = s.toast || { co: "", ini: "", stage: 0 };
+    const toast = {
+      co: tst.co, ini: tst.ini, label: stages[tst.stage],
+      segs: [0, 1, 2, 3].map((k) => (k <= tst.stage ? t.segOn : t.segOff)),
+      tf: s.toast ? "none" : "translateY(-18px) scale(0.97)",
+      op: s.toast ? "1" : "0", pe: s.toast ? "auto" : "none"
+    };
+    const sheet = s.sheet;
+    const closeSheet = () => this.setState({ sheet: null });
+    const filterGroups = [
+      { title: "Location", chips: this.chips(t, ["India", "Remote", "US", "Other"], (l) => s.loc.indexOf(l) >= 0, (l) => this.toggleIn("loc", l)) },
+      { title: "Experience they ask for", chips: this.chips(t, ["0–1 yrs", "1–3 yrs", "3–5 yrs", "5+ yrs"], (l) => s.exp.indexOf(l) >= 0, (l) => this.toggleIn("exp", l)) },
+      { title: "Posted", chips: this.chips(t, ["Last 24 hours", "3 days", "This week", "Any time"], (l) => s.posted === l, (l) => this.setState({ posted: l })) }
+    ];
+    const postedW = { "Last 24 hours": 1, "3 days": 2, "This week": 3, "Any time": 5 }[s.posted] || 3;
+    const jobCount = Math.max(0, s.loc.length * s.exp.length * postedW * 4);
+    const answers = ["Yes", "No"].map((label) => {
+      const on = s.answer === label;
+      return {
+        label, on,
+        bg: on ? "#C6F432" : t.surface, fg: on ? "#16171A" : t.text,
+        edge: on ? t.accentEdge : t.strong, shadow: on ? t.btnShadow : "none",
+        pick: () => { this.setState({ answer: label }); this.later(() => this.setState({ sheet: "code", answer: null }), 650); }
+      };
+    });
+    const code = s.code;
+    const boxes = [0, 1, 2, 3, 4, 5].map((k) => ({
+      ch: code[k] || "",
+      border: k === code.length && code.length < 6 ? "3px solid " + (t.d ? "#C6F432" : "#16171A") : "2px solid " + (code[k] ? t.strong : t.chipEdge)
+    }));
+    const setCode = (v) => {
+      const clean = String(v).replace(/[^0-9]/g, "").slice(0, 6);
+      this.setState({ code: clean });
+      if (clean.length === 6) this.later(() => this.setState({ sheet: "thanks", code: "" }), 1100);
+    };
+    const pushItems = [
+      { title: "Northwind Health sent you a code", body: "Your application is paused. Tap to enter it.", when: "now", href: t.d ? "NeedsCodeDark.dc.html" : "NeedsCode.dc.html" },
+      { title: "Kestrel Labs has a question", body: "Can you work from Pune 3 days a week? Tap to answer.", when: "4m ago", href: t.d ? "NeedsQuestionDark.dc.html" : "NeedsQuestion.dc.html" }
+    ];
+    return {
+      t, items, toast, used: s.used,
+      mode: { cards: s.mode === "cards", empty: s.mode === "empty", nomatch: s.mode === "nomatch" },
+      skip: () => this.commit(-1),
+      apply: () => this.commit(1),
+      skipScale: (1 + 0.08 * Math.max(0, -p)).toFixed(3),
+      applyScale: (1 + 0.08 * Math.max(0, p)).toFixed(3),
+      openFilters: () => this.setState({ sheet: "filters" }),
+      closeSheet,
+      sheet: {
+        any: !!sheet, filters: sheet === "filters", question: sheet === "question", code: sheet === "code", thanks: sheet === "thanks",
+        label: sheet === "filters" ? "Filters" : "The agent needs you"
+      },
+      filterGroups, jobCount,
+      resetFilters: () => this.setState({ loc: ["India", "Remote"], exp: ["1–3 yrs", "3–5 yrs"], posted: "This week" }),
+      activeFilters: s.narrow.map((l) => ({ label: l, aria: "Remove filter " + l, remove: () => this.setState({ narrow: s.narrow.filter((x) => x !== l), mode: s.narrow.length <= 1 ? "cards" : "nomatch" }) })),
+      clearFilters: () => this.setState({ narrow: [], mode: "cards" }),
+      answers, remember: s.remember,
+      toggleRemember: () => this.setState({ remember: !s.remember }),
+      boxes, code,
+      onCode: (e) => setCode(e.target.value),
+      pasteCode: () => setCode("482915"),
+      codeNote: code.length === 6 ? "Checking the code…" : "We'll paste it into their form and carry on.",
+      isPush: s.view === "push",
+      push: t.d
+        ? { bg: "#08090A", card: "#2A2B30", text: "#F2F2F3", muted: "#B4B7BD", items: pushItems }
+        : { bg: "#D9DAE0", card: "#FFFFFF", text: "#16171A", muted: "#5F6269", items: pushItems },
+      L: t.d ? { apps: "AppsDark.dc.html", feed: "FeedDark.dc.html" } : { apps: "Apps.dc.html", feed: "Feed.dc.html" }
+    };
+  }
+}
+</script>
+</body>
+</html>

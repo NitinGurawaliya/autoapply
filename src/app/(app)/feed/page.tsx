@@ -1,12 +1,20 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { SearchX } from "lucide-react";
+import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { dailyUsage } from "@/modules/governance";
 import { APPLY_BOARDS, listFeed, parseFeedFilters } from "@/modules/jobs";
 import type { FeedFilters } from "@/modules/jobs";
-import { redirect } from "next/navigation";
 import { DailyUsage } from "@/components/daily-usage";
 import { GapsLink } from "@/components/gaps-link";
+import { buttonVariants } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/eyebrow";
+import { Icon } from "@/components/ui/icons";
+import { ChipGroup } from "@/components/patterns/chip-group";
+import { EmptyState } from "@/components/patterns/content";
+import { DeckEmptyArt } from "@/components/patterns/drawings";
+import { FeedTopBar } from "@/components/patterns/top-bar";
 import { FilterSheet } from "./filter-sheet";
 import { SwipeDeck } from "./swipe-deck";
 
@@ -62,31 +70,7 @@ function toggle(list: string[], id: string, all: string[]) {
 }
 
 type FeedQuery = { boards: string[]; countries: string[]; expMax: string; days: string };
-
-function Chip({ href: to, active, children }: { href: string; active: boolean; children: string }) {
-  return (
-    <a
-      href={to}
-      aria-current={active ? "true" : undefined}
-      className={
-        active
-          ? "rounded-full border border-primary bg-primary px-3.5 py-1.5 text-sm font-medium text-primary-foreground"
-          : "rounded-full border border-border bg-card px-3.5 py-1.5 text-sm transition-colors hover:bg-accent/50"
-      }
-    >
-      {children}
-    </a>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="flex flex-col gap-2">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
-      <div className="flex flex-wrap gap-2">{children}</div>
-    </section>
-  );
-}
+type ActiveFilter = { label: string; removeHref: string };
 
 export default async function FeedPage({ searchParams }: { searchParams: Promise<Query> }) {
   const user = await getCurrentUser();
@@ -112,126 +96,173 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
     days: current.days,
   }).toString();
 
-  // What is narrowing the feed right now, in plain words.
-  const active: string[] = [];
+  // What is narrowing the feed right now, in plain words, and the link that drops each one.
+  const active: ActiveFilter[] = [];
   if (BOARDS.length > 1 && current.boards.length < BOARDS.length) {
-    active.push(BOARDS.filter((board) => current.boards.includes(board.id)).map((board) => board.label).join(", "));
+    active.push({
+      label: BOARDS.filter((board) => current.boards.includes(board.id)).map((board) => board.label).join(", "),
+      removeHref: href(current, { boards: BOARDS.map((board) => board.id) }),
+    });
   }
   if (current.countries.length < COUNTRIES.length) {
-    active.push(COUNTRIES.filter((country) => current.countries.includes(country.id)).map((country) => country.label).join(", "));
+    active.push({
+      label: COUNTRIES.filter((country) => current.countries.includes(country.id)).map((country) => country.label).join(", "),
+      removeHref: href(current, { countries: COUNTRIES.map((country) => country.id) }),
+    });
   }
-  if (current.expMax) active.push(EXPERIENCE.find((band) => band.id === current.expMax)?.label ?? `Up to ${current.expMax} years`);
-  if (current.days !== "30") active.push(WINDOWS.find((window) => window.id === current.days)?.label ?? `Last ${current.days} days`);
+  if (current.expMax) {
+    active.push({
+      label: EXPERIENCE.find((band) => band.id === current.expMax)?.label ?? `Up to ${current.expMax} years`,
+      removeHref: href(current, { expMax: "" }),
+    });
+  }
+  if (current.days !== "30") {
+    active.push({
+      label: WINDOWS.find((window) => window.id === current.days)?.label ?? `Last ${current.days} days`,
+      removeHref: href(current, { days: "30" }),
+    });
+  }
+
+  const groups = (
+    <>
+      {BOARDS.length > 1 ? (
+        <ChipGroup
+          className="mt-4"
+          legend="Job boards"
+          options={BOARDS.map((board) => ({
+            label: board.label,
+            selected: current.boards.includes(board.id),
+            href: href(current, { boards: toggle(current.boards, board.id, BOARDS.map((item) => item.id)) }),
+          }))}
+        />
+      ) : null}
+      <ChipGroup
+        className="mt-4"
+        legend="Location"
+        options={COUNTRIES.map((country) => ({
+          label: country.label,
+          selected: current.countries.includes(country.id),
+          href: href(current, { countries: toggle(current.countries, country.id, COUNTRIES.map((item) => item.id)) }),
+        }))}
+      />
+      <ChipGroup
+        className="mt-4"
+        legend="Experience they ask for"
+        options={EXPERIENCE.map((band) => ({
+          key: band.id || "any",
+          label: band.label,
+          selected: current.expMax === band.id,
+          href: href(current, { expMax: band.id }),
+        }))}
+      />
+      <ChipGroup
+        className="mt-4"
+        legend="Posted"
+        options={WINDOWS.map((window) => ({ label: window.label, selected: current.days === window.id, href: href(current, { days: window.id }) }))}
+      />
+    </>
+  );
+  const sheet = (opener: "icon" | "edit" | "widen") => (
+    <FilterSheet opener={opener} activeCount={active.length} resetHref="/feed">
+      {groups}
+    </FilterSheet>
+  );
 
   return (
     <>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Feed</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Jobs that match your profile.</p>
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-            <DailyUsage userId={user.id} />
-            <Suspense fallback={null}>
-              <GapsLink userId={user.id} />
-            </Suspense>
-          </div>
-        </div>
-        <FilterSheet activeCount={active.length}>
-          {BOARDS.length > 1 ? (
-            <Section title="Job boards">
-              {BOARDS.map((board) => (
-                <Chip
-                  key={board.id}
-                  active={current.boards.includes(board.id)}
-                  href={href(current, { boards: toggle(current.boards, board.id, BOARDS.map((item) => item.id)) })}
-                >
-                  {board.label}
-                </Chip>
-              ))}
-            </Section>
-          ) : null}
-          <Section title="Where">
-            {COUNTRIES.map((country) => (
-              <Chip
-                key={country.id}
-                active={current.countries.includes(country.id)}
-                href={href(current, { countries: toggle(current.countries, country.id, COUNTRIES.map((item) => item.id)) })}
-              >
-                {country.label}
-              </Chip>
-            ))}
-          </Section>
-          <Section title="Experience asked">
-            {EXPERIENCE.map((band) => (
-              <Chip key={band.id || "any"} active={current.expMax === band.id} href={href(current, { expMax: band.id })}>
-                {band.label}
-              </Chip>
-            ))}
-          </Section>
-          <Section title="Posted">
-            {WINDOWS.map((window) => (
-              <Chip key={window.id} active={current.days === window.id} href={href(current, { days: window.id })}>
-                {window.label}
-              </Chip>
-            ))}
-          </Section>
-          {active.length > 0 ? (
-            <Link href="/feed" className="self-start text-sm font-medium text-primary underline-offset-4 hover:underline">
-              Clear all filters
-            </Link>
-          ) : null}
-        </FilterSheet>
-      </div>
-
-      {active.length > 0 ? (
-        <div className="-mt-2 flex flex-wrap items-center gap-2" aria-label="Active filters">
-          {active.map((label) => (
-            <span key={label} className="rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-foreground">
-              {label}
-            </span>
-          ))}
-          <Link href="/feed" className="text-xs text-muted-foreground underline underline-offset-4">
-            Reset
-          </Link>
-        </div>
-      ) : null}
-
-      {/* The header and filters need only the URL; the cards stream in when the feed is scored. */}
+      <FeedTopBar usage={<DailyUsage userId={user.id} />} filters={sheet("icon")} />
+      <Suspense fallback={null}>
+        <GapsLine userId={user.id} />
+      </Suspense>
+      {/* The top bar and filters need only the URL; the cards stream in when the feed is scored. */}
       <Suspense key={deckQuery} fallback={<DeckSkeleton />}>
-        <FeedDeck userId={user.id} filters={filters} filtered={active.length > 0} query={deckQuery} />
+        <FeedDeck userId={user.id} filters={filters} active={active} query={deckQuery} editFilters={sheet("edit")} widenFilters={sheet("widen")} />
       </Suspense>
     </>
   );
 }
 
-function DeckSkeleton() {
-  return <div className="h-[420px] animate-pulse rounded-2xl bg-muted" aria-busy="true" aria-label="Loading jobs" />;
+async function GapsLine({ userId }: { userId: string }) {
+  const link = await GapsLink({ userId });
+  return link ? <div className="flex px-5 pt-2">{link}</div> : null;
 }
 
-async function FeedDeck({ userId, filters, filtered, query }: { userId: string; filters: FeedFilters; filtered: boolean; query: string }) {
-  const jobs = await listFeed(userId, filters);
-  return jobs.length === 0 ? (
-    <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-card px-6 py-10 text-center shadow-card">
-      <span className="grid size-12 place-items-center rounded-full bg-muted text-muted-foreground">
-        <SearchX className="size-6" aria-hidden />
-      </span>
-      <h2 className="text-base font-semibold">No jobs match these filters</h2>
-      <p className="max-w-[30ch] text-sm text-muted-foreground">
-        {filtered
-          ? "Try a wider search: more places, any experience, or the last 30 days."
-          : "Jobs you have not applied to yet will show up here as companies post them."}
-      </p>
-      {filtered ? (
-        <Link href="/feed" className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
-          Reset filters
-        </Link>
-      ) : (
-        <Link href="/applications" className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
-          See your applications
-        </Link>
-      )}
+function DeckSkeleton() {
+  return (
+    <div className="flex flex-1 flex-col justify-center gap-6 px-5 pb-2" aria-busy="true" aria-label="Loading jobs">
+      <Skeleton className="mt-[18px] h-[420px] rounded-card" />
+      <div className="flex items-center justify-center gap-8">
+        <Skeleton className="size-16 rounded-full" />
+        <Skeleton className="size-18 rounded-full" />
+      </div>
     </div>
-  ) : (
-    <SwipeDeck jobs={jobs} query={query} />
+  );
+}
+
+async function FeedDeck({
+  userId,
+  filters,
+  active,
+  query,
+  editFilters,
+  widenFilters,
+}: {
+  userId: string;
+  filters: FeedFilters;
+  active: ActiveFilter[];
+  query: string;
+  editFilters: React.ReactNode;
+  widenFilters: React.ReactNode;
+}) {
+  const [jobs, sentToday, inProgress] = await Promise.all([
+    listFeed(userId, filters),
+    dailyUsage(userId),
+    db.application.count({ where: { userId, status: { in: ["queued", "inspecting", "filling"] } } }),
+  ]);
+  if (jobs.length > 0) return <SwipeDeck jobs={jobs} query={query} stats={{ sentToday, inProgress }} widenFilters={widenFilters} />;
+
+  if (active.length > 0) {
+    return (
+      <EmptyState
+        art={<DeckEmptyArt />}
+        title="No jobs match these filters"
+        text={
+          active.length > 1
+            ? "Each one is fine on its own. Together they're very narrow, so try removing one."
+            : "Try a wider search: more places, any experience, or the last 30 days."
+        }
+        extra={active.map((filter) => (
+          <a
+            key={filter.label}
+            href={filter.removeHref}
+            aria-label={`Remove filter ${filter.label}`}
+            className="inline-flex h-10 items-center gap-1.5 rounded-full border-2 border-edge bg-surface pr-2.5 pl-3.5 text-sm font-semibold text-foreground no-underline"
+          >
+            {filter.label}
+            <Icon name="closeSmall" size={16} strokeWidth={2.5} />
+          </a>
+        ))}
+        actions={
+          <>
+            <a href="/feed" className={buttonVariants({ variant: "primary", size: "xl", className: "w-full" })}>
+              Clear all filters
+            </a>
+            {editFilters}
+          </>
+        }
+      />
+    );
+  }
+  return (
+    <EmptyState
+      art={<DeckEmptyArt />}
+      title="No jobs match these filters"
+      text="Jobs you have not applied to yet will show up here as companies post them."
+      actions={
+        <Link href="/applications" className={buttonVariants({ variant: "primary", size: "xl", className: "w-full" })}>
+          See my applications
+        </Link>
+      }
+    />
   );
 }

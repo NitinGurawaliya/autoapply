@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { FieldError, FieldLabel, InputBox } from "@/components/ui/field";
 
 const PHRASE = "DELETE MY ACCOUNT";
 
@@ -32,25 +32,27 @@ export function AccountActions() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <section className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4 shadow-card">
-        <h2 className="text-sm font-semibold">Download your data</h2>
-        <p className="text-sm text-muted-foreground">Your profile, saved answers and every application with what was filled in, as one JSON file.</p>
-        <a href="/api/account/export" className="self-start rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
+    <div className="flex flex-col gap-5 px-5 pt-4 pb-6">
+      <section className="box-border flex flex-col gap-2.5 rounded-panel border-[1.5px] border-line bg-surface p-4">
+        <h2 className="m-0 text-lg font-semibold tracking-[-0.01em]">Download your data</h2>
+        <p className="m-0 text-sm leading-normal text-muted-foreground">Your profile, saved answers and every application with what was filled in, as one JSON file.</p>
+        <a href="/api/account/export" className={buttonVariants({ variant: "primary", size: "lg", className: "mt-1 w-full" })}>
           Download my data
         </a>
       </section>
-      <section className="flex flex-col gap-3 rounded-2xl border border-danger/40 bg-card p-4 shadow-card">
-        <h2 className="text-sm font-semibold text-danger">Delete your account</h2>
-        <p className="text-sm text-muted-foreground">
+      <section className="box-border flex flex-col gap-3 rounded-[22px] border-2 border-edge bg-surface p-[18px] shadow-[0_5px_0_var(--shadow-color)]">
+        <h2 className="m-0 text-lg font-semibold tracking-[-0.01em]">Delete your account</h2>
+        <p className="m-0 text-sm leading-normal text-muted-foreground">
           This removes your profile, resume, saved answers, applications and screenshots, and stops anything still running. It cannot be undone. Applications already sent to companies stay with those companies.
         </p>
-        <label className="flex flex-col gap-1.5 text-sm">
-          Type <span className="font-semibold">{PHRASE}</span> to confirm
-          <Input value={text} onChange={(event) => setText(event.target.value)} autoComplete="off" />
-        </label>
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        <Button type="button" variant="destructive" disabled={busy || text.trim() !== PHRASE} onClick={() => void erase()} className="self-start">
+        <div className="flex flex-col gap-2">
+          <FieldLabel tone="muted" htmlFor="delete-confirm">
+            Type <span className="font-semibold text-foreground">{PHRASE}</span> to confirm
+          </FieldLabel>
+          <InputBox id="delete-confirm" tone="soft" value={text} onChange={(event) => setText(event.target.value)} autoComplete="off" />
+        </div>
+        {error ? <FieldError>{error}</FieldError> : null}
+        <Button type="button" variant="strong" size="lg" className="w-full" disabled={busy || text.trim() !== PHRASE} onClick={() => void erase()}>
           {busy ? "Deleting..." : "Delete everything"}
         </Button>
       </section>

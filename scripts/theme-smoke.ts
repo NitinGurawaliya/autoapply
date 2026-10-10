@@ -11,8 +11,8 @@ function check(name: string, ok: boolean, detail = "") {
   if (!ok) failed += 1;
   console.log(`${ok ? "ok  " : "FAIL"} ${name}${detail ? ` (${detail})` : ""}`);
 }
-const BRAND = "rgb(79, 70, 229)"; // --primary #4f46e5
-const PAGE_BG = "rgb(246, 247, 251)"; // --background #f6f7fb
+const BRAND = "rgb(198, 244, 50)"; // --primary #c6f432 (lime)
+const PAGE_BG = "rgb(246, 246, 247)"; // --background #f6f6f7
 
 async function main() {
   mkdirSync(OUT, { recursive: true });
@@ -52,33 +52,43 @@ async function main() {
     const apply = await page.getByRole("button", { name: "Apply" }).evaluate((el) => getComputedStyle(el).backgroundColor);
     check("Apply button uses the brand accent", apply === BRAND, apply);
     await page.getByRole("button", { name: /Filters/ }).click();
-    await page.getByRole("dialog", { name: "Filter jobs" }).waitFor({ timeout: 10000 });
+    await page.getByRole("dialog", { name: "Filters" }).waitFor({ timeout: 10000 });
     const chip = await page.locator('a[aria-current="true"]').first().evaluate((el) => getComputedStyle(el).backgroundColor);
     await page.keyboard.press("Escape");
     check("active filter chip uses the brand accent", chip === BRAND, chip);
-    const card = await page.locator("article[data-job-id]").first().evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, shadow: getComputedStyle(el).boxShadow }));
-    check("job card is a white raised surface", card.bg === "rgb(255, 255, 255)" && card.shadow !== "none", `${card.bg}, shadow ${card.shadow === "none" ? "none" : "yes"}`);
+    // The article moves; its first child is the card face (white, ink edge, hard ink shadow).
+    const card = await page
+      .locator("article[data-job-id] > div")
+      .first()
+      .evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, shadow: getComputedStyle(el).boxShadow, edge: getComputedStyle(el).borderTopColor }));
+    check(
+      "job card is a white surface with the ink edge and hard shadow",
+      card.bg === "rgb(255, 255, 255)" && card.edge === "rgb(22, 23, 26)" && card.shadow.includes("rgb(22, 23, 26) 0px 6px 0px"),
+      `${card.bg}, edge ${card.edge}, shadow ${card.shadow}`,
+    );
     await page.screenshot({ path: `${OUT}/feed.png` });
 
     await page.goto("http://localhost:3000/applications", { timeout: 90000 });
-    await page.getByText("Submitted", { exact: true }).first().waitFor({ timeout: 30000 });
-    const tile = await page.getByRole("button", { name: /^Submitted/ }).evaluate((el) => getComputedStyle(el).backgroundColor);
-    check("the Submitted summary tile is the soft green", tile === "rgb(220, 252, 231)", tile);
-    const badge = await page.locator("ul li").getByText("Submitted", { exact: true }).first().evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, color: getComputedStyle(el).color }));
-    check("Submitted badge is the soft green pair", badge.bg === "rgb(220, 252, 231)" && badge.color === "rgb(22, 101, 52)", `${badge.bg} / ${badge.color}`);
-    const failedBadge = await page.locator("ul li").getByText("Failed", { exact: true }).first().evaluate((el) => getComputedStyle(el).backgroundColor);
-    check("Failed badge is the soft red", failedBadge === "rgb(254, 226, 226)", failedBadge);
+    await page.locator('li[data-row="sent"]').first().waitFor({ timeout: 30000 });
+    // Status is ink and lime only (design/applications.html): the selected chip is ink, sent rows carry an ink check,
+    // didn't-go-through rows are dashed.
+    const all = await page.getByRole("group", { name: "Show" }).getByRole("button", { name: /^All/ }).evaluate((el) => getComputedStyle(el).backgroundColor);
+    check("the selected filter chip is ink", all === "rgb(22, 23, 26)", all);
+    const mark = await page.locator('li[data-row="sent"] [aria-hidden="true"].rounded-full').first().evaluate((el) => getComputedStyle(el).backgroundColor);
+    check("a sent row carries the ink check", mark === "rgb(22, 23, 26)", mark);
+    const dashed = await page.locator('li[data-row="failed"]').first().evaluate((el) => getComputedStyle(el).borderTopStyle);
+    check("a didn't-go-through row is dashed", dashed === "dashed", dashed);
     await page.screenshot({ path: `${OUT}/applications.png`, fullPage: true });
 
     await page.goto(`http://localhost:3000/applications/${ids[0]}`, { timeout: 90000 });
-    await page.getByText("What was filled in").waitFor({ timeout: 30000 });
+    await page.locator('section[aria-label="What was filled in"]').waitFor({ timeout: 30000 });
     await page.screenshot({ path: `${OUT}/detail.png`, fullPage: true });
 
     // Dark mode renders with the dark tokens.
     await page.emulateMedia({ colorScheme: "dark" });
     await page.evaluate(() => document.documentElement.classList.add("dark"));
     const darkBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-    check("dark mode uses the dark surface", darkBg === "rgb(13, 15, 31)", darkBg);
+    check("dark mode uses the dark surface", darkBg === "rgb(14, 15, 17)", darkBg);
     await page.screenshot({ path: `${OUT}/detail-dark.png`, fullPage: true });
   } catch (error) {
     failed += 1;

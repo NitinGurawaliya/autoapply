@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Icon } from "@/components/ui/icons";
 import { db } from "@/lib/db";
 import { enqueuePrescan } from "@/lib/queue";
 
@@ -17,7 +18,8 @@ export async function GapsLink({ userId }: { userId: string }) {
   if (!scan || gaps === 0) return null;
   const blocked = scan.scanned - scan.covered;
   return (
-    <Link href="/gaps" className="text-xs font-medium text-primary underline-offset-4 hover:underline">
+    <Link href="/gaps" className="inline-flex min-h-8 items-center gap-1.5 self-start text-[13px] font-semibold text-foreground underline underline-offset-3">
+      <Icon name="info" size={14} strokeWidth={2.25} />
       Answer {gaps} {gaps === 1 ? "question" : "questions"} to unblock {blocked} {blocked === 1 ? "job" : "jobs"}
     </Link>
   );

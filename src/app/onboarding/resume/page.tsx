@@ -1,6 +1,7 @@
-import { getCurrentUser } from "@/lib/auth";
-import { SignOutForm } from "@/components/sign-out-form";
 import { redirect } from "next/navigation";
+import { getCurrentUser, signOut } from "@/lib/auth";
+import { Button } from "@/components/ui/button";
+import { Screen } from "@/components/patterns/layout";
 import { ResumeUploadForm } from "./upload-form";
 
 export default async function ResumePage() {
@@ -8,13 +9,21 @@ export default async function ResumePage() {
   if (!user) redirect("/sign-in");
 
   return (
-    <main className="mx-auto flex w-full max-w-[480px] flex-1 flex-col gap-6 px-4 py-10">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Upload resume</h1>
-        <p className="mt-2 text-sm text-muted-foreground">PDF only. We extract what is written on it.</p>
-      </div>
-      <ResumeUploadForm />
-      <SignOutForm />
-    </main>
+    <Screen>
+      <ResumeUploadForm
+        signOut={
+          <form
+            action={async () => {
+              "use server";
+              await signOut({ redirectTo: "/sign-in" });
+            }}
+          >
+            <Button type="submit" variant="quiet" size="text" className="text-sm">
+              Sign out
+            </Button>
+          </form>
+        }
+      />
+    </Screen>
   );
 }

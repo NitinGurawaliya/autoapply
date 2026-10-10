@@ -1,12 +1,7 @@
 "use client";
 
+import { PageError } from "@/components/patterns/states";
+
 export default function ApplicationsError({ reset }: { reset: () => void }) {
-  return (
-    <div>
-      <p className="text-sm text-destructive">Could not load your applications.</p>
-      <button type="button" onClick={reset} className="mt-3 rounded-full border border-border px-3 py-1 text-xs">
-        Try again
-      </button>
-    </div>
-  );
+  return <PageError title="Could not load your applications" reset={reset} />;
 }
