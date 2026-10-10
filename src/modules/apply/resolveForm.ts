@@ -1,7 +1,8 @@
-import { upsert } from "@/modules/answers";
+import { detectConcept, upsert } from "@/modules/answers";
 import { loadRules } from "@/modules/governance";
 import type { FormField } from "./adapter";
-import { deriveAnswers, type ProfileForDerive } from "./derive";
+import { abroadAnswer } from "./abroad";
+import { deriveAnswers, type ProfileForDerive, yesNoOf } from "./derive";
 import { BEST_PROJECT_KEY, draftEssays, essayKind, ESSAY_PERMISSION_KEY, type EssayKind, type EssayProfile } from "./essay";
 import { mapFields } from "./fieldMapper";
 import { mapToOptions } from "./optionMap";
@@ -131,6 +132,41 @@ export async function resolveForm(input: {
       }
     } catch (error) {
       await log(`Could not match answers to the form's options (${why(error)}); asking instead`);
+    }
+  }
+
+  // A saved yes / no answer that contradicts what the resume, the profile or the user's standing answers prove ("Yes"
+  // to "3 years of AWS?" on a resume with 1 year in total; "authorized to work in the US? Yes" from someone who needs
+  // sponsorship outside India) is not reused: the proven answer goes in, with both in the basis (owner, 10 Oct).
+  const reused = resolved.values.filter((value) => (value.source === "user" || value.source === "matched") && yesNoOf(value.value));
+  if (reused.length > 0) {
+    try {
+      const fieldOf = new Map(mapped.map((item) => [item.field.label, item.field]));
+      const fields = reused.map((value) => fieldOf.get(value.label)).filter((field): field is FormField => !!field);
+      const proven = await deriveAnswers({ profile, fields });
+      const bank = new Map(answers.map((row) => [row.key, row]));
+      let corrected = 0;
+      for (const value of reused) {
+        const field = fieldOf.get(value.label);
+        if (!field) continue;
+        let proof: { answer: string; basis: string } | null = proven.get(value.label) ?? null;
+        const kind = proof ? null : detectConcept(value.label);
+        if (kind) {
+          const found = abroadAnswer({ kind, label: value.label, options: field.options, required: false, profile, jobCountry: job.country, bank: (key) => bank.get(key) });
+          if (found && "answer" in found) proof = found;
+        }
+        const truth = proof ? yesNoOf(proof.answer) : null;
+        if (!proof || !truth || truth === yesNoOf(value.value)) continue;
+        const option = field.options?.length ? field.options.find((item) => yesNoOf(item) === truth) : proof.answer;
+        if (!option) continue;
+        value.basis = `your saved answer was "${value.value.slice(0, 40)}", but ${proof.basis}`;
+        value.value = option;
+        value.source = "derived";
+        corrected += 1;
+      }
+      if (corrected > 0) await log(`Did not reuse ${corrected} saved answers that contradict your resume or profile`);
+    } catch (error) {
+      await log(`Could not check saved answers against your resume (${why(error)})`);
     }
   }
 

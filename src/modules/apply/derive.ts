@@ -27,6 +27,14 @@ export type ProfileForDerive = {
   experience: unknown;
 };
 
+/** Whether an answer says yes or no ("Yes, I am eligible", "I have never been employed by..."), or null. */
+export function yesNoOf(text: string): "yes" | "no" | null {
+  if (/^\s*i (have|am|do|will|was) (never|not)\b/i.test(text)) return "no";
+  if (/^\s*(yes|i am|i have|i do|i will|true)\b/i.test(text)) return "yes";
+  if (/^\s*(no|i am not|i do not|i don.t|i will not|false|none)\b/i.test(text)) return "no";
+  return null;
+}
+
 // Leading tags such as "[Relocation]" do not change what is asked.
 const opening = (question: string) => question.replace(/^\s*\[[^\]]*\]\s*/, "").trim();
 // A yes/no question, also when it opens with a statement and asks at the end ("... let us know if you're residing in X?").
