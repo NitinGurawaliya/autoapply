@@ -22,6 +22,12 @@ async function main() {
   check("a mapping onto a real option fills it, keeping the source and saying why", mapped.values[0]?.value === "1 month" && mapped.values[0]?.source === "user" && /30 days/.test(mapped.values[0]?.basis ?? "") && mapped.pending.length === 0);
   const bogus = resolveValues([{ field: notice, key: "notice_period" }], PROFILE, answers, undefined, new Map([[optionKey(notice.label, "30 days"), "6 weeks"]]));
   check("a mapping to something not on the form is ignored", bogus.values.length === 0 && bogus.pending.length === 1);
+  // A number with a unit in exactly one range of that unit is placed by code, before any model call.
+  const ctc: FormField = { selector: "#ctc", label: "Expected CTC", type: "select", required: true, options: ["0-5 LPA", "5-10 LPA", "10-15 LPA", "15+ LPA"] };
+  const inRange = resolveValues([{ field: ctc, key: "expected_ctc" }], PROFILE, [{ key: "expected_ctc", answer: "12 LPA", source: "user" }]);
+  check("'12 LPA' is placed in '10-15 LPA' without the model", inRange.values[0]?.value === "10-15 LPA" && inRange.unfit.length === 0, JSON.stringify(inRange.values[0] ?? inRange.unfit));
+  const edge = resolveValues([{ field: ctc, key: "expected_ctc" }], PROFILE, [{ key: "expected_ctc", answer: "10 LPA", source: "user" }]);
+  check("a number on the edge of two ranges is not guessed by code", edge.values.length === 0 && edge.unfit.length === 1);
 
   const items = [
     { label: "Notice period", answer: "30 days", options: ["Immediately", "15 days", "1 month", "2 months", "3 months"], key: "notice_period", sensitive: true },

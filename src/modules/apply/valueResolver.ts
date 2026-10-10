@@ -47,15 +47,27 @@ function profileValue(profile: ProfileFacts, key: string) {
 
 const DECLINE = /decline|don.?t wish|do not wish|prefer not|not (to )?(say|disclose|answer|self.?identify)|choose not/i;
 
-/** "1" against ["0-2", "3-5", "10+"] → "0-2". Only when the value is a plain number and exactly one range holds it. */
-function numericRange(value: string, options: string[]) {
-  if (!/^\d+(\.\d+)?$/.test(value.trim())) return null;
-  const n = Number(value);
+/** "years" and "year", "LPA" and "lpa" are the same unit. */
+function unit(text: string | undefined) {
+  return (text ?? "").trim().toLowerCase().replace(/s$/, "");
+}
+
+/**
+ * "1" against ["0-2", "3-5", "10+"] → "0-2"; "12 LPA" against ["5-10 LPA", "10-15 LPA"] → "10-15 LPA". Only when
+ * the value is a number, its unit is the options' unit (a bare number also fits ranges in years), and exactly one
+ * range holds it: arithmetic, not a judgement, so no model is needed.
+ */
+export function numericRange(value: string, options: string[]) {
+  const parsed = value.trim().match(/^(\d+(?:\.\d+)?)\s*([a-z%]+)?$/i);
+  if (!parsed) return null;
+  const n = Number(parsed[1]);
+  const valueUnit = unit(parsed[2]);
+  const sameUnit = (optionUnit: string | undefined) => unit(optionUnit) === valueUnit || (!valueUnit && unit(optionUnit) === "year");
   const hits = options.filter((option) => {
-    const between = option.match(/^\s*(\d+(?:\.\d+)?)\s*(?:-|–|to)\s*(\d+(?:\.\d+)?)\s*(years?)?\s*$/i);
-    if (between) return n >= Number(between[1]) && n <= Number(between[2]);
-    const plus = option.match(/^\s*(\d+(?:\.\d+)?)\s*\+\s*(years?)?\s*$/i);
-    return plus ? n >= Number(plus[1]) : false;
+    const between = option.match(/^\s*(\d+(?:\.\d+)?)\s*(?:-|–|to)\s*(\d+(?:\.\d+)?)\s*([a-z%]+)?\s*$/i);
+    if (between) return sameUnit(between[3]) && n >= Number(between[1]) && n <= Number(between[2]);
+    const plus = option.match(/^\s*(\d+(?:\.\d+)?)\s*\+\s*([a-z%]+)?\s*$/i);
+    return plus ? sameUnit(plus[2]) && n >= Number(plus[1]) : false;
   });
   return hits.length === 1 ? hits[0] : null;
 }
