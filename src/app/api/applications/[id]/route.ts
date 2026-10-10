@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { applicationVersion } from "@/lib/status-meta";
 
 const fieldsSchema = z.array(
   z.object({
@@ -25,10 +26,16 @@ const pendingSchema = z.array(
 
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: Request, context: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { id } = await context.params;
+  // What the detail page polls while a run is going (components/auto-refresh.tsx): one small query, not the page.
+  if (new URL(req.url).searchParams.get("only") === "version") {
+    const found = await db.application.findFirst({ where: { id, userId: user.id }, select: { status: true, _count: { select: { events: true } } } });
+    if (!found) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    return NextResponse.json({ version: applicationVersion(found.status, found._count.events) }, { headers: { "Cache-Control": "no-store" } });
+  }
   const application = await db.application.findFirst({
     where: { id, userId: user.id },
     include: { events: { orderBy: { createdAt: "asc" } } },

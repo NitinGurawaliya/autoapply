@@ -16,7 +16,7 @@ import { db } from "@/lib/db";
 import { EVENT_LABEL } from "@/lib/event-labels";
 import { explainOutcome } from "@/lib/explain";
 import { groupFields } from "@/lib/field-groups";
-import { statusMeta } from "@/lib/status-meta";
+import { applicationVersion, statusMeta } from "@/lib/status-meta";
 import { buildSteps } from "@/lib/steps";
 
 const fieldsSchema = z.array(
@@ -133,7 +133,14 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
   return (
     <>
       <BackTopBar href="/applications" label="Application" backLabel="Back to applications" />
-      <AutoRefresh active={RUNNING.includes(application.status)} />
+      {/* Checks a small version endpoint and re-renders only on a change: every 3 s while the agent works, every 10 s
+          while it waits for the user (that changes only when they answer). */}
+      <AutoRefresh
+        active={RUNNING.includes(application.status)}
+        everyMs={application.status === "needs_input" ? 10_000 : 3000}
+        versionUrl={`/api/applications/${application.id}?only=version`}
+        version={applicationVersion(application.status, application.events.length)}
+      />
       <div className="flex flex-col px-5 pb-10">
         <header className="flex flex-col gap-1.5 pt-3.5">
           <CompanyMark name={company} size={56} />

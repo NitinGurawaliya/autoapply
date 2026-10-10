@@ -89,7 +89,11 @@ async function main() {
     check("tapping a chip marks it pressed and filters the list", (await chip(/^Didn.t go through/).getAttribute("aria-pressed")) === "true" && (await page.locator("ul li").count()) === (await total(["failed", "blocked", "cancelled"])));
     check("only didn't-go-through rows remain", (await page.locator("li[data-row]").evaluateAll((els) => els.every((el) => el.getAttribute("data-row") === "failed"))));
     await chip(/^All/).click();
-    check("All brings every application back", (await page.locator("ul li").count()) === (await db.application.count({ where: { userId: user.id } })));
+    // All shows every active application and the newest 25 finished ones; the rest load with Show more (T73).
+    const active = await total(["needs_input", "queued", "inspecting", "filling"]);
+    const firstPage = active + Math.min(25, (await db.application.count({ where: { userId: user.id } })) - active);
+    await page.waitForFunction((n) => document.querySelectorAll("ul li").length === n, firstPage, { timeout: 30000 }).catch(() => undefined);
+    check("All brings the first page of every group back", (await page.locator("ul li").count()) === firstPage, `${await page.locator("ul li").count()} of ${firstPage}`);
     check("All is pressed again", (await chip(/^All/).getAttribute("aria-pressed")) === "true");
 
     // ---------- detail: submitted

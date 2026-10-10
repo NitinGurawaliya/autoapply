@@ -39,3 +39,8 @@ export const GROUP_TABS: Array<{ id: "all" | StatusGroup; label: string }> = [
   { id: "sent", label: "Sent" },
   { id: "failed", label: "Didn't go through" },
 ];
+
+/** Changes whenever an application's status or story does (a new event): the detail page re-renders only then. */
+export function applicationVersion(status: string, events: number) {
+  return `${status}:${events}`;
+}

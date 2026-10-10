@@ -60,12 +60,23 @@ function progressLabel(row: Row) {
   return STAGES[stage];
 }
 
+type Page = { applications: Row[]; counts: Record<string, number> | null; nextCursor: string | null };
+
+/** The API's page of finished applications for a tab: Sent and Didn't go through page their own; the rest page all. */
+function pageGroup(tab: Tab) {
+  return tab === "sent" || tab === "failed" ? tab : "all";
+}
+
 export function ApplicationsList() {
-  const [rows, setRows] = useState<Row[] | null>(null);
+  // The first page (everything active, the newest finished, the counts) and the finished pages loaded after it.
+  const [first, setFirst] = useState<Page | null>(null);
+  const [more, setMore] = useState<{ rows: Row[]; cursor: string | null } | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [failed, setFailed] = useState(false);
   const [tab, setTab] = useState<Tab>("all");
   // Bumped after a cancel or retry so the list reloads and starts polling again.
   const [version, setVersion] = useState(0);
+  const group = pageGroup(tab);
 
   useEffect(() => {
     let stopped = false;
@@ -73,13 +84,13 @@ export function ApplicationsList() {
 
     async function load() {
       try {
-        const response = await fetch("/api/applications", { cache: "no-store" });
+        const response = await fetch(`/api/applications?group=${group}`, { cache: "no-store" });
         if (!response.ok) throw new Error("bad status");
-        const body = (await response.json()) as { applications: Row[] };
+        const body = (await response.json()) as Page;
         if (stopped) return;
-        setRows(body.applications);
+        setFirst(body);
         setFailed(false);
-        // Keep polling only while something is still running.
+        // Keep polling only while something is still running; pages loaded with Show more are kept.
         if (body.applications.some((row) => RUNNING.includes(row.status))) timer = window.setTimeout(load, 3000);
       } catch {
         if (!stopped) setFailed(true);
@@ -91,7 +102,36 @@ export function ApplicationsList() {
       stopped = true;
       window.clearTimeout(timer);
     };
-  }, [version]);
+  }, [version, group]);
+
+  // A tab that pages a different group starts again from its first page (the loading state shows meanwhile).
+  function selectTab(next: Tab) {
+    if (pageGroup(next) !== group) {
+      setFirst(null);
+      setMore(null);
+    }
+    setTab(next);
+  }
+
+  async function showMore() {
+    const cursor = more ? more.cursor : first?.nextCursor;
+    if (!cursor) return;
+    setLoadingMore(true);
+    try {
+      const response = await fetch(`/api/applications?group=${group}&cursor=${encodeURIComponent(cursor)}`, { cache: "no-store" });
+      if (!response.ok) throw new Error("bad status");
+      const body = (await response.json()) as Page;
+      setMore((current) => ({ rows: [...(current?.rows ?? []), ...body.applications], cursor: body.nextCursor }));
+    } catch {
+      setFailed(true);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  // The first page wins over a later page for the same application (it is the fresher copy).
+  const rows = first ? [...first.applications, ...(more?.rows ?? []).filter((row) => !first.applications.some((fresh) => fresh.id === row.id))] : null;
+  const nextCursor = more ? more.cursor : (first?.nextCursor ?? null);
 
   if (failed && !rows) {
     return (
@@ -120,7 +160,10 @@ export function ApplicationsList() {
     StatusGroup,
     Row[]
   >;
-  const counts: Record<Tab, number> = { all: rows.length, needs: groups.needs.length, progress: groups.progress.length, sent: groups.sent.length, failed: groups.failed.length };
+  // Counts are over all the user's applications (from the server), not only the pages loaded so far.
+  const counted: Record<StatusGroup, number> = { needs: 0, progress: 0, sent: 0, failed: 0 };
+  for (const [status, count] of Object.entries(first?.counts ?? {})) counted[statusMeta(status).group] += count;
+  const counts: Record<Tab, number> = { all: counted.needs + counted.progress + counted.sent + counted.failed, ...counted };
   const sections = SECTION_ORDER.filter((group) => (tab === "all" || tab === group) && groups[group].length > 0);
 
   function rowFor(row: Row) {
@@ -172,13 +215,13 @@ export function ApplicationsList() {
     <div className="flex min-h-0 flex-1 flex-col">
       <div role="group" aria-label="Show" className="flex flex-none gap-2 overflow-x-auto px-5 pt-4 pb-3">
         {GROUP_TABS.map((item) => (
-          <Chip key={item.id} shape="tab" selected={tab === item.id} count={counts[item.id]} onClick={() => setTab(item.id)}>
+          <Chip key={item.id} shape="tab" selected={tab === item.id} count={counts[item.id]} onClick={() => selectTab(item.id)}>
             {item.label}
           </Chip>
         ))}
       </div>
 
-      {rows.length === 0 ? (
+      {rows.length === 0 && counts.all === 0 ? (
         <EmptyState
           art={<DeckEmptyArt />}
           title="No applications yet"
@@ -195,7 +238,7 @@ export function ApplicationsList() {
           title="Nothing here"
           text="No applications in this group right now."
           actions={
-            <Button variant="line" size="lg" className="w-full" onClick={() => setTab("all")}>
+            <Button variant="line" size="lg" className="w-full" onClick={() => selectTab("all")}>
               Show all
             </Button>
           }
@@ -205,11 +248,16 @@ export function ApplicationsList() {
           {sections.map((group) => (
             <section key={group} className="flex flex-col gap-2.5" aria-label={SECTION_TITLE[group]}>
               <Eyebrow as="h2">
-                {SECTION_TITLE[group]} · {groups[group].length}
+                {SECTION_TITLE[group]} · {counts[group]}
               </Eyebrow>
               <ul className="m-0 flex list-none flex-col gap-2.5 p-0">{groups[group].map(rowFor)}</ul>
             </section>
           ))}
+          {nextCursor && tab !== "needs" && tab !== "progress" ? (
+            <Button variant="line" size="lg" className="w-full" disabled={loadingMore} onClick={() => void showMore()}>
+              {loadingMore ? "Loading…" : "Show more"}
+            </Button>
+          ) : null}
         </div>
       )}
     </div>

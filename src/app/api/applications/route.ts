@@ -6,24 +6,53 @@ export const dynamic = "force-dynamic";
 
 const NO_STORE = { "Cache-Control": "no-store" };
 
-export async function GET() {
+// What is still moving (needs the user, or the agent is on it) is always returned in full: it is bounded by the queue
+// cap and is what the user came to see. Finished applications (sent, or did not go through) come a page at a time,
+// newest first, so the list stays small however many a user has.
+const ACTIVE = ["needs_input", "queued", "inspecting", "filling"];
+const FINISHED: Record<string, string[]> = { all: ["submitted", "failed", "blocked", "cancelled"], sent: ["submitted"], failed: ["failed", "blocked", "cancelled"] };
+const PAGE = 25;
+
+const SELECT = { id: true, jobId: true, status: true, error: true, attempt: true, submittedAt: true, createdAt: true, pendingQuestions: true } as const;
+
+/** "createdAt_id" of the last finished row of a page: the next page starts after it. */
+function readCursor(raw: string | null) {
+  const match = raw?.match(/^(\d{4}-\d\d-\d\dT[\d:.]+Z)_(\w+)$/);
+  return match ? { createdAt: new Date(match[1]), id: match[2] } : null;
+}
+
+/**
+ * GET /api/applications?group=all|sent|failed&cursor=… The first page (no cursor) has every active application, the
+ * newest finished ones, and the counts per status for the filter chips; later pages have finished ones only.
+ */
+export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const applications = await db.application.findMany({
-    where: { userId: user.id },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      jobId: true,
-      status: true,
-      error: true,
-      attempt: true,
-      submittedAt: true,
-      createdAt: true,
-      pendingQuestions: true,
-    },
-  });
+  const params = new URL(request.url).searchParams;
+  const finished = FINISHED[params.get("group") ?? "all"] ?? FINISHED.all;
+  const cursor = readCursor(params.get("cursor"));
+  const userId = user.id;
+
+  const [active, page, byStatus] = await Promise.all([
+    cursor ? [] : db.application.findMany({ where: { userId, status: { in: ACTIVE } }, orderBy: { createdAt: "desc" }, select: SELECT }),
+    db.application.findMany({
+      where: {
+        userId,
+        status: { in: finished },
+        ...(cursor ? { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] } : {}),
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: PAGE + 1,
+      select: SELECT,
+    }),
+    cursor ? [] : db.application.groupBy({ by: ["status"], where: { userId }, _count: true }),
+  ]);
+  const more = page.length > PAGE;
+  const finishedRows = page.slice(0, PAGE);
+  const last = finishedRows[finishedRows.length - 1];
+  const applications = [...active, ...finishedRows];
+
   // Which prompt an application is waiting on: the id of its latest "ask_user" event. A new prompt (a rejected
   // security code, a second question) gets a new id, so the client can notify once per prompt and never twice.
   // Place in line is counted over everyone's queued applications (the worker takes them oldest first), so a person who
@@ -50,20 +79,23 @@ export async function GET() {
   const byId = new Map(jobs.map((job) => [job.id, job]));
   return NextResponse.json(
     {
-    applications: applications.map((application) => {
-      const job = byId.get(application.jobId);
-      const { pendingQuestions, ...rest } = application;
-      const asksForCode = Array.isArray(pendingQuestions) && pendingQuestions.some((q) => (q as { key?: string })?.key === "security_code");
-      return {
-        ...rest,
-        waitingFor: application.status === "needs_input" ? (asksForCode ? "code" : "answers") : null,
-        promptId: promptByApp.get(application.id) ?? null,
-        ahead: application.status === "queued" ? waitingInLine.filter((other) => other.createdAt < application.createdAt).length : null,
-        title: job?.title ?? "Unknown role",
-        company: job?.company.name ?? "Unknown company",
-        location: job?.location ?? "",
-      };
-    }),
+      applications: applications.map((application) => {
+        const job = byId.get(application.jobId);
+        const { pendingQuestions, ...rest } = application;
+        const asksForCode = Array.isArray(pendingQuestions) && pendingQuestions.some((q) => (q as { key?: string })?.key === "security_code");
+        return {
+          ...rest,
+          waitingFor: application.status === "needs_input" ? (asksForCode ? "code" : "answers") : null,
+          promptId: promptByApp.get(application.id) ?? null,
+          ahead: application.status === "queued" ? waitingInLine.filter((other) => other.createdAt < application.createdAt).length : null,
+          title: job?.title ?? "Unknown role",
+          company: job?.company.name ?? "Unknown company",
+          location: job?.location ?? "",
+        };
+      }),
+      // Counts per status over all the user's applications (first page only), so the chips stay right while pages load.
+      counts: cursor ? null : Object.fromEntries(byStatus.map((row) => [row.status, row._count])),
+      nextCursor: more && last ? `${last.createdAt.toISOString()}_${last.id}` : null,
     },
     { headers: NO_STORE },
   );
