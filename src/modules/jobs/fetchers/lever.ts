@@ -19,7 +19,7 @@ const jobSchema = z.object({
 });
 
 export async function fetchLever(slug: string): Promise<FetchedJob[]> {
-  const response = await fetch(`https://api.lever.co/v0/postings/${slug}?mode=json`);
+  const response = await fetch(`https://api.lever.co/v0/postings/${slug}?mode=json`, { signal: AbortSignal.timeout(30000) });
   if (!response.ok) throw new Error(`lever ${slug} ${response.status}`);
   const body = (await response.json()) as unknown[];
   const jobs: FetchedJob[] = [];

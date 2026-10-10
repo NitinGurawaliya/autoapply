@@ -14,7 +14,7 @@ const jobSchema = z.object({
 });
 
 export async function fetchAshby(slug: string): Promise<FetchedJob[]> {
-  const response = await fetch(`https://api.ashbyhq.com/posting-api/job-board/${slug}`);
+  const response = await fetch(`https://api.ashbyhq.com/posting-api/job-board/${slug}`, { signal: AbortSignal.timeout(30000) });
   if (!response.ok) throw new Error(`ashby ${slug} ${response.status}`);
   const body = (await response.json()) as { jobs?: unknown[] };
   const jobs: FetchedJob[] = [];

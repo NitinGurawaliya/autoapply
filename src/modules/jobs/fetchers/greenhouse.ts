@@ -15,6 +15,7 @@ const jobSchema = z.object({
 export async function fetchGreenhouse(slug: string): Promise<FetchedJob[]> {
   const response = await fetch(
     `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs?content=true`,
+    { signal: AbortSignal.timeout(30000) },
   );
   if (!response.ok) throw new Error(`greenhouse ${slug} ${response.status}`);
   const body = (await response.json()) as { jobs?: unknown[] };

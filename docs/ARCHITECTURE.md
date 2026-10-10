@@ -117,7 +117,7 @@ model Answer { id String @id @default(cuid()); userId String
   user User @relation(fields:[userId], references:[id]); @@unique([userId, key]) }
 
 model Company { id String @id @default(cuid()); source String; slug String; name String
-  active Boolean @default(true); stage String? /* startup | midsize | mnc */; lastFetchedAt DateTime?; lastFetchCount Int?
+  active Boolean @default(true); stage String? /* startup | midsize | mnc */; lastFetchedAt DateTime?; lastFetchCount Int?; lastError String? /* last fetch failure, null when it worked */
   jobs Job[]; @@unique([source, slug]) }
 
 model Job { id String @id @default(cuid()); source String; externalId String
@@ -129,6 +129,7 @@ model Job { id String @id @default(cuid()); source String; externalId String
   description String; applyUrl String; postedAt DateTime; fetchedAt DateTime
   raw Json
   closedAt DateTime?   // the company's board no longer lists it (6.16)
+  contentHash String?  // md5 of what ingest stores; unchanged jobs are not rewritten (6.2)
   @@unique([source, externalId]); @@index([postedAt]); @@index([country]); @@index([source, country, postedAt]) }
 
 model Swipe { id String @id @default(cuid()); userId String; jobId String; direction String
@@ -165,6 +166,9 @@ model SubmitLock { userId String @id; holderId String; expiresAt DateTime }   //
 
 model RateEvent { id String @id @default(cuid()); key String; createdAt DateTime @default(now())
   @@index([key, createdAt]) }                    // counted-rows rate limiter (6.12)
+
+model IngestRun { id String @id; startedAt DateTime @default(now()); finishedAt DateTime?   // one row per ingest run (6.2)
+  companies Int; failed Int; fetched Int; created Int; updated Int; closed Int; deleted Int; createdEligible Int }
 ```
 
 ## 5. Canonical answer keys (`modules/answers/keys.ts`)
@@ -193,8 +197,8 @@ Each key: `{key, type, synonyms: RegExp[], default?, policy: deterministic | ban
    - Lever `GET https://api.lever.co/v0/postings/{slug}?mode=json` (date: `createdAt` ms)
    - Ashby `GET https://api.ashbyhq.com/posting-api/job-board/{slug}` (date: `publishedAt`)
 3. `normalize.ts` → Job; `tagging.ts` → `country`, `remoteType`, `experienceMin` (regex + city tables; LLM only with `llmTag=true`). Places match as whole words ("India" never matches "Indiana"); US is a US city, any state's name, or a two-letter state code after a comma ("Palo Alto, CA", not when the place is in Canada); India includes "IND" and more cities (10 Oct: 143 US jobs had been filed as Other). `scripts/backfill-job-features.ts` rewrites stored countries after a rule change. India eligibility (T77): `eligibility()` sets `Job.eligibility` from the location line, the board's offices (Greenhouse `offices`, e.g. "India Locations", "Bengaluru @ …, India") and, for a remote role that names no place, the description: `india` (an India place; when several places are listed, the India part decides whether it is remote), `remote_india` (remote and India, APAC/Asia, IST or anywhere/worldwide), `abroad` (any other place, or remote limited to other countries), `unknown` (nothing to go on, e.g. a bare "Remote" or "Hybrid", or a remote place we cannot read: when unsure, leave it out). The location line decides first; the offices only when it names no place; the description only for a bare "Remote" ("India", "IST", "work from anywhere"; not "global", which companies use for anything). Measured 10 Oct on all open jobs: Greenhouse 317 india, 18 remote_india, 2,307 abroad, 2 unknown; a spot check of 30 per bucket found one miss (fixed). The feed shows `india` and `remote_india` only (T80). `Job.firstSeenAt` records when ingest first saw a job. Greenhouse descriptions arrive HTML-escaped; `plainText` unescapes before and after removing tags (before 10 Oct the markup was stored as text). Check: `scripts/eligibility-test.ts`.
-4. Keep `postedAt >= now - days`; upsert by `(source, externalId)`; update `Company.lastFetchedAt/lastFetchCount`.
-5. Scheduled: the worker registers a pg-boss cron on start (`src/worker/schedule.ts`): `INGEST_CRON` (default `0 */6 * * *`, UTC) with `{days: INGEST_DAYS}` (default 7), stored in the database so several workers registering it is harmless, with `missed: "once"` so a run that came due while every worker was down happens once when one returns. The worker logs `ingest scheduled: ...` on start. Check: `scripts/schedule-smoke.ts`. Manual: `POST /api/jobs/ingest` and `npm run ingest -- --days 7`.
+4. Keep `postedAt >= now - days`. Per company (T79): load the stored rows by `(source, externalId)`, `createMany` the new ones, rewrite only the ones whose `contentHash` changed, that moved company or that came back after closing (transactions of 50), then close the rest (6.16). 4 companies at a time, 300 ms between them, a 30 s timeout per request and one retry after 2 s; a company that still fails gets `Company.lastError` and is counted, the others go on. `Company.lastFetchedAt/lastFetchCount` are updated. One run at a time: a run starts by inserting an `IngestRun` row only when no unfinished run started within 2 hours, otherwise it logs and skips; the row gets the totals (companies, failed, fetched, created, updated, closed, deleted, new India-eligible) when it ends. Closed jobs nobody swiped or applied to are deleted 30 days after closing. Measured 10 Oct on 116 companies (98 Greenhouse): first run 349 s, 14,521 listed, 4,792 new (549 India-eligible), 0 failed, jobs 3,561 → 8,353; second run 83 s, 0 written. Open Greenhouse jobs after it: 763 india, 77 remote_india, 6,345 abroad, 5 unknown. Check: `scripts/ingest-contract-test.ts`.
+5. Scheduled: the worker registers a pg-boss cron on start (`src/worker/schedule.ts`): `INGEST_CRON` (default `0 */3 * * *`, UTC) with `{days: INGEST_DAYS}` (default 60, so an open job stays while it is listed; runs expire after 2 hours), stored in the database so several workers registering it is harmless, with `missed: "once"` so a run that came due while every worker was down happens once when one returns. The worker logs `ingest scheduled: ...` on start. Check: `scripts/schedule-smoke.ts`. Manual: `POST /api/jobs/ingest` and `npm run ingest -- --days 7`.
 
 ### 6.3 Matching (`modules/jobs/match.ts`)
 Feed and right-swipes are limited to `APPLY_BOARDS` (`modules/jobs/match.ts`): boards with a working apply adapter, currently `greenhouse` only (plus `mock` for test profiles). Lever and Ashby were switched off on 9 Oct 2026 until their adapters submit reliably. A board left out of the list is still ingested but hidden from the feed and its filters; a right-swipe or retry on one of its jobs returns 403 `board_not_supported`, and the runner blocks any application for it with the same rule, including ones queued or answered before it was switched off.
@@ -403,8 +407,8 @@ OPENAI_VERIFY_MODEL=             # optional model for the answer-memory verify s
 DEMO_HEADED=1
 APPLY_CONCURRENCY=3              # browsers per worker, clamped 1–8 (6.7)
 BROWSER_PROFILE_ROOT=            # where per-user browser profiles live; default ./.browser-profiles (6.7)
-INGEST_CRON=0 */6 * * *          # scheduled ingest, UTC (6.2)
-INGEST_DAYS=7
+INGEST_CRON=0 */3 * * *          # scheduled ingest, UTC (6.2)
+INGEST_DAYS=60
 ```
 `ANTHROPIC_API_KEY` is no longer read by the code (the LLM is OpenAI, §8) and can be removed from `.env`.
 

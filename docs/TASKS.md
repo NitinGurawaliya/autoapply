@@ -430,26 +430,33 @@ Do: the list moves to `prisma/companies.ts` with `stage`; `Company.stage`; `scri
 **Done when:** the discovery report exists and the approved list is seeded, with totals of companies and India-eligible open jobs.
 Progress 10 Oct: batch 1 (508 candidates): 113 on Greenhouse, 65 with India-eligible jobs, 1,380 such jobs open (only 335 were stored, because ingest keeps the last 7 days of postings: T79). The owner kept all 65; `prisma/companies.ts` + `Company.stage` seeded: 66 Greenhouse companies (45 MNC, 19 mid-size, 2 startup). Batch 2 (323 more): 79 on Greenhouse, 32 with India-eligible jobs (273 open); the owner kept all 32. Done 10 Oct: 98 Greenhouse companies active (57 MNC, 36 mid-size, 5 startup) with about 1,650 India-eligible open jobs between them.
 
-### [ ] T79 — Fast, safe ingest at hundreds of companies
+### [x] T79 — Fast, safe ingest at hundreds of companies
 Do: per company one transaction (create new, update changed, close the rest); 4 companies at a time with pauses, timeout and one retry; `lastError` on failures; a singleton run guard; every 3 hours.
 **Done when:** a full ingest of the approved list finishes well inside its limit (measured), `ingest-contract-test` passes, and a second run only touches changed rows.
+Done 10 Oct: first full run of 116 companies 349 s (limit 2 h), 0 failed, 4,792 new jobs (549 India-eligible), jobs 3,561 → 8,353; second run 83 s with 0 created, 0 updated; `ingest-contract-test` PASS. Every 3 hours, 60-day window; open India-eligible Greenhouse jobs: 840 (763 in India, 77 remote).
 
 ### [ ] T80 — Feed shows only India-eligible jobs, with company type
 Do: feed and swipe check use the same eligibility rule (`not_eligible`); location chips In India / Remote; Company type chips; stage tag on the card.
 **Done when:** `feed-sql-test`, `feed-smoke`, `navigation-cache-smoke` (build) pass and no real profile's feed holds an abroad job.
 
-### [ ] T81 — Job functions for every job and every user (all fields)
-Do: `modules/jobs/functions.ts` taxonomy (Engineering with sub-functions, Data & AI, Product, Design, Marketing, Sales, Customer success, HR & people, Finance & accounting, Operations, Legal, Admin, Other) plus seniority; jobs classified at ingest by title rules, the LLM (cached per distinct title) for the rest, stored as `Job.function`, `Job.subFunction`, `Job.seniority`; the resume parse returns the candidate's functions, seniority and skills for any field.
-**Done when:** `scripts/functions-test.ts` classifies 100+ real titles across fields (sampled, reviewed), the backfill reports counts per function, and 5 kinds of resume (engineer, HR, finance, marketing, sales) parse into the right function and skills.
+Decision 10 Oct (owner): **tech first.** Matching must be right for every kind of tech candidate (ML, data science, security, DevOps...) before other fields. The taxonomy and scorer are built so that other fields are only new entries later (T85).
 
-### [ ] T82 — Scoring v2, generic: gates, fit, tiers
-Do: gates (eligibility; the job's function is one the user targets; experience gap of 3+ years = out), then fit from the user's own skills found in the job (weighted in the requirements part), title similarity within the function, seniority fit and freshness; Strong / Good / Stretch with the reason in that field's words; the minimum match becomes a minimum tier; the swipe check uses the same code.
-**Done when:** `match-test` tier cases for several fields pass, `feed-sql-test` agreement holds, and the top 20 for each real profile plus HR and finance test profiles are reviewed with the owner.
+### [ ] T81 — Tech tracks for every job and every user
+Do: `modules/jobs/functions.ts`, one taxonomy built to grow: function `engineering` / `data_ai` / `non_tech` now, with tech tracks: frontend, backend, full-stack, mobile, DevOps/SRE/cloud/platform, data engineering, data science & analytics, ML/AI (incl. LLM/applied AI, research), security, QA/test automation, embedded/firmware/hardware, solutions/support engineering, engineering management; plus seniority (intern, entry, mid, senior, staff/lead, manager+). Each track has its own skill vocabulary (e.g. ML: PyTorch, TensorFlow, MLOps, NLP, CV; security: SIEM, SOC, pentest, IAM; data science: SQL, statistics, A/B testing). Jobs classified at ingest by title rules, the LLM (cached per distinct title) only for the rest, stored as `Job.function`, `Job.track`, `Job.seniority`; non-tech jobs are stored and tagged `non_tech` (not shown to tech users). The resume parse returns the candidate's tracks (primary + secondary), seniority and skills; the user confirms them.
+**Done when:** `scripts/functions-test.ts` classifies 150+ real Greenhouse tech titles across all tracks correctly (sampled, reviewed with the owner), the backfill reports counts per track, and 6 tech resumes (frontend, backend, ML, data science, security, DevOps) parse into the right tracks and skills.
 
-### [ ] T83 — Onboarding and feed for any field
-Do: onboarding confirms the suggested functions and level (editable); engineer-only questions become optional; Function chips in the feed with Company type and location; a dry run on an HR and a finance Greenhouse form.
-**Done when:** HR and finance test profiles go through onboarding, see only their field's India-eligible jobs with tiers, and one dry run per field passes (not submitted).
+### [ ] T82 — Scoring v2 for tech: gates, fit, tiers
+Do: gates (eligibility; the job's track is one of the user's tracks or an adjacent one, e.g. backend↔full-stack, data science↔ML; experience gap of 3+ years = out), then fit from the user's skills found in the job (weighted in the requirements part, the track's own vocabulary and synonyms instead of the engineering-only aliases), title similarity within the track, seniority fit and freshness; Strong / Good / Stretch with the reason ("PyTorch and NLP match; asks 2-4 years, you have 3"); the minimum match becomes a minimum tier; the swipe check uses the same code.
+**Done when:** `match-test` tier cases per track pass (a data scientist is not shown frontend roles, a security engineer sees SOC/AppSec roles, an ML engineer sees applied-AI roles as strong, a senior staff role for a 1-yr developer is out), `feed-sql-test` agreement holds, and the top 20 for each real profile plus ML, data-science and security test profiles are reviewed with the owner.
+
+### [ ] T83 — Onboarding and feed by track
+Do: onboarding shows the suggested tracks and level ("You look like: ML/AI · entry"), editable; Track chips in the feed with Company type and location; a dry run on an ML and a security Greenhouse form.
+**Done when:** ML, data-science and security test profiles go through onboarding, see only their tracks' India-eligible jobs with tiers, and one dry run per track passes (not submitted).
 
 ### [ ] T84 — Daily freshness numbers
 Do: per-run counts (new jobs, new India-eligible jobs, failing companies); `scripts/feed-report.ts` new Strong/Good matches per profile in 24 h.
 **Done when:** the report runs after a scheduled ingest and shows several new matches per profile per day.
+
+### [ ] T85 — Other fields (HR, finance, marketing, sales, operations...) — after T81–T83 are right for tech
+Do: add each field's functions and skill vocabulary to the same taxonomy; resume parse and onboarding for them; test profiles and dry runs per field.
+**Done when:** HR and finance test profiles see only their field's India-eligible jobs with tiers, and one dry run per field passes (not submitted).

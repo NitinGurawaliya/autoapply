@@ -124,6 +124,7 @@ model Company {
   name           String
   active         Boolean   @default(true)
   stage          String?   // startup | midsize | mnc (prisma/companies.ts); the feed's Company type filter
+  lastError      String?   // the last fetch failure, cleared by a fetch that works
   lastFetchedAt  DateTime?
   lastFetchCount Int?
   jobs           Job[]
@@ -150,6 +151,8 @@ model Job {
   eligibility   String   @default("unknown")
   // When ingest first saw the job ("new for you today").
   firstSeenAt   DateTime @default(now())
+  // md5 of what ingest stores and tags from: an unchanged job is not written again.
+  contentHash   String?
   // The application form's questions read from the board's public API (modules/jobs/questions.ts), so the agent can
   // ask what it is missing before opening a browser. Null until fetched.
   questions          Json?
@@ -288,4 +291,22 @@ model FeedGap {
   updatedAt DateTime @updatedAt
 
   @@id([userId, key])
+}
+
+// One ingest run (modules/jobs/ingest.ts): an unfinished run stops another from overlapping it; the counts are the
+// daily freshness numbers.
+model IngestRun {
+  id              String    @id @default(cuid())
+  startedAt       DateTime  @default(now())
+  finishedAt      DateTime?
+  companies       Int       @default(0)
+  failed          Int       @default(0)
+  fetched         Int       @default(0)
+  created         Int       @default(0)
+  updated         Int       @default(0)
+  closed          Int       @default(0)
+  deleted         Int       @default(0)
+  createdEligible Int       @default(0)
+
+  @@index([startedAt])
 }

@@ -38,7 +38,8 @@ export async function enqueueApply(applicationId: string, delaySeconds = 0) {
 
 export async function enqueueIngest(days: number) {
   const boss = await getBoss();
-  return boss.send(INGEST_QUEUE, { days }, { expireInSeconds: 1800, retryLimit: 0 });
+  // Two hours covers hundreds of companies; a run that overlaps another skips itself (modules/jobs/ingest.ts).
+  return boss.send(INGEST_QUEUE, { days }, { expireInSeconds: 7200, retryLimit: 0 });
 }
 
 /** Pre-scan a user's feed for missing facts (modules/apply/prescan.ts); at most one per user every 10 minutes. */
