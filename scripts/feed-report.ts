@@ -23,12 +23,13 @@ async function main() {
   for (const profile of profiles) {
     const feed = await listFeed(profile.userId, parseFeedFilters({}));
     const fresher = await listFeed(profile.userId, parseFeedFilters({ level: "fresher" }));
+    const early = await listFeed(profile.userId, parseFeedFilters({ level: "early" }));
     const tiers = { strong: 0, good: 0, stretch: 0 };
     for (const job of feed) if (job.tier) tiers[job.tier] += 1;
     const ids = feed.filter((job) => job.tier === "strong" || job.tier === "good").map((job) => job.id);
     const fresh = ids.length ? await db.job.count({ where: { id: { in: ids }, firstSeenAt: { gte: day } } }) : 0;
     console.log(`\n${profile.fullName.split(" ")[0]} (…${profile.userId.slice(-6)}) · ${profile.currentTitle ?? "-"} · ${profile.yearsExperience ?? "?"} yrs · tracks ${tracksOf(profile).join(", ")}`);
-    console.log(`  feed ${feed.length} cards (cap 40): strong ${tiers.strong}, good ${tiers.good}, stretch ${tiers.stretch}; fresher filter ${fresher.length}; new strong/good in 24 h: ${fresh}`);
+    console.log(`  feed ${feed.length} cards (cap 40): strong ${tiers.strong}, good ${tiers.good}, stretch ${tiers.stretch}; fresher ${fresher.length}, early career ${early.length}; new strong/good in 24 h: ${fresh}`);
     if (showTitles) for (const job of feed.slice(0, 20)) console.log(`    ${job.tier?.padEnd(7)} ${String(job.score).padStart(3)}  ${job.company} · ${job.title} · ${job.location}  — ${job.reason}`);
   }
 }

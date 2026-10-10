@@ -29,8 +29,8 @@ export type FeedFilters = {
   countries: string[];
   expMax: number | null;
   days: number;
-  /** "fresher": jobs for interns and freshers only (0-1 years, no mid or senior level in the title). */
-  level: "any" | "fresher";
+  /** "fresher": interns and freshers (0-1 years); "early": up to 2 years. Neither lets a mid or senior title in. */
+  level: "any" | "fresher" | "early";
   /** Company types to show; empty = all. */
   stages: string[];
   /** Tracks to show, among the user's own and the adjacent ones; empty = all of them. */
@@ -100,7 +100,7 @@ export function parseFeedFilters(input: {
     countries: countries.length > 0 ? COUNTRIES.filter((country) => countries.includes(country)) : [...DEFAULT_PLACES],
     expMax,
     days: Math.min(Math.max(daysNum, 1), 365),
-    level: listParam(input.level)[0]?.trim().toLowerCase() === "fresher" ? "fresher" : "any",
+    level: (["fresher", "early"] as const).find((level) => level === listParam(input.level)[0]?.trim().toLowerCase()) ?? "any",
     stages: [...new Set(stages)],
     tracks: [...new Set(tracks)],
   };
@@ -356,7 +356,8 @@ export async function feedRows(input: {
   userId: string;
   sources: string[];
   countries: string[];
-  fresher: boolean;
+  /** The most years a job may ask for the Fresher (1) or Early career (2) level; null = any level. */
+  levelYears: number | null;
   stages: string[] | null;
   tracks: string[] | null;
   /** The resume's vector (semantic.ts): each job's closeness to it is read, and jobs below the floor are left out. */
@@ -404,8 +405,8 @@ export async function feedRows(input: {
              ('REMOTE' = ANY(${input.countries}::text[]) AND j.eligibility = 'remote_india') OR
              ('US' = ANY(${input.countries}::text[]) AND j.eligibility NOT IN ('india', 'remote_india') AND j.country = 'US') OR
              ('OTHER' = ANY(${input.countries}::text[]) AND j.eligibility NOT IN ('india', 'remote_india') AND j.country <> 'US'))
-        AND (NOT ${input.fresher} OR j.source = 'mock' OR
-             ((j.seniority IN ('intern', 'entry') OR j.seniority IS NULL) AND j."experienceMin" IS NOT NULL AND j."experienceMin" <= 1) OR
+        AND (${input.levelYears}::int IS NULL OR j.source = 'mock' OR
+             ((j.seniority IN ('intern', 'entry') OR j.seniority IS NULL) AND j."experienceMin" IS NOT NULL AND j."experienceMin" <= ${input.levelYears}::int) OR
              (j.seniority IN ('intern', 'entry') AND j."experienceMin" IS NULL))
         AND (${input.stages}::text[] IS NULL OR c.stage = ANY(${input.stages}::text[]))
         AND (${input.tracks}::text[] IS NULL OR j.source = 'mock' OR j.track = ANY(${input.tracks}::text[]))
@@ -469,7 +470,7 @@ async function scoreFeed(userId: string, filters: FeedFilters): Promise<FeedJob[
       userId,
       sources,
       countries: filters.countries,
-      fresher: filters.level === "fresher",
+      levelYears: filters.level === "fresher" ? 1 : filters.level === "early" ? 2 : null,
       stages: filters.stages.length > 0 ? filters.stages : null,
       tracks: tracks.length > 0 || filters.tracks.length > 0 ? shown : null,
       vector,

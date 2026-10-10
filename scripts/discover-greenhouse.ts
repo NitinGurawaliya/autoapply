@@ -2,16 +2,18 @@
 // right now (the same rules ingest uses: modules/jobs/tagging.ts). Reads only Greenhouse's public boards API and our
 // own Company table; writes nothing to the database. Polite: 4 boards at a time, 300 ms between requests.
 // Writes docs/greenhouse-review.csv for the owner to approve (keep / drop / stage).
-// npx tsx scripts/discover-greenhouse.ts [--batch 2]   (batch 2 writes docs/greenhouse-review-2.csv and leaves out the
-// companies already on our list)
+// npx tsx scripts/discover-greenhouse.ts [--batch 2|3]   (batch N writes docs/greenhouse-review-N.csv and leaves out the
+// companies already on our list). Also counts fresher tech jobs in India (intern / entry, at most 1 year asked).
 import { writeFileSync } from "node:fs";
 import { db } from "../src/lib/db";
 import { fetchGreenhouse } from "../src/modules/jobs/fetchers/greenhouse";
-import { tagPosting } from "../src/modules/jobs/tagging";
+import { classifyTitle } from "../src/modules/jobs/functions";
+import { requiredYears, tagPosting } from "../src/modules/jobs/tagging";
 import { CANDIDATES, type Stage } from "./greenhouse-candidates";
 import { CANDIDATES_2 } from "./greenhouse-candidates-2";
+import { CANDIDATES_3 } from "./greenhouse-candidates-3";
 
-type Row = { name: string; stage: Stage; slug: string | null; open: number; india: number; remoteIndia: number; onList: boolean; error?: string };
+type Row = { name: string; stage: Stage; slug: string | null; open: number; india: number; remoteIndia: number; fresher: number; onList: boolean; error?: string };
 
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const base = (name: string) => name.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]/g, "");
@@ -28,20 +30,27 @@ async function findBoard(slugs: string[]) {
 
 async function check(name: string, stage: Stage, slugs: string[], onList: Set<string>): Promise<Row> {
   const slug = await findBoard(slugs);
-  if (!slug) return { name, stage, slug: null, open: 0, india: 0, remoteIndia: 0, onList: false };
+  if (!slug) return { name, stage, slug: null, open: 0, india: 0, remoteIndia: 0, fresher: 0, onList: false };
   try {
     const jobs = await fetchGreenhouse(slug);
     await pause(300);
     let india = 0;
     let remoteIndia = 0;
+    let fresher = 0;
     for (const job of jobs) {
       const tags = tagPosting(job);
       if (tags.eligibility === "india") india += 1;
       if (tags.eligibility === "remote_india") remoteIndia += 1;
+      if (tags.eligibility !== "india" && tags.eligibility !== "remote_india") continue;
+      // The feed's Fresher level (match.ts feedRows): a tech job, intern or entry title or none, asking at most 1 year.
+      const kind = classifyTitle(job.title);
+      const years = requiredYears(job.title, job.description);
+      const entry = kind.seniority === "intern" || kind.seniority === "entry";
+      if (kind.function !== "non_tech" && ((entry && (years == null || years <= 1)) || (kind.seniority == null && years != null && years <= 1))) fresher += 1;
     }
-    return { name, stage, slug, open: jobs.length, india, remoteIndia, onList: onList.has(slug) };
+    return { name, stage, slug, open: jobs.length, india, remoteIndia, fresher, onList: onList.has(slug) };
   } catch (error) {
-    return { name, stage, slug, open: 0, india: 0, remoteIndia: 0, onList: onList.has(slug), error: error instanceof Error ? error.message : String(error) };
+    return { name, stage, slug, open: 0, india: 0, remoteIndia: 0, fresher: 0, onList: onList.has(slug), error: error instanceof Error ? error.message : String(error) };
   }
 }
 
@@ -51,9 +60,10 @@ async function main() {
   // Every candidate plus every company already on our list (found again, so the review has one place for all).
   const queue: Array<{ name: string; stage: Stage; slugs: string[] }> = [];
   const seen = new Set<string>();
-  const batchTwo = process.argv.includes("--batch") && process.argv[process.argv.indexOf("--batch") + 1] === "2";
+  const batch = process.argv.includes("--batch") ? process.argv[process.argv.indexOf("--batch") + 1] : "1";
+  const batchTwo = batch === "2" || batch === "3";
   if (batchTwo) existing.forEach((company) => seen.add(company.slug));
-  for (const [name, stage, ...extra] of batchTwo ? CANDIDATES_2 : CANDIDATES) {
+  for (const [name, stage, ...extra] of batch === "3" ? CANDIDATES_3 : batchTwo ? CANDIDATES_2 : CANDIDATES) {
     const slugs = [...new Set([...extra, base(name)])];
     if (slugs.every((slug) => seen.has(slug))) continue;
     slugs.forEach((slug) => seen.add(slug));
@@ -75,17 +85,18 @@ async function main() {
   const found = rows.filter((row) => row.slug);
   const eligible = found.filter((row) => row.india + row.remoteIndia > 0).sort((a, b) => b.india + b.remoteIndia - (a.india + a.remoteIndia));
   const csv = [
-    "keep,name,slug,stage,open_jobs,india_jobs,remote_india_jobs,already_on_list,note",
+    "keep,name,slug,stage,open_jobs,india_jobs,remote_india_jobs,fresher_india_tech_jobs,already_on_list,note",
     ...found
       .sort((a, b) => b.india + b.remoteIndia - (a.india + a.remoteIndia) || b.open - a.open)
-      .map((row) => [row.india + row.remoteIndia > 0 ? "yes" : "no", `"${row.name}"`, row.slug, row.stage, row.open, row.india, row.remoteIndia, row.onList ? "yes" : "no", row.error ? `"${row.error}"` : ""].join(",")),
+      .map((row) => [row.india + row.remoteIndia > 0 ? "yes" : "no", `"${row.name}"`, row.slug, row.stage, row.open, row.india, row.remoteIndia, row.fresher, row.onList ? "yes" : "no", row.error ? `"${row.error}"` : ""].join(",")),
   ].join("\n");
-  const out = batchTwo ? "docs/greenhouse-review-2.csv" : "docs/greenhouse-review.csv";
+  const out = batch === "1" ? "docs/greenhouse-review.csv" : `docs/greenhouse-review-${batch}.csv`;
   writeFileSync(out, csv + "\n");
 
-  const total = (key: "india" | "remoteIndia" | "open") => eligible.reduce((sum, row) => sum + row[key], 0);
+  const total = (key: "india" | "remoteIndia" | "open" | "fresher") => eligible.reduce((sum, row) => sum + row[key], 0);
   console.log(`candidates checked: ${queue.length}; on Greenhouse: ${found.length}; with India-eligible jobs: ${eligible.length}`);
   console.log(`India-eligible open jobs at those companies: ${total("india") + total("remoteIndia")} (in India ${total("india")}, remote from India ${total("remoteIndia")}); their open jobs in all: ${total("open")}`);
+  console.log(`fresher tech jobs in India at those companies: ${total("fresher")}; companies with any: ${eligible.filter((row) => row.fresher > 0).map((row) => `${row.name} ${row.fresher}`).join(", ") || "none"}`);
   console.log(`already on our list: ${found.filter((row) => row.onList).length}; new with India jobs: ${eligible.filter((row) => !row.onList).length}`);
   console.log("top 25:", eligible.slice(0, 25).map((row) => `${row.name} ${row.india + row.remoteIndia}`).join(", "));
   console.log(`wrote ${out}`);

@@ -45,7 +45,7 @@ async function trickySkills() {
       },
     });
     const read = (skills: string[]) =>
-      feedRows({ userId: user.id, sources: ["mock"], countries: ["REMOTE"], fresher: false, stages: null, tracks: null, vector: null, cutoff: new Date(Date.now() - 864e5), expMax: null, skills, titleWords: [], prefilter: false }).then((rows) => rows.find((r) => r.id === job.id));
+      feedRows({ userId: user.id, sources: ["mock"], countries: ["REMOTE"], levelYears: null, stages: null, tracks: null, vector: null, cutoff: new Date(Date.now() - 864e5), expMax: null, skills, titleWords: [], prefilter: false }).then((rows) => rows.find((r) => r.id === job.id));
     const row = await read(TRICKY);
     const sql = new Set(row?.hits ?? []);
     const js = new Set(TRICKY.map((skill, i) => (mentions(TITLE.toLowerCase(), skill) || mentions(DESCRIPTION.toLowerCase(), skill) ? i : -1)).filter((i) => i >= 0));

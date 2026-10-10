@@ -121,4 +121,7 @@ export const COMPANIES: Array<{ source: string; slug: string; name: string; stag
   { source: "greenhouse", slug: "skillsoft", name: "Skillsoft", stage: "mnc" },
   { source: "greenhouse", slug: "orcasecurity", name: "Orca Security", stage: "midsize" },
   { source: "greenhouse", slug: "postscript", name: "Postscript", stage: "startup" },
+  // Batch 3 (10 Oct): Indian startups are mostly not on Greenhouse; these two hire in India.
+  { source: "greenhouse", slug: "imc", name: "IMC Trading", stage: "mnc" },
+  { source: "greenhouse", slug: "towerresearchcapital", name: "Tower Research Capital", stage: "mnc" },
 ];

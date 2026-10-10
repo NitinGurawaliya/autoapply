@@ -1,0 +1,6 @@
+keep,name,slug,stage,open_jobs,india_jobs,remote_india_jobs,fresher_india_tech_jobs,already_on_list,note
+yes,"IMC Trading",imc,mnc,175,18,1,0,no,
+yes,"Tower Research Capital",towerresearchcapital,mnc,92,11,0,1,no,
+no,"Jane Street",janestreet,mnc,231,0,0,0,no,
+no,"VerSe Innovation",verse,midsize,6,0,0,0,no,
+no,"Optiver",optiver,mnc,0,0,0,0,no,

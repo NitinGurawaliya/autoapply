@@ -36,6 +36,7 @@ const COUNTRIES = [
 const LEVELS = [
   { id: "any", label: "Any level" },
   { id: "fresher", label: "Fresher (0-1 yr)" },
+  { id: "early", label: "Early career (0-2 yrs)" },
 ] as const;
 
 const STAGE_OPTIONS = [
@@ -146,7 +147,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
       removeHref: href(current, { countries: DEFAULT_PLACES }),
     });
   }
-  if (current.level === "fresher") active.push({ label: "Fresher (0-1 yr)", removeHref: href(current, { level: "any" }) });
+  if (current.level !== "any") active.push({ label: LEVELS.find((level) => level.id === current.level)?.label ?? current.level, removeHref: href(current, { level: "any" }) });
   if (current.stages.length > 0) {
     active.push({
       label: STAGE_OPTIONS.filter((stage) => current.stages.includes(stage.id)).map((stage) => stage.label).join(", "),
