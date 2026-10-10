@@ -56,6 +56,7 @@ const WINDOWS = [
   { id: "1", label: "Last day" },
   { id: "7", label: "Last 7 days" },
   { id: "30", label: "Last 30 days" },
+  { id: "60", label: "Any open job" },
 ] as const;
 
 type Query = Record<string, string | string[] | undefined>;
@@ -73,7 +74,7 @@ function href(current: FeedQuery, patch: Partial<FeedQuery>) {
   if (next.stages.length > 0) params.set("stage", next.stages.join(","));
   if (next.tracks.length > 0) params.set("track", next.tracks.join(","));
   if (next.expMax) params.set("expMax", next.expMax);
-  if (next.days !== "30") params.set("days", next.days);
+  if (next.days !== "60") params.set("days", next.days);
   const query = params.toString();
   return query ? `/feed?${query}` : "/feed";
 }
@@ -163,10 +164,10 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
       removeHref: href(current, { expMax: "" }),
     });
   }
-  if (current.days !== "30") {
+  if (current.days !== "60") {
     active.push({
       label: WINDOWS.find((window) => window.id === current.days)?.label ?? `Last ${current.days} days`,
-      removeHref: href(current, { days: "30" }),
+      removeHref: href(current, { days: "60" }),
     });
   }
 
@@ -301,7 +302,7 @@ async function FeedDeck({
         text={
           active.length > 1
             ? "Each one is fine on its own. Together they're very narrow, so try removing one."
-            : "Try a wider search: more places, any experience, or the last 30 days."
+            : "Try a wider search: more places, any experience, or any open job."
         }
         extra={active.map((filter) => (
           <a

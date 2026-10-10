@@ -19,6 +19,7 @@ const BOARDS = APPLY_BOARDS;
 // tagging.ts); US and OTHER = jobs abroad, shown only when the user picks them.
 const COUNTRIES = ["IN", "REMOTE", "US", "OTHER"] as const;
 export const DEFAULT_PLACES = ["IN", "REMOTE"];
+export const DEFAULT_FEED_DAYS = 60;
 export const STAGES = ["startup", "midsize", "mnc"] as const;
 export type Tier = "strong" | "good" | "stretch";
 
@@ -91,7 +92,9 @@ export function parseFeedFilters(input: {
   const expRaw = listParam(input.expMax)[0];
   const daysRaw = listParam(input.days)[0];
   const expMax = expRaw != null && expRaw !== "" && Number.isFinite(Number(expRaw)) ? Number(expRaw) : null;
-  const daysNum = daysRaw != null && Number.isFinite(Number(daysRaw)) ? Number(daysRaw) : 30;
+  // Every job ingest keeps (posted in the last 60 days and still listed: schedule.ts DEFAULT_INGEST_DAYS) unless the
+  // user narrows it; a 30-day default hid open fresher roles posted 31-60 days ago (11 Oct).
+  const daysNum = daysRaw != null && Number.isFinite(Number(daysRaw)) ? Number(daysRaw) : DEFAULT_FEED_DAYS;
   const stages = listParam(input.stage).map((item) => item.trim().toLowerCase()).filter((item) => (STAGES as readonly string[]).includes(item));
   const tracks = listParam(input.track).map((item) => item.trim().toLowerCase()).filter((item) => (TRACKS as readonly string[]).includes(item));
   return {

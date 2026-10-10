@@ -331,6 +331,8 @@ model JobJudgement {
   fromHash  String
   jobHash   String
   fit       String
+  // How close the work is to the candidate's: same | close | related | different (related = another field, shown only on request).
+  field     String?
   why       String
   createdAt DateTime @default(now())
 
