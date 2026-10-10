@@ -105,6 +105,13 @@ function clamp(score: number) {
   return Math.max(0, Math.min(100, score));
 }
 
+type Candidate = {
+  currentTitle: string | null;
+  skills: string[];
+  yearsExperience: number | null;
+  preferredLocations: string[];
+};
+
 export function scoreJob(
   job: {
     title: string;
@@ -113,15 +120,25 @@ export function scoreJob(
     remoteType: string;
     experienceMin: number | null;
   },
-  candidate: {
-    currentTitle: string | null;
-    skills: string[];
-    yearsExperience: number | null;
-    preferredLocations: string[];
-  },
+  candidate: Candidate,
 ) {
   const title = job.title.toLowerCase();
   const description = job.description.toLowerCase();
+  const skillHits = candidate.skills.filter((skill) => mentions(title, skill) || mentions(description, skill));
+  // What the posting really asks for comes from its title and text, never from a stored guess.
+  return scoreFeatures({ title: job.title, country: job.country, remoteType: job.remoteType, requiredYears: requiredYears(job.title, job.description), skillHits }, candidate);
+}
+
+/**
+ * The score from a job's features: which of the candidate's skills it mentions and the years it asks for. scoreJob
+ * finds them in the description; the feed finds them in Postgres (feedRows) so descriptions never leave the database.
+ */
+export function scoreFeatures(
+  job: { title: string; country: string; remoteType: string; requiredYears: number | null; skillHits: string[] },
+  candidate: Candidate,
+) {
+  const title = job.title.toLowerCase();
+  const skillHits = job.skillHits;
   const jobTitleTokens = new Set(titleTokens(job.title));
   const candidateTitleTokens = [...new Set(titleTokens(candidate.currentTitle ?? ""))];
   const titleOverlap = candidateTitleTokens.filter((token) => jobTitleTokens.has(token));
@@ -130,12 +147,10 @@ export function scoreJob(
   const titleRatio = candidateTitleTokens.length === 0 ? 0 : titleOverlap.length / candidateTitleTokens.length;
   const titleScore = Math.round(40 * Math.min(1, titleRatio + 0.5 * skillsInTitle.length));
 
-  const skillHits = candidate.skills.filter((skill) => mentions(title, skill) || mentions(description, skill));
   const skillTarget = Math.min(candidate.skills.length, SKILLS_FOR_FULL_SCORE);
   const skillScore = skillTarget === 0 ? 0 : Math.round(30 * Math.min(1, skillHits.length / skillTarget));
 
-  // What the posting really asks for comes from its title and text, never from a stored guess.
-  const asks = requiredYears(job.title, job.description);
+  const asks = job.requiredYears;
   const have = candidate.yearsExperience ?? 0;
   const gap = asks == null ? 0 : asks - have;
   const experienceScore = asks == null ? 14 : gap <= 0 ? 20 : gap === 1 ? 16 : gap === 2 ? 8 : gap === 3 ? 2 : 0;
@@ -191,12 +206,100 @@ export function dedupeListings<T extends { roleKey: string; location: string; so
   return rows.filter((row) => best.get(`${row.roleKey}|${row.location.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()}`) === row);
 }
 
+type FeedRow = {
+  id: string;
+  title: string;
+  location: string;
+  source: string;
+  country: string;
+  remoteType: string;
+  experienceMin: number | null;
+  applyUrl: string;
+  postedAt: Date;
+  companyId: string;
+  company: string;
+  hits: number[];
+};
+
+/** The SQL regex for mentions(): the skill as literal text between two non-word characters (or the text's ends). */
+function skillPattern(needle: string) {
+  const literal = needle.replace(/[^a-z0-9 ]/g, (c) => (c === "^" || c === "\\" ? `\\${c}` : `[${c}]`));
+  return `(^|[^a-z0-9+#])${literal}($|[^a-z0-9+#])`;
+}
+
+/**
+ * The feed's candidate jobs, read without their descriptions: Postgres finds which of the candidate's skills each job
+ * mentions (`hits`, indexes into `skills`), exactly as mentions() would. A one-word skill is a lookup in the GIN index
+ * on the job's `terms` (its distinct words, kept by a trigger); a skill with dots, slashes or spaces ("Node.js") is
+ * checked with the same regex, only on jobs whose terms hold all its words. With a minimum score above 30, a job with no skill
+ * and no title word in common is left out here: experience and location alone (20 + 10) cannot reach it.
+ */
+export async function feedRows(input: {
+  userId: string;
+  sources: string[];
+  countries: string[];
+  cutoff: Date;
+  expMax: number | null;
+  skills: string[];
+  titleWords: string[];
+  prefilter: boolean;
+}) {
+  // One row per skill: its words (all must be among the job's words, looked up in the GIN index on terms) and, for
+  // a skill that is more than one word, the regex that then checks they appear in that exact spelling.
+  const indexes: number[] = [];
+  const parts: string[] = [];
+  const patterns: string[] = [];
+  input.skills.forEach((skill, index) => {
+    const needle = skill.toLowerCase().trim();
+    if (!needle) return;
+    indexes.push(index);
+    parts.push(needle.split(/[^a-z0-9+#]+/).filter(Boolean).join(" "));
+    patterns.push(/^[a-z0-9+#]+$/.test(needle) ? "" : skillPattern(needle));
+  });
+  return db.$queryRaw<FeedRow[]>`
+    WITH skill AS (
+      SELECT * FROM unnest(${indexes}::int[], ${parts}::text[], ${patterns}::text[]) AS s(i, parts, pattern)
+    ),
+    hit AS (
+      SELECT j.id, array_agg(s.i) AS hits
+      FROM skill s
+      JOIN "Job" j ON j.terms @> string_to_array(s.parts, ' ')
+      WHERE s.pattern = '' OR lower(j.title || chr(10) || j.description) ~ s.pattern
+      GROUP BY j.id
+    ),
+    candidates AS (
+      SELECT j.id, j.title, j.location, j.source, j.country, j."remoteType", j."experienceMin", j."applyUrl", j."postedAt",
+             j."companyId", c.name AS company, coalesce(h.hits, '{}') AS hits
+      FROM "Job" j
+      JOIN "Company" c ON c.id = j."companyId"
+      LEFT JOIN hit h ON h.id = j.id
+      WHERE j.source = ANY(${input.sources}::text[])
+        AND j.country = ANY(${input.countries}::text[])
+        AND j."postedAt" >= ${input.cutoff}
+        AND j."closedAt" IS NULL
+        AND (${input.expMax}::int IS NULL OR j."experienceMin" IS NULL OR j."experienceMin" <= ${input.expMax}::int)
+        AND NOT EXISTS (SELECT 1 FROM "Swipe" s WHERE s."userId" = ${input.userId} AND s."jobId" = j.id)
+    )
+    SELECT * FROM candidates
+    WHERE NOT ${input.prefilter}
+       OR source = 'mock'
+       OR cardinality(hits) > 0
+       OR regexp_split_to_array(lower(title), '[^a-z0-9+#]+') && ${input.titleWords}::text[]
+    ORDER BY id`;
+}
+
+/** Every word in a job title that titleTokens() would count as one of the candidate's title words (aliases included). */
+function titleWordsFor(currentTitle: string | null) {
+  const wanted = new Set(titleTokens(currentTitle ?? ""));
+  const aliases = Object.entries(ROLE_ALIASES).filter(([, to]) => wanted.has(to)).map(([from]) => from);
+  return [...wanted, ...aliases];
+}
+
 export async function listFeed(userId: string, filters: FeedFilters): Promise<FeedJob[]> {
   // Independent reads run together: every database round trip is ~250 ms from India to the database.
-  const [profile, answers, swipes] = await Promise.all([
+  const [profile, answers] = await Promise.all([
     db.profile.findUnique({ where: { userId } }),
     db.answer.findMany({ where: { userId, key: "preferred_location" }, select: { answer: true } }),
-    db.swipe.findMany({ where: { userId }, select: { jobId: true } }),
   ]);
   const skills = skillsSchema.safeParse(profile?.skills).success ? skillsSchema.parse(profile?.skills) : [];
   const preferred = (answers[0]?.answer ?? "")
@@ -204,51 +307,41 @@ export async function listFeed(userId: string, filters: FeedFilters): Promise<Fe
     .map((item) => item.trim())
     .filter((item) => item === "India" || item === "US" || item === "Other");
 
+  // Jobs below the governance minimum would be blocked on swipe anyway, so they never reach the deck.
+  const minScore = loadRules().min_match_score;
   const cutoff = new Date(Date.now() - filters.days * 24 * 60 * 60 * 1000);
   const sources = profile?.isTest ? [...new Set([...filters.boards, "mock"])] : filters.boards;
   const [jobs, applied, results] = await Promise.all([
-    db.job.findMany({
-      where: {
-        source: { in: sources },
-        country: { in: filters.countries },
-        postedAt: { gte: cutoff },
-        closedAt: null,
-        id: { notIn: swipes.map((swipe) => swipe.jobId) },
-      },
-      select: {
-        id: true,
-        title: true,
-        location: true,
-        source: true,
-        country: true,
-        remoteType: true,
-        experienceMin: true,
-        description: true,
-        applyUrl: true,
-        postedAt: true,
-        companyId: true,
-        company: { select: { name: true } },
-      },
+    feedRows({
+      userId,
+      sources,
+      countries: filters.countries,
+      cutoff,
+      expMax: filters.expMax,
+      skills,
+      titleWords: titleWordsFor(profile?.currentTitle ?? null),
+      prefilter: minScore > 30,
     }),
     appliedRoleKeys(userId),
     companyResultsById().catch(() => new Map<string, never>()),
   ]);
 
-  // Jobs below the governance minimum would be blocked on swipe anyway, so they never reach the deck.
-  const minScore = loadRules().min_match_score;
-
   const scored = jobs
     .map((job) => {
-      const match = scoreJob(job, {
-        currentTitle: profile?.currentTitle ?? null,
-        skills,
-        yearsExperience: profile?.yearsExperience ?? null,
-        preferredLocations: preferred,
-      });
+      const hits = new Set(job.hits);
+      const match = scoreFeatures(
+        { title: job.title, country: job.country, remoteType: job.remoteType, requiredYears: job.experienceMin, skillHits: skills.filter((_, index) => hits.has(index)) },
+        {
+          currentTitle: profile?.currentTitle ?? null,
+          skills,
+          yearsExperience: profile?.yearsExperience ?? null,
+          preferredLocations: preferred,
+        },
+      );
       return {
         id: job.id,
         title: job.title,
-        company: job.company.name,
+        company: job.company,
         location: job.location,
         source: job.source,
         country: job.country,
@@ -259,7 +352,7 @@ export async function listFeed(userId: string, filters: FeedFilters): Promise<Fe
         requiredYears: match.requiredYears,
         skillHits: match.skillHits.slice(0, 4),
         remoteType: job.remoteType,
-        roleKey: roleKey(companyKey(job.company.name), job.title),
+        roleKey: roleKey(companyKey(job.company), job.title),
         verdict: judge(results.get(job.companyId)),
         mock: job.source === "mock",
       };
@@ -287,6 +380,7 @@ export async function listFeed(userId: string, filters: FeedFilters): Promise<Fe
       // Ranking only: the number the user sees stays the honest match score.
       rank: job.score + job.verdict.nudge,
     }))
+    // Rows arrive ordered by id, so equal-ranked cards (and duplicate listings) always come out the same way.
     .sort((a, b) => b.rank - a.rank || b.score - a.score || a.daysAgo - b.daysAgo)
     .map(({ rank, ...job }) => {
       void rank;

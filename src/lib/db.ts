@@ -28,9 +28,13 @@ export function loadEnvFile() {
 
 loadEnvFile();
 
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+// Job.terms (every word of a job, for the feed's skill lookup in modules/jobs/match.ts) is a few KB per job and only
+// read in raw SQL, so no Prisma query returns it unless it asks.
+const createClient = () => new PrismaClient({ omit: { job: { terms: true } } });
 
-export const db = globalForPrisma.prisma ?? new PrismaClient();
+const globalForPrisma = globalThis as unknown as { prisma?: ReturnType<typeof createClient> };
+
+export const db = globalForPrisma.prisma ?? createClient();
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = db;

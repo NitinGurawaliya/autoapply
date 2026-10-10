@@ -22,13 +22,14 @@ async function main() {
   check("a mixed record is left alone", judge({ ...base, finished: 5, submitted: 3, failed: 2, codeAsked: 1 }).nudge === 0 && judge({ ...base, finished: 5, submitted: 3, failed: 2, codeAsked: 1 }).hint === null);
 
   // ---- real data
+  // A title no real job has, so real listings never crowd the three test jobs out of the 40 cards.
   const users = await Promise.all(["a", "viewer"].map((label) => db.user.create({ data: { email: `res-${label}-${stamp}@swipeapply.local`, name: label } })));
   const [actor, viewer] = users;
-  await db.profile.create({ data: { userId: viewer.id, resumeKey: "x", resumeText: "x", fullName: "Viewer", email: viewer.email, currentTitle: "Software Engineer", yearsExperience: 1, skills: [], experience: [], education: [], rawJson: {} } });
+  await db.profile.create({ data: { userId: viewer.id, resumeKey: "x", resumeText: "x", fullName: "Viewer", email: viewer.email, currentTitle: "Quokka Wrangler", yearsExperience: 1, skills: [], experience: [], education: [], rawJson: {} } });
   const companies = await Promise.all(["x", "y", "z"].map((n) => db.company.create({ data: { source: "greenhouse", slug: `results-${n}-${stamp}`, name: `Results ${n.toUpperCase()}`, active: false } })));
   const [X, Y, Z] = companies;
   const job = (companyId: string, n: string) =>
-    db.job.create({ data: { source: "greenhouse", externalId: `res-${n}-${stamp}`, companyId, title: "Software Engineer", location: "Bengaluru, India", country: "IN", remoteType: "unknown", description: "Software Engineer role. 0-2 years of experience.", applyUrl: "https://job-boards.greenhouse.io/x/jobs/1", postedAt: new Date(), fetchedAt: new Date(), raw: {} } });
+    db.job.create({ data: { source: "greenhouse", externalId: `res-${n}-${stamp}`, companyId, title: "Quokka Wrangler", location: "Bengaluru, India", country: "IN", remoteType: "unknown", description: "Quokka Wrangler role. 0-2 years of experience.", applyUrl: "https://job-boards.greenhouse.io/x/jobs/1", postedAt: new Date(), fetchedAt: new Date(), raw: {} } });
   const jobs = { x: await job(X.id, "x"), y: await job(Y.id, "y"), z: await job(Z.id, "z") };
   const run = async (jobId: string, status: string, codeAsked: boolean) => {
     const app = await db.application.create({ data: { userId: actor.id, jobId, status, fields: [], pendingQuestions: [] } });

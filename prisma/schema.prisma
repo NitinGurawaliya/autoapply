@@ -149,6 +149,10 @@ model Job {
   // ask what it is missing before opening a browser. Null until fetched.
   questions          Json?
   questionsFetchedAt DateTime?
+  // The distinct words of the title and description, kept by a trigger (migration job_terms): the feed matches skills
+  // in Postgres instead of downloading descriptions (modules/jobs/match.ts).
+  // Left out of every Prisma read (omit in lib/db.ts) and never written by the app: the trigger owns it.
+  terms              String[]
   raw           Json
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -157,6 +161,7 @@ model Job {
   @@index([postedAt])
   @@index([country])
   @@index([source, country, postedAt]) // the feed's filter
+  @@index([terms], type: Gin) // feedRows looks skills up here (migration job_terms_index)
 }
 
 model Swipe {

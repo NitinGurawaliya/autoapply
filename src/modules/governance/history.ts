@@ -1,4 +1,8 @@
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+
+/** The shared client, or a transaction's (so swipe-time counts can be read under the swipe's lock). */
+type Reader = typeof db | Prisma.TransactionClient;
 
 // Applications that still count against the user: sent, or on their way. Failed, blocked and cancelled ones do not.
 const COUNTED = ["submitted", "queued", "inspecting", "filling", "needs_input"];
@@ -23,13 +27,13 @@ export function startOfTodayUtc() {
   return start;
 }
 
-export async function dailyUsage(userId: string) {
-  return db.application.count({ where: { userId, createdAt: { gte: startOfTodayUtc() } } });
+export async function dailyUsage(userId: string, client: Reader = db) {
+  return client.application.count({ where: { userId, createdAt: { gte: startOfTodayUtc() } } });
 }
 
 /** This user's counted applications with their job title and company name, in one round trip (a join, not two reads). */
-async function countedApplications(userId: string) {
-  return db.$queryRaw<Array<{ title: string; companyName: string; createdAt: Date }>>`
+async function countedApplications(userId: string, client: Reader = db) {
+  return client.$queryRaw<Array<{ title: string; companyName: string; createdAt: Date }>>`
     SELECT j."title" AS "title", c."name" AS "companyName", a."createdAt" AS "createdAt"
     FROM "Application" a
     JOIN "Job" j ON j."id" = a."jobId"
@@ -44,15 +48,15 @@ export async function appliedRoleKeys(userId: string) {
 }
 
 /** What the swipe-time rules need to know about this user's history with one job's role and company. */
-export async function historyFor(userId: string, job: { title: string; companyId: string }, now = new Date()) {
+export async function historyFor(userId: string, job: { title: string; companyId: string }, now = new Date(), client: Reader = db) {
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   // Independent reads, so one round trip instead of five.
   const [apps, company, inFlight, applicationsToday] = await Promise.all([
-    countedApplications(userId),
-    db.company.findUnique({ where: { id: job.companyId }, select: { name: true } }),
+    countedApplications(userId, client),
+    client.company.findUnique({ where: { id: job.companyId }, select: { name: true } }),
     // Applications that are using, or waiting for, the shared worker. A user parked on a question is not one of them.
-    db.application.count({ where: { userId, status: { in: ["queued", "inspecting", "filling"] } } }),
-    dailyUsage(userId),
+    client.application.count({ where: { userId, status: { in: ["queued", "inspecting", "filling"] } } }),
+    dailyUsage(userId, client),
   ]);
   const thisCompany = companyKey(company?.name ?? job.companyId);
   const key = roleKey(thisCompany, job.title);

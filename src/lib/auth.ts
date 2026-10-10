@@ -1,4 +1,5 @@
 import { PrismaAdapter } from "@auth/prisma-adapter";
+import type { PrismaClient } from "@prisma/client";
 import { cache } from "react";
 import type { DefaultSession } from "next-auth";
 import NextAuth from "next-auth";
@@ -14,7 +15,8 @@ declare module "next-auth" {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: PrismaAdapter(db),
+  // The adapter types a plain client; ours only leaves Job.terms out of reads, which the adapter never touches.
+  adapter: PrismaAdapter(db as unknown as PrismaClient),
   providers: [Google],
   trustHost: true,
   session: { strategy: "database" },

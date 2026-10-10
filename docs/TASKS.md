@@ -274,6 +274,11 @@ Ashby checkbox groups (OpenAI's arbitration and "I certify" boxes, Snowflake's p
 ### [x] T48 — Performance quick wins (from the 9 Oct audit)
 One shared, visibility-aware poller on a small `/api/applications/summary` endpoint instead of four timers on the full list (about 7x fewer requests, none while the tab is hidden); loading and error screens on Governance and Account; `getCurrentUser` cached per request; independent queries in parallel and joins instead of two reads (`history.ts`, `/api/applications`, `listFeed`, governance overview); indexes on `Job(source, country, postedAt)` and `ApplicationEvent(applicationId, type, createdAt)`; feed header streams before the cards. Measured (dev, test account): Applications tab 20 s to 1.8 s, Governance first feedback 11 s to 1.3 s, feed header 14-27 s to about 2 s. Not done here: feed scoring and cookie sessions (decisions 1 and 5 in the performance audit doc).
 **Done when:** the regression smokes pass and the timings above are re-measured. Done 9 Oct.
+### [x] T70 — Feed without descriptions (audit decision 1)
+Do: `Job.terms` (distinct words, kept by a trigger) and `feedRows` in `modules/jobs/match.ts`: Postgres finds which of the candidate's skills each job mentions, so `listFeed` reads small columns only; `scoreFeatures` shares the scoring with `scoreJob`; `Job.experienceMin` backfilled to `requiredYears` (`scripts/backfill-job-features.ts`).
+**Done when:** `scripts/feed-sql-test.ts` PASS (same 40 cards, order, scores and reasons as the old feed for every real profile), the feed smokes pass, and the feed load is re-measured.
+Done 10 Oct: `feed-sql-test` PASS for all 5 real profiles (identical cards; feed 0.9–2 s, was 8–27 s; under 0.5 MB per load, was 24 MB). `match-test`, `guards-test`, `results-test` (its test jobs now use a title no real job has), `ingest-contract-test`, `lifecycle-smoke`, `gaps-test` and `swipe-batch-test` PASS. `feed-smoke` fails at the Filters sheet, which Phase G is rebuilding (T62, uncommitted at the time); the cards themselves render. Found on the way and fixed: swipe-time counts were read before the per-user lock, so a burst passed the daily cap (24 of 20); `swipe-batch-test` now checks whichever of the queue and daily caps is lower.
+
 
 ## Phase F — Smarter answers (ask only what we cannot know)
 

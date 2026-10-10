@@ -108,19 +108,20 @@ export async function swipeRight(userId: string, jobId: string, enqueue: (applic
   if (job.closedAt) return { ok: false, reason: "blocked", rule: "job_closed" };
   if (!boardSupported(job.source)) return { ok: false, reason: "blocked", rule: "board_not_supported" };
 
-  const history = await historyFor(userId, { title: job.title, companyId: job.companyId });
-  if (history.inFlight >= loadRules().max_in_flight_per_user) return { ok: false, reason: "blocked", rule: "max_in_flight" };
-
   let application;
+  let history;
   try {
-    application = await db.$transaction(async (tx) => {
-      // Many swipes at once must not each see room in the queue: one at a time per person, and count again inside.
+    ({ application, history } = await db.$transaction(async (tx) => {
+      // Many swipes at once must not each see room under a limit: one at a time per person, and every count the rules
+      // use (queue, today's total, this company this week, duplicate role) is read under the lock, so a burst of
+      // swipes cannot pass the daily or company cap together.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
-      const inFlight = await tx.application.count({ where: { userId, status: { in: ["queued", "inspecting", "filling"] } } });
-      if (inFlight >= loadRules().max_in_flight_per_user) throw new QueueFull();
+      const counts = await historyFor(userId, { title: job.title, companyId: job.companyId }, new Date(), tx);
+      if (counts.inFlight >= loadRules().max_in_flight_per_user) throw new QueueFull();
       await tx.swipe.create({ data: { userId, jobId, direction: "right" } });
-      return tx.application.create({ data: { userId, jobId, status: "queued", fields: [], pendingQuestions: [] } });
-    }, { maxWait: 60000, timeout: 60000 });
+      const created = await tx.application.create({ data: { userId, jobId, status: "queued", fields: [], pendingQuestions: [] } });
+      return { application: created, history: counts };
+    }, { maxWait: 60000, timeout: 60000 }));
   } catch (error) {
     if (error instanceof QueueFull) return { ok: false, reason: "blocked", rule: "max_in_flight" };
     // Two swipes on the same job at once: the unique key lets exactly one through. Anything else is a real error.
