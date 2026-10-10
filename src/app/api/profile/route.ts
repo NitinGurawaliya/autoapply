@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { forgetFeed } from "@/lib/feed-cache";
 import { profileSchema } from "@/modules/profile";
 
 function toJson(profile: {
@@ -75,5 +76,6 @@ export async function PUT(req: Request) {
       education: profile.education as Prisma.InputJsonValue,
     },
   });
+  forgetFeed(user.id); // title, skills and years decide the feed's scores
   return NextResponse.json(toJson(updated));
 }

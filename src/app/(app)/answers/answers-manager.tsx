@@ -1,7 +1,7 @@
 "use client";
 
+import { forgetVisitedPages } from "@/lib/forget-pages";
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/eyebrow";
@@ -20,7 +20,6 @@ function titleOf(row: Row) {
 }
 
 export function AnswersManager({ initial }: { initial: Row[] }) {
-  const router = useRouter();
   const [rows, setRows] = useState(initial);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -51,7 +50,7 @@ export function AnswersManager({ initial }: { initial: Row[] }) {
         return exists ? current.map((item) => (item.key === row.key ? next : item)) : [...current, next];
       });
       toast.success("Saved");
-      router.refresh();
+      await forgetVisitedPages();
       return true;
     } catch {
       toast.error("Could not save that answer.");
@@ -69,7 +68,7 @@ export function AnswersManager({ initial }: { initial: Row[] }) {
       setRows((current) => current.filter((item) => item.key !== row.key));
       setConfirming(null);
       toast.success("Deleted. The next application that needs it will ask you.");
-      router.refresh();
+      await forgetVisitedPages();
     } catch {
       toast.error("Could not delete that answer.");
     } finally {

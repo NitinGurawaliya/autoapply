@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { forgetFeed } from "@/lib/feed-cache";
 import { swipeRight } from "@/modules/apply/lifecycle";
 
 const bodySchema = z.object({
@@ -22,6 +23,7 @@ export async function POST(req: Request) {
     if (!job) return NextResponse.json({ error: "not_found" }, { status: 404 });
     try {
       await db.swipe.create({ data: { userId: user.id, jobId, direction: "left" } });
+      forgetFeed(user.id);
     } catch {
       return NextResponse.json({ error: "already_swiped" }, { status: 409 });
     }

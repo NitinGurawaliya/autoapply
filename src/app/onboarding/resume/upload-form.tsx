@@ -1,5 +1,6 @@
 "use client";
 
+import { forgetVisitedPages } from "@/lib/forget-pages";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "cn";
@@ -98,6 +99,7 @@ export function ResumeUploadForm({ signOut }: { signOut: React.ReactNode }) {
       setError("Could not read that PDF. Try another file.");
       return;
     }
+    void forgetVisitedPages(); // a new resume changes the feed
     const profile = await fetch("/api/profile", { cache: "no-store" })
       .then((res) => (res.ok ? (res.json() as Promise<Profile>) : null))
       .catch(() => null);

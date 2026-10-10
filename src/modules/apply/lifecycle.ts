@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { forgetFeed } from "@/lib/feed-cache";
 import { enqueueApply } from "@/lib/queue";
 import { check, historyFor, loadRules, writeEvent } from "@/modules/governance";
 import { APPLY_BOARDS, scoreJob } from "@/modules/jobs";
@@ -122,6 +123,8 @@ export async function swipeRight(userId: string, jobId: string, enqueue: (applic
       const created = await tx.application.create({ data: { userId, jobId, status: "queued", fields: [], pendingQuestions: [] } });
       return { application: created, history: counts };
     }, { maxWait: 60000, timeout: 60000 }));
+    // The swiped job leaves the feed; a cached feed must not show it again (lib/feed-cache.ts).
+    forgetFeed(userId);
   } catch (error) {
     if (error instanceof QueueFull) return { ok: false, reason: "blocked", rule: "max_in_flight" };
     // Two swipes on the same job at once: the unique key lets exactly one through. Anything else is a real error.

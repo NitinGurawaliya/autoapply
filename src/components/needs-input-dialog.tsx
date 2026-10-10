@@ -1,7 +1,7 @@
 "use client";
 
+import { forgetVisitedPages } from "@/lib/forget-pages";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useApplicationsSummary } from "@/components/applications-summary";
 import { Button } from "@/components/ui/button";
 import { AccentPill, Chip } from "@/components/ui/chip";
@@ -38,7 +38,6 @@ const MAX_ANSWER_BUTTONS = 4;
  * answer is saved or the application stops waiting.
  */
 export function NeedsInputDialog() {
-  const router = useRouter();
   const [waiting, setWaiting] = useState<Waiting | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
@@ -110,7 +109,7 @@ export function NeedsInputDialog() {
     setWaiting(null);
     setValues({});
     refresh();
-    router.refresh();
+    void forgetVisitedPages();
   }
 
   async function pasteCode() {

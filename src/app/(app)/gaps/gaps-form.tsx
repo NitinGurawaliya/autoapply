@@ -1,7 +1,7 @@
 "use client";
 
+import { forgetVisitedPages } from "@/lib/forget-pages";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { FieldError, InputBox, NativeSelect } from "@/components/ui/field";
 import { Icon } from "@/components/ui/icons";
@@ -10,7 +10,6 @@ type Gap = { key: string; label: string; type: string; options: string[] | null;
 
 /** One row per missing fact; saving it stores the answer and triggers a rescan of the feed. */
 export function GapsForm({ gaps }: { gaps: Gap[] }) {
-  const router = useRouter();
   const [values, setValues] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<Record<string, string>>({});
@@ -35,7 +34,7 @@ export function GapsForm({ gaps }: { gaps: Gap[] }) {
       return;
     }
     setSaved((current) => ({ ...current, [gap.key]: true }));
-    router.refresh();
+    await forgetVisitedPages();
   }
 
   return (

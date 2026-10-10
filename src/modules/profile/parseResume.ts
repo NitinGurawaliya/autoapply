@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { upsert } from "@/modules/answers";
 import { callJson } from "@/lib/llm";
 import { db } from "@/lib/db";
+import { forgetFeed } from "@/lib/feed-cache";
 import { storage } from "@/lib/storage";
 import { profileSchema, type ParsedProfile } from "./profileSchema";
 import { sampleProfile } from "./sampleProfile";
@@ -116,6 +117,7 @@ export async function ingestResume(userId: string, bytes: Uint8Array) {
     create: { userId, ...data },
     update: data,
   });
+  forgetFeed(userId);
   for (const row of resumeAnswers(parsed.profile)) {
     await upsert(userId, { ...row, source: "resume" });
   }

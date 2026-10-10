@@ -13,6 +13,12 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   serverExternalPackages: ["pdf-parse"],
   poweredByHeader: false,
+  experimental: {
+    // Keep a page the user has just visited in the browser for a minute, so going feed → applications → feed does not
+    // rebuild it on the server each time. Saves drop every kept page (lib/forget-pages.ts); the deck skips cards
+    // already swiped (feed/swipe-deck.tsx); polling screens still poll.
+    staleTimes: { dynamic: 60 },
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

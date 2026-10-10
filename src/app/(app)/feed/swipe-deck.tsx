@@ -40,6 +40,10 @@ function cardData(job: FeedJob): JobCardData {
 
 type Toast = { id: string; company: string; stage: number; visible: boolean };
 
+// Jobs swiped since this tab opened. It outlives the deck: a feed page kept in the browser for a minute (staleTimes)
+// still lists cards swiped since it was built, and they must not come back.
+const swipedThisVisit = new Set<string>();
+
 export function SwipeDeck({
   jobs,
   query,
@@ -51,10 +55,11 @@ export function SwipeDeck({
   stats: { sentToday: number; inProgress: number };
   widenFilters: ReactNode;
 }) {
-  const [cards, setCards] = useState(jobs);
+  const [initial] = useState(() => jobs.filter((job) => !swipedThisVisit.has(job.id)));
+  const [cards, setCards] = useState(initial);
   // The ref is the source of truth so rapid taps or key presses never act on a stale top card.
-  const deck = useRef(jobs);
-  const seen = useRef(new Set<string>());
+  const deck = useRef(initial);
+  const seen = useRef(swipedThisVisit);
   const refilling = useRef(false);
   // Keys and buttons throw the card through the stage, which commits the swipe when the card is off screen.
   const stage = useRef<SwipeStageHandle>(null);

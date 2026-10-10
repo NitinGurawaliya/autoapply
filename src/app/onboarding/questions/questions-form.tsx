@@ -1,5 +1,6 @@
 "use client";
 
+import { forgetVisitedPages } from "@/lib/forget-pages";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -105,8 +106,8 @@ export function QuestionsForm({ initial }: { initial: QuestionValues }) {
       setStatus("failed");
       return;
     }
+    await forgetVisitedPages();
     router.push("/feed");
-    router.refresh();
   }
 
   // A saved notice period that is not one of the chips still shows, selected.

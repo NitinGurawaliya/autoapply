@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { daysAgoLabel } from "@/lib/days";
+import { cachedFeed, rememberFeed } from "@/lib/feed-cache";
 import { appliedRoleKeys, companyKey, loadRules, roleKey } from "@/modules/governance";
 import { companyResultsById, judge } from "./results";
 import { requiredYears } from "./tagging";
@@ -296,6 +297,16 @@ function titleWordsFor(currentTitle: string | null) {
 }
 
 export async function listFeed(userId: string, filters: FeedFilters): Promise<FeedJob[]> {
+  // A visit within a minute of the last one, with nothing changed since, reuses its result (lib/feed-cache.ts).
+  const filtersKey = JSON.stringify(filters);
+  const cached = cachedFeed<FeedJob[]>(userId, filtersKey);
+  if (cached) return cached;
+  const feed = await scoreFeed(userId, filters);
+  rememberFeed(userId, filtersKey, feed);
+  return feed;
+}
+
+async function scoreFeed(userId: string, filters: FeedFilters): Promise<FeedJob[]> {
   // Independent reads run together: every database round trip is ~250 ms from India to the database.
   const [profile, answers] = await Promise.all([
     db.profile.findUnique({ where: { userId } }),

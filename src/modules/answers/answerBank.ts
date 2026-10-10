@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { forgetFeed } from "@/lib/feed-cache";
 import type { AnswerContext } from "./memory";
 import { getAnswerKey } from "./keys";
 import { isCustomQuestionKey } from "./questionKey";
@@ -18,6 +19,7 @@ export async function get(userId: string, key: string) {
 
 export async function remove(userId: string, key: string) {
   const result = await db.answer.deleteMany({ where: { userId, key } });
+  if (key === "preferred_location") forgetFeed(userId);
   return result.count > 0;
 }
 
@@ -36,6 +38,8 @@ export async function upsert(
   // The embedding is refreshed lazily (memory.ensureEmbeddings) when the wording changes, so a save stays one query.
   const context = input.context ? (input.context as Prisma.InputJsonValue) : Prisma.DbNull;
   const data = { question: input.question, answer: input.answer, source: input.source, context };
+  // Preferred locations score the feed's location points.
+  if (input.key === "preferred_location") forgetFeed(userId);
   return db.answer.upsert({
     where: { userId_key: { userId, key: input.key } },
     create: { userId, key: input.key, ...data },

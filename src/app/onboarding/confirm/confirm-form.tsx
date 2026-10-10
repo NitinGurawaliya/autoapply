@@ -1,5 +1,6 @@
 "use client";
 
+import { forgetVisitedPages } from "@/lib/forget-pages";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -190,6 +191,7 @@ export function ConfirmForm({ initial }: { initial: ConfirmValues }) {
       setStatus("error");
       return;
     }
+    await forgetVisitedPages();
     router.push("/onboarding/questions");
   }
 

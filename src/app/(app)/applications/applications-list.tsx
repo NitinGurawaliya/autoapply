@@ -62,6 +62,10 @@ function progressLabel(row: Row) {
 
 type Page = { applications: Row[]; counts: Record<string, number> | null; nextCursor: string | null };
 
+// The last first page per group, kept while the tab is open: coming back to the list shows it at once, and the fresh
+// copy replaces it a moment later (the list always reloads on arrival).
+const lastFirst = new Map<string, Page>();
+
 /** The API's page of finished applications for a tab: Sent and Didn't go through page their own; the rest page all. */
 function pageGroup(tab: Tab) {
   return tab === "sent" || tab === "failed" ? tab : "all";
@@ -69,7 +73,7 @@ function pageGroup(tab: Tab) {
 
 export function ApplicationsList() {
   // The first page (everything active, the newest finished, the counts) and the finished pages loaded after it.
-  const [first, setFirst] = useState<Page | null>(null);
+  const [first, setFirst] = useState<Page | null>(() => lastFirst.get("all") ?? null);
   const [more, setMore] = useState<{ rows: Row[]; cursor: string | null } | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   // True after switching to a tab that pages another group, until its own first page arrives: the rows already loaded
@@ -92,6 +96,7 @@ export function ApplicationsList() {
         const body = (await response.json()) as Page;
         if (stopped) return;
         setFirst(body);
+        lastFirst.set(group, body);
         setStale(false);
         setFailed(false);
         // Keep polling only while something is still running; pages loaded with Show more are kept.

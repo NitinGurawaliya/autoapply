@@ -1,7 +1,7 @@
 "use client";
 
+import { forgetVisitedPages } from "@/lib/forget-pages";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,6 @@ const NEEDS_CONFIRM = ["inspecting", "filling", "needs_input"];
 type Props = { id: string; status: string; company: string; onChanged?: () => void; look?: "inline" | "panel"; className?: string };
 
 export function ApplicationActions({ id, status, company, onChanged, look = "inline", className }: Props) {
-  const router = useRouter();
   const [busy, setBusy] = useState<"cancel" | "retry" | null>(null);
   const [confirming, setConfirming] = useState(false);
 
@@ -40,14 +39,14 @@ export function ApplicationActions({ id, status, company, onChanged, look = "inl
       const body = (await response.json().catch(() => ({}))) as { blocked?: string; error?: string };
       if (response.ok) {
         toast.success(action === "cancel" ? `Cancelled ${company}` : `Retrying ${company}`);
-        if (onChanged) onChanged();
-        else router.refresh();
+        void forgetVisitedPages();
+        onChanged?.();
       } else if (response.status === 403 && body.blocked) {
         toast.error(`${company}: ${explainOutcome("blocked", body.blocked).headline}`, { description: `Rule: ${body.blocked}` });
       } else if (response.status === 409) {
         toast.message("That application already changed. Refreshing.");
-        if (onChanged) onChanged();
-        else router.refresh();
+        void forgetVisitedPages();
+        onChanged?.();
       } else {
         toast.error(`Could not ${action} the application for ${company}.`);
       }
