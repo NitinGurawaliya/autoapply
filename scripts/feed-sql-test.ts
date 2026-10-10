@@ -95,13 +95,22 @@ async function referenceFeed(userId: string) {
     for (const row of rows) sims.set(row.id, row.s);
   }
   const open = (job: (typeof jobs)[number]) => !history.roles.has(roleKey(companyKey(job.company.name), job.title)) && !history.companiesAtCap.has(companyKey(job.company.name));
-  const shortlist = jobs
+  const closest = jobs
     .filter((job) => sims.has(job.id) && sims.get(job.id)! >= 0.35 && job.source !== "mock" && open(job))
-    .sort((a, b) => sims.get(b.id)! - sims.get(a.id)! || (a.id < b.id ? -1 : 1))
-    .slice(0, 150);
-  const kept = new Set(shortlist.map((job) => job.id));
-  const verdicts = profile && shortlist.length ? await judgeJobs(profile, shortlist) : new Map();
-  const scored = jobs
+    .sort((a, b) => sims.get(b.id)! - sims.get(a.id)! || (a.id < b.id ? -1 : 1));
+  // The same widening as the feed: 150 closest, then 150 more while fewer than 40 cards remain, up to 450.
+  let kept = new Set<string>();
+  let verdicts = new Map();
+  let scored: ReturnType<typeof scoreAll> = [];
+  for (let limit = 150; ; limit += 150) {
+    const shortlist = closest.slice(0, limit);
+    kept = new Set(shortlist.map((job) => job.id));
+    verdicts = profile && shortlist.length ? await judgeJobs(profile, shortlist) : new Map();
+    scored = scoreAll();
+    if (scored.length >= 40 || limit >= closest.length || limit >= 450) break;
+  }
+  function scoreAll() {
+    return jobs
     .filter((job) => !sims.has(job.id) || (sims.get(job.id)! >= 0.35 && kept.has(job.id)))
     .map((job) => {
       const match = scoreJob({ ...job, similarity: sims.get(job.id) ?? null, judgement: verdicts.get(job.id) ?? null }, { currentTitle: profile?.currentTitle ?? null, skills, yearsExperience: profile?.yearsExperience ?? null, preferredLocations: preferred, tracks });
@@ -114,6 +123,7 @@ async function referenceFeed(userId: string) {
     .filter((job) => job.mock || job.score >= minScore)
     .filter((job) => !history.roles.has(job.roleKey))
     .filter((job) => !history.companiesAtCap.has(companyKey(job.company)));
+  }
   return dedupeListings(scored)
     .map((job) => ({ ...job, rank: job.score + job.verdict.nudge }))
     .sort((a, b) => b.rank - a.rank || b.score - a.score || a.daysAgo - b.daysAgo)

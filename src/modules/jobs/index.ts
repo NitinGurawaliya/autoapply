@@ -11,3 +11,4 @@ export { clearCompanyResultsCache, companyResultsById, judge, loadCompanyResults
 export type { CompanyResult, Verdict } from "./results";
 export { embedPendingJobs, jobSimilarity, judgeJobs, profileVector } from "./semantic";
 export type { Judgement } from "./semantic";
+export { warmFeeds } from "./warm";

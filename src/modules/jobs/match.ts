@@ -148,8 +148,11 @@ export const SIMILARITY_FLOOR = 0.35;
 const UNJUDGED_FLOOR = 0.45;
 const SIMILARITY_LOW = 0.35;
 const SIMILARITY_HIGH = 0.6;
-// The closest jobs the model judges per feed (cached per resume and posting, so mostly once).
-const SHORTLIST = 150;
+// The closest jobs the model judges per feed (cached per resume and posting, so mostly once), more when the deck is
+// short, up to MAX_SHORTLIST.
+export const SHORTLIST = 150;
+export const MAX_SHORTLIST = 450;
+export const FEED_SIZE = 40;
 const FIT_POINTS = { strong: 30, good: 20, stretch: 8 } as const;
 
 /** Strong, good or stretch from the score; null below the minimum. */
@@ -488,17 +491,12 @@ async function scoreFeed(userId: string, filters: FeedFilters): Promise<FeedJob[
   // The closest jobs (by meaning) that the user can still apply to are judged by the model against the resume
   // (semantic.ts, cached); jobs further away are left out. Mock jobs and jobs without a vector are scored by tracks.
   const open = (job: FeedRow) => !history.roles.has(roleKey(companyKey(job.company), job.title)) && !history.companiesAtCap.has(companyKey(job.company));
-  const shortlist = jobs
+  const closest = jobs
     .filter((job) => job.similarity != null && job.source !== "mock" && open(job))
-    .sort((a, b) => b.similarity! - a.similarity! || (a.id < b.id ? -1 : 1))
-    .slice(0, SHORTLIST);
-  const kept = new Set(shortlist.map((job) => job.id));
-  const judgements =
-    profile && shortlist.length > 0
-      ? await judgeJobs(profile, await db.job.findMany({ where: { id: { in: [...kept] } }, select: { id: true, title: true, description: true, contentHash: true } }))
-      : new Map<string, Judgement>();
+    .sort((a, b) => b.similarity! - a.similarity! || (a.id < b.id ? -1 : 1));
+  const judgements = new Map<string, Judgement>();
 
-  const scored = jobs
+  const scoreAll = (kept: Set<string>) => jobs
     .filter((job) => job.similarity == null || kept.has(job.id))
     .map((job) => {
       const hits = new Set(job.hits);
@@ -539,6 +537,20 @@ async function scoreFeed(userId: string, filters: FeedFilters): Promise<FeedJob[
     .filter((job) => !history.companiesAtCap.has(companyKey(job.company)))
     .filter((job) => filters.expMax == null || job.requiredYears == null || job.requiredYears <= filters.expMax);
 
+  // The closest SHORTLIST are judged; when that leaves fewer than a deck of cards (the user swiped most of them), the
+  // next closest are judged too, up to MAX_SHORTLIST. Verdicts are cached, so each job is judged once per resume.
+  let scored: ReturnType<typeof scoreAll> = [];
+  for (let limit = SHORTLIST; ; limit += SHORTLIST) {
+    const shortlist = closest.slice(0, limit);
+    const missing = shortlist.filter((job) => !judgements.has(job.id)).map((job) => job.id);
+    if (profile && missing.length > 0) {
+      const texts = await db.job.findMany({ where: { id: { in: missing } }, select: { id: true, title: true, description: true, contentHash: true } });
+      for (const [id, judgement] of await judgeJobs(profile, texts)) judgements.set(id, judgement);
+    }
+    scored = scoreAll(new Set(shortlist.map((job) => job.id)));
+    if (scored.length >= FEED_SIZE || limit >= closest.length || limit >= MAX_SHORTLIST) break;
+  }
+
   return dedupeListings(scored)
     .map((job) => ({
       id: job.id,
@@ -567,5 +579,5 @@ async function scoreFeed(userId: string, filters: FeedFilters): Promise<FeedJob[
       void rank;
       return job;
     })
-    .slice(0, 40);
+    .slice(0, FEED_SIZE);
 }
