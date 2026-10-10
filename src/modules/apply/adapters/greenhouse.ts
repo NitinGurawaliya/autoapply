@@ -198,15 +198,31 @@ function bestOption(options: string[], wanted: string) {
   return null;
 }
 
+/**
+ * What to type into a search box, best first: the answer, then simpler forms of it, because location pickers find
+ * nothing for "Greater Delhi Area" or "Bengaluru, Karnataka, India" but do for "Delhi" and "Bengaluru" (10 Oct dry run).
+ */
+export function searchTerms(value: string) {
+  const terms = [value.trim()];
+  const plain = value.replace(/\b(greater|metropolitan|metro|area|region|district|urban|rural|ncr|city of)\b/gi, " ").replace(/\s+/g, " ").trim();
+  terms.push(plain, plain.split(",")[0].trim(), value.split(",")[0].trim());
+  return [...new Set(terms.filter((term) => term.length >= 2))];
+}
+
 async function pickCombobox(page: Page, selector: string, value: string, label: string) {
   const input = page.locator(selector);
   await input.scrollIntoViewIfNeeded();
   await input.click();
-  await input.fill(value);
   const options = await optionsFor(page, input);
-  await options.first().waitFor({ timeout: 8000 }).catch(() => undefined);
-  const texts = (await options.allInnerTexts()).map((text) => text.trim());
-  const choice = bestOption(texts, value);
+  let texts: string[] = [];
+  let choice: string | null = null;
+  for (const term of searchTerms(value)) {
+    await input.fill(term);
+    await options.first().waitFor({ timeout: 8000 }).catch(() => undefined);
+    texts = (await options.allInnerTexts()).map((text) => text.trim());
+    choice = bestOption(texts, term);
+    if (choice) break;
+  }
   if (!choice) {
     await closeMenu(page);
     // Live options when the list showed some; otherwise a free-text question so the user can try another search term.

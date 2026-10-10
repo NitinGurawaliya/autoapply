@@ -298,6 +298,10 @@ export function resolveValues(
     }
     const def = getAnswerKey(key);
     const eeo = def?.policy === "default_only" && def.default === rules.eeo_default;
+    // Facts the profile holds (city, phone, links...) come from the profile the user confirmed, not from an older saved
+    // answer: a "City = Greater Delhi Area" saved on 8 Oct had kept beating the profile's Bangalore (10 Oct dry run).
+    const fromProfileFirst = def?.policy === "deterministic" ? profileValue(profile, key) : null;
+    if (fromProfileFirst && push(key, fromProfileFirst, "resume")) continue;
     const saved = bank.get(key);
     if (saved) {
       if (push(key, saved.answer, saved.source, eeo)) continue;
