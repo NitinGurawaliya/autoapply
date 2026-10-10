@@ -4,6 +4,7 @@ import { ACKNOWLEDGEMENT_KEY, ACKNOWLEDGEMENT_QUESTION, acknowledgementValue } f
 import type { FormField, PendingQuestion, ResolvedValue } from "./adapter";
 import { BEST_PROJECT_KEY, essayKind, ESSAY_PERMISSION_KEY, ESSAY_PERMISSION_QUESTION } from "./essay";
 import type { MemoryAnswer } from "./recall";
+import { outsideHome, SPONSORSHIP_ABROAD_KEY, SPONSORSHIP_ABROAD_OPTIONS, sponsorshipAbroadQuestion, standingSponsorship } from "./sponsorship";
 
 type AnswerRow = { key: string; answer: string; source: string; context?: unknown };
 
@@ -108,8 +109,9 @@ export function resolveValues(
   memory?: Map<string, MemoryAnswer>,
   /** A known answer re-worded onto this form's own option (optionMap.ts), by optionKey(label, answer). */
   optionMatches?: Map<string, string>,
-  /** The job being applied to: a "why this company" answer is only reused for the same company. */
-  job?: { company: string },
+  /** The job being applied to: a "why this company" answer is only reused for the same company; its country decides
+   * whether the standing sponsorship answer applies (sponsorship.ts). */
+  job?: { company: string; country?: string },
 ) {
   const rules = loadRules();
   const bank = new Map(answers.map((row) => [row.key, row]));
@@ -176,6 +178,22 @@ export function resolveValues(
       if (verified && push(key ?? questionKey, verified.answer, verified.source ?? "matched")) {
         values[values.length - 1].basis = verified.basis;
         continue;
+      }
+      // Sponsorship for a job outside the candidate's home country: their one answer for everywhere abroad, asked
+      // once (sponsorship.ts). "It depends on the country" keeps the per-country question.
+      if (kind === "needs_sponsorship" && outsideHome(profile.country, job?.country)) {
+        const standing = bank.get(SPONSORSHIP_ABROAD_KEY);
+        const value = standingSponsorship(standing?.answer);
+        if (standing && value && push(key ?? questionKey, value, standing.source)) {
+          values[values.length - 1].basis = `your answer: you ${value === "Yes" ? "need" : "do not need"} visa sponsorship outside ${profile.country}`;
+          continue;
+        }
+        if (!standing) {
+          if (field.required && !pending.some((q) => q.key === SPONSORSHIP_ABROAD_KEY)) {
+            pending.push({ key: SPONSORSHIP_ABROAD_KEY, label: sponsorshipAbroadQuestion(profile.country ?? "your country"), type: "select", options: SPONSORSHIP_ABROAD_OPTIONS, required: true });
+          }
+          continue;
+        }
       }
       ask(questionKey);
       continue;

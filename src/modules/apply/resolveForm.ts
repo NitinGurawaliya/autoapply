@@ -46,7 +46,7 @@ export async function resolveForm(input: {
   const log: Log = input.log ?? (async () => undefined);
   const rules = loadRules();
   const mapped = await mapFields(input.source, input.fields);
-  const jobRef = { company: job.company };
+  const jobRef = { company: job.company, country: job.country };
   let resolved = resolveValues(mapped, profile, answers, undefined, undefined, jobRef);
   let memoryAnswers: Map<string, MemoryAnswer> | undefined;
   const pendingFields = () => {

@@ -56,6 +56,8 @@ export const ANSWER_KEYS: AnswerKeyDef[] = [
   // Essay drafts (modules/apply/essay.ts): the one-time permission, and the "best project" story drafted once and reused.
   { key: "accept_ai_essays", type: "select", policy: "bank_or_ask", synonyms: [] },
   { key: "essay_best_project", type: "long_text", policy: "ai_draft_ok", synonyms: [] },
+  // One answer for visa sponsorship everywhere outside the home country (modules/apply/sponsorship.ts). The user's own.
+  { key: "sponsorship_outside_home", type: "select", policy: "bank_or_ask", synonyms: [] },
 ];
 
 const BY_KEY = new Map(ANSWER_KEYS.map((def) => [def.key, def]));

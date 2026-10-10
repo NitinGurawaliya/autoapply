@@ -284,6 +284,11 @@ Do: `getSessionAndUser` in `lib/auth.ts` as one SQL join returning the session, 
 **Done when:** sign-in costs one query per request, pages are re-measured, and `security-test`, `onboarding-smoke`, `answers-smoke`, `infra-smoke` pass.
 Done 10 Oct: query log shows one session query per request (was four); `/answers` and `/account` 1.6–2.2 s → 0.8–1.1 s warm on the dev server. All four checks PASS.
 
+### [x] T72 — Sponsorship asked once for every country abroad
+Do: `modules/apply/sponsorship.ts` and the needs-sponsorship branch of `valueResolver.ts`: one standing answer (`sponsorship_outside_home`) for jobs outside the home country, asked instead of the per-country question; the pre-scan keeps it as one gap.
+**Done when:** `scripts/sponsorship-test.ts` PASS and the answering chain checks still pass.
+Done 10 Oct: `sponsorship-test` PASS (14 checks); `resolver-test`, `acknowledgement-test`, `keys-test`, `recall-test`, `derive-test`, `essay-test`, `gaps-test`, `precheck-smoke` PASS. `option-map-test` fails 2 live model cases ("12 LPA" → "10-15 LPA", an unlisted event → "Other"): the model now leaves them unmapped; the code was not touched and its cached answers were lost in the 10 Oct restore. Not fixed here.
+
 
 ## Phase F — Smarter answers (ask only what we cannot know)
 
