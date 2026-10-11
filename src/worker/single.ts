@@ -19,6 +19,9 @@ function alive(pid: number) {
  */
 export function claimWorkerLock() {
   mkdirSync(PROFILE_ROOT, { recursive: true });
+  // In a container one container is one worker; a lock file kept on a volume from the previous container could name a
+  // process id that is something else in this one and block the start (Dockerfile.worker sets this).
+  if (process.env.WORKER_SINGLE_LOCK === "off") return;
   try {
     const other = Number(readFileSync(LOCK, "utf8").trim());
     if (other && other !== process.pid && alive(other)) {
