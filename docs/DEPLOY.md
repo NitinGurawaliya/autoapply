@@ -9,11 +9,15 @@ Browser ──> Vercel (Next.js web + API) ──> Neon Postgres <── Worker 
 
 The web app never runs a browser. The worker is the only place Playwright runs. They talk only through Neon (jobs, applications, answers, pg-boss queue). Nothing here has been deployed yet; treat the first deploy as a test.
 
+The worker must run all the time: without it there is no job fetch (every 3 h), no discovery of new companies (daily), no new-match push and no applying. Every setting is listed in `.env.example`.
+
 ## 0. Before you start (changes to the repo)
 
-1. **Prisma client on Vercel.** Add to `package.json` scripts: `"postinstall": "prisma generate"`. Without it the Vercel build fails or uses a stale client.
-2. **Long resume parsing.** In `src/app/api/profile/resume/route.ts` add `export const maxDuration = 60;` (Vercel's default is shorter than a parse plus LLM call).
-3. **Ingest schedule.** Done: the worker registers it on start (`src/worker/schedule.ts`). Optional overrides: `INGEST_CRON`, `INGEST_DAYS`. Look for `ingest scheduled: ...` in the worker log after deploy.
+1. **Prisma client on Vercel.** Done (11 Oct): `"postinstall": "prisma generate"` in `package.json`.
+2. **Long resume parsing.** Done (11 Oct): `export const maxDuration = 60` in `src/app/api/profile/resume/route.ts`.
+3. **Schedules.** Done: the worker registers them on start (`src/worker/schedule.ts`): ingest `INGEST_CRON` (default every 3 h, last `INGEST_DAYS` = 60 days) and discovery `DISCOVER_CRON` (default 01:30 UTC daily). Look for `ingest scheduled: ...; discovery ...` in the worker log after deploy.
+5. **Rules file.** Done: `config/rules.json` ships with every route (`outputFileTracingIncludes` in `next.config.ts`).
+6. **Browser push keys.** Generate one pair once: `npx web-push generate-vapid-keys`; set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (`mailto:` you) on web and worker, the same pair on both. A new pair later means every user turns notifications on again.
 4. **Rotate secrets you pasted anywhere** (database password, API keys) before going live, and never commit `.env`.
 
 ## 1. Neon (database)
@@ -56,6 +60,7 @@ In Google Cloud Console, edit your OAuth client:
    | `ENABLE_MOCK_FORM` | leave unset in production; `1` only on a staging deploy used for the end-to-end test |
    | `APP_URL` | `https://<your-domain>` (links in notification emails; worker too) |
    | `NOTIFY_WEBHOOK_URL`, `NOTIFY_WEBHOOK_SECRET` | optional, only if you want "needs you" emails (worker) |
+   | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | browser push (step 0.6); web and worker |
 
 3. Deploy. Check: `/sign-in` loads, Google sign-in returns to `/onboarding/resume`, resume upload parses.
 4. Do **not** set `DEMO_HEADED` on Vercel.
@@ -65,26 +70,22 @@ In Google Cloud Console, edit your OAuth client:
 
 Use the official Playwright image so Chromium and its system libraries are present. **The image tag must match the installed Playwright version (1.63.0).**
 
-`Dockerfile.worker`:
+`Dockerfile.worker` is in the repo (Playwright 1.63.0 image, `npm ci`, `npm run worker:prod`, browser profiles under `/data/browser-profiles`). Locally:
 
-```dockerfile
-FROM mcr.microsoft.com/playwright:v1.63.0-jammy
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npx prisma generate
-ENV NODE_ENV=production
-CMD ["npx", "tsx", "src/worker/index.ts"]
+```bash
+docker build -f Dockerfile.worker -t swipeapply-worker .
+docker run --env-file .env -v swipeapply-profiles:/data/browser-profiles swipeapply-worker
 ```
 
-- Use `tsx` directly, not `npm run worker` (that one is `tsx watch`, for development).
-- The worker needs the same variables as the web app except the `AUTH_*` ones: `DATABASE_URL`, `DIRECT_URL`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `STORAGE_DRIVER`. Leave `DEMO_HEADED` unset (headless; there is no screen).
+- `npm run worker:prod` runs `tsx` without watching (`npm run worker` is `tsx watch`, for development).
+- The worker needs the same variables as the web app except the `AUTH_*` ones, plus `VAPID_*` and `APP_URL`. Leave `DEMO_HEADED` unset (headless; there is no screen).
+- A volume at `/data/browser-profiles` keeps per-user browser cookies across restarts (optional).
+- A restart is safe: an application cut off before Submit is picked up again by the next worker (up to twice); one cut off after Submit is marked "may have been sent, check your email", never sent twice.
 - Parallelism: set `APPLY_CONCURRENCY` (default 3, max 8). Budget about 0.5 GB RAM per concurrent run plus headroom, so 3 runs want roughly 2 GB. A run waiting for a security code holds a slot for up to 10 minutes. More simultaneous submissions from one cloud IP may raise how often the employer asks for a verification code.
 - Several replicas are safe for the queue and the per-user submit lock (it lives in the database), and each runs the stale-run reaper. Still start with **one replica** until the first end-to-end test passes. Two workers are safe for the queue, but run them only after the first end-to-end test passes.
 - Give it at least 1 GB RAM (Chromium) and keep it always on (no scale-to-zero): it holds a browser open while it waits for a security code.
 - Railway: New Project → Deploy from GitHub → set the Dockerfile path to `Dockerfile.worker` → add the variables. Fly: `fly launch --dockerfile Dockerfile.worker`, `fly secrets set ...`, `fly scale count 1`.
-- Check the logs for `worker listening for apply and ingest`.
+- Check the logs for `worker listening for apply and ingest`, then `<your-domain>/api/health`: `"worker": "up"` (the worker beats every minute), `lastIngest` within 3 hours, `lastDiscovery` within a day. It answers 503 when no worker has beaten for 5 minutes: point an uptime monitor at it.
 
 ## 5. End-to-end test (do this before trusting it)
 
@@ -97,9 +98,10 @@ CMD ["npx", "tsx", "src/worker/index.ts"]
 ## 6. Known risks in production
 
 - **Greenhouse verification.** A cloud IP and a headless browser are more likely to trigger the emailed security code than your laptop. This is likely, not confirmed. The manual code popup is the fallback.
-- **Lever and Ashby** adapters are placeholders; those jobs are hidden from the feed.
+- **Lever and Ashby** adapters are switched off (captcha and spam checks); their jobs are fetched but hidden from the feed.
 - **Cold starts / Neon pauses** can fail the first queue call; retry.
-- **No monitoring.** Watch worker logs; add Sentry later.
+- **Monitoring.** `/api/health` for uptime (worker heartbeat, last ingest and discovery); `npx tsx scripts/feed-report.ts` for daily freshness (new India jobs, failing companies, each profile's new matches). Add Sentry later.
+- **Discovery yield.** Daily discovery re-checks Greenhouse companies that had too few India jobs (every 14 days) and asks the model for new names; by 11 Oct the model knew few names not already checked (0-2 a day). Most new companies will come with the Lever and Ashby boards.
 - **Real applications.** Production submits real applications. Keep `config/rules.json` limits (`max_applications_per_day`, `min_match_score`) on.
 
 ## 7. Updating

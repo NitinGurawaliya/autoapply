@@ -11,7 +11,8 @@ async function main() {
       where: {
         source_slug: { source: company.source, slug: company.slug },
       },
-      update: { name: company.name, active: true, stage: company.stage },
+      // Seeding a company turns it back on, also after ingest switched it off (failing or empty board).
+      update: { name: company.name, active: true, stage: company.stage, offReason: null, failedFetches: 0, emptySince: null },
       create: {
         source: company.source,
         slug: company.slug,

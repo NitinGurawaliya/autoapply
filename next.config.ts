@@ -12,6 +12,8 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["pdf-parse"],
+  // The governance rules are read from disk at runtime (modules/governance/rules.ts): ship them with every server route.
+  outputFileTracingIncludes: { "/**": ["./config/rules.json"] },
   poweredByHeader: false,
   experimental: {
     // Keep a page the user has just visited in the browser for a minute, so going feed → applications → feed does not

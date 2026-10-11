@@ -1,0 +1,17 @@
+# The SwipeApply worker (docs/DEPLOY.md): pg-boss jobs for apply, ingest, discovery and pre-scan, Playwright with
+# Chromium. The official Playwright image matches the playwright version in package.json, so its browsers fit.
+FROM mcr.microsoft.com/playwright:v1.63.0-noble
+
+WORKDIR /app
+ENV NODE_ENV=production \
+    BROWSER_PROFILE_ROOT=/data/browser-profiles
+
+COPY package.json package-lock.json ./
+COPY prisma ./prisma
+RUN npm ci --include=dev
+
+COPY . .
+
+# Browser profiles (per-user cookies) on a volume when the host offers one; the worker works without it too.
+RUN mkdir -p /data/browser-profiles
+CMD ["npm", "run", "worker:prod"]

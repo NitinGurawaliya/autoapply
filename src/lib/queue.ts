@@ -6,6 +6,7 @@ loadEnvFile();
 const APPLY_QUEUE = "apply";
 const INGEST_QUEUE = "ingest";
 const PRESCAN_QUEUE = "prescan";
+const DISCOVER_QUEUE = "discover";
 
 let bossPromise: Promise<PgBoss> | null = null;
 
@@ -23,6 +24,7 @@ export function getBoss() {
       await ensureQueue(started, APPLY_QUEUE);
       await ensureQueue(started, INGEST_QUEUE);
       await ensureQueue(started, PRESCAN_QUEUE);
+      await ensureQueue(started, DISCOVER_QUEUE);
       return started;
     });
   }

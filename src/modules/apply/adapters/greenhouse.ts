@@ -234,9 +234,18 @@ async function pickCombobox(page: Page, selector: string, value: string, label: 
     choice = texts.find((text) => /^other\b/i.test(text)) ?? null;
   }
   if (!choice) {
+    // Nothing matched the search: a list that shows every option when empty (Discipline: 72 subjects, Degree) is asked
+    // whole, so the user picks once and the pick fits every form with the same list ("Information Technology" is not one
+    // of Greenhouse's subjects; picking the nearest one for them would be a guess about their education).
+    if (texts.filter(Boolean).length === 0) {
+      await input.fill("");
+      await options.first().waitFor({ timeout: 3000 }).catch(() => undefined);
+      const all = (await options.allInnerTexts()).map((text) => text.trim()).filter(Boolean);
+      if (all.length > 0 && all.length <= 200) texts = all;
+    }
     await closeMenu(page);
     // Live options when the list showed some; otherwise a free-text question so the user can try another search term.
-    const shown = texts.filter(Boolean).slice(0, 30);
+    const shown = texts.filter(Boolean).slice(0, 200);
     const question = { key: customQuestionKey(label), label: shown.length ? label : `${label} (nothing matched "${value}", try another search word)`, type: shown.length ? "combobox" : "text", required: true, ...(shown.length ? { options: shown } : {}) };
     throw new NeedsAnswerError(question);
   }

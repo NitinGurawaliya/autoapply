@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { db } from "../src/lib/db";
 import { CancelledError, codeRequester, runApplication } from "../src/modules/apply/runner";
 import { LockStopped, withSubmitLock } from "../src/modules/apply/submitLock";
-import { reapStaleRuns, STALE_MESSAGE } from "../src/worker/reaper";
+import { reapStaleRuns, STALE_AFTER_SUBMIT } from "../src/worker/reaper";
 
 let failed = 0;
 function check(name: string, ok: boolean, detail = "") {
@@ -137,9 +137,11 @@ async function main() {
     const rerun = await db.application.findUnique({ where: { id: app.id } });
     check("re-running a cancelled application changes nothing", rerun?.status === "cancelled" && rerun.attempt === 0);
 
-    // 7. Reaper: only a dead run (active queue job, stale heartbeat) is failed.
+    // 7. Reaper: a dead run (active queue job, stale heartbeat) is picked up again when nothing was sent, and failed
+    // when it had reached the submit check.
     const old = new Date(Date.now() - 10 * 60 * 1000);
     const deadApp = await makeApp({ status: "filling", heartbeatAt: old });
+    const submittedApp = await makeApp({ status: "filling", heartbeatAt: old });
     const liveApp = await makeApp({ status: "filling", heartbeatAt: new Date() });
     const idleApp = await makeApp({ status: "needs_input", heartbeatAt: old }); // waiting for answers: no active job, must stay
     // Answered after the check before the run, minutes later: re-queued with its old heartbeat, its new job just started.
@@ -151,14 +153,18 @@ async function main() {
       return rows[0].id;
     };
     const deadJob = await addActive(deadApp.id, old);
+    await addActive(submittedApp.id, old);
+    await db.applicationEvent.create({ data: { applicationId: submittedApp.id, type: "rule_check", rule: "submit", message: "submit passed" } });
     await addActive(liveApp.id, old);
     await addActive(resumedApp.id, new Date());
     await db.$executeRaw`INSERT INTO "SubmitLock" ("userId", "holderId", "expiresAt") VALUES (${userId("reap")}, ${deadApp.id}, now() + interval '1 minute')`;
     const reaped = await reapStaleRuns();
-    const [d, l, i, r] = await Promise.all([deadApp, liveApp, idleApp, resumedApp].map((a) => db.application.findUnique({ where: { id: a.id } })));
+    const [d, l, i, r, s] = await Promise.all([deadApp, liveApp, idleApp, resumedApp, submittedApp].map((a) => db.application.findUnique({ where: { id: a.id } })));
+    const requeued = await db.$queryRaw<Array<{ n: bigint }>>`SELECT count(*) AS n FROM pgboss.job WHERE name = 'apply' AND state <> 'cancelled' AND data->>'applicationId' = ${deadApp.id}`; // a running worker may already have taken it
     const jobState = await db.$queryRaw<Array<{ state: string }>>`SELECT state FROM pgboss.job WHERE id = ${deadJob}::uuid`;
     const lockLeft = await db.$queryRaw<Array<{ n: bigint }>>`SELECT count(*) AS n FROM "SubmitLock" WHERE "holderId" = ${deadApp.id}`;
-    check("reaper fails a run whose heartbeat stopped", d?.status === "failed" && d.error === STALE_MESSAGE, `${d?.status}; reaped ${reaped}`);
+    check("reaper picks up again a run cut off before Submit (nothing was sent)", d?.status === "queued" && Number(requeued[0].n) === 1, `${d?.status}; queued jobs ${requeued[0].n}; reaped ${reaped}`);
+    check("reaper fails a run cut off after the submit check, saying it may have been sent", s?.status === "failed" && s.error === STALE_AFTER_SUBMIT, `${s?.status}: ${s?.error}`);
     check("reaper cancels that run's queue job", jobState[0]?.state === "cancelled", jobState[0]?.state);
     check("reaper frees that run's submit lock", Number(lockLeft[0].n) === 0);
     check("reaper leaves a run with a fresh heartbeat alone", l?.status === "filling");
@@ -166,6 +172,8 @@ async function main() {
     check("reaper leaves a run that just resumed (old heartbeat, new job) alone", r?.status === "queued", r?.status);
   } finally {
     if (jobIdsToClean.length) await db.$executeRaw`DELETE FROM pgboss.job WHERE id::text = ANY(${jobIdsToClean})`;
+    // Runs the reaper queued again: never left for a worker to pick up.
+    await db.$executeRaw`DELETE FROM pgboss.job WHERE name = 'apply' AND data->>'applicationId' = ANY(${created})`;
     await db.applicationEvent.deleteMany({ where: { applicationId: { in: created } } });
     await db.application.deleteMany({ where: { id: { in: created } } });
     await db.$executeRaw`DELETE FROM "SubmitLock" WHERE "userId" = ANY(${lockUsers})`;

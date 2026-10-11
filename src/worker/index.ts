@@ -1,4 +1,7 @@
+import { hostname } from "node:os";
+import { db } from "@/lib/db";
 import { getBoss } from "@/lib/queue";
+import { runDiscovery } from "@/modules/jobs/discovery";
 import { handleApply } from "./handlers/apply";
 import { handleIngest } from "./handlers/ingest";
 import { handlePrescan } from "./handlers/prescan";
@@ -15,9 +18,21 @@ async function main() {
   await boss.work("apply", { localConcurrency: concurrency }, handleApply);
   await boss.work("ingest", handleIngest);
   await boss.work("prescan", handlePrescan);
+  await boss.work("discover", async () => {
+    await runDiscovery();
+  });
   console.log(`worker listening for apply (x${concurrency}) and ingest`);
   const ingest = await registerSchedules(boss);
-  console.log(`ingest scheduled: "${ingest.cron}" ${ingest.timezone}, last ${ingest.days} days`);
+  console.log(`ingest scheduled: "${ingest.cron}" ${ingest.timezone}, last ${ingest.days} days; discovery "${ingest.discoverCron}"`);
+
+  // Heartbeat for /api/health: a worker that has not beaten for a few minutes is down.
+  const host = process.env.WORKER_NAME?.trim() || hostname();
+  const startedAt = new Date();
+  const beat = async () => {
+    await db.workerBeat.upsert({ where: { id: host }, create: { id: host, beatAt: new Date(), startedAt }, update: { beatAt: new Date(), startedAt } }).catch(() => undefined);
+  };
+  void beat();
+  setInterval(() => void beat(), 60_000);
 
   // Runs whose worker died stay "active" forever otherwise. Every worker checks; the reaper is idempotent.
   const reap = async () => {

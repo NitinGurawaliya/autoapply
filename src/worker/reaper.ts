@@ -1,20 +1,27 @@
 import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { db } from "@/lib/db";
+import { enqueueApply } from "@/lib/queue";
 import { pruneRateEvents } from "@/lib/rate-limit";
 import { PROFILE_ROOT } from "@/modules/apply/browser";
 import { writeEvent } from "@/modules/governance";
 
 export const STALE_AFTER_MINUTES = 3;
 export const STALE_MESSAGE = "The worker stopped while running this application. Retry it.";
+export const STALE_AFTER_SUBMIT = "The worker stopped right after pressing Submit, so it may have been sent. Check your email before applying again.";
+// A run cut off before Submit is picked up again this many times (worker restarts, deploys) before it fails.
+const MAX_RESUMES = 2;
 
 /**
- * A run whose queue job is still "active" but whose heartbeat stopped belongs to a dead worker. Fail it with a clear
- * reason, cancel its queue job so nothing re-runs it blindly, and free its submit lock. Safe to run from every worker.
+ * A run whose queue job is still "active" but whose heartbeat stopped belongs to a dead worker (a restart, a deploy, a
+ * laptop going to sleep: 11 of the 30 failures in the week to 10 Oct). Its queue job is cancelled and its submit lock
+ * freed. If that attempt never reached the submit check, nothing was sent: the run is queued again and starts over from
+ * the job URL (the runner is stateless), up to MAX_RESUMES times. If it did, it may have been sent, so it fails with
+ * that reason rather than risk a second application. Safe to run from every worker.
  */
 export async function reapStaleRuns(staleMinutes = STALE_AFTER_MINUTES) {
-  const stale = await db.$queryRaw<Array<{ applicationId: string; jobId: string }>>`
-    SELECT a."id" AS "applicationId", j."id"::text AS "jobId"
+  const stale = await db.$queryRaw<Array<{ applicationId: string; jobId: string; startedOn: Date }>>`
+    SELECT a."id" AS "applicationId", j."id"::text AS "jobId", j.started_on AS "startedOn"
     FROM "Application" a
     JOIN pgboss.job j ON j.name = 'apply' AND j.state = 'active' AND j.data->>'applicationId' = a."id"
     WHERE a."status" IN ('queued', 'inspecting', 'filling', 'needs_input')
@@ -24,14 +31,31 @@ export async function reapStaleRuns(staleMinutes = STALE_AFTER_MINUTES) {
 
   let reaped = 0;
   for (const row of stale) {
-    const marked = await db.application.updateMany({
-      where: { id: row.applicationId, status: { in: ["queued", "inspecting", "filling", "needs_input"] } },
-      data: { status: "failed", error: STALE_MESSAGE, pendingQuestions: [], verificationCode: null },
-    });
     await db.$executeRaw`UPDATE pgboss.job SET state = 'cancelled', completed_on = now() WHERE id = ${row.jobId}::uuid AND state = 'active'`;
     await db.$executeRaw`DELETE FROM "SubmitLock" WHERE "holderId" = ${row.applicationId}`;
+    const [reachedSubmit, resumes] = await Promise.all([
+      db.applicationEvent.count({ where: { applicationId: row.applicationId, type: "rule_check", rule: "submit", createdAt: { gte: row.startedOn } } }),
+      db.applicationEvent.count({ where: { applicationId: row.applicationId, type: "retry", message: { startsWith: "Picked up again" } } }),
+    ]);
+    if (reachedSubmit === 0 && resumes < MAX_RESUMES) {
+      const requeued = await db.application.updateMany({
+        where: { id: row.applicationId, status: { in: ["queued", "inspecting", "filling", "needs_input"] } },
+        data: { status: "queued", pendingQuestions: [], verificationCode: null },
+      });
+      if (requeued.count > 0) {
+        await writeEvent(row.applicationId, "retry", "Picked up again after the worker stopped (nothing had been sent)");
+        await enqueueApply(row.applicationId);
+        reaped += 1;
+      }
+      continue;
+    }
+    const message = reachedSubmit > 0 ? STALE_AFTER_SUBMIT : STALE_MESSAGE;
+    const marked = await db.application.updateMany({
+      where: { id: row.applicationId, status: { in: ["queued", "inspecting", "filling", "needs_input"] } },
+      data: { status: "failed", error: message, pendingQuestions: [], verificationCode: null },
+    });
     if (marked.count > 0) {
-      await writeEvent(row.applicationId, "error", STALE_MESSAGE);
+      await writeEvent(row.applicationId, "error", message);
       reaped += 1;
     }
   }

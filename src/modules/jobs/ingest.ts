@@ -16,6 +16,10 @@ const PAUSE_MS = 300;
 const RUN_LIMIT_MS = 2 * 60 * 60 * 1000;
 // Closed jobs nobody swiped or applied to are deleted this long after they closed.
 const DELETE_CLOSED_AFTER_DAYS = 30;
+// A company is switched off after this many failed fetches in a row (8 runs = a day), or after this long with no open
+// jobs at all (a board left empty, or moved to another ATS). Its offReason says which; seeding it again turns it on.
+const OFF_AFTER_FAILURES = 8;
+const OFF_AFTER_EMPTY_DAYS = 30;
 
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -138,14 +142,30 @@ export async function ingestJobs(days: number) {
   }
 
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-  const companies = await db.company.findMany({ where: { active: true }, orderBy: [{ source: "asc" }, { name: "asc" }], select: { id: true, source: true, slug: true, name: true } });
-  const totals = { companies: companies.length, failed: 0, fetched: 0, created: 0, updated: 0, closed: 0, deleted: 0, createdEligible: 0 };
+  const companies = await db.company.findMany({ where: { active: true }, orderBy: [{ source: "asc" }, { name: "asc" }], select: { id: true, source: true, slug: true, name: true, failedFetches: true, emptySince: true } });
+  const totals = { companies: companies.length, failed: 0, fetched: 0, created: 0, updated: 0, closed: 0, deleted: 0, createdEligible: 0, switchedOff: 0 };
   let next = 0;
   const worker = async () => {
     while (next < companies.length) {
       const company = companies[next++];
       const result = await ingestCompany(company, cutoff);
-      await db.company.update({ where: { id: company.id }, data: { lastFetchedAt: new Date(), lastFetchCount: result.error ? 0 : result.fetched, lastError: result.error ?? null } });
+      const now = new Date();
+      const failures = result.error ? company.failedFetches + 1 : 0;
+      const emptySince = result.error ? company.emptySince : result.fetched === 0 ? company.emptySince ?? now : null;
+      const off =
+        failures >= OFF_AFTER_FAILURES
+          ? `fetch failed ${failures} times in a row: ${result.error?.slice(0, 80)}`
+          : emptySince && now.getTime() - emptySince.getTime() > OFF_AFTER_EMPTY_DAYS * 24 * 60 * 60 * 1000
+            ? `no open jobs for ${OFF_AFTER_EMPTY_DAYS} days`
+            : null;
+      await db.company.update({
+        where: { id: company.id },
+        data: { lastFetchedAt: now, lastFetchCount: result.error ? 0 : result.fetched, lastError: result.error ?? null, failedFetches: failures, emptySince, ...(off ? { active: false, offReason: off } : {}) },
+      });
+      if (off) {
+        totals.switchedOff += 1;
+        console.log(`ingest: switched off ${company.source} ${company.slug}: ${off}`);
+      }
       if (result.error) {
         totals.failed += 1;
         console.error(`ingest error ${company.source} ${company.slug}: ${result.error}`);
@@ -169,7 +189,9 @@ export async function ingestJobs(days: number) {
     });
     console.log(`ingest: embedded ${embedded} jobs`);
   } finally {
-    await db.ingestRun.update({ where: { id: runId }, data: { ...totals, finishedAt: new Date() } });
+    const { switchedOff, ...recorded } = totals;
+    void switchedOff;
+    await db.ingestRun.update({ where: { id: runId }, data: { ...recorded, finishedAt: new Date() } });
   }
   console.log(`ingest done: ${JSON.stringify(totals)}`);
   return totals;

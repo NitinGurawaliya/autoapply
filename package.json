@@ -9,6 +9,8 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "worker": "tsx watch src/worker/index.ts",
+    "worker:prod": "tsx src/worker/index.ts",
+    "postinstall": "prisma generate",
     "ingest": "tsx scripts/ingest.ts",
     "seed": "tsx prisma/seed.ts"
   },

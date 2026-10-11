@@ -149,9 +149,41 @@ model Company {
   lastError      String?   // the last fetch failure, cleared by a fetch that works
   lastFetchedAt  DateTime?
   lastFetchCount Int?
+  // Switched off automatically (modules/jobs/ingest.ts): 8 failed fetches in a row (a day), or no open jobs for 30 days.
+  failedFetches  Int       @default(0)
+  emptySince     DateTime?
+  offReason      String?
+  // "seed" (prisma/companies.ts) or "discovery" (modules/jobs/discovery.ts, added by its rule)
+  addedBy        String    @default("seed")
+  addedAt        DateTime  @default(now())
   jobs           Job[]
 
   @@unique([source, slug])
+}
+
+// Every company discovery has checked (modules/jobs/discovery.ts), so it never checks the same name twice and always
+// moves on to new ones. status: added | few_india_jobs | not_on_board | error.
+model DiscoveryCandidate {
+  id           String   @id @default(cuid())
+  source       String   @default("greenhouse")
+  name         String
+  slug         String?
+  stage        String?
+  from         String   // where the name came from: list | model
+  status       String
+  openJobs     Int      @default(0)
+  indiaJobs    Int      @default(0)
+  freshIndiaJobs Int    @default(0) // India-eligible jobs posted in the last 30 days
+  checkedAt    DateTime @default(now())
+
+  @@unique([source, name])
+}
+
+// The worker's heartbeat (src/worker/index.ts, every minute); /api/health reads it.
+model WorkerBeat {
+  id        String   @id // host name
+  beatAt    DateTime
+  startedAt DateTime
 }
 
 model Job {

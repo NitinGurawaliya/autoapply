@@ -3,6 +3,9 @@ import { getCurrentUser } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
 import { ingestResume } from "@/modules/profile";
 
+// Reading a resume (PDF text, then the model) can take longer than a serverless default (docs/DEPLOY.md).
+export const maxDuration = 60;
+
 export const runtime = "nodejs";
 
 const MAX_BYTES = 5_000_000;
