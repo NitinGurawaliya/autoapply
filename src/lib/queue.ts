@@ -20,6 +20,10 @@ export function getBoss() {
     const connectionString = process.env.DIRECT_URL;
     if (!connectionString) throw new Error("DIRECT_URL is not set");
     const boss = new PgBoss(connectionString);
+    // A lost connection (Wi-Fi drop, DNS failure, Neon waking up) is reported as an "error" event; with no listener Node
+    // treats it as fatal and the whole worker exits (11/12 Oct: "getaddrinfo ENOTFOUND"). pg-boss keeps polling and
+    // recovers by itself once the network is back, so the error is only logged.
+    boss.on("error", (error: Error) => console.error(`queue: ${error.message.slice(0, 160)}`));
     bossPromise = boss.start().then(async (started) => {
       await ensureQueue(started, APPLY_QUEUE);
       await ensureQueue(started, INGEST_QUEUE);
