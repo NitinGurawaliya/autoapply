@@ -96,7 +96,16 @@ export function ResumeUploadForm({ signOut }: { signOut: React.ReactNode }) {
     const response = await fetch("/api/profile/resume", { method: "POST", body }).catch(() => null);
     if (!response?.ok) {
       setView("upload");
-      setError("Could not read that PDF. Try another file.");
+      const code = response ? ((await response.json().catch(() => null)) as { error?: string } | null)?.error : null;
+      setError(
+        code === "no_text"
+          ? "This PDF has no text we can read (it may be a scan). Export your resume as a text PDF and try again."
+          : code === "parse_failed" || code === "read_failed"
+            ? "We could not read your resume just now. Try again in a minute."
+            : code === "rate_limited"
+              ? "Too many uploads in the last hour. Try again later."
+              : "Could not read that PDF. Try another file.",
+      );
       return;
     }
     void forgetVisitedPages(); // a new resume changes the feed

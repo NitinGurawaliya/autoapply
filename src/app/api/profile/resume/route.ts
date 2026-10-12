@@ -36,5 +36,6 @@ export async function POST(req: Request) {
   }
 
   const result = await ingestResume(user.id, bytes);
+  if (!result.ok) return NextResponse.json({ error: result.failure }, { status: 422 });
   return NextResponse.json({ ok: true, usedFallback: result.usedFallback });
 }

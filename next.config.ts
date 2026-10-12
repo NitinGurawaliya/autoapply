@@ -11,7 +11,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["pdf-parse"],
+  // pdf-parse and its canvas stay outside the bundle, as its guide says for Vercel (the parse fails bundled).
+  serverExternalPackages: ["pdf-parse", "@napi-rs/canvas"],
   // The governance rules are read from disk at runtime (modules/governance/rules.ts): ship them with every server route.
   outputFileTracingIncludes: { "/**": ["./config/rules.json"] },
   poweredByHeader: false,

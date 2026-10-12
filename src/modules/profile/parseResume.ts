@@ -20,12 +20,22 @@ type PdfParser = {
 };
 
 type PdfParseModule = {
-  PDFParse: new (options: { data: Uint8Array }) => PdfParser;
+  PDFParse: (new (options: { data: Uint8Array; CanvasFactory?: unknown }) => PdfParser) & { setWorker: (worker: string) => void };
 };
+type PdfWorkerModule = { getData: () => string; CanvasFactory: unknown };
+
+let workerReady = false;
 
 async function extractText(bytes: Uint8Array) {
-  const { PDFParse } = (await import("pdf-parse")) as PdfParseModule;
-  const parser = new PDFParse({ data: bytes });
+  // pdf-parse 2 on serverless hosts (Vercel): the worker module is loaded first and handed to the parser inline, and
+  // its canvas factory is passed, or the parse fails there ("fake worker", "DOMMatrix") while it works locally.
+  const worker = (await import("pdf-parse/worker")) as unknown as PdfWorkerModule;
+  const { PDFParse } = (await import("pdf-parse")) as unknown as PdfParseModule;
+  if (!workerReady) {
+    PDFParse.setWorker(worker.getData());
+    workerReady = true;
+  }
+  const parser = new PDFParse({ data: bytes, CanvasFactory: worker.CanvasFactory });
   try {
     const result = await parser.getText();
     return result.text.slice(0, 20000);
@@ -34,27 +44,41 @@ async function extractText(bytes: Uint8Array) {
   }
 }
 
-export async function parseResumePdf(bytes: Uint8Array): Promise<{
-  profile: ParsedProfile;
-  resumeText: string;
-  usedFallback: boolean;
-}> {
+export type ResumeFailure = "no_text" | "read_failed" | "parse_failed";
+
+// Why a resume could not be read, for the logs: the error's kind and message only, never the resume's text.
+const reason = (error: unknown) => (error instanceof Error ? `${error.name}: ${error.message.slice(0, 160)}` : String(error).slice(0, 160));
+
+/**
+ * The resume's text and the facts read from it. A resume that cannot be read is a failure the user is told about
+ * (upload-form shows it), never a profile: before 11 Oct a failure silently saved the sample profile ("Sample Name",
+ * a sample email) in production, where an application could have gone out with it. The sample is only for local
+ * demos without a model key (RESUME_SAMPLE_FALLBACK=1).
+ */
+export async function parseResumePdf(bytes: Uint8Array): Promise<
+  { ok: true; profile: ParsedProfile; resumeText: string; usedFallback: boolean } | { ok: false; failure: ResumeFailure }
+> {
+  const sample = process.env.RESUME_SAMPLE_FALLBACK === "1";
   let resumeText = "";
   try {
     resumeText = (await extractText(bytes)).trim();
-  } catch {
-    return { profile: sampleProfile, resumeText: "", usedFallback: true };
+  } catch (error) {
+    console.error(`resume: could not read the PDF (${reason(error)})`);
+    return sample ? { ok: true, profile: sampleProfile, resumeText: "", usedFallback: true } : { ok: false, failure: "read_failed" };
   }
   if (!resumeText) {
-    return { profile: sampleProfile, resumeText: "", usedFallback: true };
+    // A scanned resume (an image of text) has no text to read.
+    console.error("resume: the PDF has no text (scanned?)");
+    return sample ? { ok: true, profile: sampleProfile, resumeText: "", usedFallback: true } : { ok: false, failure: "no_text" };
   }
 
   try {
     const cacheKey = createHash("sha256").update(resumeText).digest("hex");
     const profile = await callJson(profileSchema, SYSTEM, resumeText, { cacheKey });
-    return { profile, resumeText, usedFallback: false };
-  } catch {
-    return { profile: sampleProfile, resumeText, usedFallback: true };
+    return { ok: true, profile, resumeText, usedFallback: false };
+  } catch (error) {
+    console.error(`resume: could not read the facts from the text (${reason(error)})`);
+    return sample ? { ok: true, profile: sampleProfile, resumeText, usedFallback: true } : { ok: false, failure: "parse_failed" };
   }
 }
 
@@ -90,9 +114,11 @@ export function resumeAnswers(profile: ParsedProfile) {
 }
 
 export async function ingestResume(userId: string, bytes: Uint8Array) {
+  const parsed = await parseResumePdf(bytes);
+  // Nothing is saved for a resume that could not be read: the profile the user had stays as it was.
+  if (!parsed.ok) return { ok: false as const, failure: parsed.failure };
   const key = `resumes/${userId}/resume.pdf`;
   await storage.put(key, bytes, "application/pdf", userId);
-  const parsed = await parseResumePdf(bytes);
   const data = {
     resumeKey: key,
     resumeText: parsed.resumeText,
@@ -121,5 +147,5 @@ export async function ingestResume(userId: string, bytes: Uint8Array) {
   for (const row of resumeAnswers(parsed.profile)) {
     await upsert(userId, { ...row, source: "resume" });
   }
-  return { usedFallback: parsed.usedFallback };
+  return { ok: true as const, usedFallback: parsed.usedFallback };
 }
