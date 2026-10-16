@@ -15,6 +15,7 @@ import { jobQuestions } from "./questions";
 import { resolveForm } from "./resolveForm";
 import { formUrlAllowed } from "./urls";
 import { LockStopped, withSubmitLock } from "./submitLock";
+import { sendPush } from "@/lib/push";
 
 /** The user (or a queue clear) cancelled this application while it was running. */
 export class CancelledError extends Error {
@@ -71,14 +72,51 @@ export async function runApplication(applicationId: string) {
   }
 }
 
+// Screenshots as JPEG: a full-page PNG of a confirmation page was 0.9 MB (16 Oct QA); text stays readable at this quality.
+const SHOT = { type: "jpeg" as const, quality: 72 };
+
+/**
+ * What the job board showed after Submit, as proof of the confirmation (owner, 16 Oct: some companies send no email, so
+ * this is the only record). Taken after the application is recorded as sent; never blocks or undoes that.
+ */
+async function captureConfirmation(page: Awaited<ReturnType<typeof openBrowser>>["page"], applicationId: string, attempt: number, userId: string) {
+  if (page.isClosed()) return;
+  try {
+    const shot = await page.screenshot({ ...SHOT, fullPage: true, timeout: 10000 });
+    const key = `screenshots/${applicationId}/sent-${attempt}.jpg`;
+    await storage.put(key, new Uint8Array(shot), "image/jpeg", userId);
+    await writeEvent(applicationId, "screenshot", key);
+  } catch {
+    /* the page closed after confirming; the confirmation text is already recorded */
+  }
+}
+
+/**
+ * Ashby's spam check refuses bursts (16 Oct: 14 Ashby runs in 4 minutes from one machine, then 4 spam refusals and 4
+ * CAPTCHAs, while the same day's spread-out runs all went through). At most one Ashby run starts every
+ * ASHBY_SUBMIT_GAP_SECONDS across all workers; a slot is reserved under a database lock, so two workers cannot take the
+ * same one. Returns 0 when this run may go now, else the seconds until the next free slot.
+ */
+const ASHBY_GAP_SECONDS = Number(process.env.ASHBY_SUBMIT_GAP_SECONDS) || 240;
+async function ashbySlot() {
+  return db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('ashby-submit-slot'))`;
+    const [last] = await tx.$queryRaw<Array<{ at: Date }>>`SELECT max("createdAt") AS at FROM "RateEvent" WHERE "key" = 'ashby-slot'`;
+    const since = last?.at ? (Date.now() - last.at.getTime()) / 1000 : Infinity;
+    if (since < ASHBY_GAP_SECONDS) return Math.ceil(ASHBY_GAP_SECONDS - since);
+    await tx.$executeRaw`INSERT INTO "RateEvent" ("id", "key") VALUES (${`ashby-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`}, 'ashby-slot')`;
+    return 0;
+  });
+}
+
 /** What the page looked like when a run failed, so "why" is an answer and not a guess. Never blocks the failure path. */
 async function captureFailure(session: Awaited<ReturnType<typeof openBrowser>> | null, applicationId: string, attempt: number, userId: string) {
   const page = session?.page;
   if (!page || page.isClosed()) return;
   try {
-    const shot = await page.screenshot({ type: "png", fullPage: true, timeout: 10000 });
-    const key = `screenshots/${applicationId}/fail-${attempt}.png`;
-    await storage.put(key, new Uint8Array(shot), "image/png", userId);
+    const shot = await page.screenshot({ ...SHOT, fullPage: true, timeout: 10000 });
+    const key = `screenshots/${applicationId}/fail-${attempt}.jpg`;
+    await storage.put(key, new Uint8Array(shot), "image/jpeg", userId);
     await writeEvent(applicationId, "screenshot", key);
     // Only lines that look like messages from the site, never form values.
     const lines = (await page.locator("body").innerText({ timeout: 5000 })).split(String.fromCharCode(10)).map((line) => line.trim());
@@ -131,6 +169,14 @@ async function execute(applicationId: string) {
     await block(applicationId, "test_profile_mock_only", "Test profiles can only apply on the mock form");
     return;
   }
+  // A missing resume file cannot be fixed by trying again: say so before any browser opens (16 Oct QA: it was found
+  // only after the form was filled, and the run was retried).
+  if (!(await storage.get(profile.resumeKey))) {
+    const message = "Resume file is missing. Upload it again from Account, then retry.";
+    await writeEvent(applicationId, "error", message);
+    await setApp(applicationId, { status: "failed", error: message, attempt: application.attempt });
+    return;
+  }
 
   await touch();
   const heartbeat = setInterval(() => void touch(), 30_000);
@@ -175,7 +221,20 @@ async function execute(applicationId: string) {
       }
       await writeEvent(applicationId, "resolve", "Every question on the form can be answered; opening it");
     }
-    session = await openBrowser(formUrl, application.userId);
+    // Ashby submits by itself like Greenhouse (owner, 15 Oct: measure how often Ashby's spam check refuses it). With
+    // ASHBY_HANDOFF=1 the user presses Submit in a visible Chrome window instead (adapters/ashby.ts waitForUserSubmit).
+    const handoff = adapter.source === "ashby" && process.env.ASHBY_HANDOFF === "1";
+    if (adapter.source === "ashby" && !handoff) {
+      const wait = await ashbySlot();
+      if (wait > 0) {
+        // Not a failure and not a try: the run waits in the queue for its slot, with no browser open.
+        await setApp(applicationId, { status: "queued", attempt: application.attempt });
+        await writeEvent(applicationId, "rule_check", `Ashby applications go out at least ${Math.round(ASHBY_GAP_SECONDS / 60)} minutes apart (bursts are refused as spam); this one starts in about ${Math.ceil(wait / 60)} min`, "ashby_spacing");
+        await enqueueApply(applicationId, wait + 5);
+        return;
+      }
+    }
+    session = await openBrowser(formUrl, application.userId, { handoff });
     const fields = await adapter.inspect(session.page);
     await writeEvent(applicationId, "inspect", `Found ${fields.length} fields`);
     const { resolved } = await resolveForm({ userId: application.userId, source: adapter.source, fields, profile, answers, job: jobInfo, draftEssays: true, log: resolveLog });
@@ -205,7 +264,7 @@ async function execute(applicationId: string) {
     const uploadNow = async () => {
       if (!resume) return;
       const stored = await storage.get(profile.resumeKey);
-      if (!stored) throw new Error("Resume file is missing");
+      if (!stored) throw new NoRetryError("Resume file is missing. Upload it again from Account, then retry.");
       upload.cleanup = adapter.uploadFile
         ? await adapter.uploadFile(session!.page, resume, stored.bytes)
         : await uploadResume(session!.page, resume, stored.bytes);
@@ -235,9 +294,9 @@ async function execute(applicationId: string) {
       });
     }
 
-    const screenshot = await session.page.screenshot({ type: "png" });
-    const screenshotKey = `screenshots/${applicationId}/${attempt}.png`;
-    await storage.put(screenshotKey, new Uint8Array(screenshot), "image/png", application.userId);
+    const screenshot = await session.page.screenshot(SHOT);
+    const screenshotKey = `screenshots/${applicationId}/${attempt}.jpg`;
+    await storage.put(screenshotKey, new Uint8Array(screenshot), "image/jpeg", application.userId);
     await setApp(applicationId, { screenshotKey });
     await writeEvent(applicationId, "screenshot", screenshotKey);
 
@@ -263,7 +322,15 @@ async function execute(applicationId: string) {
           await setApp(applicationId, { status: "blocked", error: submitCheck.rule, fields: filled as Prisma.InputJsonValue });
           return null;
         }
-        return adapter.submit(page, { requestCode: codeRequester(applicationId) });
+        return adapter.submit(page, {
+          requestCode: codeRequester(applicationId),
+          handoff,
+          announceHandoff: async (message) => {
+            await writeEvent(applicationId, "ask_user", message);
+            void sendPush(application.userId, { title: `${jobInfo.company}: ready to send`, body: `Press Submit in the Chrome window to send your ${jobInfo.title} application.`, url: `/applications/${applicationId}`, tag: `app-${applicationId}` });
+          },
+          cancelled: async () => (await db.application.findUnique({ where: { id: applicationId }, select: { status: true } }))?.status === "cancelled",
+        });
       },
     );
     if (!result) return;
@@ -276,6 +343,7 @@ async function execute(applicationId: string) {
       error: null,
     });
     await writeEvent(applicationId, "submit", `Application submitted. Confirmation: ${result.evidence}`.slice(0, 300));
+    await captureConfirmation(page, applicationId, attempt, application.userId);
   } catch (error) {
     if (error instanceof CancelledError) throw error;
     if (error instanceof LockStopped) throw new CancelledError();

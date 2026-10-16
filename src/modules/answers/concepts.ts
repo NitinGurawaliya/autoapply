@@ -34,11 +34,12 @@ export const RISKY: Record<Exclude<ConceptId, "general">, { parameter: Parameter
   needs_sponsorship: { parameter: "country", detector: /sponsor|\bvisa\b/i },
   willing_to_relocate: { parameter: "place", detector: /relocat/i },
   office_attendance: { parameter: "place", detector: /\boffice\b|on-?site|in[- ]person|days (a|per) week|hybrid/i },
-  previously_employed_by: { parameter: "company", detector: /(worked|employed|contracted|interned)\b.{0,40}\b(at|for|by|with)\b|former employee|previous(ly)? (worked|employed)/i },
+  // "Have you worked at X", not "what has worked well for you" (15 Oct: a Supabase essay was taken for this and asked forever).
+  previously_employed_by: { parameter: "company", detector: /\byou\b.{0,40}\b(worked|employed|contracted|interned)\b(?! (well|best|on|through|in)\b).{0,40}\b(at|for|by|with)\b|former employee|previous(ly)? (worked|employed)|\b(are|were) you (currently |presently |ever )?(an? )?(current |former )?[\w&.-]+( [\w&.-]+){0,2} (employee|contractor)\b/i },
   company_relationship: { parameter: "company", detector: /relative|family member|know (anyone|someone)|friends? (at|who)|personal relationship|conflict of interest|outside business/i },
   compensation: { parameter: null, detector: /salary|\bctc\b|compensation|expected pay|pay expectation/i },
   notice_period: { parameter: null, detector: /notice period/i },
-  eeo: { parameter: null, detector: /gender|\brace\b|ethnic|veteran|disabilit|pronoun|hispanic|latin[oax]|sexual orientation|transgender/i },
+  eeo: { parameter: null, detector: /gender|\brace\b|ethnic|veteran|disabilit|\bpronouns?\b|hispanic|latin[oax]|sexual orientation|transgender/i },
 };
 
 /** The risky kind a question's own words reveal, or null for general. */

@@ -11,10 +11,12 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const [beats, lastIngest, lastDiscovery, companies] = await Promise.all([
-      db.workerBeat.findMany({ orderBy: { beatAt: "desc" }, take: 5 }),
+      // Workers seen in the last day: old hosts (a laptop test, a stopped container) are history, not the fleet.
+      db.workerBeat.findMany({ where: { beatAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } }, orderBy: { beatAt: "desc" }, take: 5 }),
       db.ingestRun.findFirst({ orderBy: { startedAt: "desc" }, select: { startedAt: true, finishedAt: true, companies: true, failed: true, created: true, createdEligible: true } }),
-      db.discoveryCandidate.findFirst({ where: { from: "model" }, orderBy: { checkedAt: "desc" }, select: { checkedAt: true } }),
-      db.company.count({ where: { active: true, source: "greenhouse" } }),
+      // Discovery's own names (the model, or the crawl index for Ashby), not re-checks of a list.
+      db.discoveryCandidate.findFirst({ where: { from: { in: ["model", "crawl"] } }, orderBy: { checkedAt: "desc" }, select: { checkedAt: true } }),
+      db.company.groupBy({ by: ["source"], where: { active: true, source: { not: "mock" } }, _count: true }),
     ]);
     const workerUp = beats.some((beat) => Date.now() - beat.beatAt.getTime() < 5 * 60 * 1000);
     const body = {
@@ -24,7 +26,8 @@ export async function GET() {
       workers: beats.map((beat) => ({ host: beat.id, lastBeat: beat.beatAt, since: beat.startedAt })),
       lastIngest,
       lastDiscovery: lastDiscovery?.checkedAt ?? null,
-      activeGreenhouseCompanies: companies,
+      activeCompanies: Object.fromEntries(companies.map((row) => [row.source, row._count])),
+      activeGreenhouseCompanies: companies.find((row) => row.source === "greenhouse")?._count ?? 0,
     };
     return NextResponse.json(body, { status: workerUp ? 200 : 503 });
   } catch {

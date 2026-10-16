@@ -11,9 +11,10 @@ import { requiredYears } from "./tagging";
 export { daysAgoLabel };
 
 // Boards the agent applies on: the feed, its filters, swipes, retries and the runner all read this list.
-// Lever and Ashby adapters exist (modules/apply/adapters) but are switched off until they submit reliably
-// (hCaptcha on Lever, reCAPTCHA spam refusals on Ashby); their jobs are still ingested. Add them back here to switch on.
-export const APPLY_BOARDS = ["greenhouse"] as const;
+// The Lever adapter exists (modules/apply/adapters) but is switched off until it submits reliably (hCaptcha); its jobs
+// are still ingested. Ashby is on (owner, 15 Oct): submitted automatically like Greenhouse, with its spam refusals
+// measured by scripts/ashby-report.ts; ENABLE_ASHBY=0 switches it off, ASHBY_HANDOFF=1 makes the user press Submit.
+export const APPLY_BOARDS: readonly string[] = ["greenhouse", ...(process.env.ENABLE_ASHBY === "0" ? [] : ["ashby"])];
 const BOARDS = APPLY_BOARDS;
 // Where a job is, for the feed's Location filter (T80): IN = in India and REMOTE = remote and open to India (Job.eligibility,
 // tagging.ts); US and OTHER = jobs abroad, shown only when the user picks them.
@@ -55,7 +56,7 @@ export type FeedJob = {
   skillHits: string[];
   stage: string | null;
   track: string | null;
-  /** First seen by ingest in the last 24 hours: the card says "New". */
+  /** First seen by ingest in the last 24 hours and posted in the last 7 days: the card says "New". */
   isNew: boolean;
   /** What past applications to this company taught us, when it is worth saying. */
   hint: string | null;
@@ -332,6 +333,8 @@ export function dedupeListings<T extends { roleKey: string; location: string; so
 type FeedRow = {
   id: string;
   title: string;
+  /** For the verdict cache (semantic.ts judgeJobs): read here, so the shortlist needs no second query. */
+  contentHash: string | null;
   location: string;
   source: string;
   country: string;
@@ -401,7 +404,7 @@ export async function feedRows(input: {
       GROUP BY j.id
     ),
     candidates AS (
-      SELECT j.id, j.title, j.location, j.source, j.country, j."remoteType", j."experienceMin", j."applyUrl", j."postedAt",
+      SELECT j.id, j.title, j."contentHash", j.location, j.source, j.country, j."remoteType", j."experienceMin", j."applyUrl", j."postedAt",
              j."companyId", c.name AS company, c.stage, j.track, j."firstSeenAt", coalesce(h.hits, '{}') AS hits,
              CASE WHEN ${input.vector}::text IS NULL OR j.embedding IS NULL THEN NULL
                   ELSE (1 - (j.embedding <=> ${input.vector}::halfvec))::float8 END AS similarity
@@ -532,7 +535,9 @@ async function scoreFeed(userId: string, filters: FeedFilters): Promise<FeedJob[
         remoteType: job.remoteType,
         stage: job.stage,
         track: job.track,
-        isNew: Date.now() - job.firstSeenAt.getTime() < 24 * 60 * 60 * 1000,
+        // New to us AND recently posted: a company added today brings old postings, and "New" beside "Posted 52d ago"
+        // read as a contradiction (16 Oct QA).
+        isNew: Date.now() - job.firstSeenAt.getTime() < 24 * 60 * 60 * 1000 && Date.now() - job.postedAt.getTime() < 7 * 24 * 60 * 60 * 1000,
         roleKey: roleKey(companyKey(job.company), job.title),
         verdict: judge(results.get(job.companyId)),
         mock: job.source === "mock",
@@ -551,7 +556,9 @@ async function scoreFeed(userId: string, filters: FeedFilters): Promise<FeedJob[
     const shortlist = closest.slice(0, limit);
     const missing = shortlist.filter((job) => !judgements.has(job.id)).map((job) => job.id);
     if (profile && missing.length > 0) {
-      const texts = await db.job.findMany({ where: { id: { in: missing } }, select: { id: true, title: true, description: true, contentHash: true } });
+      // Title and fingerprint come with the feed rows; judgeJobs reads descriptions only for jobs not judged yet.
+      const missingSet = new Set(missing);
+      const texts = jobs.filter((job) => missingSet.has(job.id)).map((job) => ({ id: job.id, title: job.title, contentHash: job.contentHash }));
       for (const [id, judgement] of await judgeJobs(profile, texts)) judgements.set(id, judgement);
     }
     scored = scoreAll(new Set(shortlist.map((job) => job.id)));

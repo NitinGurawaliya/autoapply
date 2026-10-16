@@ -312,7 +312,13 @@ export function resolveValues(
     const eeo = def?.policy === "default_only" && def.default === rules.eeo_default;
     // Facts the profile holds (city, phone, links...) come from the profile the user confirmed, not from an older saved
     // answer: a "City = Greater Delhi Area" saved on 8 Oct had kept beating the profile's Bangalore (10 Oct dry run).
-    const fromProfileFirst = def?.policy === "deterministic" ? profileValue(profile, key) : null;
+    // The user's own answer to this very question beats the profile: it was asked because the profile value did not fit
+    // the form (16 Oct, ElevenLabs "Location" wants a country; "India" was answered and then ignored for the city).
+    const answeredHere = questionKey !== key ? bank.get(questionKey) : undefined;
+    if (answeredHere?.source === "user" && push(key, answeredHere.answer, "user")) continue;
+    let fromProfileFirst = def?.policy === "deterministic" ? profileValue(profile, key) : null;
+    // A location search box finds "Bengaluru, India" by city or by country; the city alone fails on country-only lists.
+    if (fromProfileFirst && key === "city" && field.type === "combobox" && profile.country && !fromProfileFirst.includes(",")) fromProfileFirst = `${fromProfileFirst}, ${profile.country}`;
     if (fromProfileFirst && push(key, fromProfileFirst, "resume")) continue;
     const saved = bank.get(key);
     if (saved) {

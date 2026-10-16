@@ -162,7 +162,9 @@ async function main() {
     const [d, l, i, r, s] = await Promise.all([deadApp, liveApp, idleApp, resumedApp, submittedApp].map((a) => db.application.findUnique({ where: { id: a.id } })));
     const requeued = await db.$queryRaw<Array<{ n: bigint }>>`SELECT count(*) AS n FROM pgboss.job WHERE name = 'apply' AND state <> 'cancelled' AND data->>'applicationId' = ${deadApp.id}`; // a running worker may already have taken it
     const jobState = await db.$queryRaw<Array<{ state: string }>>`SELECT state FROM pgboss.job WHERE id = ${deadJob}::uuid`;
-    const lockLeft = await db.$queryRaw<Array<{ n: bigint }>>`SELECT count(*) AS n FROM "SubmitLock" WHERE "holderId" = ${deadApp.id}`;
+    // Only the dead run's own lock (inserted with a 1-minute lease): a running worker that picks the re-queued run up
+    // takes a fresh 120 s lease, which is not a lock the reaper failed to free (16 Oct: failed with a live worker).
+    const lockLeft = await db.$queryRaw<Array<{ n: bigint }>>`SELECT count(*) AS n FROM "SubmitLock" WHERE "holderId" = ${deadApp.id} AND "expiresAt" < now() + interval '90 seconds'`;
     check("reaper picks up again a run cut off before Submit (nothing was sent)", d?.status === "queued" && Number(requeued[0].n) === 1, `${d?.status}; queued jobs ${requeued[0].n}; reaped ${reaped}`);
     check("reaper fails a run cut off after the submit check, saying it may have been sent", s?.status === "failed" && s.error === STALE_AFTER_SUBMIT, `${s?.status}: ${s?.error}`);
     check("reaper cancels that run's queue job", jobState[0]?.state === "cancelled", jobState[0]?.state);

@@ -56,7 +56,7 @@ export function UsagePill({ used, cap }: { used: number; cap: number }) {
         {used}
         <span className="font-medium text-muted-foreground">/{cap}</span>
       </span>
-      <span className="sr-only">applications sent today{used >= cap ? ". Daily limit reached." : ""}</span>
+      <span className="sr-only">applications started today{used >= cap ? ". Daily limit reached." : ""}</span>
       <span aria-hidden="true" className="block h-1 w-8 overflow-hidden rounded-full bg-track">
         <span className="block h-full bg-bar transition-[width] duration-400 ease-settle" style={{ width: `${percent}%` }} />
       </span>

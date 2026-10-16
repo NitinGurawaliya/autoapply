@@ -33,6 +33,14 @@ export function AccountActions() {
 
   return (
     <div className="flex flex-col gap-5 px-5 pt-4 pb-6">
+      {/* The only way back to the upload once onboarding is done (16 Oct QA: a missing resume had no place to fix it). */}
+      <section className="box-border flex flex-col gap-2.5 rounded-panel border-[1.5px] border-line bg-surface p-4">
+        <h2 className="m-0 text-lg font-semibold tracking-[-0.01em]">Your resume</h2>
+        <p className="m-0 text-sm leading-normal text-muted-foreground">Upload a new resume. We read it again and you check what we found before anything changes.</p>
+        <a href="/onboarding/resume" className={buttonVariants({ variant: "line", size: "lg", className: "mt-1 w-full" })}>
+          Upload a new resume
+        </a>
+      </section>
       <section className="box-border flex flex-col gap-2.5 rounded-panel border-[1.5px] border-line bg-surface p-4">
         <h2 className="m-0 text-lg font-semibold tracking-[-0.01em]">Download your data</h2>
         <p className="m-0 text-sm leading-normal text-muted-foreground">Your profile, saved answers and every application with what was filled in, as one JSON file.</p>

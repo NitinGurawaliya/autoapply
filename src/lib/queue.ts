@@ -48,8 +48,12 @@ export async function enqueueIngest(days: number) {
   return boss.send(INGEST_QUEUE, { days }, { expireInSeconds: 7200, retryLimit: 0 });
 }
 
-/** Pre-scan a user's feed for missing facts (modules/apply/prescan.ts); at most one per user every 10 minutes. */
-export async function enqueuePrescan(userId: string) {
+/**
+ * Pre-scan a user's feed for missing facts (modules/apply/prescan.ts); at most one per user and reason every 10
+ * minutes. Building the feed also caches the model's verdicts on its jobs, so a scan queued when a resume is read
+ * ("resume") or confirmed ("profile") makes the first feed a read instead of a wait (16 Oct QA: 10-15 s for a new user).
+ */
+export async function enqueuePrescan(userId: string, reason = "answers") {
   const boss = await getBoss();
-  return boss.send(PRESCAN_QUEUE, { userId }, { singletonKey: userId, singletonSeconds: 600, expireInSeconds: 1800, retryLimit: 0 });
+  return boss.send(PRESCAN_QUEUE, { userId }, { singletonKey: `${userId}:${reason}`, singletonSeconds: 600, expireInSeconds: 1800, retryLimit: 0 });
 }

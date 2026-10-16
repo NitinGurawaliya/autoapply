@@ -49,6 +49,12 @@ export type SubmitResult = {
 export type SubmitContext = {
   /** Ask the user for a one-time code the ATS emailed them. Resolves null if they do not answer in time. */
   requestCode(prompt: string): Promise<string | null>;
+  /** True when the user presses Submit themselves (the form is filled in a visible window; see browser.ts). */
+  handoff?: boolean;
+  /** Tell the user the form is filled and waiting for them to press Submit (an event and a push). */
+  announceHandoff?(message: string): Promise<void>;
+  /** True once the user cancelled this application. */
+  cancelled?(): Promise<boolean>;
 };
 
 export interface AtsAdapter {

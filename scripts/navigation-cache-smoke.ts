@@ -41,7 +41,9 @@ async function main() {
         if (process.env.DEBUG_NAV) console.log("     RSC", url.search.slice(0, 40), Object.keys(request.headers()).filter((h) => h.startsWith("next-")).join(","));
       }
     });
-    const topCard = () => page.locator("main h2, main h3").filter({ hasText: /Software Engineer \d/ }).first().innerText();
+    // The top card's title, whatever job it is: real jobs share the feed with the fixtures and can rank above them
+    // (16 Oct, Ashby in the feed), so the fixtures' "Software Engineer N" is no longer always on top.
+    const topCard = () => page.locator("main h2.type-display-xl").first().innerText();
     // Clicked as an event: in dev, the Next.js indicator sits over the Discover tab at 390 px.
     const tab = (name: string) => ({ click: () => page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: new RegExp(`^${name}`) }).dispatchEvent("click") });
 

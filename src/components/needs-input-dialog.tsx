@@ -76,8 +76,12 @@ export function NeedsInputDialog() {
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (!current) return;
-    if (current.questions.some((question) => !values[question.key]?.trim())) {
-      setError("Answer every question.");
+    const missing = current.questions.filter((question) => !values[question.key]?.trim());
+    if (missing.length > 0) {
+      // A long list scrolls; take the user to the first one left (15 Oct: answers were never saved, "Answer every
+      // question." sat below the fold).
+      setError(missing.length === 1 ? "Answer this question to save." : `Answer the ${missing.length} questions left to save.`);
+      document.getElementById(`question-${missing[0].key}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
       return;
     }
     setSaving(true);
@@ -175,7 +179,7 @@ export function NeedsInputDialog() {
               }
               const options = question.options ?? [];
               return (
-                <div key={question.key} className="flex flex-col">
+                <div key={question.key} id={`question-${question.key}`} className="flex flex-col">
                   <label htmlFor={options.length > 0 && options.length <= MAX_ANSWER_BUTTONS ? undefined : id} className={single ? "mt-[22px] type-title" : "mt-[18px] type-lead font-semibold"}>
                     {question.label}
                   </label>
@@ -205,13 +209,16 @@ export function NeedsInputDialog() {
               );
             })}
 
-            {error ? <FieldError className="mt-3.5">{error}</FieldError> : null}
-            <Button type="submit" variant="primary" size="xl" className="mt-5 w-full" disabled={saving}>
-              {saving ? "Saving…" : "Save"}
-            </Button>
-            <InfoNote size="sm" className="mt-3.5">
-              {isCode ? "The code goes only into this application's form." : "The agent never answers questions like this without you."}
-            </InfoNote>
+            {/* Pinned to the bottom of the sheet: with many questions, Save and its message stay in view. */}
+            <div className="sticky bottom-[-30px] -mx-5 mt-5 -mb-[30px] border-t border-line bg-surface px-5 pt-3.5 pb-[30px]">
+              {error ? <FieldError className="mb-3">{error}</FieldError> : null}
+              <Button type="submit" variant="primary" size="xl" className="w-full" disabled={saving}>
+                {saving ? "Saving…" : "Save"}
+              </Button>
+              <InfoNote size="sm" className="mt-3.5">
+                {isCode ? "The code goes only into this application's form." : "The agent never answers questions like this without you."}
+              </InfoNote>
+            </div>
           </form>
         ) : null}
       </SheetContent>

@@ -63,7 +63,8 @@ async function main() {
 
     // ---- the data
     const o = await governanceOverview(A.user.id);
-    check("counters count today's applications, submissions, blocks, questions and checks", o.counters.started === 3 && o.counters.submitted === 1 && o.counters.blocked === 1 && o.counters.asked === 1 && o.counters.checks >= 2, JSON.stringify(o.counters));
+    check("counters count today's applications, submissions, blocks, questions and checks", // Started counts against the daily cap, which a blocked application does not use (16 Oct): sent + waiting today.
+      o.counters.started === 2 && o.counters.submitted === 1 && o.counters.blocked === 1 && o.counters.asked === 1 && o.counters.checks >= 2, JSON.stringify(o.counters));
     check("the daily cap is the one from the rules", o.counters.cap === rules.max_applications_per_day);
     check("answers from the user's data are counted (reused + worked out, not resume)", o.counters.fromData === 2, String(o.counters.fromData));
     check("blocks list newest first and include yesterday's", o.blocks.map((b) => b.rule).join(",") === "min_match_score,no_duplicate_role", o.blocks.map((b) => b.rule).join(","));
@@ -71,7 +72,7 @@ async function main() {
     check("events carry the company and role they belong to", o.events.every((e) => e.company.length > 0 && e.title.length > 0) && o.blocks[0].company === jobB.company.name);
     check("another user's events are never included", !JSON.stringify(o).includes("B-SECRET-EVENT"));
     const bOverview = await governanceOverview(B.user.id);
-    check("the other user sees only their own", bOverview.blocks.length === 1 && bOverview.blocks[0].message === "B-SECRET-EVENT" && bOverview.counters.started === 1);
+    check("the other user sees only their own", bOverview.blocks.length === 1 && bOverview.blocks[0].message === "B-SECRET-EVENT" && bOverview.counters.started === 0); // B's only application today was blocked
 
     // twenty at most, newest first
     for (let i = 0; i < 25; i += 1) await ev(sent.id, "rule_check", `bulk ${i}`, "start", new Date(Date.now() + 1000 + i * 10));
@@ -97,7 +98,7 @@ async function main() {
       const page = await open(A.token);
       await page.screenshot({ path: `${process.env.TEMP ?? "."}/governance-page.png`, fullPage: true });
       const stat = async (label: string) => (await page.locator(`[data-stat="${label}"] span`).first().innerText()).trim();
-      check("the page shows today's counters", (await stat("Started")) === `3 of ${rules.max_applications_per_day}` && (await stat("Submitted")) === "1" && (await stat("Blocked")) === "1" && (await stat("Questions asked")) === "1" && (await stat("Answered from your data")) === "2");
+      check("the page shows today's counters", (await stat("Started")) === `2 of ${rules.max_applications_per_day}` && (await stat("Submitted")) === "1" && (await stat("Blocked")) === "1" && (await stat("Questions asked")) === "1" && (await stat("Answered from your data")) === "2");
       check("the page lists every rule with its value", (await page.locator("[data-rule]").count()) === 13 && (await page.locator('[data-rule="min_match_score"]').innerText()).includes(`${rules.min_match_score}%`));
       const blockRow = page.locator('[data-block-rule="min_match_score"]');
       const blockText = await blockRow.innerText();

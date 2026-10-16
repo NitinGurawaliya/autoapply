@@ -4,7 +4,7 @@
 import { spawn, execSync } from "node:child_process";
 import { getBoss } from "../src/lib/queue";
 import { db } from "../src/lib/db";
-import { DEFAULT_INGEST_CRON, registerSchedules } from "../src/worker/schedule";
+import { DEFAULT_INGEST_CRON, DEFAULT_INGEST_DAYS, registerSchedules } from "../src/worker/schedule";
 
 let failed = 0;
 function check(name: string, ok: boolean, detail = "") {
@@ -26,12 +26,14 @@ async function main() {
     // Already gone.
   }
   const line = out.split(/\r?\n/).find((l) => /ingest scheduled/.test(l)) ?? "";
-  check("the worker logs the ingest schedule", /ingest scheduled: "0 \*\/6 \* \* \*" UTC, last 7 days/.test(line), line.trim());
+  // The values come from src/worker/schedule.ts, so a schedule change does not break this check (16 Oct: it still
+  // expected the old "every 6 hours, last 7 days").
+  check("the worker logs the ingest schedule", line.includes(`ingest scheduled: "${DEFAULT_INGEST_CRON}" UTC, last ${DEFAULT_INGEST_DAYS} days`), line.trim());
 
   const boss = await getBoss();
   const stored = await boss.getSchedule("ingest");
-  check("the schedule is stored in the database as every 6 hours, UTC", stored?.cron === DEFAULT_INGEST_CRON && stored.timezone === "UTC", `${stored?.cron} ${stored?.timezone}`);
-  check("it carries the lookback window", (stored?.data as { days?: number } | undefined)?.days === 7);
+  check(`the schedule is stored in the database as "${DEFAULT_INGEST_CRON}", UTC`, stored?.cron === DEFAULT_INGEST_CRON && stored.timezone === "UTC", `${stored?.cron} ${stored?.timezone}`);
+  check("it carries the lookback window", (stored?.data as { days?: number } | undefined)?.days === DEFAULT_INGEST_DAYS);
   check("a missed run catches up once", stored?.options?.missed === "once");
 
   // 2. Registering again (a second worker, a restart) changes nothing.

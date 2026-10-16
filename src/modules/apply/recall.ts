@@ -98,6 +98,8 @@ async function newestSamePlace(userId: string, candidate: Candidate, kind: strin
   return later ? ({ ...later, context: later.context as Candidate["context"], score: candidate.score, n: 0 } as Candidate) : null;
 }
 
+const sameText = (a: string, b: string) => a.toLowerCase().replace(/\s+/g, " ").trim() === b.toLowerCase().replace(/\s+/g, " ").trim();
+
 export async function answerFromMemory(input: {
   userId: string;
   job: JobContext | null;
@@ -138,7 +140,7 @@ export async function answerFromMemory(input: {
   for (const result of verdict.results) {
     const question = questions.find((item) => item.index === result.index);
     if (!question || result.match == null) continue;
-    const candidate = question.candidates.find((item) => item.n === result.match);
+    let candidate = question.candidates.find((item) => item.n === result.match);
     const label = question.field.label;
     const refuse = (why: string) => rejected.push(`${label.slice(0, 60)}: ${why}`);
     if (!candidate) {
@@ -182,10 +184,14 @@ export async function answerFromMemory(input: {
           grounded(result.param, [label, ...jobTexts]) &&
           grounded(result.matchParam, oldTexts) &&
           sameParam(result.param, result.matchParam);
-        if (!ok) {
+        // The user's answer to this exact wording names the same place by definition: use it when the model picked
+        // another wording whose place could not be shown to match (15 Oct: "our US office" answered, "San Francisco" picked).
+        const sameWording = ok ? null : question.candidates.find((item) => item.source === "user" && sameText(item.question, label));
+        if (!ok && !sameWording) {
           refuse(`${concept} needs the same ${rule.parameter} on both questions (${result.param ?? "?"} vs ${result.matchParam ?? "?"})`);
           continue;
         }
+        if (sameWording) candidate = sameWording;
       }
     }
     // Newest wins (the owner's rule for conflicting answers): for a question about one country, a later answer of the

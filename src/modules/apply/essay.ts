@@ -21,9 +21,13 @@ export const ESSAY_PERMISSION_QUESTION =
 
 export type EssayKind = "best_project" | "motivation" | "other";
 
-const BEST_PROJECT = /(best|favou?rite|most (impressive|challenging|interesting|complex|meaningful)|proud(est)?)\b.{0,60}\b(project|system|product|thing|work)|(project|system|product)\b.{0,40}\b(proud|built|shipped|led)\b|describe a (project|system) you/i;
-const MOTIVATION = /why (do you want|would you like|are you interested|are you applying|did you apply|this (role|company|position|job|team|opportunity))|why (us|join|here)\b|what (excites|interests|draws|attracts|motivates) you|interest(ed)? in (working|joining|this)|motivat/i;
-const OTHER = /tell us (about|why|how)|describe (a|your|how|the)|what makes you|walk us through|share (a|an|your)/i;
+// Also "Something you shipped end to end that you're proud of?" (16 Oct, Cardboard): no "project" in the wording.
+const BEST_PROJECT = /(best|favou?rite|most (impressive|challenging|interesting|complex|meaningful)|proud(est)?)\b.{0,60}\b(project|system|product|thing|work)|(project|system|product)\b.{0,40}\b(proud|built|shipped|led)\b|describe a (project|system) you|\b(something|anything) (that )?you('ve| have)? (built|shipped|made|created|launched)\b|\byou('re| are) (most )?proud of\b/i;
+const MOTIVATION = /why (do you want|would you like|are you interested|are you applying|did you apply|this (role|company|position|job|team|opportunity))|why (are you|you're|you are) (excited|interested|keen|passionate|drawn)|why (us|join|here)\b|what (excites|interests|draws|attracts|motivates) you|what makes you (excited|interested|want)|excited (about|to join|to work)|interest(ed)? in (working|joining|this)|motivat/i;
+const OTHER = /tell us (about|why|how)|describe (a|your|how|the)|what makes you|walk us through|share (a|an|your)|what qualities|how (do|does|would|have|will) your (skills|experience|background)|what (would|do|will) you bring|hard(est)? problem|achievement/i;
+// A long free-text question that asks for a hard fact is not an essay: the AI must not write an address or a date.
+const FACTUAL = /\b(address|phone|e-?mail|url|link|website|portfolio|github|linkedin|salary|ctc|visa|date|year|month|number|name|pronoun|gpa|grade|cgpa|percentage|reference|referr|notice|location|city|country|time ?zone|if other|please specify)\b/i;
+const OPEN_QUESTION = /^\s*(what|how|why|tell|describe|share|walk|explain|give|in your own words)\b|\?\s*$/i;
 
 /** The essay kind of a free-text question, or null when it is not an essay (or is a factual / sensitive question). */
 export function essayKind(label: string, type: string): EssayKind | null {
@@ -32,6 +36,8 @@ export function essayKind(label: string, type: string): EssayKind | null {
   if (BEST_PROJECT.test(label)) return "best_project";
   if (MOTIVATION.test(label)) return "motivation";
   if (type === "textarea" && OTHER.test(label)) return "other";
+  // Any other open question asked in a long text box (owner, 15 Oct: essays are drafted, never asked).
+  if (type === "textarea" && OPEN_QUESTION.test(label) && !FACTUAL.test(label)) return "other";
   return null;
 }
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { enqueuePrescan } from "@/lib/queue";
 import { rateLimit } from "@/lib/rate-limit";
 import { ingestResume } from "@/modules/profile";
 
@@ -37,5 +38,7 @@ export async function POST(req: Request) {
 
   const result = await ingestResume(user.id, bytes);
   if (!result.ok) return NextResponse.json({ error: result.failure }, { status: 422 });
+  // The worker builds the first feed while the user checks what we read (onboarding confirm and questions).
+  void enqueuePrescan(user.id, "resume").catch(() => undefined);
   return NextResponse.json({ ok: true, usedFallback: result.usedFallback });
 }

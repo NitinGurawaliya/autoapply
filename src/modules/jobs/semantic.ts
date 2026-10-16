@@ -185,7 +185,9 @@ export async function judgeBatch(candidate: { summary: string; years: number | n
  */
 export async function judgeJobs(
   profile: { id: string; embeddedFrom?: string | null } & Parameters<typeof profileText>[0],
-  jobs: Array<{ id: string; title: string; description: string; contentHash: string | null }>,
+  /** Without a description, a job's text is read only when it has no valid cached verdict (16 Oct: a new user's feed
+   * read every description just to check its cache, about 1 s a batch of 150). */
+  jobs: Array<{ id: string; title: string; description?: string; contentHash: string | null }>,
 ): Promise<Map<string, Judgement>> {
   const out = new Map<string, Judgement>();
   if (jobs.length === 0) return out;
@@ -202,8 +204,11 @@ export async function judgeJobs(
     }
     return true;
   });
-  const batches: (typeof missing)[] = [];
-  for (let i = 0; i < missing.length; i += JUDGE_BATCH) batches.push(missing.slice(i, i + JUDGE_BATCH));
+  const unread = missing.filter((job) => job.description == null).map((job) => job.id);
+  const texts = unread.length > 0 ? new Map((await db.job.findMany({ where: { id: { in: unread } }, select: { id: true, description: true } })).map((row) => [row.id, row.description])) : new Map<string, string>();
+  const toJudge = missing.map((job) => ({ ...job, description: job.description ?? texts.get(job.id) ?? "" }));
+  const batches: (typeof toJudge)[] = [];
+  for (let i = 0; i < toJudge.length; i += JUDGE_BATCH) batches.push(toJudge.slice(i, i + JUDGE_BATCH));
   const fresh: Array<{ jobId: string; fit: Fit; why: string; jobHash: string }> = [];
   for (let i = 0; i < batches.length; i += JUDGE_PARALLEL) {
     await Promise.all(

@@ -69,11 +69,18 @@ async function attachFile(page: Page, value: ResolvedValue, bytes: Uint8Array) {
     }
     const attached = page.locator(`[aria-labelledby="upload-label-${id}"] .file-upload__filename`, { hasText: name });
     const failed = page.locator(`[id="${id}-error"]`);
-    const deadline = Date.now() + 30000;
+    // Greenhouse's upload sometimes stalls with a full progress bar and never finishes (4 runs, 12-15 Oct): after 30 s
+    // the file is attached once more, and the run gives up only after 75 s in all.
+    const started = Date.now();
+    let reattached = false;
     while (!(await attached.count())) {
       const message = (await failed.count()) ? (await failed.innerText()).trim() : "";
       if (message) throw new Error(`Resume upload failed: ${message}`);
-      if (Date.now() > deadline) throw new Error("Resume upload did not finish in 30s");
+      if (!reattached && Date.now() - started > 30000) {
+        reattached = true;
+        await page.locator(value.selector).setInputFiles(file).catch(() => undefined);
+      }
+      if (Date.now() - started > 75000) throw new Error("Resume upload did not finish in 75s (Greenhouse's upload stalled twice)");
       await page.waitForTimeout(500);
     }
     return cleanup;

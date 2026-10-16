@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { startOfTodayUtc } from "./history";
+import { dailySent, dailyUsage, startOfTodayUtc } from "./history";
 import { loadRules } from "./rules";
 
 const NOISE = ["fill"];
@@ -9,8 +9,9 @@ export async function governanceOverview(userId: string) {
   const since = startOfTodayUtc();
   const mine = { application: { userId } };
   const [started, submitted, blockedEvents, asked, checks, events, blocks, fromData] = await Promise.all([
-    db.application.count({ where: { userId, createdAt: { gte: since } } }),
-    db.application.count({ where: { userId, submittedAt: { gte: since } } }),
+    // The same count the daily limit uses (history.ts dailyUsage): a blocked application never ran.
+    dailyUsage(userId),
+    dailySent(userId),
     db.applicationEvent.count({ where: { ...mine, type: "block", createdAt: { gte: since } } }),
     db.applicationEvent.count({ where: { ...mine, type: "ask_user", createdAt: { gte: since } } }),
     // A check that blocked is still a check that ran, so passes and blocks both count.

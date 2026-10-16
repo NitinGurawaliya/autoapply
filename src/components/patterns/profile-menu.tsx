@@ -7,6 +7,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Icon } from "@/components/ui/icons";
 import { userInitials } from "@/components/ui/marks";
 import { NotificationsToggle } from "@/components/notifications";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { useShell } from "@/components/patterns/shell-context";
 
 // The design's round initials button ("Your profile and sign out"). The pages that are not tabs live here.
@@ -75,6 +76,7 @@ export function ProfileMenu({ align = "left" }: { align?: "left" | "right" }) {
             </Link>
           ))}
           <NotificationsToggle />
+          <ThemeToggle />
           <div className="mt-1 border-t border-line px-2 pt-2.5 pb-1">{shell.signOut}</div>
         </div>
       ) : null}

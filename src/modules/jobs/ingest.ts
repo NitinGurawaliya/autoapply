@@ -24,6 +24,16 @@ const OFF_AFTER_EMPTY_DAYS = 30;
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
+ * Ashby boards are mostly US and non-tech roles: only tech jobs a candidate in India can take are stored from Ashby
+ * (owner, 15 Oct). Jobs stored before stay. Every other board is stored whole, as before.
+ */
+export function storedFromBoard(source: string, job: FetchedJob) {
+  if (source !== "ashby") return true;
+  const { eligibility } = tagPosting(job);
+  return (eligibility === "india" || eligibility === "remote_india") && classifyTitle(job.title).function !== "non_tech";
+}
+
+/**
  * Jobs the company's board no longer lists are closed, so the feed stops offering them. Called only after a fetch that
  * worked and returned something: an empty or failed response says nothing about whether jobs were taken down.
  */
@@ -64,7 +74,7 @@ async function ingestCompany(company: { id: string; source: string; slug: string
       return { fetched: 0, created: 0, updated: 0, closed: 0, createdEligible: 0, error: error instanceof Error ? error.message : "fetch failed" };
     }
   }
-  const kept = jobs.filter((job) => job.postedAt.getTime() >= cutoff);
+  const kept = jobs.filter((job) => job.postedAt.getTime() >= cutoff && storedFromBoard(company.source, job));
   const stored = await db.job.findMany({ where: { source: company.source, externalId: { in: kept.map((job) => job.externalId) } }, select: { id: true, externalId: true, contentHash: true, closedAt: true, companyId: true } });
   const byExternalId = new Map(stored.map((row) => [row.externalId, row]));
   const now = new Date();

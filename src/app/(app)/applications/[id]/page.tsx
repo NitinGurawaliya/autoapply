@@ -122,6 +122,8 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
     .map((source) => ({ source, count: fields.filter((field) => field.source === source).length }))
     .filter((item) => item.count > 0);
   const shot = application.events.find((event) => event.type === "screenshot");
+  // The job board's own confirmation, taken after Submit (runner.ts captureConfirmation).
+  const sentShot = sent ? application.events.findLast((event) => event.type === "screenshot" && /\/sent-\d+\.(png|jpg)$/.test(event.message ?? "")) : undefined;
   const address = (() => {
     try {
       return job?.applyUrl ? new URL(job.applyUrl).host + new URL(job.applyUrl).pathname : company;
@@ -205,6 +207,22 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
             ) : null}
             <a
               href={`/api/files/${application.screenshotKey}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonVariants({ variant: "line", size: "md", className: "w-full rounded-field" })}
+            >
+              View full size
+            </a>
+          </section>
+        ) : null}
+
+        {sentShot?.message ? (
+          <section aria-label="Confirmation" className="mt-8 flex flex-col gap-3">
+            <Eyebrow as="h2">What the job board showed after Submit</Eyebrow>
+            <ScreenshotFrame src={`/api/files/${sentShot.message}`} alt="The job board's confirmation page" address={address} />
+            <span className="text-[13px] text-muted-foreground">Taken at {clock(sentShot.createdAt, true)}, right after it confirmed.</span>
+            <a
+              href={`/api/files/${sentShot.message}`}
               target="_blank"
               rel="noopener noreferrer"
               className={buttonVariants({ variant: "line", size: "md", className: "w-full rounded-field" })}

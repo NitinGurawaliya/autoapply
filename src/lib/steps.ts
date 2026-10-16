@@ -15,13 +15,21 @@ export function buildSteps(events: EventLite[], status: string): Step[] {
   const codeStep = events.some((e) => /security code/i.test(e.message));
   const evidence = events.find((e) => e.type === "submit")?.message.match(/Confirmation:\s*(.*)$/)?.[1]?.trim();
 
+  // A rule that stopped the run stops the story at the rules, not at "form read" (16 Oct QA: a blocked application
+  // said "Application form read · stopped here" although the form was never opened).
+  const blockedByRule = has("block");
   const steps: Array<{ key: string; label: string; done: boolean; note?: string }> = [
-    { key: "checks", label: "Rules checked", done: has("rule_check") || submitted },
+    { key: "checks", label: blockedByRule ? "Stopped by a rule" : "Rules checked", done: !blockedByRule && (has("rule_check") || submitted) },
     { key: "read", label: "Application form read", done: has("inspect") || submitted },
     { key: "prepared", label: "Answers prepared", done: has("resolve") || submitted },
   ];
   if (asked) {
-    steps.push({ key: "asked", label: "Waited for you", done: status !== "needs_input" && (has("fill") || submitted || STOPPED.includes(status) || status === "filling") });
+    // Questions asked before the form was opened (T56) come before "form read"; asked mid-form, after "prepared".
+    const firstAsk = events.findIndex((e) => e.type === "ask_user" && !/security code/i.test(e.message));
+    const firstRead = events.findIndex((e) => e.type === "inspect");
+    const wait = { key: "asked", label: "Waited for you", done: status !== "needs_input" && (has("fill") || has("inspect") || submitted || STOPPED.includes(status) || status === "filling") };
+    if (firstRead < 0 || firstAsk < firstRead) steps.splice(1, 0, wait);
+    else steps.push(wait);
   }
   steps.push({ key: "filled", label: "Form filled in", done: has("fill") || submitted });
   if (codeStep) {

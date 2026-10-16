@@ -27,8 +27,14 @@ export function startOfTodayUtc() {
   return start;
 }
 
+/** Applications started today, against the daily cap. A blocked one never ran (a rule stopped it), so it uses none. */
 export async function dailyUsage(userId: string, client: Reader = db) {
-  return client.application.count({ where: { userId, createdAt: { gte: startOfTodayUtc() } } });
+  return client.application.count({ where: { userId, createdAt: { gte: startOfTodayUtc() }, status: { not: "blocked" } } });
+}
+
+/** Applications actually sent today: what "sent today" means on screen (16 Oct QA: it showed every one started). */
+export async function dailySent(userId: string, client: Reader = db) {
+  return client.application.count({ where: { userId, status: "submitted", submittedAt: { gte: startOfTodayUtc() } } });
 }
 
 /** This user's counted applications with their job title and company name, in one round trip (a join, not two reads). */

@@ -25,7 +25,39 @@ export type ProfileForDerive = {
   currentCompany: string | null;
   skills: unknown;
   experience: unknown;
+  education?: unknown;
 };
+
+type School = { school?: string | null; degree?: string | null; year?: string | null };
+
+/** "Education History" (free text) → the resume's education, one line per school (16 Oct, Tekion). */
+function educationHistory(label: string, type: string, profile: ProfileForDerive): { answer: string; basis: string } | null {
+  const schools = Array.isArray(profile.education) ? (profile.education as School[]).filter((item) => item?.school) : [];
+  if (schools.length === 0) return null;
+  // A school picker (search list) takes the school's name: "Education History", "What university do you attend?".
+  if (type === "combobox" && /\b(education|school|college|university|institution|alma mater)\b/i.test(label)) {
+    return { answer: schools[0].school!, basis: "from your resume's education" };
+  }
+  if (type !== "text" && type !== "textarea") return null;
+  if (!/^\s*(your )?(education(al)?( history| background| details| qualifications?)?|academic (history|background|qualifications?)|list your (education|degrees?|qualifications?))\s*[?:*]?\s*$/i.test(label)) return null;
+  const lines = schools.map((item) => [item.degree, item.school].filter(Boolean).join(", ") + (item.year ? ` (${item.year})` : ""));
+  return { answer: lines.join("\n"), basis: "from your resume's education" };
+}
+
+/**
+ * "If you have worked as a contractor or consultant for Tekion, give the dates and agency" → "Not applicable" when the
+ * company is not among the resume's employers; asked when it is (16 Oct).
+ */
+function contractedFor(label: string, type: string, roles: Role[]): { answer: string; basis: string } | null {
+  if ((type !== "text" && type !== "textarea") || asksYesNo(label)) return null;
+  if (!/\bif you\b/i.test(label) || !/\b(provide|list|share|give|include)\b/i.test(label)) return null;
+  const company = label.match(/\b(?:contractor|consultant|employee|intern)s?\b(?: or (?:contractor|consultant|employee|intern))?\s+(?:for|at|with)\s+([A-Z][\w&.'-]*(?: [A-Z][\w&.'-]*){0,2})/)?.[1]?.trim();
+  if (!company || roles.length === 0) return null;
+  const target = normalCompany(company);
+  const employers = roles.map((role) => role.company).filter(Boolean);
+  if (!target || employers.some((employer) => ` ${normalCompany(employer)} `.includes(` ${target} `) || ` ${target} `.includes(` ${normalCompany(employer)} `))) return null;
+  return { answer: "Not applicable", basis: `derived from your resume: ${company} is not among your employers (${employers.join(", ")})` };
+}
 
 /** Whether an answer says yes or no ("Yes, I am eligible", "I have never been employed by..."), or null. */
 export function yesNoOf(text: string): "yes" | "no" | null {
@@ -66,6 +98,14 @@ function residenceCountry(label: string, profile: ProfileForDerive): { answer: s
   return { answer: profile.country, basis: `derived from your location: ${profile.city ? `${profile.city}, ` : ""}${profile.country}` };
 }
 
+/** "Where are you currently located?" (asked as free text) → the profile's city and country. */
+function currentLocation(label: string, profile: ProfileForDerive): { answer: string; basis: string } | null {
+  if (asksYesNo(label) || !profile.country) return null;
+  if (!/^\s*(where are you (currently )?(located|based|living)|where do you (currently )?(live|reside)|what is your (current )?(location|city)|(your )?current (location|city))\b/i.test(label)) return null;
+  const place = profile.city ? `${profile.city}, ${profile.country}` : profile.country;
+  return { answer: place, basis: `derived from your location: ${place}` };
+}
+
 /** "What timezone do you reside in?" → India Standard Time for a profile in India (one time zone for the whole country). */
 function timeZone(label: string, profile: ProfileForDerive): { answer: string; basis: string } | null {
   if (!/\btime ?zones?\b/i.test(label) || /\b(overlap|work (in|during|across)|willing|able|comfortable|flexib)/i.test(label)) return null;
@@ -82,7 +122,10 @@ const normalCompany = (name: string) =>
 /** "Have you ever worked at MongoDB?" → "No" when MongoDB is not among the resume's employers. */
 function workedAt(label: string, roles: Role[]): { answer: string; basis: string } | null {
   if (!asksYesNo(label) || detectConcept(label) !== "previously_employed_by" || roles.length === 0) return null;
-  const match = label.match(/(?:worked|employed|interned|contracted)\b.{0,40}?\b(?:at|for|by|with)\s+([A-Z][\w&.'-]*(?:[ ,]+(?:[A-Z][\w&.'-]*|Inc\.?))*)/);
+  const match =
+    label.match(/(?:worked|employed|interned|contracted)\b.{0,40}?\b(?:at|for|by|with)\s+([A-Z][\w&.'-]*(?:[ ,]+(?:[A-Z][\w&.'-]*|Inc\.?))*)/) ??
+    // "Are you currently a Tekion employee?" (16 Oct)
+    label.match(/\b(?:[Aa]re|[Ww]ere) you (?:currently |presently |ever )?(?:an? )?(?:current |former )?([A-Z][\w&.'-]*(?: [A-Z][\w&.'-]*){0,2}) (?:employee|contractor)\b/);
   const company = match?.[1]?.trim();
   if (!company || /^(any|a|an|the)\b/i.test(company)) return null;
   const target = normalCompany(company);
@@ -92,6 +135,8 @@ function workedAt(label: string, roles: Role[]): { answer: string; basis: string
     const e = normalCompany(employer);
     return e === target || ` ${e} `.includes(` ${target} `) || ` ${target} `.includes(` ${e} `);
   });
+  // A past job there does not prove a current one: "currently" is asked when the company is among the employers.
+  if (hit && /\b(currently|presently)\b/i.test(label)) return null;
   if (hit) return { answer: "Yes", basis: `derived from your resume: you worked at ${hit}` };
   return { answer: "No", basis: `derived from your resume: ${company.replace(/[,.]+$/, "")} is not among your employers (${employers.join(", ")})` };
 }
@@ -163,6 +208,11 @@ export async function deriveAnswers(input: { profile: ProfileForDerive; fields: 
     // Never pay, notice period, work authorization, sponsorship, relocation, office or EEO.
     const kind = detectConcept(label);
     if (kind && kind !== "residence" && kind !== "previously_employed_by") continue;
+    const located = kind === "residence" || !kind ? currentLocation(label, input.profile) : null;
+    if (located) {
+      put(label, located);
+      continue;
+    }
     const homeCountry = kind === "residence" || !kind ? residenceCountry(label, input.profile) : null;
     if (homeCountry) {
       put(label, homeCountry);
@@ -178,9 +228,14 @@ export async function deriveAnswers(input: { profile: ProfileForDerive; fields: 
       put(label, lived);
       continue;
     }
-    const worked = workedAt(label, roles);
+    const worked = workedAt(label, roles) ?? contractedFor(label, field.type, roles);
     if (worked) {
       put(label, worked);
+      continue;
+    }
+    const studied = !kind ? educationHistory(label, field.type, input.profile) : null;
+    if (studied) {
+      put(label, studied);
       continue;
     }
     const asked = asksYesNo(label) && !kind ? yearsQuestion(label) : null;

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { dailyUsage } from "@/modules/governance";
+import { dailySent } from "@/modules/governance";
 import { APPLY_BOARDS, DEFAULT_PLACES, listFeed, parseFeedFilters, TRACK_LABELS, tracksOf } from "@/modules/jobs";
 import type { Track } from "@/modules/jobs";
 import type { FeedFilters } from "@/modules/jobs";
@@ -289,7 +289,7 @@ async function FeedDeck({
 }) {
   const [jobs, sentToday, inProgress] = await Promise.all([
     listFeed(userId, filters),
-    dailyUsage(userId),
+    dailySent(userId),
     db.application.count({ where: { userId, status: { in: ["queued", "inspecting", "filling"] } } }),
   ]);
   if (jobs.length > 0) return <SwipeDeck jobs={jobs} query={query} stats={{ sentToday, inProgress }} widenFilters={widenFilters} />;

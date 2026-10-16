@@ -1,9 +1,9 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Page } from "playwright";
+import type { Locator, Page } from "playwright";
 import { customQuestionKey } from "@/modules/answers";
-import type { AtsAdapter, FilledField, FormField, ResolvedValue, SubmitResult } from "../adapter";
+import type { AtsAdapter, FilledField, FormField, ResolvedValue, SubmitContext, SubmitResult } from "../adapter";
 import { NeedsAnswerError, NoRetryError } from "../adapter";
 import { assertJobOpen, dismissOverlays, firstVisible, friendlyError, inField, toDatePickerText } from "./common";
 
@@ -137,6 +137,10 @@ async function attachFile(page: Page, value: ResolvedValue, bytes: Uint8Array) {
       [value.selector, name],
       { timeout: 30000 },
     );
+    // Ashby reads an attached resume on its server and may overwrite fields when that finishes: let it finish before
+    // the fill, or Ashby can drop typed values (15 Oct: "Missing entry for required field: Legal Name" with it on screen).
+    await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => undefined);
+    await page.waitForTimeout(1500);
     return cleanup;
   } catch (error) {
     await cleanup();
@@ -154,28 +158,97 @@ function pickLabel(options: string[], wanted: string) {
   return normalised.findIndex((option) => option.includes(target));
 }
 
+/**
+ * A search-list option that is the value asked for: the same text, one that continues it after a comma ("Bengaluru" →
+ * "Bengaluru, Karnataka, India"), or one with it as a whole comma-separated part ("India" → "Karnataka, India"). Never
+ * a mere substring: "Computer Science" picked "Warsaw School of Computer Science" as a school (16 Oct, Tekion).
+ */
+function pickSearchOption(options: string[], wanted: string) {
+  const target = norm(wanted);
+  if (!target) return -1;
+  const normalised = options.map(norm);
+  const exact = normalised.indexOf(target);
+  if (exact >= 0) return exact;
+  const starts = normalised.findIndex((option) => option.startsWith(`${target},`));
+  if (starts >= 0) return starts;
+  return options.findIndex((option) => option.split(",").some((part) => norm(part) === target));
+}
+
+// Ashby's location search knows the official names: "Bangalore" finds nothing, "Bengaluru" does (15 Oct, ElevenLabs).
+const CITY_NAMES: Record<string, string> = { bangalore: "Bengaluru", bombay: "Mumbai", gurgaon: "Gurugram", calcutta: "Kolkata", madras: "Chennai", poona: "Pune", trivandrum: "Thiruvananthapuram", mysore: "Mysuru", baroda: "Vadodara" };
+
+/** Words to search a combobox with, in order: the value, its official city name, the city alone, the country alone. */
+function searchWords(value: string, label = "") {
+  const parts = value.split(",").map((part) => part.trim()).filter(Boolean);
+  const official = (word: string) => CITY_NAMES[word.toLowerCase()];
+  const words = [value, ...parts.map((part) => (official(part) ? parts.map((item) => official(item) ?? item).join(", ") : null)), official(parts[0] ?? "") ?? null];
+  if (parts.length > 1) words.push(parts[0], parts[parts.length - 1]);
+  // A school is listed under its short name too: "Jaypee University" or "JUIT" for "Jaypee University of Information
+  // Technology". Only an exact option counts (pickSearchOption), so a different school with a similar name is never taken.
+  if (SCHOOL_PICKER.test(label)) {
+    const before = value.split(/\s+of\s+/i)[0].trim();
+    const initials = value.split(/\s+/).filter((word) => /^[A-Z]/.test(word) && !/^(of|and|the|for|at)$/i.test(word)).map((word) => word[0]).join("");
+    words.push(before, initials.length >= 3 ? initials : "");
+  }
+  return [...new Set(words.filter((word): word is string => !!word && word.length >= 2))];
+}
+
+const SCHOOL_PICKER = /\b(school|college|universit|institution|education|alma mater)/i;
+// When the school is not in a company's list (a US list without Indian universities, 16 Oct, Sierra), the list's own
+// "Other" is the true answer: the school is not listed.
+const NOT_LISTED = /^(other|others|other \(.*\)|not listed|none of the above|my (school|university|college) is not listed.*|school not listed|university not listed)$/i;
+
 async function fillCombobox(page: Page, value: ResolvedValue) {
   const entry = page.locator(value.selector);
   const input = entry.locator('input[role="combobox"]');
   await input.scrollIntoViewIfNeeded();
-  await input.click();
-  await input.fill("");
-  await input.pressSequentially(value.value, { delay: 60 });
   const options = page.locator('[role="listbox"] [role="option"]');
-  await options.first().waitFor({ timeout: 8000 }).catch(() => undefined);
-  const texts = (await options.allInnerTexts()).map((text) => text.replace(/\s+/g, " ").trim());
-  if (texts.length === 0) {
+  let texts: string[] = [];
+  let index = -1;
+  // Only an option that matches the word searched: the first suggestion is a guess ("West Bengal, India" for
+  // "Bengaluru", 15 Oct), and a guess is a made-up fact about the candidate.
+  for (const candidate of searchWords(value.value, value.label)) {
+    await input.click();
     await input.fill("");
-    if (!value.required) return null;
-    throw new NeedsAnswerError({ key: customQuestionKey(value.label), label: `${value.label} (nothing matched "${value.value}", try another search word)`, type: "text", required: true });
+    await input.pressSequentially(candidate, { delay: 60 });
+    await options.first().waitFor({ timeout: 8000 }).catch(() => undefined);
+    texts = (await options.allInnerTexts()).map((text) => text.replace(/\s+/g, " ").trim());
+    index = pickSearchOption(texts, candidate);
+    if (index >= 0) break;
   }
-  const index = Math.max(0, pickLabel(texts, value.value));
+  if (index < 0 && SCHOOL_PICKER.test(value.label)) {
+    await input.click();
+    await input.fill("");
+    await input.pressSequentially("Other", { delay: 60 });
+    await options.first().waitFor({ timeout: 8000 }).catch(() => undefined);
+    texts = (await options.allInnerTexts()).map((text) => text.replace(/\s+/g, " ").trim());
+    index = texts.findIndex((text) => NOT_LISTED.test(text));
+  }
+  if (index < 0) {
+    await input.fill("");
+    // Some pickers mark "required" on the input, not the label (16 Oct, Tekion "Education History"): left blank, the run
+    // then stopped at the check before Submit instead of asking.
+    const required = value.required || (await entry.locator('[class*="_required"], [aria-required="true"], [required]').count()) > 0;
+    if (!required) return null;
+    const hint = SCHOOL_PICKER.test(value.label)
+      ? `"${value.value}" is not in their list and it has no "Other": type the name as they might list it`
+      : `nothing matched "${value.value}", try another search word`;
+    throw new NeedsAnswerError({ key: customQuestionKey(value.label), label: `${value.label} (${hint})`, type: "text", required: true });
+  }
   await options.nth(index).click();
   return texts[index];
 }
 
 const CONFIRMATION = /successfully submitted|application (has been )?(submitted|received)|thank you for (applying|your application)/i;
 const REFUSED = /flagged as (possible )?spam|couldn.t be submitted|unable to submit your application/i;
+const MISSING = /Missing entry for required field:\s*([^\n]+)/g;
+
+/** Ashby's server said required fields were empty: the form was not accepted, so nothing was sent. */
+class MissingEntriesError extends NoRetryError {
+  constructor(readonly labels: string[]) {
+    super(`Ashby said these required fields were empty: ${labels.slice(0, 5).join(", ")}`);
+  }
+}
 
 async function captchaChallengeVisible(page: Page) {
   const frames = page.locator('iframe[src*="recaptcha"][src*="bframe"], iframe[title*="recaptcha challenge" i]');
@@ -198,6 +271,8 @@ export async function waitForAshbyConfirmation(page: Page, timeoutMs = 60000) {
     const done = body.match(CONFIRMATION);
     if (done) return `text "${done[0]}"`;
     if (REFUSED.test(body)) throw new NoRetryError("Ashby refused the application as possible spam. Open the form and submit it yourself.");
+    const missing = [...body.matchAll(MISSING)].map((match) => match[1].trim());
+    if (missing.length > 0 && Date.now() - started > 3000) throw new MissingEntriesError(missing);
     if (await captchaChallengeVisible(page)) throw new NoRetryError("Ashby showed a CAPTCHA. Open the form and submit it yourself.");
     const errors = await entriesWithErrors(page);
     if (errors.length > 0 && Date.now() - started > 6000) {
@@ -206,6 +281,69 @@ export async function waitForAshbyConfirmation(page: Page, timeoutMs = 60000) {
     await page.waitForTimeout(1000);
   }
   throw new NoRetryError("Submit clicked but no confirmation appeared. Check your email before applying again.");
+}
+
+/** Selects a radio or checkbox option by clicking its label, as a person does; a forced check only if that fails. */
+async function clickOption(entry: Locator, option: Locator) {
+  if (await option.isChecked().catch(() => false)) return;
+  const id = await option.getAttribute("id");
+  const label = id ? entry.locator(`label[for="${id.replace(/"/g, '\\"')}"]`).first() : null;
+  if (label && (await label.count()) > 0) await label.click().catch(() => undefined);
+  if (!(await option.isChecked().catch(() => false))) await option.check({ force: true });
+}
+
+/** Types again, key by key, the on-screen text of each named entry. Returns how many were typed. */
+async function retypeEntries(page: Page, labels: string[]) {
+  let typed = 0;
+  for (const label of labels) {
+    const entry = page.locator("[data-field-path]").filter({ has: page.locator(".ashby-application-form-question-title", { hasText: label }) }).first();
+    const input = entry.locator("input:not([type=file]):not([type=hidden]):not([type=checkbox]):not([type=radio]), textarea").first();
+    if ((await input.count()) === 0) {
+      const radios = entry.locator('input[type="radio"]');
+      const chosen = entry.locator('input[type="radio"]:checked').first();
+      if ((await chosen.count()) === 0 || (await radios.count()) < 2) continue;
+      const chosenId = await chosen.getAttribute("id");
+      const other = entry.locator(`input[type="radio"]:not([id="${chosenId}"])`).first();
+      await clickOption(entry, other);
+      await clickOption(entry, entry.locator(`input[type="radio"][id="${chosenId}"]`));
+      typed += 1;
+      continue;
+    }
+    const value = await input.inputValue().catch(() => "");
+    if (!value.trim()) continue;
+    await input.scrollIntoViewIfNeeded().catch(() => undefined);
+    await input.click();
+    await input.fill("");
+    await input.pressSequentially(value, { delay: 25 });
+    await input.press("Tab");
+    typed += 1;
+  }
+  return typed;
+}
+
+export const HANDOFF_WAIT_MS = 15 * 60 * 1000;
+
+/**
+ * Hand-off (owner, 15 Oct): Ashby's spam check refuses applications an automated browser submits by itself (7 of 26
+ * runs to 9 Oct), so the form is filled in a visible Chrome window and the user presses Submit, answering anything Ashby
+ * asks. This waits for Ashby's answer: the confirmation, a refusal, the window closed, a cancel, or no Submit in time.
+ */
+async function waitForUserSubmit(page: Page, ctx: SubmitContext): Promise<SubmitResult> {
+  const button = await firstVisible(page, ["button.ashby-application-form-submit-button", "button[type=submit]"], 20000);
+  await button?.scrollIntoViewIfNeeded().catch(() => undefined);
+  await page.bringToFront().catch(() => undefined);
+  await ctx.announceHandoff?.("Ready to send: check the form in the Chrome window on your computer and press Submit");
+  const deadline = Date.now() + HANDOFF_WAIT_MS;
+  while (Date.now() < deadline) {
+    if (page.isClosed()) throw new NoRetryError("The Ashby window was closed before Submit was pressed. Nothing was sent.");
+    if (await ctx.cancelled?.()) throw new NoRetryError("Cancelled before Submit was pressed. Nothing was sent.");
+    const body = await page.locator("body").innerText().catch(() => "");
+    const done = body.match(CONFIRMATION);
+    if (done) return { confirmed: true, evidence: `text "${done[0]}" after you pressed Submit` };
+    if (REFUSED.test(body)) throw new NoRetryError("Ashby refused the application as possible spam, even with you pressing Submit. Open the posting and apply in your usual browser.");
+    await page.waitForTimeout(2000).catch(() => undefined);
+  }
+  throw new NoRetryError("Submit was not pressed within 15 minutes. Nothing was sent; retry when you are at your computer.");
 }
 
 export const ashbyAdapter: AtsAdapter = {
@@ -257,7 +395,8 @@ export const ashbyAdapter: AtsAdapter = {
           );
           const index = pickLabel(labels, value.value);
           if (index < 0) throw new Error(`No option "${value.value}" for "${value.label}"`);
-          await inputs.nth(index).check({ force: true });
+          // A forced check shows the dot but Ashby's form state can miss it ("Missing entry", 15 Oct, ElevenLabs).
+          await clickOption(entry, inputs.nth(index));
           return labels[index];
         }
         if (value.type === "checkbox") {
@@ -274,20 +413,31 @@ export const ashbyAdapter: AtsAdapter = {
     }
     return filled;
   },
-  async submit(page): Promise<SubmitResult> {
+  async submit(page, ctx): Promise<SubmitResult> {
     await dismissOverlays(page);
     // Catch an unfilled required field here, before Submit: a form sent half empty is the kind Ashby's spam check dislikes.
     const empty = await emptyRequired(page);
     if (empty.length > 0) throw new NoRetryError(`These required questions are still empty: ${empty.slice(0, 5).join(", ")}`);
+    if (ctx.handoff) return waitForUserSubmit(page, ctx);
     const button = await firstVisible(page, ["button.ashby-application-form-submit-button", "button[type=submit]"], 20000);
     if (!button) throw new NoRetryError("The Submit button never appeared on the Ashby form. Open the form and submit it yourself.");
-    await button.scrollIntoViewIfNeeded().catch(() => undefined);
+    const press = async () => {
+      await button.scrollIntoViewIfNeeded().catch(() => undefined);
+      try {
+        await button.click({ timeout: 15000 });
+      } catch (error) {
+        throw new NoRetryError(`Could not press Submit on the Ashby form: ${friendlyError(error)}`);
+      }
+    };
+    await press();
     try {
-      await button.click({ timeout: 15000 });
+      return { confirmed: true, evidence: await waitForAshbyConfirmation(page) };
     } catch (error) {
-      throw new NoRetryError(`Could not press Submit on the Ashby form: ${friendlyError(error)}`);
+      // Ashby sometimes keeps a typed value on screen but not in its form state and rejects the form as missing it
+      // (15 Oct, Legal Name). Nothing was sent, so type those values again key by key and press Submit once more.
+      if (!(error instanceof MissingEntriesError) || (await retypeEntries(page, error.labels)) === 0) throw error;
+      await press();
+      return { confirmed: true, evidence: `${await waitForAshbyConfirmation(page)} (after Ashby's empty-field check)` };
     }
-    const evidence = await waitForAshbyConfirmation(page);
-    return { confirmed: true, evidence };
   },
 };

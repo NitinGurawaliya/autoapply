@@ -57,6 +57,12 @@ export async function deleteAccount(userId: string) {
   }
   await db.$executeRaw`DELETE FROM "SubmitLock" WHERE "userId" = ${userId}`;
   await db.$executeRaw`DELETE FROM "RateEvent" WHERE "key" LIKE ${`%:${userId}`}`;
+  // No foreign key ties these to the user, so the cascade misses them (16 Oct QA: 788 gap rows, 29 scans and 5,663 job
+  // verdicts, whose "why" lines come from the resume, outlived 18 deleted accounts).
+  await db.feedGap.deleteMany({ where: { userId } });
+  await db.feedScan.deleteMany({ where: { userId } });
+  const profile = await db.profile.findUnique({ where: { userId }, select: { id: true } });
+  if (profile) await db.jobJudgement.deleteMany({ where: { profileId: profile.id } });
   const files = await storage.deleteForUser(userId);
   await db.user.delete({ where: { id: userId } });
   return { applications: ids.length, files };

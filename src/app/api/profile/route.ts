@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { forgetFeed } from "@/lib/feed-cache";
+import { enqueuePrescan } from "@/lib/queue";
 import { TRACKS } from "@/modules/jobs";
 import { profileSchema } from "@/modules/profile";
 
@@ -82,5 +83,7 @@ export async function PUT(req: Request) {
     },
   });
   forgetFeed(user.id); // title, skills and years decide the feed's scores
+  // Confirmed details change the verdicts' input: build the feed again in the worker before the user gets there.
+  void enqueuePrescan(user.id, "profile").catch(() => undefined);
   return NextResponse.json(toJson(updated));
 }
