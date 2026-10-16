@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -22,6 +22,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "invalid" }, { status: 400 });
   }
   await db.feedGap.delete({ where: { userId_key: { userId: user.id, key: gap.key } } });
-  void enqueuePrescan(user.id).catch(() => undefined);
+  after(() => enqueuePrescan(user.id).catch(() => undefined));
   return NextResponse.json({ ok: true });
 }

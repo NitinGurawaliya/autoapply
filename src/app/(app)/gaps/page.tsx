@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { AutoRefresh } from "@/components/auto-refresh";
@@ -20,7 +21,7 @@ export default async function GapsPage() {
     db.feedScan.findUnique({ where: { userId: user.id } }),
     db.feedGap.findMany({ where: { userId: user.id }, orderBy: [{ jobs: "desc" }, { label: "asc" }] }),
   ]);
-  if (!scan) void enqueuePrescan(user.id).catch(() => undefined);
+  if (!scan) after(() => enqueuePrescan(user.id).catch(() => undefined));
   const percent = scan && scan.scanned > 0 ? Math.round((scan.covered / scan.scanned) * 100) : null;
 
   return (

@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { forgetFeed } from "@/lib/feed-cache";
@@ -84,6 +84,6 @@ export async function PUT(req: Request) {
   });
   forgetFeed(user.id); // title, skills and years decide the feed's scores
   // Confirmed details change the verdicts' input: build the feed again in the worker before the user gets there.
-  void enqueuePrescan(user.id, "profile").catch(() => undefined);
+  after(() => enqueuePrescan(user.id, "profile").catch(() => undefined));
   return NextResponse.json(toJson(updated));
 }

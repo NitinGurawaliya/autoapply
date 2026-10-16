@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import Link from "next/link";
 import { Icon } from "@/components/ui/icons";
 import { db } from "@/lib/db";
@@ -8,7 +9,7 @@ const STALE_MS = 30 * 60 * 1000;
 /** The latest feed scan for this user; starts a rescan in the background when there is none or it is stale. */
 async function gapsSummary(userId: string) {
   const [scan, gaps] = await Promise.all([db.feedScan.findUnique({ where: { userId } }), db.feedGap.count({ where: { userId } })]);
-  if (!scan || Date.now() - scan.updatedAt.getTime() > STALE_MS) void enqueuePrescan(userId).catch(() => undefined);
+  if (!scan || Date.now() - scan.updatedAt.getTime() > STALE_MS) after(() => enqueuePrescan(userId).catch(() => undefined));
   return { scan, gaps };
 }
 
