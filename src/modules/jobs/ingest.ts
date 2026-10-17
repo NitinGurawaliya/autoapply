@@ -52,7 +52,7 @@ export function contentHash(job: FetchedJob) {
 type CompanyResult = { fetched: number; created: number; updated: number; closed: number; createdEligible: number; error?: string };
 
 /** One company: fetch its board (one retry), create new jobs, update changed ones, close the ones it no longer lists. */
-async function ingestCompany(company: { id: string; source: string; slug: string }, cutoff: number): Promise<CompanyResult> {
+export async function ingestCompany(company: { id: string; source: string; slug: string }, cutoff: number): Promise<CompanyResult> {
   let jobs: FetchedJob[];
   try {
     jobs = await fetchCompany(company.source, company.slug);

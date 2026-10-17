@@ -169,14 +169,14 @@ export const BOARDS: Board[] = [
     label: "Workday",
     fetch: (slug) => fetchWorkday(slug),
     stores: indiaEligible,
-    formHost: /^[a-z0-9-]+.wdd{1,3}.myworkdayjobs.com$/i,
+    formHost: /^[a-z0-9-]+\.wd\d{1,3}\.myworkdayjobs\.com$/i,
     // "{tenant}.{wdN}/{site}"; the site keeps its case ("NVIDIAExternalCareerSite").
     slugOf: (text) => text.trim().replace(/[^A-Za-z0-9./_-]/g, ""),
     discovery: {
       boardUrl: "<tenant>.<wdN>.myworkdayjobs.com/<site>",
       async open(slug) {
         // The list alone (one request a page): enough to count India jobs and their age.
-        const jobs = /^[a-z0-9-]+.wdd{1,3}/[A-Za-z0-9_-]+$/.test(slug) ? await fetchWorkday(slug, { details: false }).catch(() => null) : null;
+        const jobs = /^[a-z0-9-]+\.wd\d{1,3}\/[A-Za-z0-9_-]+$/.test(slug) ? await fetchWorkday(slug, { details: false }).catch(() => null) : null;
         await pause(PAUSE_MS);
         return jobs;
       },
@@ -202,7 +202,7 @@ export const BOARDS: Board[] = [
     label: "Zoho Recruit",
     fetch: fetchZohoRecruit,
     stores: indiaEligible,
-    formHost: /^[a-z0-9-]+.zohorecruit.(in|com|eu|com.au|jp)$/i,
+    formHost: /^[a-z0-9-]+\.zohorecruit\.(in|com|eu|com\.au|jp)$/i,
     // The portal host; a bare name is its .in portal (the model's guesses: "Arting Digital" → artingdigital.zohorecruit.in).
     slugOf: (text) => {
       const lower = text.trim().toLowerCase();
