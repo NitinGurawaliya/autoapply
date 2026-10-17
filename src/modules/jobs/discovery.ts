@@ -1,11 +1,7 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { callJson } from "@/lib/llm";
-import { fetchAshby } from "./fetchers/ashby";
-import { fetchGreenhouse } from "./fetchers/greenhouse";
-import { storedFromBoard } from "./ingest";
-import type { FetchedJob } from "./normalize";
-import { tagPosting } from "./tagging";
+import { BOARDS as ALL_BOARDS, type BoardDiscovery, type BoardSource } from "./boards";
 
 /**
  * Discovery that runs by itself (T89): every day the worker finds companies that are not on our list yet, checks each
@@ -18,7 +14,7 @@ import { tagPosting } from "./tagging";
  * posted in the last 30 days. Added companies are fetched by the next ingest. Polite: 4 boards at a time, 300 ms apart.
  */
 
-export const MIN_INDIA_JOBS = 3;
+// How each board is checked, and its bar (MIN_INDIA_JOBS on Greenhouse), live with the board: boards.ts `discovery`.
 const FRESH_DAYS = 30;
 const PER_RUN = 40;
 // Companies on Greenhouse that had too few India jobs are checked again after RECHECK_DAYS (they start hiring in India
@@ -26,7 +22,6 @@ const PER_RUN = 40;
 const RECHECK_DAYS = 14;
 const RECHECK_PER_RUN = 60;
 const CONCURRENCY = 4;
-const PAUSE_MS = 300;
 
 // A different focus each day, so the model does not keep proposing the same famous names.
 const SECTORS = [
@@ -51,74 +46,11 @@ const proposalSchema = z.object({
 export const normalName = (name: string) => name.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]/g, "");
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** A public job board discovery checks names against: how the model is asked, how a slug is written, how jobs load. */
-type Board = {
-  source: "greenhouse" | "ashby";
-  label: string;
-  boardUrl: string;
-  slugOf: (text: string) => string;
-  /** The open jobs on this slug's board, or null when the slug is not a board. */
-  open: (slug: string) => Promise<FetchedJob[] | null>;
-  /** The jobs that count for the rule, and how many make a company worth adding. */
-  counts: (job: FetchedJob) => boolean;
-  minIndiaJobs: number;
-  /** One of them posted in the last FRESH_DAYS. */
-  needsFresh: boolean;
-  /** Board names also come from the Common Crawl index of the board's host (slugsFromCrawl). */
-  crawlHost?: string;
-  /** The company's own name for a board known only by its slug (from the crawl), or null. */
-  nameOf?: (slug: string) => Promise<string | null>;
-};
+/** A board discovery runs on: the registry entry's name and slug rule with its discovery settings. */
+type Board = BoardDiscovery & { source: BoardSource; label: string; slugOf: (text: string) => string };
 
-const indiaEligible = (job: FetchedJob) => {
-  const { eligibility } = tagPosting(job);
-  return eligibility === "india" || eligibility === "remote_india";
-};
-
-export const BOARDS: Board[] = [
-  {
-    source: "greenhouse",
-    label: "Greenhouse",
-    boardUrl: "boards.greenhouse.io/<slug>",
-    slugOf: (text) => text.toLowerCase().replace(/[^a-z0-9]/g, ""),
-    async open(slug) {
-      const response = await fetch(`https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(slug)}`, { signal: AbortSignal.timeout(15000) }).catch(() => null);
-      await pause(PAUSE_MS);
-      return response?.ok ? fetchGreenhouse(slug) : null;
-    },
-    counts: indiaEligible,
-    minIndiaJobs: MIN_INDIA_JOBS,
-    needsFresh: true,
-  },
-  {
-    source: "ashby",
-    label: "Ashby",
-    boardUrl: "jobs.ashbyhq.com/<slug>",
-    // Ashby slugs keep dots and hyphens ("perplexity-ai", "fly.io").
-    slugOf: (text) => text.toLowerCase().replace(/[^a-z0-9.-]/g, ""),
-    async open(slug) {
-      // The same public posting API ingest uses; an unknown slug answers 404.
-      const jobs = await fetchAshby(slug).catch(() => null);
-      await pause(PAUSE_MS);
-      return jobs;
-    },
-    // Ashby: one India tech job is enough, the jobs ingest stores from Ashby (ingest.ts storedFromBoard; owner, 15 Oct:
-    // as many companies as possible). Few Ashby companies hire in India, so the Greenhouse bar would add almost none.
-    counts: (job) => storedFromBoard("ashby", job),
-    minIndiaJobs: 1,
-    needsFresh: false,
-    crawlHost: "jobs.ashbyhq.com",
-    // The public board page's title is "<Company> Jobs" ("TELUS Digital Jobs"); the slug alone reads "telus-digital".
-    async nameOf(slug) {
-      const html = await fetch(`https://jobs.ashbyhq.com/${encodeURIComponent(slug)}`, { signal: AbortSignal.timeout(15000) }).then((r) => (r.ok ? r.text() : "")).catch(() => "");
-      await pause(PAUSE_MS);
-      const title = html.match(/<title>([^<]{1,140})<\/title>/i)?.[1]?.replace(/\s*\bJobs\s*$/i, "").trim();
-      if (title) return title;
-      // Some boards are titled just "Jobs": the slug, spaced and capitalised ("real-fast" → "Real Fast").
-      return slug.split(/[-.]+/).filter(Boolean).map((word) => word[0].toUpperCase() + word.slice(1)).join(" ") || null;
-    },
-  },
-];
+/** The boards discovery covers, in order (Greenhouse, then Ashby). */
+export const BOARDS: Board[] = ALL_BOARDS.flatMap((board) => (board.discovery ? [{ source: board.source, label: board.label, slugOf: board.slugOf, ...board.discovery }] : []));
 
 /**
  * Names for today's run from the model, minus every name already checked or on our list. The model is given every

@@ -191,7 +191,7 @@ Status: adapter built and dry-run verified on 6 live Ashby forms (fills every fi
 Do: the ingest code in `modules/jobs` (fetchers, normalise, tagging) imports nothing from `app/` or `apply`. Write `docs/INGEST_CONTRACT.md` (Job row fields, unique key, required tags). Dedupe the same role across sources by company, title and location, keeping the direct ATS apply link.
 Done when: `scripts/ingest-contract-test.ts` passes, and two sources carrying the same role give one feed card.
 
-### [ ] T32 — More public ATS fetchers (40 min)
+### [-] T32 — More public ATS fetchers (40 min) — replaced by T95 (SmartRecruiters) and T96 (Keka), 18 Oct: Workable and Recruitee had no Indian employers in the probe
 
 Do: Workable, SmartRecruiters and Recruitee fetchers behind the same interface (public APIs only), with companies added to the seed.
 Done when: `npm run ingest` logs rows for each new source with valid `postedAt`, `country` and `applyUrl`.
@@ -494,3 +494,36 @@ Done 11 Oct (the rule adds; no review step): daily `discover` job, near-miss re-
 
 ### [x] T90 — End-to-end check of the Greenhouse pipeline (11 Oct)
 Ingest of 118 companies 88 s, 0 failed, new jobs embedded; 9 feeds warmed in 88 s; `/api/health` 200; `push-smoke` PASS (real Chrome); dry runs on 12 forms from 12 companies (Bangalore profile, not submitted): 10 fill everything they can and stop only for the user's own answers; Elastic and IMC ask Discipline once from the form's list (Greenhouse has no "Information Technology"; the agent does not pick a nearby subject for the user).
+
+## Phase J — More boards: expand the existing ones, then India's own (owner, 18 Oct)
+
+Measured 18 Oct (open jobs): Greenhouse 100 companies, 807 india + 67 remote_india; Ashby 188 companies, 342 + 64; Lever 10 companies, 141 + 5 (Lever is the most India-heavy board but discovery never looks at it). Probes of 63 Indian startups: Lever (Paytm 182 jobs, Meesho 59, Zeta 24, Mindtickle 20, CRED 7), SmartRecruiters (Swiggy 198, Freshworks 127 of which 34 in India), Greenhouse (InMobi, Druva, Slice, Groww, Razorpay on a non-obvious slug). Most others run Indian HR suites: Keka (Jupiter; public `careers/api/embedjobs` JSON), Darwinbox (Rapido, Perfios, Spinny; behind a Cloudflare challenge, so out), TurboHire (Flipkart, Ola; no public API, out), Workday (BrowserStack, Sprinklr; public postings API, but applying needs an account per employer, so later). Order: one registry for boards first, then grow the boards we have, then add SmartRecruiters and Keka. A new board is ingested hidden and goes into `APPLY_BOARDS` only after one real submit (INGEST_CONTRACT).
+
+### [x] T91 — Board registry
+Do: one place per board (`modules/jobs/boards.ts`): its fetcher, the hosts its forms may open on, how a slug is written, which jobs are stored, and its discovery settings. `ingest.ts fetchCompany`/`storedFromBoard`, `discovery.ts BOARDS` and `apply/urls.ts` read from it. No change in behaviour.
+**Done when:** `ingest-contract-test`, `eligibility-test`, `security-test`, `guards-test` PASS; an ingest of a few companies per board gives the same counts as before; typecheck and lint pass.
+Done 18 Oct: `modules/jobs/boards.ts` (`BOARDS`, `boardOf`); `ingest.ts` fetches and filters through it, `discovery.ts BOARDS` is the entries with discovery settings, `apply/urls.ts` takes form hosts from it. The four checks PASS; old vs new code on the 3 largest companies per board (Databricks, Stripe, Anthropic; Palantir, Paytm, Meesho; three Ashby boards): the same jobs fetched and stored (e.g. Ashby bjakcareer 3,030 fetched, 12 stored by both); discovery still Greenhouse (min 3, fresh) then Ashby (min 1, crawl). Typecheck and lint pass.
+
+### [ ] T92 — Greenhouse and Lever discovery from the crawl index
+Do: `crawlHost` for Greenhouse (`job-boards.greenhouse.io`, `boards.greenhouse.io`) and a Lever entry in discovery (`jobs.lever.co`, public postings API, India rule); Lever names from the board page's title.
+**Done when:** one discovery run lists the boards found per host and adds Lever and Greenhouse companies by the rule, with counts of new India-eligible jobs.
+
+### [ ] T93 — India company probe
+Do: `scripts/probe-india-companies.ts`: a list of 300+ Indian startups, unicorns and product companies, each probed on Greenhouse, Lever, Ashby, SmartRecruiters and Keka; results recorded in `DiscoveryCandidate`, the ones passing the rule added.
+**Done when:** the probe prints per board how many were found and added, and the India-eligible open jobs added.
+
+### [ ] T94 — Lever apply with the handoff
+Do: Lever forms always carry hCaptcha: the agent fills, the user presses Submit in the visible window (the handoff Ashby uses); fix what the 6 failed and 3 blocked Lever runs hit.
+**Done when:** dry runs on 5 Lever forms of Indian companies fill everything they can; one real handoff submit reaches `submitted`; Lever goes into `APPLY_BOARDS`.
+
+### [ ] T95 — SmartRecruiters
+Do: fetcher on `api.smartrecruiters.com/v1/companies/{id}/postings` (`country=in`, then each posting's detail for its description), host `jobs.smartrecruiters.com` in `urls.ts`, discovery entry, adapter for its application form.
+**Done when:** ingest stores Swiggy's and Freshworks' India jobs with eligibility tags; `ats-smoke` dry runs on 3 forms pass; one real submit before it goes into `APPLY_BOARDS`.
+
+### [ ] T96 — Keka
+Do: fetcher on `{company}.keka.com/careers/api/embedjobs/default/active/{id}` (the id read from the careers page on each fetch, so `Company.slug` stays the subdomain), host `*.keka.com` in `urls.ts`, discovery from the crawl index, adapter for Keka's application form.
+**Done when:** ingest stores Jupiter's jobs and a few more Keka companies'; dry runs on 3 forms pass; one real submit before it goes into `APPLY_BOARDS`.
+
+### [ ] T97 — Board report and docs
+Do: `scripts/feed-report.ts` shows companies, open India-eligible jobs and fresher jobs per board; ARCHITECTURE §5 and INGEST_CONTRACT describe every board; the Workday decision recorded (postings public, apply needs an account per employer).
+**Done when:** the report runs after a scheduled ingest and the numbers are in ARCHITECTURE.

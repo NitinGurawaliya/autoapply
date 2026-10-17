@@ -38,7 +38,7 @@ npx playwright test
 - EEO keys default to "Decline to answer". Never guess gender, race, veteran or disability.
 - Required privacy-notice, "my answers are true" and arbitration acknowledgements are ticked only under the user's standing permission (`accept_acknowledgements` = Yes, asked once); without it each is asked. Marketing opt-ins and certifications of facts (work authorization, age, record) are never auto-ticked. See `modules/apply/acknowledgement.ts`.
 - Every governance check writes an `ApplicationEvent`. Blocked runs end in `status = blocked` with the rule name.
-- Jobs come only from public APIs (Greenhouse, Lever, Ashby). No scraping Naukri, LinkedIn or login-walled sites.
+- Jobs come only from public, no-login job APIs (Greenhouse, Lever, Ashby, SmartRecruiters, Keka). No scraping Naukri, LinkedIn, login-walled sites or sites behind a bot challenge (Darwinbox).
 - No data in local files: companies, jobs, profiles, answers, applications → Postgres; resumes, screenshots → `lib/storage.ts` (FileBlob table; never the filesystem). Only `lib/storage.ts` touches `FileBlob`. Temp files for Playwright uploads are deleted in `finally`.
 - Resumes are personal data: never log resume text, phone numbers or emails.
 

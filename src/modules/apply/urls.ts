@@ -1,11 +1,7 @@
+import { boardOf } from "@/modules/jobs";
+
 // The worker opens a browser on whatever address an application points at. Job feeds are outside input, so it only
 // opens addresses that belong to the ATS the job claims to be on (or, for the mock form, this app's own page).
-
-const HOSTS: Record<string, RegExp> = {
-  greenhouse: /^(job-boards|boards)(\.eu)?\.greenhouse\.io$/i,
-  lever: /^jobs(\.eu)?\.lever\.co$/i,
-  ashby: /^jobs\.ashbyhq\.com$/i,
-};
 
 function appHosts() {
   const hosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
@@ -28,6 +24,6 @@ export function formUrlAllowed(rawUrl: string, source: string) {
   if (source === "mock") {
     return (url.protocol === "http:" || url.protocol === "https:") && appHosts().has(url.hostname.toLowerCase()) && url.pathname.replace(/\/$/, "") === "/mock/greenhouse";
   }
-  const pattern = HOSTS[source];
-  return Boolean(pattern) && url.protocol === "https:" && pattern.test(url.hostname) && (url.port === "" || url.port === "443");
+  const pattern = boardOf(source)?.formHost;
+  return !!pattern && url.protocol === "https:" && pattern.test(url.hostname) && (url.port === "" || url.port === "443");
 }

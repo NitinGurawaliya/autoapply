@@ -81,7 +81,7 @@ swipeapply/
     modules/
       profile/     parseResume.ts, profileSchema.ts, sampleProfile.ts
       answers/     keys.ts, answerBank.ts, questionKey.ts
-      jobs/        fetchers/{greenhouse,lever,ashby}.ts, normalize.ts, tagging.ts, match.ts, ingest.ts,
+      jobs/        boards.ts (registry: one entry per board, T91), fetchers/{greenhouse,lever,ashby}.ts, normalize.ts, tagging.ts, match.ts, ingest.ts,
                    listing.ts (is the job still listed), results.ts (per-company outcomes)
       apply/       adapter.ts, adapters/{common,greenhouse,lever,ashby,mock}.ts,
                    fieldMapper.ts, valueResolver.ts, runner.ts, browser.ts, pick.ts,

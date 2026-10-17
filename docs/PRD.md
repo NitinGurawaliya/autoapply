@@ -53,7 +53,7 @@ Indian software engineers with 0–5 years' experience applying to startups and 
 
 - **FR1** Resume → profile JSON via LLM; every field editable.
 - **FR2** Answer bank: key → answer with source. A canonical question is never asked twice.
-- **FR3** Job ingest from Greenhouse, Lever and Ashby public APIs for the companies in the `Company` table; filter by posted date; normalize to one Job model; tag country, remote type, experience band. Runs as a worker job on a schedule and on demand.
+- **FR3** Job ingest from the Greenhouse, Lever, Ashby, SmartRecruiters and Keka public APIs for the companies in the `Company` table; filter by posted date; normalize to one Job model; tag country, remote type, experience band. Runs as a worker job on a schedule and on demand.
 - **FR4** Deterministic match score (0–100) with a short reason.
 - **FR5** Right-swipe → Application `queued` → enqueued for the worker. Left-swipe → Swipe row only.
 - **FR6** Apply runner (worker), two phases: (a) inspect → missing required answers → `needs_input`; (b) fill → submit → screenshot → `submitted`. Failures → `failed` with reason; one automatic retry.
