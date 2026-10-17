@@ -77,6 +77,19 @@ export function numericRange(value: string, options: string[]) {
   return hits.length === 1 ? hits[0] : null;
 }
 
+// Currencies a pay question can name. INR covers how Indian forms state pay (LPA, lakh, CTC).
+const CURRENCIES: Array<[string, RegExp]> = [
+  ["EUR", /\b(eur|euros?)\b|€/i],
+  ["USD", /\b(usd|dollars?)\b|\$/i],
+  ["GBP", /\b(gbp|pounds?)\b|£/i],
+  ["INR", /\b(inr|rupees?|lpa|lakhs?|lacs?|crores?)\b|\d\s*(lpa|lakhs?|lacs?|cr)\b|₹/i],
+];
+export function currencyOf(text: string) {
+  const hits = CURRENCIES.filter(([, pattern]) => pattern.test(text));
+  return hits.length === 1 ? hits[0][0] : null;
+}
+const homeCurrency = (country: string | null | undefined) => (/india/i.test(country ?? "") ? "INR" : /united states|^usa?$/i.test(country ?? "") ? "USD" : null);
+
 /** Number inputs refuse anything else: "30 days" → "30"; "Immediate" or "2-3 years" do not fit. */
 function fitNumber(value: string) {
   return value.trim().match(/^[^\d-]*(-?\d+(?:\.\d+)?)\D*$/)?.[1] ?? null;
@@ -154,7 +167,13 @@ export function resolveValues(
       const options = field.type === "checkbox" ? ["Yes", "No"] : field.options;
       pending.push({ key: askKey, label: field.label, type: field.type, options, required: true });
     };
+    // Pay asked in a currency other than the candidate's own ("salary expectation in EUR per year"): only an answer
+    // given to this very question, or one that states that currency, is used. "46lpa" or a bare "8" (lakh) is never
+    // turned into euros: the user is asked (18 Oct: "46lpa" was about to become EUR 46).
+    const askedCurrency = detectConcept(field.label) === "compensation" ? currencyOf(field.label) : null;
+    const foreignCurrency = askedCurrency && askedCurrency !== homeCurrency(profile.country) ? askedCurrency : null;
     const push = (valueKey: string, raw: string, source: string, eeo = false) => {
+      if (foreignCurrency && valueKey !== questionKey && currencyOf(raw) !== foreignCurrency) return false;
       let value = field.type === "file" ? raw : field.type === "number" ? fitNumber(raw) : fitOption(raw, field.options, eeo);
       let reworded = false;
       if (value == null && field.options?.length) {

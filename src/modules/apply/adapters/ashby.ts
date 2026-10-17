@@ -49,7 +49,8 @@ const READ_FORM = `(() => {
     if (select) return void rows.push({ path, label, kind: 'select', required, options: Array.from(select.options).filter((o) => o.value).map((o) => clean(o.textContent)) });
     const radios = Array.from(entry.querySelectorAll('input[type=radio]')).filter((r) => !/consent/i.test(r.name));
     const text = entry.querySelector('input:not([type=radio]):not([type=checkbox]):not([type=file]):not([type=hidden]), textarea');
-    if (text) return void rows.push({ path, label, kind: text.tagName === 'TEXTAREA' ? 'textarea' : 'text', required });
+    // A number box takes digits only (18 Oct: "46lpa" into a EUR salary box failed the run): read it as one.
+    if (text) return void rows.push({ path, label, kind: text.tagName === 'TEXTAREA' ? 'textarea' : text.getAttribute('type') === 'number' ? 'number' : 'text', required });
     if (radios.length) return void rows.push({ path, label, kind: 'radio', required, options: radios.map(optionText) });
     const boxes = Array.from(entry.querySelectorAll('input[type=checkbox]'));
     if (boxes.length > 1 || (boxes.length === 1 && entry.querySelector('.ashby-application-form-input-checkbox-group'))) return void rows.push({ path, label, kind: 'checkbox-group', required, options: boxes.map(optionText) });
@@ -404,6 +405,13 @@ export const ashbyAdapter: AtsAdapter = {
           if (/^(yes|true|checked|agree|i agree|1)$/i.test(value.value.trim())) await box.check({ force: true });
           else await box.uncheck({ force: true });
           return value.value;
+        }
+        if (value.type === "number") {
+          // Digits only; anything else is asked again as a plain number, never guessed.
+          const number = value.value.replace(/[\s,]/g, "").match(/^-?\d+(\.\d+)?$/)?.[0];
+          if (!number) throw new NeedsAnswerError({ key: customQuestionKey(value.label), label: `${value.label} (a number only)`, type: "number", required: true });
+          await entry.locator("input").first().fill(number);
+          return number;
         }
         await entry.locator("input:not([type=file]), textarea").first().fill(value.value);
         return value.value;

@@ -95,7 +95,7 @@ async function captureConfirmation(page: Awaited<ReturnType<typeof openBrowser>>
  * Ashby's spam check refuses bursts (16 Oct: 14 Ashby runs in 4 minutes from one machine, then 4 spam refusals and 4
  * CAPTCHAs, while the same day's spread-out runs all went through). At most one Ashby run starts every
  * ASHBY_SUBMIT_GAP_SECONDS across all workers; a slot is reserved under a database lock, so two workers cannot take the
- * same one. Returns 0 when this run may go now, else the seconds until the next free slot.
+ * same one. Returns wait 0 and the slot id when this run may go now, else the seconds until the next free slot.
  */
 const ASHBY_GAP_SECONDS = Number(process.env.ASHBY_SUBMIT_GAP_SECONDS) || 240;
 async function ashbySlot() {
@@ -103,9 +103,10 @@ async function ashbySlot() {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('ashby-submit-slot'))`;
     const [last] = await tx.$queryRaw<Array<{ at: Date }>>`SELECT max("createdAt") AS at FROM "RateEvent" WHERE "key" = 'ashby-slot'`;
     const since = last?.at ? (Date.now() - last.at.getTime()) / 1000 : Infinity;
-    if (since < ASHBY_GAP_SECONDS) return Math.ceil(ASHBY_GAP_SECONDS - since);
-    await tx.$executeRaw`INSERT INTO "RateEvent" ("id", "key") VALUES (${`ashby-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`}, 'ashby-slot')`;
-    return 0;
+    if (since < ASHBY_GAP_SECONDS) return { wait: Math.ceil(ASHBY_GAP_SECONDS - since), id: null };
+    const id = `ashby-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    await tx.$executeRaw`INSERT INTO "RateEvent" ("id", "key") VALUES (${id}, 'ashby-slot')`;
+    return { wait: 0, id };
   });
 }
 
@@ -206,6 +207,8 @@ async function execute(applicationId: string) {
   // 18 Oct). If a question needs the user, that browser is closed before the run stops, never held open while waiting.
   // Ashby keeps its order: its spacing slot is taken only by a run that is about to open the form.
   const early = adapter.source !== "ashby" ? openBrowser(formUrl, application.userId, { handoff: false }) : null;
+  let ashbySlotId: string | null = null;
+  let submitting = false;
   early?.catch(() => undefined);
   try {
     // Ask before opening the form (T56): when the board publishes the form's questions, run the same answering chain on
@@ -234,7 +237,8 @@ async function execute(applicationId: string) {
     // ASHBY_HANDOFF=1 the user presses Submit in a visible Chrome window instead (adapters/ashby.ts waitForUserSubmit).
     const handoff = adapter.source === "ashby" && process.env.ASHBY_HANDOFF === "1";
     if (adapter.source === "ashby" && !handoff) {
-      const wait = await ashbySlot();
+      const { wait, id } = await ashbySlot();
+      ashbySlotId = id;
       if (wait > 0) {
         // Not a failure and not a try: the run waits in the queue for its slot, with no browser open.
         await setApp(applicationId, { status: "queued", attempt: application.attempt });
@@ -331,6 +335,7 @@ async function execute(applicationId: string) {
           await setApp(applicationId, { status: "blocked", error: submitCheck.rule, fields: filled as Prisma.InputJsonValue });
           return null;
         }
+        submitting = true;
         return adapter.submit(page, {
           requestCode: codeRequester(applicationId),
           handoff,
@@ -392,6 +397,9 @@ async function execute(applicationId: string) {
       await setApp(applicationId, { status: "failed", error: message });
     }
   } finally {
+    // A run that stopped before Submit (asked the user, failed) gives its Ashby slot back: only a submission counts
+    // toward the spacing (18 Oct: each answer round trip cost a 4-minute wait).
+    if (ashbySlotId && !submitting) await db.$executeRaw`DELETE FROM "RateEvent" WHERE "id" = ${ashbySlotId}`.catch(() => undefined);
     clearInterval(heartbeat);
     await upload.cleanup?.();
     // A browser opened early but never taken (the run stopped before the form) is closed too.
