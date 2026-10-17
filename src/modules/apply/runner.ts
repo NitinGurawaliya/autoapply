@@ -171,8 +171,11 @@ async function execute(applicationId: string) {
   }
   // A missing resume file cannot be fixed by trying again: say so before any browser opens (16 Oct QA: it was found
   // only after the form was filled, and the run was retried).
-  if (!(await storage.get(profile.resumeKey))) {
-    const message = "Resume file is missing. Upload it again from Account, then retry.";
+  // An empty file counts as missing: Greenhouse waits forever on a 0-byte upload (18 Oct: 7 runs of one user, each
+  // tried twice, all stopped at "upload did not finish").
+  const resumeFile = await storage.get(profile.resumeKey);
+  if (!resumeFile || resumeFile.bytes.length === 0) {
+    const message = "Resume file is missing or empty. Upload it again from Account, then retry.";
     await writeEvent(applicationId, "error", message);
     await setApp(applicationId, { status: "failed", error: message, attempt: application.attempt });
     return;
@@ -199,6 +202,11 @@ async function execute(applicationId: string) {
     if (asks.length < MAX_ASKS) return undefined;
     return pending.find((question) => answers.some((row) => row.key === question.key && row.updatedAt >= asks[0].createdAt));
   };
+  // Greenhouse and the other boards: the form opens while its published questions are worked out (about 5 s a run,
+  // 18 Oct). If a question needs the user, that browser is closed before the run stops, never held open while waiting.
+  // Ashby keeps its order: its spacing slot is taken only by a run that is about to open the form.
+  const early = adapter.source !== "ashby" ? openBrowser(formUrl, application.userId, { handoff: false }) : null;
+  early?.catch(() => undefined);
   try {
     // Ask before opening the form (T56): when the board publishes the form's questions, run the same answering chain on
     // them first; anything genuinely missing is asked now, with no browser open and no half-filled form. Essays the run
@@ -216,6 +224,7 @@ async function execute(applicationId: string) {
         }
         await setApp(applicationId, { status: "needs_input", attempt: application.attempt, pendingQuestions: before.missing as Prisma.InputJsonValue });
         await writeEvent(applicationId, "ask_user", `Need ${before.missing.length} answers before opening the form`);
+        if (early) session = await early.catch(() => null); // closed in finally
         void notifyNeedsInput(applicationId, "answers");
         return;
       }
@@ -234,7 +243,7 @@ async function execute(applicationId: string) {
         return;
       }
     }
-    session = await openBrowser(formUrl, application.userId, { handoff });
+    session = early ? await early : await openBrowser(formUrl, application.userId, { handoff });
     const fields = await adapter.inspect(session.page);
     await writeEvent(applicationId, "inspect", `Found ${fields.length} fields`);
     const { resolved } = await resolveForm({ userId: application.userId, source: adapter.source, fields, profile, answers, job: jobInfo, draftEssays: true, log: resolveLog });
@@ -263,8 +272,8 @@ async function execute(applicationId: string) {
     const resume = resolved.values.find((value) => value.type === "file");
     const uploadNow = async () => {
       if (!resume) return;
-      const stored = await storage.get(profile.resumeKey);
-      if (!stored) throw new NoRetryError("Resume file is missing. Upload it again from Account, then retry.");
+      // Read once, at the start of the run (resumeFile), and checked there to be neither missing nor empty.
+      const stored = resumeFile;
       upload.cleanup = adapter.uploadFile
         ? await adapter.uploadFile(session!.page, resume, stored.bytes)
         : await uploadResume(session!.page, resume, stored.bytes);
@@ -285,20 +294,20 @@ async function execute(applicationId: string) {
     // Keep why each value was chosen (a reused answer's original question) with the field and its event.
     const basisBySelector = new Map(resolved.values.map((value) => [value.selector, value.basis]));
     for (const field of filled) field.basis = basisBySelector.get(field.selector);
-    for (const field of filled) {
-      await writeEvent(applicationId, "fill", `Filled ${field.key}`, undefined, {
-        key: field.key,
-        source: field.source,
-        selector: field.selector,
-        ...(field.basis ? { basis: field.basis } : {}),
-      });
-    }
+    // One write for every filled field: one at a time cost ~0.4 s each from the worker to the database (18 Oct).
+    await db.applicationEvent.createMany({
+      data: filled.map((field) => ({
+        applicationId,
+        type: "fill",
+        message: `Filled ${field.key}`,
+        data: { key: field.key, source: field.source, selector: field.selector, ...(field.basis ? { basis: field.basis } : {}) } as Prisma.InputJsonValue,
+      })),
+    });
 
     const screenshot = await session.page.screenshot(SHOT);
     const screenshotKey = `screenshots/${applicationId}/${attempt}.jpg`;
     await storage.put(screenshotKey, new Uint8Array(screenshot), "image/jpeg", application.userId);
-    await setApp(applicationId, { screenshotKey });
-    await writeEvent(applicationId, "screenshot", screenshotKey);
+    await Promise.all([setApp(applicationId, { screenshotKey }), writeEvent(applicationId, "screenshot", screenshotKey)]);
 
     const page = session.page;
     const result = await withSubmitLock(
@@ -385,6 +394,8 @@ async function execute(applicationId: string) {
   } finally {
     clearInterval(heartbeat);
     await upload.cleanup?.();
+    // A browser opened early but never taken (the run stopped before the form) is closed too.
+    if (!session && early) session = await early.catch(() => null);
     await session?.close();
   }
 }

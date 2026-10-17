@@ -108,6 +108,14 @@ export function ResumeUploadForm({ signOut }: { signOut: React.ReactNode }) {
       );
       return;
     }
+    // A replaced resume's changes, for the review screen (sessionStorage: it may be unavailable, then nothing shows).
+    const result = (await response.json().catch(() => null)) as { changes?: { replaced?: boolean } } | null;
+    try {
+      if (result?.changes?.replaced) sessionStorage.setItem("resume-changes", JSON.stringify(result.changes));
+      else sessionStorage.removeItem("resume-changes");
+    } catch {
+      /* private mode: the review screen shows the profile without the summary */
+    }
     void forgetVisitedPages(); // a new resume changes the feed
     const profile = await fetch("/api/profile", { cache: "no-store" })
       .then((res) => (res.ok ? (res.json() as Promise<Profile>) : null))

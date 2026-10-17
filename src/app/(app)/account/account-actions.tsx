@@ -36,9 +36,9 @@ export function AccountActions() {
       {/* The only way back to the upload once onboarding is done (16 Oct QA: a missing resume had no place to fix it). */}
       <section className="box-border flex flex-col gap-2.5 rounded-panel border-[1.5px] border-line bg-surface p-4">
         <h2 className="m-0 text-lg font-semibold tracking-[-0.01em]">Your resume</h2>
-        <p className="m-0 text-sm leading-normal text-muted-foreground">Upload a new resume. We read it again and you check what we found before anything changes.</p>
+        <p className="m-0 text-sm leading-normal text-muted-foreground">Replace it with a newer one. Your details and saved answers stay; skills, roles and projects come from the new resume, and you see what changed before it is used.</p>
         <a href="/onboarding/resume" className={buttonVariants({ variant: "line", size: "lg", className: "mt-1 w-full" })}>
-          Upload a new resume
+          Replace resume
         </a>
       </section>
       <section className="box-border flex flex-col gap-2.5 rounded-panel border-[1.5px] border-line bg-surface p-4">

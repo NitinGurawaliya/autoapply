@@ -1,7 +1,7 @@
 "use client";
 
 import { forgetVisitedPages } from "@/lib/forget-pages";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Chip, SkillTag } from "@/components/ui/chip";
@@ -136,6 +136,68 @@ function EditableRow({
 }
 
 /** Step 2 of onboarding (design/onboarding.html "Here's what we found"). Saves with the same two calls as before. */
+type ResumeChanges = {
+  replaced: boolean;
+  skillsAdded: string[];
+  skillsRemoved: string[];
+  rolesAdded: string[];
+  rolesRemoved: string[];
+  title: { from: string | null; to: string | null } | null;
+  educationChanged: boolean;
+  keptCore: string[];
+};
+
+const CORE_LABELS: Record<string, string> = { fullName: "name", email: "email", phone: "phone", city: "city", country: "country", linkedin: "LinkedIn", github: "GitHub", portfolio: "portfolio" };
+
+const readChanges = () => {
+  try {
+    return sessionStorage.getItem("resume-changes");
+  } catch {
+    return null;
+  }
+};
+
+/** After "Replace resume": what the new resume changed and what stayed, before anything is used (18 Oct, owner). */
+function ResumeChangesPanel() {
+  const raw = useSyncExternalStore(() => () => undefined, readChanges, () => null);
+  let changes: ResumeChanges | null = null;
+  try {
+    changes = raw ? (JSON.parse(raw) as ResumeChanges) : null;
+  } catch {
+    changes = null;
+  }
+  if (!changes?.replaced) return null;
+  const kept = changes.keptCore.map((field) => CORE_LABELS[field] ?? field);
+  const nothing = !changes.skillsAdded.length && !changes.skillsRemoved.length && !changes.rolesAdded.length && !changes.rolesRemoved.length && !changes.title && !changes.educationChanged;
+  return (
+    <SectionCard title="What changed with your new resume">
+      <div className="flex flex-col gap-2.5 pb-2 text-sm leading-normal">
+        <p className="m-0 text-muted-foreground">
+          Your details stay as they were{kept.length ? `: your resume shows a different ${kept.join(", ")}, and we kept yours` : ""}. Saved answers are kept; answers worked out from your resume follow the new one.
+        </p>
+        {nothing ? <p className="m-0">The skills, roles and education read the same as before.</p> : null}
+        {changes.title ? (
+          <p className="m-0">
+            Current title: {changes.title.from ?? "none"} → <span className="font-semibold">{changes.title.to ?? "none"}</span>
+          </p>
+        ) : null}
+        {changes.rolesAdded.length ? <p className="m-0">New roles: <span className="font-semibold">{changes.rolesAdded.join("; ")}</span></p> : null}
+        {changes.rolesRemoved.length ? <p className="m-0 text-muted-foreground">No longer listed: {changes.rolesRemoved.join("; ")}</p> : null}
+        {changes.skillsAdded.length ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span>New skills:</span>
+            {changes.skillsAdded.slice(0, 12).map((skill) => (
+              <SkillTag key={`add-${skill}`}>{skill}</SkillTag>
+            ))}
+          </div>
+        ) : null}
+        {changes.skillsRemoved.length ? <p className="m-0 text-muted-foreground">Skills no longer listed: {changes.skillsRemoved.slice(0, 12).join(", ")}</p> : null}
+        {changes.educationChanged ? <p className="m-0">Education updated from the new resume.</p> : null}
+      </div>
+    </SectionCard>
+  );
+}
+
 export function ConfirmForm({ initial, trackOptions }: { initial: ConfirmValues; trackOptions: Array<{ id: string; label: string }> }) {
   const router = useRouter();
   const [values, setValues] = useState(initial);
@@ -206,6 +268,7 @@ export function ConfirmForm({ initial, trackOptions }: { initial: ConfirmValues;
       <StepHeader step={2} backHref="/onboarding/resume" />
       <ScreenBody className="gap-4 overflow-y-auto pb-5">
         <PageIntro title="Here's what we found" sub="Tap anything to fix it. We only ever use what's on this page." />
+        <ResumeChangesPanel />
 
         {askPhone ? (
           <div className="box-border flex flex-col gap-3 rounded-panel border-2 border-dashed border-edge bg-surface p-4">

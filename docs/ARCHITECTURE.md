@@ -407,6 +407,8 @@ This is the checked-in file as it is now. The daily cap is 120 here; PRD §9 nam
 
 ## 9. Storage (`lib/storage.ts`)
 
+Resume upload and replace (18 Oct): the PDF reader gets a copy of the bytes (pdf.js empties the array it is handed; from 12 to 18 Oct every resume was stored as 0 bytes and no form could upload it), an empty file is never stored, and a run stops before opening a browser when the stored resume is missing or empty. "Replace resume" (Account) re-runs onboarding: the person's details (name, email, phone, city, country, links) stay and only a blank one is filled; skills, roles, education, title, years and the resume text come from the new resume; the user's own answers stay; the AI "best project" draft is dropped and drafted again; the review screen shows what changed (`parseResume.ts mergeResumeProfile`, `saveParsedResume`). Check: `scripts/resume-test.ts`. Runs (18 Oct): non-Ashby forms open while their published questions are worked out (closed again if the run stops to ask); fill events go in one write; the resume is read once a run.
+
 Interface: `put(key, bytes, contentType, userId?)`, `get(key)`, `url(key)`. MVP implementation: `FileBlob` table in Postgres. Keys: `resumes/{userId}/resume.pdf`, `screenshots/{appId}/{attempt}.jpg` (and `sent-`/`fail-` variants; `.png` before 16 Oct). `url(key)` points at `GET /api/files/{key}`, which streams the bytes only to the owning user. The worker writes the resume bytes to a temp file for Playwright upload and deletes it in `finally`. Later: an `S3Storage` class with the same interface (R2/S3) selected by env; callers never change.
 
 ## 10. Mock Greenhouse form (`/mock/greenhouse`)

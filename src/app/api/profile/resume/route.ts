@@ -40,5 +40,5 @@ export async function POST(req: Request) {
   if (!result.ok) return NextResponse.json({ error: result.failure }, { status: 422 });
   // The worker builds the first feed while the user checks what we read (onboarding confirm and questions).
   after(() => enqueuePrescan(user.id, "resume").catch(() => undefined));
-  return NextResponse.json({ ok: true, usedFallback: result.usedFallback });
+  return NextResponse.json({ ok: true, usedFallback: result.usedFallback, changes: result.changes });
 }
