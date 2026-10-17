@@ -107,22 +107,26 @@ export async function checkCandidate(candidate: { slugs: string[] }, board: Boar
 
 // Board names the model does not know: every public board page of the host in the latest Common Crawl indexes (a
 // public archive of the web; only the index is read, never the boards' pages). 15 Oct: two crawls listed 1,370 Ashby
-// boards, against 43 we had. At most CRAWL_PER_RUN new ones are checked a run; every one checked is recorded.
+// boards, against 43 we had; Greenhouse and Lever since T92. At most CRAWL_PER_RUN new ones are checked a run; every one checked is recorded.
 const CRAWLS = 6;
 const CRAWL_PER_RUN = 400;
 const NOT_A_BOARD = new Set(["api", "embed", "static", "assets", "favicon.ico", "robots.txt"]);
 
-export async function slugsFromCrawl(host: string, crawls = CRAWLS, log: (line: string) => void = () => undefined) {
+/**
+ * `host` "*.myworkdayjobs.com" reads every subdomain (Workday, Zoho Recruit: the company is the host); `slugFromUrl`
+ * reads the slug from such an address, and `maxPages` caps the index pages read a crawl for hosts with millions of pages.
+ */
+export async function slugsFromCrawl(host: string, crawls = CRAWLS, log: (line: string) => void = () => undefined, options: { slugFromUrl?: (url: URL) => string | null; maxPages?: number } = {}) {
   const slugs = new Set<string>();
   const info = (await (await fetch("https://index.commoncrawl.org/collinfo.json", { signal: AbortSignal.timeout(30000) })).json()) as Array<{ id: string }>;
   for (const { id } of info.slice(0, crawls)) {
-    const base = `https://index.commoncrawl.org/${id}-index?url=${host}/*&output=json&fl=url`;
+    const base = `https://index.commoncrawl.org/${id}-index?url=${host.startsWith("*.") ? host : `${host}/*`}&output=json&fl=url`;
     let meta: { pages?: number } | null = null;
     for (let attempt = 0; attempt < 4 && !meta; attempt += 1) {
       if (attempt > 0) await pause(5000 * 2 ** attempt);
       meta = (await fetch(`${base}&showNumPages=true`, { signal: AbortSignal.timeout(60000) }).then((r) => (r.ok ? r.json() : null)).catch(() => null)) as { pages?: number } | null;
     }
-    for (let page = 0; page < (meta?.pages ?? 0); page += 1) {
+    for (let page = 0; page < Math.min(meta?.pages ?? 0, options.maxPages ?? Infinity); page += 1) {
       // The index is often busy (503): a page is tried up to 4 times, waiting longer each time, before it counts as empty.
       let text = "";
       for (let attempt = 0; attempt < 4 && !text; attempt += 1) {
@@ -131,6 +135,11 @@ export async function slugsFromCrawl(host: string, crawls = CRAWLS, log: (line: 
       }
       for (const line of text.split("\n")) {
         try {
+          if (options.slugFromUrl) {
+            const slug = options.slugFromUrl(new URL((JSON.parse(line) as { url: string }).url));
+            if (slug) slugs.add(slug);
+            continue;
+          }
           const slug = decodeURIComponent(new URL((JSON.parse(line) as { url: string }).url).pathname.split("/")[1] ?? "").toLowerCase();
           if (slug && !NOT_A_BOARD.has(slug) && /^[a-z0-9][a-z0-9.-]*$/.test(slug)) slugs.add(slug);
         } catch {
@@ -166,7 +175,7 @@ async function discoverOn(board: Board, options: { count?: number; crawlLimit?: 
   const names = [...new Set([...checked.map((row) => row.name), ...everywhere.map((row) => row.name)])];
   const known = { keys: new Set(names.map(normalName)), names };
   const knownSlugs = new Set([...checked.map((row) => row.slug), ...companies.map((row) => row.slug)].filter((slug): slug is string => !!slug));
-  const proposals = await proposeCandidates(known, options.count ?? PER_RUN, new Date(), board).catch((error) => {
+  const proposals = await (board.fromModel === false ? Promise.resolve([]) : proposeCandidates(known, options.count ?? PER_RUN, new Date(), board)).catch((error) => {
     log(`discovery ${source}: the model gave no names (${error instanceof Error ? error.message.slice(0, 80) : "failed"})`);
     return [] as Awaited<ReturnType<typeof proposeCandidates>>;
   });
@@ -177,15 +186,19 @@ async function discoverOn(board: Board, options: { count?: number; crawlLimit?: 
     select: { name: true, slug: true, stage: true },
   });
   const rechecks = due.filter((row) => !companies.some((company) => company.slug === row.slug)).map((row) => ({ name: row.name, stage: row.stage, slugs: [row.slug!], recheck: true }));
-  const crawled = board.crawlHost
-    ? (await slugsFromCrawl(board.crawlHost, CRAWLS, log).catch((error) => {
-        log(`discovery ${source}: the crawl index gave no boards (${error instanceof Error ? error.message.slice(0, 80) : "failed"})`);
-        return [] as string[];
-      }))
-        .filter((slug) => !knownSlugs.has(slug) && !known.keys.has(normalName(slug)) && !proposals.some((item) => item.slugs.includes(slug)))
-        .slice(0, options.crawlLimit ?? CRAWL_PER_RUN)
-        .map((slug) => ({ name: slug, stage: null, slugs: [slug], recheck: false, from: "crawl" }))
-    : [];
+  // Every host of the board (Greenhouse has two), each slug written the board's way and listed once.
+  const fromCrawl: string[] = [];
+  for (const host of board.crawlHosts ?? []) {
+    const slugs = await slugsFromCrawl(host, CRAWLS, log, { slugFromUrl: board.slugFromUrl, maxPages: board.crawlPages }).catch((error) => {
+      log(`discovery ${source}: the crawl index gave no boards for ${host} (${error instanceof Error ? error.message.slice(0, 80) : "failed"})`);
+      return [] as string[];
+    });
+    fromCrawl.push(...slugs.map(board.slugOf).filter((slug) => slug.length >= 2));
+  }
+  const crawled = [...new Set(fromCrawl)]
+    .filter((slug) => !knownSlugs.has(slug) && !known.keys.has(normalName(slug)) && !proposals.some((item) => item.slugs.includes(slug)))
+    .slice(0, options.crawlLimit ?? CRAWL_PER_RUN)
+    .map((slug) => ({ name: slug, stage: null, slugs: [slug], recheck: false, from: "crawl" }));
   const queue = [...proposals.map((item) => ({ ...item, recheck: false, from: "model" })), ...rechecks.map((item) => ({ ...item, from: "list" })), ...crawled];
   const totals: Totals = { proposed: proposals.length + crawled.length, rechecked: rechecks.length, onBoard: 0, added: 0, indiaJobsAdded: 0, errors: 0 };
   let next = 0;
