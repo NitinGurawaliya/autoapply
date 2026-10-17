@@ -12,9 +12,10 @@ import { claimWorkerLock } from "./single";
 async function main() {
   claimWorkerLock();
   const boss = await getBoss();
-  // Each run owns its own Chromium, so concurrency is bounded by RAM (~0.5 GB per run) and by how many simultaneous
-  // submissions from one IP the ATS tolerates. A run waiting on a security code holds one slot for up to 10 minutes.
-  const concurrency = Math.min(Math.max(Number(process.env.APPLY_CONCURRENCY) || 3, 1), 8);
+  // Runs share one Chromium, each in its own context (modules/apply/browser.ts), so concurrency is bounded by RAM
+  // (a context is a fraction of a browser) and by how many simultaneous submissions from one IP the ATS tolerates.
+  // A run waiting on a security code holds one slot for up to 10 minutes.
+  const concurrency = Math.min(Math.max(Number(process.env.APPLY_CONCURRENCY) || 3, 1), 24);
   await boss.work("apply", { localConcurrency: concurrency }, handleApply);
   await boss.work("ingest", handleIngest);
   await boss.work("prescan", handlePrescan);

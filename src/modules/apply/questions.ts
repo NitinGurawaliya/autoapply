@@ -77,11 +77,17 @@ export const MOCK_QUESTIONS: FormField[] = [
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** The job's questions are on its row and fresh, so reading them costs no request. */
+export function questionsCached(job: { source: string; questions: unknown; questionsFetchedAt: Date | null }) {
+  if (job.source === "mock") return true;
+  return job.source === "greenhouse" && Boolean(job.questions) && job.questionsFetchedAt !== null && Date.now() - job.questionsFetchedAt.getTime() < DAY_MS;
+}
+
 /** The job's questions (cached on the row for a day), or null when they cannot be read without a browser. */
 export async function jobQuestions(job: { id: string; source: string; externalId: string; questions: unknown; questionsFetchedAt: Date | null; company: { slug: string } }): Promise<FormField[] | null> {
   if (job.source === "mock") return MOCK_QUESTIONS;
   if (job.source !== "greenhouse") return null;
-  if (job.questions && job.questionsFetchedAt && Date.now() - job.questionsFetchedAt.getTime() < DAY_MS) return job.questions as FormField[];
+  if (questionsCached(job)) return job.questions as FormField[];
   try {
     const response = await fetch(`https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(job.company.slug)}/jobs/${encodeURIComponent(job.externalId)}?questions=true`, { signal: AbortSignal.timeout(15_000) });
     if (!response.ok) return null;

@@ -79,7 +79,7 @@ docker run --env-file .env -v swipeapply-profiles:/data/browser-profiles swipeap
 
 - `npm run worker:prod` runs `tsx` without watching (`npm run worker` is `tsx watch`, for development).
 - The worker needs the same variables as the web app except the `AUTH_*` ones, plus `VAPID_*` and `APP_URL`. Leave `DEMO_HEADED` unset (headless; there is no screen).
-- A volume at `/data/browser-profiles` keeps per-user browser cookies across restarts (optional).
+- No volume is needed: since T100 users' browser cookies are kept in the database (`browser-state/` files), so any worker replica can run any user. `/data/browser-profiles` holds only the pid lock.
 - A restart is safe: an application cut off before Submit is picked up again by the next worker (up to twice); one cut off after Submit is marked "may have been sent, check your email", never sent twice.
 - Parallelism: set `APPLY_CONCURRENCY` (default 3, max 8). Budget about 0.5 GB RAM per concurrent run plus headroom, so 3 runs want roughly 2 GB. A run waiting for a security code holds a slot for up to 10 minutes. More simultaneous submissions from one cloud IP may raise how often the employer asks for a verification code.
 - Several replicas are safe for the queue and the per-user submit lock (it lives in the database), and each runs the stale-run reaper. Still start with **one replica** until the first end-to-end test passes. Two workers are safe for the queue, but run them only after the first end-to-end test passes.

@@ -1,37 +1,35 @@
-import { join } from "node:path";
-import { chromium, type BrowserContext, type Page } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { z } from "zod";
+import { storage } from "@/lib/storage";
 import { NoRetryError } from "./adapter";
 
 export type OpenBrowser = {
   context: BrowserContext;
   page: Page;
-  profileDir: string;
+  /** Where this owner's cookies and local storage are kept between runs (lib/storage.ts). */
+  stateKey: string;
   close: () => Promise<void>;
 };
 
-// Profiles live under one root, one folder per user, so cookies and storage are never shared between users.
-// Chromium allows one process per profile folder, so concurrent runs of the SAME user each take their own slot.
+// One Chromium per worker process, one incognito context per run (T100, 18 Oct): a context costs a fraction of a
+// browser (8 runs at once: 40 processes and 2.0 GB as 8 browsers), and contexts never share cookies or storage.
+// A user's cookies and local storage live in storage, not in a folder on this machine, so any worker can run them.
+// Still a local folder: the worker's pid lock (worker/single.ts), and old per-user profile folders the reaper removes.
 export const PROFILE_ROOT = process.env.BROWSER_PROFILE_ROOT ?? "./.browser-profiles";
-const MAX_SLOTS = 8;
-const freeSlotsByOwner = new Map<string, number[]>();
+
+// A long-lived Chromium slowly grows; it is replaced after this many runs, once its last run has closed.
+const RECYCLE_AFTER = Number(process.env.BROWSER_RECYCLE_AFTER) || 200;
+// Cookies are kilobytes; local storage of some sites is not. Beyond this only the cookies are kept.
+const MAX_STATE_BYTES = 512 * 1024;
 
 function ownerKey(owner: string) {
   const key = owner.replace(/[^a-zA-Z0-9_-]/g, "_");
-  if (!key) throw new Error("A browser profile needs an owner");
+  if (!key) throw new Error("A browser needs an owner");
   return key;
 }
 
-function slotsFor(owner: string) {
-  let slots = freeSlotsByOwner.get(owner);
-  if (!slots) {
-    slots = Array.from({ length: MAX_SLOTS }, (_, index) => index);
-    freeSlotsByOwner.set(owner, slots);
-  }
-  return slots;
-}
-
-export function profileDirFor(owner: string, slot: number, kind: "chromium" | "chrome" = "chromium") {
-  return join(PROFILE_ROOT, ownerKey(owner), kind === "chrome" ? `chrome-slot-${slot}` : `slot-${slot}`);
+export function stateKeyFor(owner: string) {
+  return `browser-state/${ownerKey(owner)}.json`;
 }
 
 /** A screen to show a window on: always on Windows and macOS; on Linux only with an X or Wayland display (not in Docker). */
@@ -39,63 +37,120 @@ export function canShowWindow() {
   return process.platform !== "linux" || Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+type Shared = { browser: Promise<Browser>; opened: number; open: number; retiring: boolean };
+const shared = new Map<"main" | "handoff", Shared>();
+
+async function launch(kind: "main" | "handoff"): Promise<Browser> {
+  const headless = !(process.env.DEMO_HEADED === "1" || kind === "handoff");
+  if (kind === "handoff") {
+    try {
+      return await chromium.launch({ headless, channel: "chrome" });
+    } catch (error) {
+      // No Google Chrome on this machine: the bundled Chromium, still in a visible window.
+      if (!/distribution .*chrome.* is not found|chrome.*not found|Executable doesn't exist/i.test(String(error))) throw error;
+    }
+  }
+  return chromium.launch({ headless });
+}
+
+function sharedBrowser(kind: "main" | "handoff"): Shared {
+  const current = shared.get(kind);
+  if (current && !current.retiring) return current;
+  const entry: Shared = { browser: launch(kind), opened: 0, open: 0, retiring: false };
+  shared.set(kind, entry);
+  entry.browser.then(
+    // A crashed or killed browser is forgotten, so the next run launches a new one.
+    (browser) => browser.on("disconnected", () => {
+      if (shared.get(kind) === entry) shared.delete(kind);
+    }),
+    () => {
+      if (shared.get(kind) === entry) shared.delete(kind);
+    },
+  );
+  return entry;
+}
+
+async function release(kind: "main" | "handoff", entry: Shared) {
+  entry.open -= 1;
+  if (entry.retiring && entry.open === 0) {
+    const browser = await entry.browser.catch(() => null);
+    await browser?.close().catch(() => undefined);
+  }
+}
+
+const stateSchema = z.object({
+  cookies: z.array(z.object({ name: z.string(), value: z.string(), domain: z.string(), path: z.string(), expires: z.number(), httpOnly: z.boolean(), secure: z.boolean(), sameSite: z.enum(["Strict", "Lax", "None"]) })),
+  origins: z.array(z.object({ origin: z.string(), localStorage: z.array(z.object({ name: z.string(), value: z.string() })) })),
+});
+type SavedState = z.infer<typeof stateSchema>;
+
+async function loadState(key: string): Promise<SavedState | undefined> {
+  const file = await storage.get(key).catch(() => null);
+  if (!file) return undefined;
+  try {
+    const parsed = stateSchema.safeParse(JSON.parse(Buffer.from(file.bytes).toString("utf8")));
+    return parsed.success ? parsed.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// Two runs of one user at once: the one that closes last wins, which loses at most the other run's new cookies.
+async function saveState(context: BrowserContext, key: string, owner: string) {
+  try {
+    const state = await context.storageState();
+    let text = JSON.stringify(state);
+    if (text.length > MAX_STATE_BYTES) text = JSON.stringify({ cookies: state.cookies, origins: [] });
+    if (text.length > MAX_STATE_BYTES) return;
+    await storage.put(key, new TextEncoder().encode(text), "application/json", owner);
+  } catch {
+    /* a closed or crashed context has nothing to save; the previous state stays */
+  }
+}
 
 /**
  * `handoff`: a run where the user presses Submit themselves (Ashby, whose spam check refuses submissions an automated
- * browser makes on its own): a visible window in the user's installed Google Chrome, with its own profile folder, or
- * the bundled Chromium when Chrome is not installed. It needs a screen, so it runs only where the worker runs on the
- * user's own computer.
+ * browser makes on its own): a visible window in the user's installed Google Chrome, or the bundled Chromium when
+ * Chrome is not installed. It needs a screen, so it runs only where the worker runs on the user's own computer.
  */
 export async function openBrowser(url: string, owner: string, options: { handoff?: boolean } = {}): Promise<OpenBrowser> {
   if (options.handoff && !canShowWindow()) {
     throw new NoRetryError("This form needs you to press Submit yourself, and the worker is running without a screen. Run the worker on your own computer, or open the form and apply by hand.");
   }
-  const headed = process.env.DEMO_HEADED === "1" || options.handoff === true;
-  let channel: "chrome" | undefined = options.handoff ? "chrome" : undefined;
-  const key = ownerKey(owner);
-  const free = slotsFor(key);
+  const kind = options.handoff ? "handoff" : "main";
+  const stateKey = stateKeyFor(owner);
+  const savedState = await loadState(stateKey);
 
-  let slot: number | undefined;
+  let entry = sharedBrowser(kind);
   let context: BrowserContext | undefined;
-  let lastError: unknown;
-  // A profile folder stays locked for a moment after its browser closes, and a stale Chromium can hold one.
-  // A locked slot goes to the back of the line, and the sweep repeats after a pause before giving up.
-  const maxTries = MAX_SLOTS * 3;
-  for (let tries = 0; tries < maxTries && !context; tries += 1) {
-    if (tries > 0 && tries % MAX_SLOTS === 0) await sleep(1500);
-    slot = free.shift();
-    if (slot === undefined) {
-      await sleep(1500);
-      continue;
-    }
+  for (let tries = 0; tries < 2 && !context; tries += 1) {
     try {
-      context = await chromium.launchPersistentContext(profileDirFor(key, slot, channel ?? "chromium"), {
-        headless: !headed,
-        viewport: { width: 1280, height: 800 },
-        ...(channel ? { channel } : {}),
-      });
+      const browser = await entry.browser;
+      context = await browser.newContext({ viewport: { width: 1280, height: 800 }, ...(savedState ? { storageState: savedState } : {}) });
     } catch (error) {
-      lastError = error;
-      // No Google Chrome on this machine: the bundled Chromium, still in a visible window.
-      if (channel && /distribution .*chrome.* is not found|chrome.*not found|Executable doesn't exist/i.test(String(error))) {
-        channel = undefined;
-        free.unshift(slot);
-        continue;
-      }
-      // A profile another browser still holds, or one that died while opening, is a reason to try the next slot.
-      if (/already in use|existing browser session|has been closed|singleton|process.*exited|crashed/i.test(String(error))) {
-        free.push(slot);
-        continue;
-      }
-      free.unshift(slot);
-      throw error;
+      // The shared browser died between runs: launch a new one once.
+      if (tries > 0 || !/has been closed|disconnected|crashed|Target closed/i.test(String(error))) throw error;
+      if (shared.get(kind) === entry) shared.delete(kind);
+      entry = sharedBrowser(kind);
     }
   }
-  if (!context || slot === undefined) {
-    throw lastError instanceof Error ? lastError : new Error("No free browser slot; lower APPLY_CONCURRENCY or wait");
-  }
-  const heldSlot = slot;
+  if (!context) throw new Error("Could not open a browser");
+  entry.open += 1;
+  entry.opened += 1;
+  if (entry.opened >= RECYCLE_AFTER) entry.retiring = true;
+  const held = entry;
+
+  let closed = false;
+  const close = async () => {
+    if (closed) return;
+    closed = true;
+    try {
+      await saveState(context, stateKey, owner);
+      await context.close().catch(() => undefined);
+    } finally {
+      await release(kind, held);
+    }
+  };
 
   let page: Page;
   try {
@@ -105,21 +160,11 @@ export async function openBrowser(url: string, owner: string, options: { handoff
       timeout: 30000,
     });
   } catch (error) {
+    closed = true;
     await context.close().catch(() => undefined);
-    free.unshift(heldSlot);
+    await release(kind, held);
     throw error;
   }
 
-  return {
-    context,
-    page,
-    profileDir: profileDirFor(key, heldSlot),
-    close: async () => {
-      try {
-        await context.close();
-      } finally {
-        free.unshift(heldSlot);
-      }
-    },
-  };
+  return { context, page, stateKey, close };
 }
