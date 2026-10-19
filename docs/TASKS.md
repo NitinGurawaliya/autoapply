@@ -509,9 +509,10 @@ Do: `crawlHost` for Greenhouse (`job-boards.greenhouse.io`, `boards.greenhouse.i
 **Done when:** one discovery run lists the boards found per host and adds Lever and Greenhouse companies by the rule, with counts of new India-eligible jobs.
 Done 18 Oct (`discover-now.ts 40 --boards greenhouse,lever`, 53 min, the crawl index was slow): crawl listed 5,179 boards on `job-boards.greenhouse.io`, 2,742 on `boards.greenhouse.io` and only 27 on `jobs.lever.co` (Lever pages are barely in Common Crawl). Greenhouse: 400 checked (alphabetical, so a–c only), 317 live boards, 15 added (2K, Addepar, AlphaSense, CloudSEK, Coalition…), 244 India jobs open. Lever: 63 checked, 24 live, 4 added (Zeta, Veeva, Shield AI, Lyra Health), 78 India jobs. Company names from the boards API / page title. The ingest after it: 334 companies, 1,257 new jobs, 164 India-eligible. Fresher tech jobs in India (intern/entry, 0–1 yr) now: Greenhouse 5, Ashby 2, Lever 4; up to 2 years: 22, 8, 4. The new companies added 1 fresher job: more boards alone do not bring freshers (T94–T96 do).
 
-### [ ] T93 — India company probe
+### [x] T93 — India company probe
 Do: `scripts/probe-india-companies.ts`: a list of 300+ Indian startups, unicorns and product companies, each probed on Greenhouse, Lever, Ashby, SmartRecruiters and Keka; results recorded in `DiscoveryCandidate`, the ones passing the rule added.
 **Done when:** the probe prints per board how many were found and added, and the India-eligible open jobs added.
+Done 19 Oct (Greenhouse, Lever and Ashby; SmartRecruiters and Keka wait for T95 and T96): 304 Indian companies probed, 22 found on a board, 6 added (DevRev, STAGE, Razorpay, Mindtickle, 100ms, Pocket FM), each recorded in `DiscoveryCandidate` with `from = probe`. The next ingest stored 125 of their jobs, 50 in India. Most Indian product companies are on none of the three boards: they use Keka, Darwinbox, Zoho Recruit or their own careers page.
 
 ### [ ] T94 — Lever apply with the handoff
 Do: Lever forms always carry hCaptcha: the agent fills, the user presses Submit in the visible window (the handoff Ashby uses); fix what the 6 failed and 3 blocked Lever runs hit.

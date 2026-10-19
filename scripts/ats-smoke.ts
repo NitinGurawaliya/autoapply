@@ -100,8 +100,8 @@ async function main() {
   } catch (error) {
     console.log(`stopped: ${error instanceof Error ? error.message.split("\n")[0] : error}`);
   } finally {
-    await (cleanup as (() => Promise<void>) | null)?.();
     await session.close();
+    await (cleanup as (() => Promise<void>) | null)?.();
     await db.$disconnect();
   }
   console.log(ok ? "PASS dry run (not submitted)" : "FAIL dry run");

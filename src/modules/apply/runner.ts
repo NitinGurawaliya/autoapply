@@ -403,9 +403,10 @@ async function execute(applicationId: string) {
     // toward the spacing (18 Oct: each answer round trip cost a 4-minute wait).
     if (ashbySlotId && !submitting) await db.$executeRaw`DELETE FROM "RateEvent" WHERE "id" = ${ashbySlotId}`.catch(() => undefined);
     clearInterval(heartbeat);
-    await upload.cleanup?.();
-    // A browser opened early but never taken (the run stopped before the form) is closed too.
+    // A browser opened early but never taken (the run stopped before the form) is closed too. The browser is closed
+    // before the temp resume is deleted: an open page still holds the file, and on Windows the delete then fails.
     if (!session && early) session = await early.catch(() => null);
     await session?.close();
+    await upload.cleanup?.().catch(() => undefined);
   }
 }
