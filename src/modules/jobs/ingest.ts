@@ -1,9 +1,7 @@
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { fetchAshby } from "./fetchers/ashby";
-import { fetchGreenhouse } from "./fetchers/greenhouse";
-import { fetchLever } from "./fetchers/lever";
+import { boardOf } from "./boards";
 import { classifyTitle } from "./functions";
 import type { FetchedJob } from "./normalize";
 import { embedPendingJobs, forgetJobVectors } from "./semantic";
@@ -23,14 +21,9 @@ const OFF_AFTER_EMPTY_DAYS = 30;
 
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/**
- * Ashby boards are mostly US and non-tech roles: only tech jobs a candidate in India can take are stored from Ashby
- * (owner, 15 Oct). Jobs stored before stay. Every other board is stored whole, as before.
- */
+/** Whether ingest stores this job from this board (boards.ts `stores`: Ashby keeps only India tech jobs). */
 export function storedFromBoard(source: string, job: FetchedJob) {
-  if (source !== "ashby") return true;
-  const { eligibility } = tagPosting(job);
-  return (eligibility === "india" || eligibility === "remote_india") && classifyTitle(job.title).function !== "non_tech";
+  return boardOf(source)?.stores(job) ?? true;
 }
 
 /**
@@ -47,10 +40,7 @@ export async function markClosed(companyId: string, source: string, listedExtern
 }
 
 async function fetchCompany(source: string, slug: string): Promise<FetchedJob[]> {
-  if (source === "greenhouse") return fetchGreenhouse(slug);
-  if (source === "lever") return fetchLever(slug);
-  if (source === "ashby") return fetchAshby(slug);
-  return [];
+  return boardOf(source)?.fetch(slug) ?? [];
 }
 
 /** What ingest stores and tags from: when none of it changed, the job is not written again. */
@@ -62,7 +52,7 @@ export function contentHash(job: FetchedJob) {
 type CompanyResult = { fetched: number; created: number; updated: number; closed: number; createdEligible: number; error?: string };
 
 /** One company: fetch its board (one retry), create new jobs, update changed ones, close the ones it no longer lists. */
-async function ingestCompany(company: { id: string; source: string; slug: string }, cutoff: number): Promise<CompanyResult> {
+export async function ingestCompany(company: { id: string; source: string; slug: string }, cutoff: number): Promise<CompanyResult> {
   let jobs: FetchedJob[];
   try {
     jobs = await fetchCompany(company.source, company.slug);

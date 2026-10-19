@@ -1,3 +1,5 @@
+export { boardOf, BOARDS } from "./boards";
+export type { Board, BoardSource } from "./boards";
 export { ingestJobs } from "./ingest";
 export { listingState } from "./listing";
 export type { ListingState } from "./listing";

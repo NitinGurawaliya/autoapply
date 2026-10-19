@@ -1,11 +1,7 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { callJson } from "@/lib/llm";
-import { fetchAshby } from "./fetchers/ashby";
-import { fetchGreenhouse } from "./fetchers/greenhouse";
-import { storedFromBoard } from "./ingest";
-import type { FetchedJob } from "./normalize";
-import { tagPosting } from "./tagging";
+import { BOARDS as ALL_BOARDS, type BoardDiscovery, type BoardSource } from "./boards";
 
 /**
  * Discovery that runs by itself (T89): every day the worker finds companies that are not on our list yet, checks each
@@ -18,7 +14,7 @@ import { tagPosting } from "./tagging";
  * posted in the last 30 days. Added companies are fetched by the next ingest. Polite: 4 boards at a time, 300 ms apart.
  */
 
-export const MIN_INDIA_JOBS = 3;
+// How each board is checked, and its bar (MIN_INDIA_JOBS on Greenhouse), live with the board: boards.ts `discovery`.
 const FRESH_DAYS = 30;
 const PER_RUN = 40;
 // Companies on Greenhouse that had too few India jobs are checked again after RECHECK_DAYS (they start hiring in India
@@ -26,7 +22,6 @@ const PER_RUN = 40;
 const RECHECK_DAYS = 14;
 const RECHECK_PER_RUN = 60;
 const CONCURRENCY = 4;
-const PAUSE_MS = 300;
 
 // A different focus each day, so the model does not keep proposing the same famous names.
 const SECTORS = [
@@ -51,74 +46,11 @@ const proposalSchema = z.object({
 export const normalName = (name: string) => name.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]/g, "");
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** A public job board discovery checks names against: how the model is asked, how a slug is written, how jobs load. */
-type Board = {
-  source: "greenhouse" | "ashby";
-  label: string;
-  boardUrl: string;
-  slugOf: (text: string) => string;
-  /** The open jobs on this slug's board, or null when the slug is not a board. */
-  open: (slug: string) => Promise<FetchedJob[] | null>;
-  /** The jobs that count for the rule, and how many make a company worth adding. */
-  counts: (job: FetchedJob) => boolean;
-  minIndiaJobs: number;
-  /** One of them posted in the last FRESH_DAYS. */
-  needsFresh: boolean;
-  /** Board names also come from the Common Crawl index of the board's host (slugsFromCrawl). */
-  crawlHost?: string;
-  /** The company's own name for a board known only by its slug (from the crawl), or null. */
-  nameOf?: (slug: string) => Promise<string | null>;
-};
+/** A board discovery runs on: the registry entry's name and slug rule with its discovery settings. */
+type Board = BoardDiscovery & { source: BoardSource; label: string; slugOf: (text: string) => string };
 
-const indiaEligible = (job: FetchedJob) => {
-  const { eligibility } = tagPosting(job);
-  return eligibility === "india" || eligibility === "remote_india";
-};
-
-export const BOARDS: Board[] = [
-  {
-    source: "greenhouse",
-    label: "Greenhouse",
-    boardUrl: "boards.greenhouse.io/<slug>",
-    slugOf: (text) => text.toLowerCase().replace(/[^a-z0-9]/g, ""),
-    async open(slug) {
-      const response = await fetch(`https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(slug)}`, { signal: AbortSignal.timeout(15000) }).catch(() => null);
-      await pause(PAUSE_MS);
-      return response?.ok ? fetchGreenhouse(slug) : null;
-    },
-    counts: indiaEligible,
-    minIndiaJobs: MIN_INDIA_JOBS,
-    needsFresh: true,
-  },
-  {
-    source: "ashby",
-    label: "Ashby",
-    boardUrl: "jobs.ashbyhq.com/<slug>",
-    // Ashby slugs keep dots and hyphens ("perplexity-ai", "fly.io").
-    slugOf: (text) => text.toLowerCase().replace(/[^a-z0-9.-]/g, ""),
-    async open(slug) {
-      // The same public posting API ingest uses; an unknown slug answers 404.
-      const jobs = await fetchAshby(slug).catch(() => null);
-      await pause(PAUSE_MS);
-      return jobs;
-    },
-    // Ashby: one India tech job is enough, the jobs ingest stores from Ashby (ingest.ts storedFromBoard; owner, 15 Oct:
-    // as many companies as possible). Few Ashby companies hire in India, so the Greenhouse bar would add almost none.
-    counts: (job) => storedFromBoard("ashby", job),
-    minIndiaJobs: 1,
-    needsFresh: false,
-    crawlHost: "jobs.ashbyhq.com",
-    // The public board page's title is "<Company> Jobs" ("TELUS Digital Jobs"); the slug alone reads "telus-digital".
-    async nameOf(slug) {
-      const html = await fetch(`https://jobs.ashbyhq.com/${encodeURIComponent(slug)}`, { signal: AbortSignal.timeout(15000) }).then((r) => (r.ok ? r.text() : "")).catch(() => "");
-      await pause(PAUSE_MS);
-      const title = html.match(/<title>([^<]{1,140})<\/title>/i)?.[1]?.replace(/\s*\bJobs\s*$/i, "").trim();
-      if (title) return title;
-      // Some boards are titled just "Jobs": the slug, spaced and capitalised ("real-fast" → "Real Fast").
-      return slug.split(/[-.]+/).filter(Boolean).map((word) => word[0].toUpperCase() + word.slice(1)).join(" ") || null;
-    },
-  },
-];
+/** The boards discovery covers, in order (Greenhouse, then Ashby). */
+export const BOARDS: Board[] = ALL_BOARDS.flatMap((board) => (board.discovery ? [{ source: board.source, label: board.label, slugOf: board.slugOf, ...board.discovery }] : []));
 
 /**
  * Names for today's run from the model, minus every name already checked or on our list. The model is given every
@@ -175,22 +107,26 @@ export async function checkCandidate(candidate: { slugs: string[] }, board: Boar
 
 // Board names the model does not know: every public board page of the host in the latest Common Crawl indexes (a
 // public archive of the web; only the index is read, never the boards' pages). 15 Oct: two crawls listed 1,370 Ashby
-// boards, against 43 we had. At most CRAWL_PER_RUN new ones are checked a run; every one checked is recorded.
+// boards, against 43 we had; Greenhouse and Lever since T92. At most CRAWL_PER_RUN new ones are checked a run; every one checked is recorded.
 const CRAWLS = 6;
 const CRAWL_PER_RUN = 400;
 const NOT_A_BOARD = new Set(["api", "embed", "static", "assets", "favicon.ico", "robots.txt"]);
 
-export async function slugsFromCrawl(host: string, crawls = CRAWLS, log: (line: string) => void = () => undefined) {
+/**
+ * `host` "*.myworkdayjobs.com" reads every subdomain (Workday, Zoho Recruit: the company is the host); `slugFromUrl`
+ * reads the slug from such an address, and `maxPages` caps the index pages read a crawl for hosts with millions of pages.
+ */
+export async function slugsFromCrawl(host: string, crawls = CRAWLS, log: (line: string) => void = () => undefined, options: { slugFromUrl?: (url: URL) => string | null; maxPages?: number } = {}) {
   const slugs = new Set<string>();
   const info = (await (await fetch("https://index.commoncrawl.org/collinfo.json", { signal: AbortSignal.timeout(30000) })).json()) as Array<{ id: string }>;
   for (const { id } of info.slice(0, crawls)) {
-    const base = `https://index.commoncrawl.org/${id}-index?url=${host}/*&output=json&fl=url`;
+    const base = `https://index.commoncrawl.org/${id}-index?url=${host.startsWith("*.") ? host : `${host}/*`}&output=json&fl=url`;
     let meta: { pages?: number } | null = null;
     for (let attempt = 0; attempt < 4 && !meta; attempt += 1) {
       if (attempt > 0) await pause(5000 * 2 ** attempt);
       meta = (await fetch(`${base}&showNumPages=true`, { signal: AbortSignal.timeout(60000) }).then((r) => (r.ok ? r.json() : null)).catch(() => null)) as { pages?: number } | null;
     }
-    for (let page = 0; page < (meta?.pages ?? 0); page += 1) {
+    for (let page = 0; page < Math.min(meta?.pages ?? 0, options.maxPages ?? Infinity); page += 1) {
       // The index is often busy (503): a page is tried up to 4 times, waiting longer each time, before it counts as empty.
       let text = "";
       for (let attempt = 0; attempt < 4 && !text; attempt += 1) {
@@ -199,6 +135,11 @@ export async function slugsFromCrawl(host: string, crawls = CRAWLS, log: (line: 
       }
       for (const line of text.split("\n")) {
         try {
+          if (options.slugFromUrl) {
+            const slug = options.slugFromUrl(new URL((JSON.parse(line) as { url: string }).url));
+            if (slug) slugs.add(slug);
+            continue;
+          }
           const slug = decodeURIComponent(new URL((JSON.parse(line) as { url: string }).url).pathname.split("/")[1] ?? "").toLowerCase();
           if (slug && !NOT_A_BOARD.has(slug) && /^[a-z0-9][a-z0-9.-]*$/.test(slug)) slugs.add(slug);
         } catch {
@@ -234,7 +175,7 @@ async function discoverOn(board: Board, options: { count?: number; crawlLimit?: 
   const names = [...new Set([...checked.map((row) => row.name), ...everywhere.map((row) => row.name)])];
   const known = { keys: new Set(names.map(normalName)), names };
   const knownSlugs = new Set([...checked.map((row) => row.slug), ...companies.map((row) => row.slug)].filter((slug): slug is string => !!slug));
-  const proposals = await proposeCandidates(known, options.count ?? PER_RUN, new Date(), board).catch((error) => {
+  const proposals = await (board.fromModel === false ? Promise.resolve([]) : proposeCandidates(known, options.count ?? PER_RUN, new Date(), board)).catch((error) => {
     log(`discovery ${source}: the model gave no names (${error instanceof Error ? error.message.slice(0, 80) : "failed"})`);
     return [] as Awaited<ReturnType<typeof proposeCandidates>>;
   });
@@ -245,15 +186,19 @@ async function discoverOn(board: Board, options: { count?: number; crawlLimit?: 
     select: { name: true, slug: true, stage: true },
   });
   const rechecks = due.filter((row) => !companies.some((company) => company.slug === row.slug)).map((row) => ({ name: row.name, stage: row.stage, slugs: [row.slug!], recheck: true }));
-  const crawled = board.crawlHost
-    ? (await slugsFromCrawl(board.crawlHost, CRAWLS, log).catch((error) => {
-        log(`discovery ${source}: the crawl index gave no boards (${error instanceof Error ? error.message.slice(0, 80) : "failed"})`);
-        return [] as string[];
-      }))
-        .filter((slug) => !knownSlugs.has(slug) && !known.keys.has(normalName(slug)) && !proposals.some((item) => item.slugs.includes(slug)))
-        .slice(0, options.crawlLimit ?? CRAWL_PER_RUN)
-        .map((slug) => ({ name: slug, stage: null, slugs: [slug], recheck: false, from: "crawl" }))
-    : [];
+  // Every host of the board (Greenhouse has two), each slug written the board's way and listed once.
+  const fromCrawl: string[] = [];
+  for (const host of board.crawlHosts ?? []) {
+    const slugs = await slugsFromCrawl(host, CRAWLS, log, { slugFromUrl: board.slugFromUrl, maxPages: board.crawlPages }).catch((error) => {
+      log(`discovery ${source}: the crawl index gave no boards for ${host} (${error instanceof Error ? error.message.slice(0, 80) : "failed"})`);
+      return [] as string[];
+    });
+    fromCrawl.push(...slugs.map(board.slugOf).filter((slug) => slug.length >= 2));
+  }
+  const crawled = [...new Set(fromCrawl)]
+    .filter((slug) => !knownSlugs.has(slug) && !known.keys.has(normalName(slug)) && !proposals.some((item) => item.slugs.includes(slug)))
+    .slice(0, options.crawlLimit ?? CRAWL_PER_RUN)
+    .map((slug) => ({ name: slug, stage: null, slugs: [slug], recheck: false, from: "crawl" }));
   const queue = [...proposals.map((item) => ({ ...item, recheck: false, from: "model" })), ...rechecks.map((item) => ({ ...item, from: "list" })), ...crawled];
   const totals: Totals = { proposed: proposals.length + crawled.length, rechecked: rechecks.length, onBoard: 0, added: 0, indiaJobsAdded: 0, errors: 0 };
   let next = 0;

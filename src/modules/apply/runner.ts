@@ -11,7 +11,7 @@ import { uploadResume } from "./adapters/mock";
 import { openBrowser } from "./browser";
 import { boardSupported } from "./lifecycle";
 import { pickAdapter } from "./pick";
-import { jobQuestions } from "./questions";
+import { jobQuestions, questionsCached } from "./questions";
 import { resolveForm } from "./resolveForm";
 import { formUrlAllowed } from "./urls";
 import { LockStopped, withSubmitLock } from "./submitLock";
@@ -206,7 +206,9 @@ async function execute(applicationId: string) {
   // Greenhouse and the other boards: the form opens while its published questions are worked out (about 5 s a run,
   // 18 Oct). If a question needs the user, that browser is closed before the run stops, never held open while waiting.
   // Ashby keeps its order: its spacing slot is taken only by a run that is about to open the form.
-  const early = adapter.source !== "ashby" ? openBrowser(formUrl, application.userId, { handoff: false }) : null;
+  // The browser is open for inspect, fill and submit only (T100): when the job's questions are already on its row they
+  // are answered first, with no browser open, and the form opens after; only questions still to be fetched overlap it.
+  const early = adapter.source !== "ashby" && !questionsCached(job) ? openBrowser(formUrl, application.userId, { handoff: false }) : null;
   let ashbySlotId: string | null = null;
   let submitting = false;
   early?.catch(() => undefined);

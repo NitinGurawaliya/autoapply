@@ -21,4 +21,4 @@ Everything that finds jobs (today the Greenhouse, Lever and Ashby fetchers) hand
 
 ## Adding a board
 
-Write `fetchers/<board>.ts` returning `FetchedJob[]`, add it in `fetchCompany`, add an adapter, and only then add it to `APPLY_BOARDS` after one real submit succeeded.
+Write `fetchers/<board>.ts` returning `FetchedJob[]`, add one entry in `modules/jobs/boards.ts` (fetcher, which jobs are stored, form hosts, slug rule, optional discovery settings; ingest, discovery and `apply/urls.ts` read it), add an adapter, and only then add it to `APPLY_BOARDS` after one real submit succeeded.

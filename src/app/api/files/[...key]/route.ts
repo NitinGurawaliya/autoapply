@@ -11,6 +11,8 @@ export async function GET(_request: Request, context: RouteContext) {
 
   const { key: parts } = await context.params;
   const key = parts.map(decodeURIComponent).join("/");
+  // Saved browser cookies (modules/apply/browser.ts) are the worker's, never served, not even to their owner.
+  if (key.startsWith("browser-state/")) return new Response("Not found", { status: 404 });
   const file = await storage.get(key);
   if (!file || file.userId !== session.user.id) {
     return new Response("Not found", { status: 404 });

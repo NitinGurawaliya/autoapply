@@ -191,7 +191,7 @@ Status: adapter built and dry-run verified on 6 live Ashby forms (fills every fi
 Do: the ingest code in `modules/jobs` (fetchers, normalise, tagging) imports nothing from `app/` or `apply`. Write `docs/INGEST_CONTRACT.md` (Job row fields, unique key, required tags). Dedupe the same role across sources by company, title and location, keeping the direct ATS apply link.
 Done when: `scripts/ingest-contract-test.ts` passes, and two sources carrying the same role give one feed card.
 
-### [ ] T32 — More public ATS fetchers (40 min)
+### [-] T32 — More public ATS fetchers (40 min) — replaced by T95 (SmartRecruiters) and T96 (Keka), 18 Oct: Workable and Recruitee had no Indian employers in the probe
 
 Do: Workable, SmartRecruiters and Recruitee fetchers behind the same interface (public APIs only), with companies added to the seed.
 Done when: `npm run ingest` logs rows for each new source with valid `postedAt`, `country` and `applyUrl`.
@@ -494,3 +494,54 @@ Done 11 Oct (the rule adds; no review step): daily `discover` job, near-miss re-
 
 ### [x] T90 — End-to-end check of the Greenhouse pipeline (11 Oct)
 Ingest of 118 companies 88 s, 0 failed, new jobs embedded; 9 feeds warmed in 88 s; `/api/health` 200; `push-smoke` PASS (real Chrome); dry runs on 12 forms from 12 companies (Bangalore profile, not submitted): 10 fill everything they can and stop only for the user's own answers; Elastic and IMC ask Discipline once from the form's list (Greenhouse has no "Information Technology"; the agent does not pick a nearby subject for the user).
+
+## Phase J — More boards: expand the existing ones, then India's own (owner, 18 Oct)
+
+Measured 18 Oct (open jobs): Greenhouse 100 companies, 807 india + 67 remote_india; Ashby 188 companies, 342 + 64; Lever 10 companies, 141 + 5 (Lever is the most India-heavy board but discovery never looks at it). Probes of 63 Indian startups: Lever (Paytm 182 jobs, Meesho 59, Zeta 24, Mindtickle 20, CRED 7), SmartRecruiters (Swiggy 198, Freshworks 127 of which 34 in India), Greenhouse (InMobi, Druva, Slice, Groww, Razorpay on a non-obvious slug). Most others run Indian HR suites: Keka (Jupiter; public `careers/api/embedjobs` JSON), Darwinbox (Rapido, Perfios, Spinny; behind a Cloudflare challenge, so out), TurboHire (Flipkart, Ola; no public API, out), Workday (BrowserStack, Sprinklr; public postings API, but applying needs an account per employer, so later). Order: one registry for boards first, then grow the boards we have, then add SmartRecruiters and Keka. A new board is ingested hidden and goes into `APPLY_BOARDS` only after one real submit (INGEST_CONTRACT).
+
+### [x] T91 — Board registry
+Do: one place per board (`modules/jobs/boards.ts`): its fetcher, the hosts its forms may open on, how a slug is written, which jobs are stored, and its discovery settings. `ingest.ts fetchCompany`/`storedFromBoard`, `discovery.ts BOARDS` and `apply/urls.ts` read from it. No change in behaviour.
+**Done when:** `ingest-contract-test`, `eligibility-test`, `security-test`, `guards-test` PASS; an ingest of a few companies per board gives the same counts as before; typecheck and lint pass.
+Done 18 Oct: `modules/jobs/boards.ts` (`BOARDS`, `boardOf`); `ingest.ts` fetches and filters through it, `discovery.ts BOARDS` is the entries with discovery settings, `apply/urls.ts` takes form hosts from it. The four checks PASS; old vs new code on the 3 largest companies per board (Databricks, Stripe, Anthropic; Palantir, Paytm, Meesho; three Ashby boards): the same jobs fetched and stored (e.g. Ashby bjakcareer 3,030 fetched, 12 stored by both); discovery still Greenhouse (min 3, fresh) then Ashby (min 1, crawl). Typecheck and lint pass.
+
+### [x] T92 — Greenhouse and Lever discovery from the crawl index
+Do: `crawlHost` for Greenhouse (`job-boards.greenhouse.io`, `boards.greenhouse.io`) and a Lever entry in discovery (`jobs.lever.co`, public postings API, India rule); Lever names from the board page's title.
+**Done when:** one discovery run lists the boards found per host and adds Lever and Greenhouse companies by the rule, with counts of new India-eligible jobs.
+Done 18 Oct (`discover-now.ts 40 --boards greenhouse,lever`, 53 min, the crawl index was slow): crawl listed 5,179 boards on `job-boards.greenhouse.io`, 2,742 on `boards.greenhouse.io` and only 27 on `jobs.lever.co` (Lever pages are barely in Common Crawl). Greenhouse: 400 checked (alphabetical, so a–c only), 317 live boards, 15 added (2K, Addepar, AlphaSense, CloudSEK, Coalition…), 244 India jobs open. Lever: 63 checked, 24 live, 4 added (Zeta, Veeva, Shield AI, Lyra Health), 78 India jobs. Company names from the boards API / page title. The ingest after it: 334 companies, 1,257 new jobs, 164 India-eligible. Fresher tech jobs in India (intern/entry, 0–1 yr) now: Greenhouse 5, Ashby 2, Lever 4; up to 2 years: 22, 8, 4. The new companies added 1 fresher job: more boards alone do not bring freshers (T94–T96 do).
+
+### [ ] T93 — India company probe
+Do: `scripts/probe-india-companies.ts`: a list of 300+ Indian startups, unicorns and product companies, each probed on Greenhouse, Lever, Ashby, SmartRecruiters and Keka; results recorded in `DiscoveryCandidate`, the ones passing the rule added.
+**Done when:** the probe prints per board how many were found and added, and the India-eligible open jobs added.
+
+### [ ] T94 — Lever apply with the handoff
+Do: Lever forms always carry hCaptcha: the agent fills, the user presses Submit in the visible window (the handoff Ashby uses); fix what the 6 failed and 3 blocked Lever runs hit.
+**Done when:** dry runs on 5 Lever forms of Indian companies fill everything they can; one real handoff submit reaches `submitted`; Lever goes into `APPLY_BOARDS`.
+
+### [ ] T95 — SmartRecruiters
+Do: fetcher on `api.smartrecruiters.com/v1/companies/{id}/postings` (`country=in`, then each posting's detail for its description), host `jobs.smartrecruiters.com` in `urls.ts`, discovery entry, adapter for its application form.
+**Done when:** ingest stores Swiggy's and Freshworks' India jobs with eligibility tags; `ats-smoke` dry runs on 3 forms pass; one real submit before it goes into `APPLY_BOARDS`.
+
+### [ ] T96 — Keka
+Do: fetcher on `{company}.keka.com/careers/api/embedjobs/default/active/{id}` (the id read from the careers page on each fetch, so `Company.slug` stays the subdomain), host `*.keka.com` in `urls.ts`, discovery from the crawl index, adapter for Keka's application form.
+**Done when:** ingest stores Jupiter's jobs and a few more Keka companies'; dry runs on 3 forms pass; one real submit before it goes into `APPLY_BOARDS`.
+
+### [ ] T97 — Board report and docs
+Do: `scripts/feed-report.ts` shows companies, open India-eligible jobs and fresher jobs per board; ARCHITECTURE §5 and INGEST_CONTRACT describe every board; the Workday decision recorded (postings public, apply needs an account per employer).
+**Done when:** the report runs after a scheduled ingest and the numbers are in ARCHITECTURE.
+
+### [ ] T98 — Every company on a board: more slug sources (after T92's run)
+Why: no ATS publishes its customer list, so "every company on Greenhouse / Lever / Ashby" means collecting slugs from every public source we can, verifying each on the board's public API, and keeping the companies that hire in India. T92's first crawl pass listed 3,769 Greenhouse boards in 2 of 6 crawls, against the 100 we fetch.
+Do: a slug-source layer per board in `boards.ts` that discovery reads, each source recorded on `DiscoveryCandidate.from`: Common Crawl (also the `for=<slug>` of embedded boards, `boards.greenhouse.io/embed/job_board?for=…`, today dropped as "embed"); the Wayback Machine URL index (`web.archive.org/cdx`, when it is up); the India company probe (T93). No crawl of the boards' own pages, no search engine scraping; a paid search API only on the owner's OK with its cost. The crawl backlog is worked through over several runs (`CRAWL_PER_RUN`), oldest first, until every listed slug has been checked once. Decide with the owner: discovered companies store only India and remote-India jobs (as Ashby does), to keep the table small at thousands of boards.
+**Done when:** per board, the report shows slugs listed per source, checked, on the board, and added, and the backlog of unchecked slugs reaches zero.
+
+### [x] T99 — Workday and Zoho Recruit job sources (discovery only)
+Why: tsenta.com's job index (18 Oct, 65 live jobs) was 35% Workday, and its newest Indian listings are mostly Zoho Recruit portals (`*.zohorecruit.in`). Both are public with no login and no bot challenge.
+Do: `fetchers/workday.ts` on the public CXS API (`POST {tenant}.{wdN}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs`, 20 a page, narrowed to the tenant's India location facet when it has one; each posting's detail `GET .../job/{externalPath}` for description, locations and start date; `Company.slug` = `{tenant}.{wdN}/{site}`). `fetchers/zohorecruit.ts` on the portal page `{host}/jobs/Careers` (no JSON feed: the page carries its openings as JSON in a hidden `<input id="jobs">`; `Company.slug` = the portal host). Board entries in `boards.ts` (store India-eligible jobs only, discovery from the Common Crawl index of `*.myworkdayjobs.com`, `*.zohorecruit.in`, `*.zohorecruit.com`). Not in `APPLY_BOARDS`: no adapter (Workday's apply needs an account per employer).
+**Done when:** `scripts/boards-smoke.ts` ingests at least one live job from a Workday tenant and a Zoho Recruit portal into Postgres and prints PASS; typecheck and lint pass.
+Done 18 Oct: `fetchers/workday.ts`, `fetchers/zohorecruit.ts`, entries in `boards.ts` (discovery: `slugFromUrl`, `crawlPages`, `fromModel: false` for Workday; `discovery.ts slugsFromCrawl` reads `*.host` patterns). `boards-smoke.ts` PASS: BrowserStack (Workday) 27 fetched, 25 India jobs stored; Arting Digital (Zoho) 72 fetched, 71 stored; NVIDIA's India facet gives 249 of its 2,000 jobs in 17 s (list only). Zoho portals that hide the opening date are skipped. Typecheck and lint pass.
+
+### [x] T100 — One shared browser per worker
+Why: at 20,000 users (about 1M applications a day, 14 a second) a Chromium per run (~0.5 GB, a profile folder on the machine's disk) needs ~1,000 browsers at once, ~80 machines, and a user's cookies are tied to the one machine that holds their folder.
+Do: `browser.ts` keeps one Chromium per worker process (one more, headed, for the handoff) and gives each run its own incognito context; a user's cookies and local storage are saved through `lib/storage.ts` (`browser-state/<userId>.json`) when the run closes and restored when the next run opens, on any worker. The shared browser is relaunched if it dies and recycled after many runs. The runner opens the form only once the job's published questions are answered when they are already known (cached), so the browser is open for inspect, fill and submit only. `APPLY_CONCURRENCY` may go above 8.
+**Done when:** `scripts/profile-isolation-smoke.ts` (rewritten) PASSes: users do not see each other's cookies or local storage, a user gets theirs back on the next run, two runs of one user run side by side, an owner name cannot escape its key, a crashed browser is relaunched; 8 runs at once use one browser process tree with measured memory below the old 8 browsers; `security-test` and `queue-smoke` PASS; typecheck and lint pass.
+Done 18 Oct: `profile-isolation-smoke` PASS (12 checks). 8 runs at once, this script's own process tree on Windows: 23 processes and 970 MB private memory, against 78 processes and 2,345 MB as 8 browsers (a heavier page: 1,240 MB against 2,708 MB), about 2.4x more runs per machine. `security-test` and `queue-smoke` PASS; `ats-smoke` dry run on a live Greenhouse form (Yugabyte) fills 9 fields and attaches the resume in a shared-browser context. Cookies kept in the old profile folders are not carried over (each user starts fresh once). Not yet run: a real submit through the worker with the shared browser, and the Lever / Ashby handoff window on the new handoff browser.
