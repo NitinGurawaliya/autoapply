@@ -31,7 +31,8 @@ export type FeedFilters = {
   countries: string[];
   expMax: number | null;
   days: number;
-  /** "fresher": interns and freshers (0-1 years); "early": up to 2 years. Neither lets a mid or senior title in. */
+  /** "fresher": up to 1 year asked; "early": up to 2. A job that states neither level nor years stays in (the model ranks
+   * it); a mid or senior title, or more years than the band, leaves. */
   level: "any" | "fresher" | "early";
   /** Company types to show; empty = all. */
   stages: string[];
@@ -417,9 +418,12 @@ export async function feedRows(input: {
              ('REMOTE' = ANY(${input.countries}::text[]) AND j.eligibility = 'remote_india') OR
              ('US' = ANY(${input.countries}::text[]) AND j.eligibility NOT IN ('india', 'remote_india') AND j.country = 'US') OR
              ('OTHER' = ANY(${input.countries}::text[]) AND j.eligibility NOT IN ('india', 'remote_india') AND j.country <> 'US'))
+        -- A job that states neither a level nor years stays in the Fresher and Early career bands: the model's verdict
+        -- on the resume ranks it (19 Oct: the bands showed a fresher 7 jobs against 31 that fit, dropping plain
+        -- "Software Engineer" postings). Only a stated mid/senior title or more years than the band leaves.
         AND (${input.levelYears}::int IS NULL OR j.source = 'mock' OR
              ((j.seniority IN ('intern', 'entry') OR j.seniority IS NULL) AND j."experienceMin" IS NOT NULL AND j."experienceMin" <= ${input.levelYears}::int) OR
-             (j.seniority IN ('intern', 'entry') AND j."experienceMin" IS NULL))
+             ((j.seniority IN ('intern', 'entry') OR j.seniority IS NULL) AND j."experienceMin" IS NULL))
         AND (${input.stages}::text[] IS NULL OR c.stage = ANY(${input.stages}::text[]))
         AND (${input.tracks}::text[] IS NULL OR j.source = 'mock' OR j.track = ANY(${input.tracks}::text[]))
         AND (${input.vector}::text IS NULL OR j.embedding IS NULL OR 1 - (j.embedding <=> ${input.vector}::halfvec) >= ${SIMILARITY_FLOOR})
