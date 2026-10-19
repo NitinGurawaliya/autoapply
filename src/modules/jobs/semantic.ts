@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { db } from "@/lib/db";
 import { z } from "zod";
 import { callJson, embed } from "@/lib/llm";
-import { seniorityOf } from "./functions";
+import { ADJACENT, classifyTitle, seniorityOf, TRACK_LABELS, tracksOf, type Track } from "./functions";
 import { requiredYears } from "./tagging";
 
 /**
@@ -118,7 +118,7 @@ const JUDGE_BATCH = 40;
 const JUDGE_PARALLEL = 4;
 
 // Part of the cache key: a change to the prompt or the rules judges every job again.
-const JUDGE_VERSION = "6";
+const JUDGE_VERSION = "8";
 // The model says only how close the work is (what it is good at); the level is code (levelFit), measured on
 // scripts/judge-test.ts: asked to apply years and levels itself, gpt-4o-mini got the arithmetic wrong.
 const JUDGE_SYSTEM = `You match one job seeker with job postings. You get the candidate's resume summary and numbered jobs (title and the start of what the job needs). For each job say only how close the WORK is to the candidate's own work, ignoring seniority and years:
@@ -136,6 +136,36 @@ const jobBrief = (job: JudgedJob, n: number) => ({ n, title: job.title, needs: j
 const ORDER: Fit[] = ["no", "stretch", "good", "strong"];
 const atMost = (fit: Fit, cap: Fit) => ORDER[Math.min(ORDER.indexOf(fit), ORDER.indexOf(cap))];
 const FROM_FIELD: Record<"same" | "close" | "related" | "different", Fit> = { same: "strong", close: "good", related: "stretch", different: "no" };
+const FIELDS = ["different", "related", "close", "same"] as const;
+type Field = (typeof FIELDS)[number];
+
+/**
+ * The least the work can be, from the job title's track (functions.ts) and the candidate's tracks: their own track is at
+ * least close, a neighbouring one (a plain "Software Engineer" for a web developer) at least related. Asked about 40
+ * jobs at once, gpt-4o-mini called frontend, backend and full-stack roles "different" for a full-stack developer (2,140
+ * of 2,332 verdicts "no", 19 Oct), and said close for the same jobs asked a few at a time; the title's track is code and
+ * does not drift. Returns the floor and the track that gave it.
+ */
+export function trackFloor(title: string, candidateTracks: string[]): { field: Field; track: Track | null } {
+  // The title's track, and any web track it names outright ("Platform Engineer - Full Stack" is filed under DevOps).
+  const tracks = [classifyTitle(title).track, ...NAMED.filter(([, pattern]) => pattern.test(title)).map(([track]) => track)].filter((track): track is Track => Boolean(track));
+  const floorOf = (track: Track): Field => {
+    if (candidateTracks.includes(track)) return "close";
+    if (candidateTracks.some((own) => (ADJACENT[own as Track] ?? []).includes(track))) return "related";
+    return "different";
+  };
+  let best: { field: Field; track: Track | null } = { field: "different", track: null };
+  for (const track of tracks) {
+    const field = floorOf(track);
+    if (FIELDS.indexOf(field) > FIELDS.indexOf(best.field)) best = { field, track };
+  }
+  return best;
+}
+const NAMED: Array<[Track, RegExp]> = [
+  ["fullstack", /\bfull[\s-]?stack\b/i],
+  ["frontend", /\bfront[\s-]?end\b/i],
+  ["backend", /\bback[\s-]?end\b/i],
+];
 
 /**
  * The verdict from how close the work is (the model) and the level (code): years asked over the candidate's cap it
@@ -163,16 +193,22 @@ export function levelFit(field: keyof typeof FROM_FIELD, job: JudgedJob, years: 
 }
 
 /** One call: the verdict on each of these jobs (by index) for this candidate. No cache (judgeJobs caches). */
-export async function judgeBatch(candidate: { summary: string; years: number | null }, jobs: JudgedJob[]): Promise<Map<number, Judgement>> {
+export async function judgeBatch(candidate: { summary: string; years: number | null; tracks?: string[] }, jobs: JudgedJob[]): Promise<Map<number, Judgement>> {
   const verdict = await callJson(judgeSchema, JUDGE_SYSTEM, JSON.stringify({ candidate: candidate.summary.slice(0, 2500), jobs: jobs.map(jobBrief) }));
   const out = new Map<number, Judgement>();
   for (const result of verdict.results) {
     if (result.n < 0 || result.n >= jobs.length || out.has(result.n)) continue;
-    const { fit, note } = levelFit(result.field, jobs[result.n], candidate.years);
-    const why = result.why.trim().replace(/[.\s]+$/, "");
+    const floor = trackFloor(jobs[result.n].title, candidate.tracks ?? []);
+    const raised = FIELDS.indexOf(floor.field) > FIELDS.indexOf(result.field);
+    const field = raised ? floor.field : result.field;
+    const { fit, note } = levelFit(field, jobs[result.n], candidate.years);
+    // Raised by the title's track: the model's "why" argued the other way, so the reason says what the floor saw.
+    const why = raised && floor.track
+      ? `${TRACK_LABELS[floor.track]} work, ${floor.field === "close" ? "like yours" : "near your own"}`
+      : result.why.trim().replace(/[.\s]+$/, "");
     // A job kept despite a gap already says so in its score's reason ("Asks for about 3+ years, you have 1"); one
     // left out says why instead of what the work is.
-    const reason = fit === "no" && note && result.field !== "different" ? `${note[0].toUpperCase()}${note.slice(1)}` : why;
+    const reason = fit === "no" && note && field !== "different" ? `${note[0].toUpperCase()}${note.slice(1)}` : why;
     out.set(result.n, { fit, why: reason.slice(0, 140) });
   }
   return out;
@@ -192,7 +228,8 @@ export async function judgeJobs(
   const out = new Map<string, Judgement>();
   if (jobs.length === 0) return out;
   const summary = profileText(profile);
-  const fromHash = createHash("md5").update(`${JUDGE_VERSION}\n${profile.yearsExperience ?? ""}\n${summary}`).digest("hex");
+  const tracks = tracksOf(profile);
+  const fromHash = createHash("md5").update(`${JUDGE_VERSION}\n${profile.yearsExperience ?? ""}\n${tracks.join(",")}\n${summary}`).digest("hex");
   const hashOf = (job: { contentHash: string | null }) => job.contentHash ?? "none";
   const cached = await db.jobJudgement.findMany({ where: { profileId: profile.id, jobId: { in: jobs.map((job) => job.id) } } });
   const valid = new Map(cached.map((row) => [row.jobId, row]));
@@ -214,7 +251,7 @@ export async function judgeJobs(
     await Promise.all(
       batches.slice(i, i + JUDGE_PARALLEL).map(async (batch) => {
         try {
-          const verdicts = await judgeBatch({ summary, years: profile.yearsExperience }, batch);
+          const verdicts = await judgeBatch({ summary, years: profile.yearsExperience, tracks }, batch);
           for (const [n, judgement] of verdicts) {
             const job = batch[n];
             if (out.has(job.id)) continue;

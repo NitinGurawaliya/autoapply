@@ -1,5 +1,6 @@
 // Offline checks for experience parsing and match scoring. npx tsx scripts/match-test.ts
 import { scoreJob, tierOf } from "../src/modules/jobs";
+import { trackFloor } from "../src/modules/jobs/semantic";
 import { requiredYears, titleYears } from "../src/modules/jobs/tagging";
 
 let failed = 0;
@@ -64,5 +65,13 @@ check("by meaning: a strong verdict that fits is strong", tierOf(meaning(0.38, "
 check("by meaning: the floor does not lift a job asking more years", tierOf(meaning(0.39, "good", { description: `${stack} 3+ years of experience.` }).score, 40) !== "good", String(meaning(0.39, "good", { description: `${stack} 3+ years of experience.` }).score));
 check("by meaning: the verdict's reason is shown", /^Test/.test(meaning(0.6, "strong").reason), meaning(0.6, "strong").reason);
 
+// 19 Oct: the model called frontend, backend and full-stack roles "different" for a full-stack developer; the title's track sets a floor.
+const web = ["fullstack", "backend", "frontend"];
+check("track floor: a frontend role is at least close for a full-stack developer", trackFloor("Software Engineer II, Frontend (Bangalore, India)", web).field === "close", trackFloor("Software Engineer II, Frontend (Bangalore, India)", web).field);
+check("track floor: a full-stack role is at least close", trackFloor("Platform Engineer - Full Stack (UI Centric)", web).field === "close", trackFloor("Platform Engineer - Full Stack (UI Centric)", web).field);
+check("track floor: a plain Software Engineer is related for a web developer, not close", trackFloor("Software Engineer", web).field === "related", trackFloor("Software Engineer", web).field);
+check("track floor: a mobile role is at least related for a frontend developer", trackFloor("Android Developer", ["frontend"]).field === "related", trackFloor("Android Developer", ["frontend"]).field);
+check("track floor: sales and recruiting get no floor", trackFloor("Account Executive", web).field === "different" && trackFloor("Technical Recruiter", web).field === "different");
+check("track floor: a data scientist gets no floor on a frontend role", trackFloor("Frontend Engineer", ["data_science"]).field === "different", trackFloor("Frontend Engineer", ["data_science"]).field);
 console.log(failed === 0 ? "PASS match logic" : `FAIL match logic (${failed})`);
 process.exit(failed === 0 ? 0 : 1);
