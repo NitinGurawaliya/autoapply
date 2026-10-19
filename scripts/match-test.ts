@@ -58,6 +58,10 @@ check("by meaning: judged no → out, whatever the closeness", meaning(0.65, "no
 check("by meaning: below the floor → out", meaning(0.3, "good").score === 0);
 check("by meaning: unjudged needs to be closer", meaning(0.4, null).score === 0 && meaning(0.5, null).score > 0);
 check("by meaning: a senior role for a 1-yr dev stays low even if close", meaning(0.6, "stretch", { title: "Senior Software Engineer", description: `${stack} 5+ years of experience required.` }).score < 40);
+const intern = { title: "SDE Intern - Backend", description: "Backend services in Go and SQL. Our story: awards, funding rounds and offices." };
+check("by meaning: a good verdict on an intern role that fits is not Stretch, even when far by meaning", tierOf(meaning(0.39, "good", intern).score, 40) === "good", String(meaning(0.39, "good", intern).score));
+check("by meaning: a strong verdict that fits is strong", tierOf(meaning(0.38, "strong", intern).score, 40) === "strong", String(meaning(0.38, "strong", intern).score));
+check("by meaning: the floor does not lift a job asking more years", tierOf(meaning(0.39, "good", { description: `${stack} 3+ years of experience.` }).score, 40) !== "good", String(meaning(0.39, "good", { description: `${stack} 3+ years of experience.` }).score));
 check("by meaning: the verdict's reason is shown", /^Test/.test(meaning(0.6, "strong").reason), meaning(0.6, "strong").reason);
 
 console.log(failed === 0 ? "PASS match logic" : `FAIL match logic (${failed})`);

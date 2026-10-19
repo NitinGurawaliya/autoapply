@@ -161,6 +161,8 @@ export const SHORTLIST = 150;
 export const MAX_SHORTLIST = 450;
 export const FEED_SIZE = 40;
 const FIT_POINTS = { strong: 30, good: 20, stretch: 8 } as const;
+// The lowest score of each tier (tierOf): a verdict the level and place agree with shows at least that tier.
+const VERDICT_FLOOR = { strong: 75, good: 60, stretch: 0 } as const;
 
 /** Strong, good or stretch from the score; null below the minimum. */
 export function tierOf(score: number, minScore: number): Tier | null {
@@ -298,8 +300,12 @@ function scoreByMeaning(
   else if (asks != null && gap <= 0) parts.push("Experience fits");
   else if (asks != null) parts.push("Experience is close");
 
+  // The model's verdict is the floor when nothing else holds the job back (no years over the candidate's, the place
+  // fits): closeness by meaning only orders such jobs. A posting padded with the company's story scored 0.39 and showed
+  // a good-verdict intern role to a 1-year developer as Stretch (CloudSEK, 19 Oct).
+  const floor = verdict && gap <= 0 && locationScore === 10 ? VERDICT_FLOOR[verdict.fit] : 0;
   return {
-    score: Math.min(ceiling, clamp(meaningScore + skillScore + experienceScore + locationScore)),
+    score: Math.max(floor, Math.min(ceiling, clamp(meaningScore + skillScore + experienceScore + locationScore))),
     reason: parts.slice(0, 3).join(". "),
     requiredYears: asks,
     skillHits: job.skillHits,
