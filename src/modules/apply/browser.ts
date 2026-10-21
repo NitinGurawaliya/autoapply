@@ -43,12 +43,16 @@ const shared = new Map<"main" | "handoff", Shared>();
 async function launch(kind: "main" | "handoff"): Promise<Browser> {
   const headless = !(process.env.DEMO_HEADED === "1" || kind === "handoff");
   if (kind === "handoff") {
+    // Maximized, with the page sized to the window (no fixed viewport): a 1280x800 page in a smaller window hid the
+    // Submit button below the screen's edge (21 Oct).
+    const args = ["--start-maximized"];
     try {
-      return await chromium.launch({ headless, channel: "chrome" });
+      return await chromium.launch({ headless, channel: "chrome", args });
     } catch (error) {
       // No Google Chrome on this machine: the bundled Chromium, still in a visible window.
       if (!/distribution .*chrome.* is not found|chrome.*not found|Executable doesn't exist/i.test(String(error))) throw error;
     }
+    return chromium.launch({ headless, args });
   }
   return chromium.launch({ headless });
 }
@@ -126,7 +130,8 @@ export async function openBrowser(url: string, owner: string, options: { handoff
   for (let tries = 0; tries < 2 && !context; tries += 1) {
     try {
       const browser = await entry.browser;
-      context = await browser.newContext({ viewport: { width: 1280, height: 800 }, ...(savedState ? { storageState: savedState } : {}) });
+      const viewport = kind === "handoff" ? null : { width: 1280, height: 800 };
+      context = await browser.newContext({ viewport, ...(savedState ? { storageState: savedState } : {}) });
     } catch (error) {
       // The shared browser died between runs: launch a new one once.
       if (tries > 0 || !/has been closed|disconnected|crashed|Target closed/i.test(String(error))) throw error;
