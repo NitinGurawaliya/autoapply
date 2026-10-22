@@ -18,6 +18,8 @@ const META: Record<string, StatusMeta> = {
   inspecting: { label: "Reading the form", group: "progress", stage: 1, live: true },
   filling: { label: "Filling it in", group: "progress", stage: 2, live: true },
   needs_input: { label: "Needs you", group: "needs", stage: null, live: false },
+  // Submit may have gone out unconfirmed: the user checks their email and says which (apply/outcome.ts).
+  pending_verification: { label: "Check your email", group: "needs", stage: null, live: false },
   submitted: { label: "Sent", group: "sent", stage: 3, live: false },
   failed: { label: "Didn't go through", group: "failed", stage: null, live: false },
   blocked: { label: "Didn't go through", group: "failed", stage: null, live: false },

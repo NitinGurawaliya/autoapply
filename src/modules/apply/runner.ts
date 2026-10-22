@@ -1,14 +1,15 @@
 import { listingState } from "@/modules/jobs";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { enqueueApply } from "@/lib/queue";
+import { enqueueApply, HANDOFF_BOARDS } from "@/lib/queue";
 import { storage } from "@/lib/storage";
 import { notifyNeedsInput } from "@/lib/notify";
 import { ONE_TIME_CODE_KEY } from "@/modules/answers";
 import { check, loadRules, writeEvent } from "@/modules/governance";
-import { NeedsAnswerError, NoRetryError, type FilledField, type PendingQuestion } from "./adapter";
+import { MaybeSentError, NeedsAnswerError, NoRetryError, type FilledField, type PendingQuestion } from "./adapter";
+import { decideAfterError, SUBMIT_ATTEMPT } from "./outcome";
 import { uploadResume } from "./adapters/mock";
-import { openBrowser } from "./browser";
+import { livePage, openBrowser } from "./browser";
 import { boardSupported } from "./lifecycle";
 import { pickAdapter } from "./pick";
 import { jobQuestions, questionsCached } from "./questions";
@@ -26,8 +27,18 @@ export class CancelledError extends Error {
 
 // Every status write goes through here, so a cancel can never be overwritten by a run that is still going.
 async function setApp(applicationId: string, data: Prisma.ApplicationUpdateManyMutationInput) {
-  const result = await db.application.updateMany({ where: { id: applicationId, status: { not: "cancelled" } }, data });
+  // A run never writes over a cancel, a confirmed submission or one that may have been sent (21 Oct: an old run wrote
+  // "failed" over Sarvam AI after it had been confirmed sent). The run then stops as if cancelled.
+  const result = await db.application.updateMany({ where: { id: applicationId, status: { notIn: ["cancelled", "submitted", "pending_verification"] } }, data });
   if (result.count === 0) throw new CancelledError();
+}
+
+/**
+ * Records an outcome once Submit may have gone out (submitted or pending_verification), even over a cancel: the user
+ * may press Cancel while the board receives it, and an application left "cancelled" could be retried and sent twice.
+ */
+export async function recordAfterSubmit(applicationId: string, data: Prisma.ApplicationUpdateManyMutationInput) {
+  await db.application.updateMany({ where: { id: applicationId, status: { in: ["queued", "inspecting", "filling", "needs_input", "cancelled"] } }, data });
 }
 
 async function block(applicationId: string, rule: string, message: string) {
@@ -91,24 +102,10 @@ async function captureConfirmation(page: Awaited<ReturnType<typeof openBrowser>>
   }
 }
 
-/**
- * Ashby's spam check refuses bursts (16 Oct: 14 Ashby runs in 4 minutes from one machine, then 4 spam refusals and 4
- * CAPTCHAs, while the same day's spread-out runs all went through). At most one Ashby run starts every
- * ASHBY_SUBMIT_GAP_SECONDS across all workers; a slot is reserved under a database lock, so two workers cannot take the
- * same one. Returns wait 0 and the slot id when this run may go now, else the seconds until the next free slot.
- */
-const ASHBY_GAP_SECONDS = Number(process.env.ASHBY_SUBMIT_GAP_SECONDS) || 240;
-async function ashbySlot() {
-  return db.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('ashby-submit-slot'))`;
-    const [last] = await tx.$queryRaw<Array<{ at: Date }>>`SELECT max("createdAt") AS at FROM "RateEvent" WHERE "key" = 'ashby-slot'`;
-    const since = last?.at ? (Date.now() - last.at.getTime()) / 1000 : Infinity;
-    if (since < ASHBY_GAP_SECONDS) return { wait: Math.ceil(ASHBY_GAP_SECONDS - since), id: null };
-    const id = `ashby-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    await tx.$executeRaw`INSERT INTO "RateEvent" ("id", "key") VALUES (${id}, 'ashby-slot')`;
-    return { wait: 0, id };
-  });
-}
+// Handoff: how long the board's Success stays on screen before the window closes itself, and the event that marks a
+// window opened again after the user closed it before Submit.
+const HANDOFF_SUCCESS_SHOWN_MS = 3000;
+const WINDOW_REOPENED = "The window was closed before Submit, so it opened again";
 
 /** What the page looked like when a run failed, so "why" is an answer and not a guess. Never blocks the failure path. */
 async function captureFailure(session: Awaited<ReturnType<typeof openBrowser>> | null, applicationId: string, attempt: number, userId: string) {
@@ -195,22 +192,41 @@ async function execute(applicationId: string) {
   // still refuses it. An older answer (the same question on another company's form, with other options, such as
   // "How did you hear about this job?") is simply asked again with this form's options; the new answer replaces it.
   // A question the user already answered for this application that is still pending: the answer did not fit the form.
-  // It is asked again with the form's own choices (up to MAX_ASKS times in all); only then does the run give up, so a
+  // It is asked again with the form's own choices (until the user has answered it MAX_ANSWERS times); only then does the run give up, so a
   // wording mismatch costs one more tap instead of the application (6 runs failed this way in the week to 10 Oct).
-  const MAX_ASKS = 3;
+  // Answered by the user on this application this many times (since the last Retry) and still not usable: give up.
+  const MAX_ANSWERS = 2;
+  // Counts the user's own answers to that question here ("answer" events carry the question keys), not every ask: asks
+  // for other questions, or from an earlier attempt, are no sign that this answer does not fit (21 Oct: fonio and Colonist
+  // failed on their first real answer after asks from 17 Oct and asks for other questions were counted).
   const repeatedQuestion = async (pending: PendingQuestion[]) => {
-    const asks = await db.applicationEvent.findMany({ where: { applicationId, type: "ask_user" }, orderBy: { createdAt: "desc" }, select: { createdAt: true } });
-    if (asks.length < MAX_ASKS) return undefined;
-    return pending.find((question) => answers.some((row) => row.key === question.key && row.updatedAt >= asks[0].createdAt));
+    const lastRetry = await db.applicationEvent.findFirst({ where: { applicationId, type: "retry", message: { startsWith: "Retried by you" } }, orderBy: { createdAt: "desc" }, select: { createdAt: true } });
+    const answered = await db.applicationEvent.findMany({ where: { applicationId, type: "answer", ...(lastRetry ? { createdAt: { gt: lastRetry.createdAt } } : {}) }, select: { data: true } });
+    const times = (key: string) => answered.filter((event) => ((event.data as { keys?: unknown } | null)?.keys as unknown[] | undefined)?.includes(key)).length;
+    return pending.find((question) => times(question.key) >= MAX_ANSWERS);
   };
   // Greenhouse and the other boards: the form opens while its published questions are worked out (about 5 s a run,
   // 18 Oct). If a question needs the user, that browser is closed before the run stops, never held open while waiting.
-  // Ashby keeps its order: its spacing slot is taken only by a run that is about to open the form.
+  // A handoff board opens its window only once the answers are ready, so nothing is opened early for it.
   // The browser is open for inspect, fill and submit only (T100): when the job's questions are already on its row they
   // are answered first, with no browser open, and the form opens after; only questions still to be fetched overlap it.
-  const early = adapter.source !== "ashby" && !questionsCached(job) ? openBrowser(formUrl, application.userId, { handoff: false }) : null;
-  let ashbySlotId: string | null = null;
+  // A person presses Submit on handoff boards (lib/queue.ts HANDOFF_BOARDS: Ashby), in a visible window opened when the
+  // form is ready (adapters/ashby.ts waitForUserSubmit); other boards submit by themselves.
+  const handoff = HANDOFF_BOARDS.includes(adapter.source);
+  const early = !handoff && !questionsCached(job) ? openBrowser(formUrl, application.userId, { handoff: false }) : null;
   let submitting = false;
+  // Set by the adapter right before Submit is pressed (outcome.ts): from then on a failure is never retried automatically.
+  let attempted = false;
+  // The submit was confirmed and recorded: nothing after it changes the status.
+  let confirmedSent = false;
+  // From here the application may have been sent: no automatic retry (outcome.ts). Kept on the record so a later Retry
+  // (a cancel after this point) knows it too (lifecycle.ts).
+  const markAttempted = async () => {
+    if (attempted) return;
+    attempted = true;
+    await writeEvent(applicationId, SUBMIT_ATTEMPT, "Submit is being pressed: from here the application may have been sent").catch(() => undefined);
+  };
+  let stopWatchingSubmit: (() => void) | undefined;
   early?.catch(() => undefined);
   try {
     // Ask before opening the form (T56): when the board publishes the form's questions, run the same answering chain on
@@ -222,7 +238,7 @@ async function execute(applicationId: string) {
       if (before.missing.length > 0) {
         const repeatedEarly = await repeatedQuestion(before.missing);
         if (repeatedEarly) {
-          const message = `After ${MAX_ASKS} tries, your answer for "${repeatedEarly.label.slice(0, 80)}" still does not match this form's options`;
+          const message = `You answered ${MAX_ANSWERS} times, but your answer for "${repeatedEarly.label.slice(0, 80)}" still does not match this form's options`;
           await writeEvent(applicationId, "error", message);
           await setApp(applicationId, { status: "failed", error: message, attempt: application.attempt });
           return;
@@ -235,28 +251,16 @@ async function execute(applicationId: string) {
       }
       await writeEvent(applicationId, "resolve", "Every question on the form can be answered; opening it");
     }
-    // Ashby submits by itself like Greenhouse (owner, 15 Oct: measure how often Ashby's spam check refuses it). With
-    // ASHBY_HANDOFF=1 the user presses Submit in a visible Chrome window instead (adapters/ashby.ts waitForUserSubmit).
-    const handoff = adapter.source === "ashby" && process.env.ASHBY_HANDOFF === "1";
-    if (adapter.source === "ashby" && !handoff) {
-      const { wait, id } = await ashbySlot();
-      ashbySlotId = id;
-      if (wait > 0) {
-        // Not a failure and not a try: the run waits in the queue for its slot, with no browser open.
-        await setApp(applicationId, { status: "queued", attempt: application.attempt });
-        await writeEvent(applicationId, "rule_check", `Ashby applications go out at least ${Math.round(ASHBY_GAP_SECONDS / 60)} minutes apart (bursts are refused as spam); this one starts in about ${Math.ceil(wait / 60)} min`, "ashby_spacing");
-        await enqueueApply(applicationId, wait + 5);
-        return;
-      }
-    }
     session = early ? await early : await openBrowser(formUrl, application.userId, { handoff });
+    // A handoff window is the person's from the moment it opens: a Submit pressed before the agent is ready still counts.
+    if (handoff) stopWatchingSubmit = adapter.watchSubmit?.(session.page, () => void markAttempted());
     const fields = await adapter.inspect(session.page);
     await writeEvent(applicationId, "inspect", `Found ${fields.length} fields`);
     const { resolved } = await resolveForm({ userId: application.userId, source: adapter.source, fields, profile, answers, job: jobInfo, draftEssays: true, log: resolveLog });
     await writeEvent(applicationId, "resolve", `Resolved ${resolved.values.length}, pending ${resolved.pending.length}`);
     const repeated = await repeatedQuestion(resolved.pending);
     if (repeated) {
-      const message = `After ${MAX_ASKS} tries, your answer for "${repeated.label.slice(0, 80)}" still does not match this form's options`;
+      const message = `You answered ${MAX_ANSWERS} times, but your answer for "${repeated.label.slice(0, 80)}" still does not match this form's options`;
       await writeEvent(applicationId, "error", message);
       await setApp(applicationId, { status: "failed", error: message, attempt: application.attempt });
       return;
@@ -316,54 +320,83 @@ async function execute(applicationId: string) {
     await Promise.all([setApp(applicationId, { screenshotKey }), writeEvent(applicationId, "screenshot", screenshotKey)]);
 
     const page = session.page;
-    const result = await withSubmitLock(
-      application.userId,
-      applicationId,
-      {
-        onWait: async () => {
-          await writeEvent(applicationId, "resolve", "Waiting for another application's security code to finish first");
+    const submitStep = async () => {
+      // The cancel check and the submit rule check both happen after any wait, right before Submit.
+      await setApp(applicationId, { status: "filling" });
+      const submitCheck = await check("submit", {
+        applicationId,
+        isTest: profile.isTest,
+        adapterSource: adapter.source,
+      });
+      if (!submitCheck.ok) {
+        await setApp(applicationId, { status: "blocked", error: submitCheck.rule, fields: filled as Prisma.InputJsonValue });
+        return null;
+      }
+      submitting = true;
+      return adapter.submit(page, {
+        requestCode: codeRequester(applicationId),
+        handoff,
+        announceHandoff: async (message) => {
+          await writeEvent(applicationId, "ask_user", message);
+          void sendPush(application.userId, { title: `${jobInfo.company}: ready to send`, body: `Press Submit in the Chrome window to send your ${jobInfo.title} application.`, url: `/applications/${applicationId}`, tag: `app-${applicationId}` });
         },
-        shouldStop: async () => (await db.application.findUnique({ where: { id: applicationId }, select: { status: true } }))?.status === "cancelled",
-      },
-      async () => {
-        // The cancel check and the submit rule check both happen after the wait, right before clicking Submit.
-        await setApp(applicationId, { status: "filling" });
-        const submitCheck = await check("submit", {
+        cancelled: async () => (await db.application.findUnique({ where: { id: applicationId }, select: { status: true } }))?.status === "cancelled",
+        diagnosticsTag: applicationId.slice(-6),
+        markAttempted,
+      });
+    };
+    // The per-user submit lock serialises emailed security codes (Greenhouse). A handoff run never takes it: its window can
+    // wait minutes for the person, and must not hold back the same user's other applications (21 Oct: Raghav's Greenhouse
+    // jobs waited behind his open Ashby windows).
+    const result = handoff
+      ? await submitStep()
+      : await withSubmitLock(
+          application.userId,
           applicationId,
-          isTest: profile.isTest,
-          adapterSource: adapter.source,
-        });
-        if (!submitCheck.ok) {
-          await setApp(applicationId, { status: "blocked", error: submitCheck.rule, fields: filled as Prisma.InputJsonValue });
-          return null;
-        }
-        submitting = true;
-        return adapter.submit(page, {
-          requestCode: codeRequester(applicationId),
-          handoff,
-          announceHandoff: async (message) => {
-            await writeEvent(applicationId, "ask_user", message);
-            void sendPush(application.userId, { title: `${jobInfo.company}: ready to send`, body: `Press Submit in the Chrome window to send your ${jobInfo.title} application.`, url: `/applications/${applicationId}`, tag: `app-${applicationId}` });
+          {
+            onWait: async () => {
+              await writeEvent(applicationId, "resolve", "Waiting for another application's security code to finish first");
+            },
+            shouldStop: async () => (await db.application.findUnique({ where: { id: applicationId }, select: { status: true } }))?.status === "cancelled",
           },
-          cancelled: async () => (await db.application.findUnique({ where: { id: applicationId }, select: { status: true } }))?.status === "cancelled",
-        });
-      },
-    );
+          submitStep,
+        );
     if (!result) return;
-    if (!result.confirmed) throw new Error("Submit was not confirmed");
-    await setApp(applicationId, {
+    if (!result.confirmed) throw new MaybeSentError("Submit was pressed but the board did not confirm it. Check your email before applying again.");
+    await recordAfterSubmit(applicationId, {
       status: "submitted",
       submittedAt: new Date(),
       fields: filled as Prisma.InputJsonValue,
       pendingQuestions: [],
       error: null,
     });
+    confirmedSent = true;
     await writeEvent(applicationId, "submit", `Application submitted. Confirmation: ${result.evidence}`.slice(0, 300));
-    await captureConfirmation(page, applicationId, attempt, application.userId);
+    const shown = livePage(page) ?? page;
+    await captureConfirmation(shown, applicationId, attempt, application.userId);
+    // The user sees Ashby's Success before the window closes by itself, so there is no window for them to close.
+    if (handoff) await shown.waitForTimeout(HANDOFF_SUCCESS_SHOWN_MS).catch(() => undefined);
   } catch (error) {
     if (error instanceof CancelledError) throw error;
     if (error instanceof LockStopped) throw new CancelledError();
-    if (error instanceof NeedsAnswerError) {
+    // Recorded as sent with a confirmation: nothing that fails afterwards (a screenshot, an event) changes that.
+    if (confirmedSent) {
+      // The error's type only: a database error's message can echo the values it tried to write.
+      console.error(`apply ${applicationId}: after the confirmed submit: ${error instanceof Error ? error.name : "error"}`);
+      return;
+    }
+    // The person pressed Submit before the agent was ready (the fill or the wait then trips on a page that has moved on):
+    // the board's own success state on the page still proves it was sent.
+    if (handoff && attempted && session) {
+      const live = livePage(session.page);
+      const evidence = live ? await adapter.confirmation?.(live).catch(() => null) : null;
+      if (evidence) {
+        await recordAfterSubmit(applicationId, { status: "submitted", submittedAt: new Date(), pendingQuestions: [], error: null });
+        await writeEvent(applicationId, "submit", `Application submitted. Confirmation: ${evidence} after you pressed Submit`.slice(0, 300));
+        return;
+      }
+    }
+    if (error instanceof NeedsAnswerError && !attempted) {
       // A saved answer no longer fits this form: ask again with the live options (the new answer replaces the old one).
       await setApp(applicationId, {
         status: "needs_input",
@@ -374,11 +407,10 @@ async function execute(applicationId: string) {
       void notifyNeedsInput(applicationId, "answers");
       return;
     }
-    await captureFailure(session, applicationId, attempt, application.userId);
     let message = error instanceof Error ? error.message : "apply failed";
     let retryable = !(error instanceof NoRetryError);
     // "Closed" is only believed when the company's own board agrees. A page that did not load looks the same.
-    if (/no longer open/i.test(message)) {
+    if (!attempted && /no longer open/i.test(message)) {
       const state = await listingState(job.source, job.company.slug, job.externalId);
       if (state === "listed") {
         // The board lists the job but its own application page says "not found": the company takes applications on its
@@ -389,7 +421,43 @@ async function execute(applicationId: string) {
         await db.job.update({ where: { id: job.id }, data: { closedAt: new Date() } }).catch(() => undefined);
       }
     }
-    if (attempt < rules.max_attempts && retryable) {
+    // The user closed the handoff window before Submit, often by mistake: 21 Oct, after one job's Success the next job's
+    // window came to the front where it had been, and the click meant for the finished window closed that form. It opens
+    // again once; closed a second time, the user meant to skip it. Neither counts as a failed attempt.
+    const reopenedBefore = handoff ? (await db.applicationEvent.count({ where: { applicationId, type: "retry", message: { startsWith: WINDOW_REOPENED } } })) > 0 : false;
+    const next = decideAfterError({
+      error,
+      attempted,
+      handoff,
+      submitStage: submitting,
+      windowGone: Boolean(session && !livePage(session.page)),
+      reopenedBefore,
+      retryable,
+      attempt,
+      maxAttempts: rules.max_attempts,
+    });
+    if (next === "reopen") {
+      await writeEvent(applicationId, "retry", `${WINDOW_REOPENED}. Press Submit in it when you are ready.`);
+      await setApp(applicationId, { status: "queued", attempt: application.attempt, error: null });
+      await enqueueApply(applicationId, 3);
+      return;
+    }
+    if (next === "skip") {
+      const skipped = "You closed the window before pressing Submit, twice. Nothing was sent; press Retry when you want to apply.";
+      await writeEvent(applicationId, "error", skipped);
+      await setApp(applicationId, { status: "failed", error: skipped, attempt: application.attempt });
+      return;
+    }
+    await captureFailure(session, applicationId, attempt, application.userId);
+    if (next === "pending_verification") {
+      // Submit may have gone out and nothing confirms it either way: never retried automatically (a retry could send a
+      // second application). The user checks their email and says which it was (lifecycle.ts resolveVerification).
+      const uncertain = error instanceof MaybeSentError ? message : `Submit was pressed, then: ${message.slice(0, 160)}. It may have been sent; check your email.`;
+      await writeEvent(applicationId, "verify", uncertain);
+      await recordAfterSubmit(applicationId, { status: "pending_verification", error: uncertain });
+      return;
+    }
+    if (next === "retry") {
       await writeEvent(applicationId, "retry", message);
       await setApp(applicationId, { status: "queued", error: message });
       // A short pause first: a page that just failed to load or a form that was busy is rarely better a second later.
@@ -399,10 +467,8 @@ async function execute(applicationId: string) {
       await setApp(applicationId, { status: "failed", error: message });
     }
   } finally {
-    // A run that stopped before Submit (asked the user, failed) gives its Ashby slot back: only a submission counts
-    // toward the spacing (18 Oct: each answer round trip cost a 4-minute wait).
-    if (ashbySlotId && !submitting) await db.$executeRaw`DELETE FROM "RateEvent" WHERE "id" = ${ashbySlotId}`.catch(() => undefined);
     clearInterval(heartbeat);
+    stopWatchingSubmit?.();
     // A browser opened early but never taken (the run stopped before the form) is closed too. The browser is closed
     // before the temp resume is deleted: an open page still holds the file, and on Windows the delete then fails.
     if (!session && early) session = await early.catch(() => null);

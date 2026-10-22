@@ -5,7 +5,8 @@ import { db } from "@/lib/db";
 type Reader = typeof db | Prisma.TransactionClient;
 
 // Applications that still count against the user: sent, or on their way. Failed, blocked and cancelled ones do not.
-const COUNTED = ["submitted", "queued", "inspecting", "filling", "needs_input"];
+// pending_verification may have reached the employer, so it counts like a sent one (no second application to the role).
+const COUNTED = ["submitted", "pending_verification", "queued", "inspecting", "filling", "needs_input"];
 
 /** A company is its name, lower-cased and stripped, so one company listed on two job boards is still one company. */
 export function companyKey(name: string) {

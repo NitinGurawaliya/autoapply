@@ -1,9 +1,10 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { forgetFeed } from "@/lib/feed-cache";
-import { enqueueApply } from "@/lib/queue";
+import { APPLY_QUEUES, enqueueApply } from "@/lib/queue";
 import { check, historyFor, loadRules, writeEvent } from "@/modules/governance";
 import { APPLY_BOARDS, jobSimilarity, judgeJobs, profileVector, scoreJob, tracksOf } from "@/modules/jobs";
+import { lastRunMaySendTwice } from "./outcome";
 
 export const CANCELLABLE = ["queued", "inspecting", "filling", "needs_input"];
 export const RETRYABLE = ["failed", "cancelled"];
@@ -41,7 +42,7 @@ export async function cancelApplication(applicationId: string, userId: string) {
   }
   await db.$executeRaw`
     UPDATE pgboss.job SET state = 'cancelled', completed_on = now()
-    WHERE name = 'apply' AND state IN ('created', 'retry', 'active') AND data->>'applicationId' = ${applicationId}`;
+    WHERE name = ANY(${APPLY_QUEUES}) AND state IN ('created', 'retry', 'active') AND data->>'applicationId' = ${applicationId}`;
   await db.$executeRaw`DELETE FROM "SubmitLock" WHERE "holderId" = ${applicationId}`;
   await writeEvent(applicationId, "cancel", "Cancelled by you");
   return "cancelled" as const;
@@ -57,6 +58,17 @@ export async function retryApplication(applicationId: string, userId: string): P
   const application = await db.application.findFirst({ where: { id: applicationId, userId } });
   if (!application) return { ok: false, reason: "not_found" };
   if (!RETRYABLE.includes(application.status)) return { ok: false, reason: "not_retryable" };
+  // Cancelled after its Submit may have gone out (the worker died before it could record so): ask the user instead of
+  // running it again, which could send a second application.
+  if (application.status === "cancelled") {
+    const events = await db.applicationEvent.findMany({ where: { applicationId }, select: { type: true, rule: true, createdAt: true } });
+    if (lastRunMaySendTwice(events)) {
+      const message = "Cancelled after Submit was pressed, so it may have been sent. Check your email.";
+      const moved = await db.application.updateMany({ where: { id: applicationId, userId, status: "cancelled" }, data: { status: "pending_verification", error: message } });
+      if (moved.count > 0) await writeEvent(applicationId, "verify", message);
+      return { ok: false, reason: "not_retryable" };
+    }
+  }
 
   const [job, profile] = await Promise.all([
     db.job.findUnique({ where: { id: application.jobId } }),
@@ -94,6 +106,31 @@ export async function retryApplication(applicationId: string, userId: string): P
 }
 
 class QueueFull extends Error {}
+
+/**
+ * The user settles an application whose Submit may have gone out (status pending_verification, apply/outcome.ts): they
+ * got the board's confirmation email (sent), or they did not (failed, so Retry is allowed). Nothing else leaves that
+ * status, so a retry can never send a second application while the first may have arrived.
+ */
+export async function resolveVerification(applicationId: string, userId: string, sent: boolean) {
+  // Sent at the moment the outcome became uncertain (the row's last change), not when the user answered: "sent today"
+  // and the daily counts stay on the right day.
+  const pending = await db.application.findFirst({ where: { id: applicationId, userId, status: "pending_verification" }, select: { updatedAt: true } });
+  const updated = await db.application.updateMany({
+    where: { id: applicationId, userId, status: "pending_verification" },
+    data: sent ? { status: "submitted", submittedAt: pending?.updatedAt ?? new Date(), error: null } : { status: "failed", error: "You checked: it was not sent. Press Retry to apply again." },
+  });
+  if (updated.count === 0) {
+    const exists = await db.application.findFirst({ where: { id: applicationId, userId }, select: { id: true } });
+    return exists ? ("not_pending" as const) : ("not_found" as const);
+  }
+  await writeEvent(
+    applicationId,
+    sent ? "submit" : "error",
+    sent ? "Application submitted. Confirmation: you confirmed the board's email" : "You confirmed the application was not sent",
+  );
+  return sent ? ("submitted" as const) : ("failed" as const);
+}
 
 export type SwipeResult =
   | { ok: true; applicationId: string }

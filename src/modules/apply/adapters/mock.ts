@@ -63,7 +63,8 @@ export const mockAdapter: AtsAdapter = {
     }
     return filled;
   },
-  async submit(page): Promise<SubmitResult> {
+  async submit(page, ctx): Promise<SubmitResult> {
+    await ctx.markAttempted?.();
     await page.getByRole("button", { name: "Submit application" }).click();
     try {
       const evidence = await waitForConfirmation(page);

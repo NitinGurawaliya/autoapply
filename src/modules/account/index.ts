@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { APPLY_QUEUES } from "@/lib/queue";
 import { storage } from "@/lib/storage";
 import { CANCELLABLE, cancelApplication } from "@/modules/apply/lifecycle";
 
@@ -52,7 +53,7 @@ export async function deleteAccount(userId: string) {
 
   const ids = applications.map((application) => application.id);
   if (ids.length > 0) {
-    await db.$executeRaw`UPDATE pgboss.job SET state = 'cancelled', completed_on = now() WHERE name = 'apply' AND state IN ('created', 'retry', 'active') AND data->>'applicationId' = ANY(${ids})`;
+    await db.$executeRaw`UPDATE pgboss.job SET state = 'cancelled', completed_on = now() WHERE name = ANY(${APPLY_QUEUES}) AND state IN ('created', 'retry', 'active') AND data->>'applicationId' = ANY(${ids})`;
     await db.$executeRaw`DELETE FROM "SubmitLock" WHERE "holderId" = ANY(${ids})`;
   }
   await db.$executeRaw`DELETE FROM "SubmitLock" WHERE "userId" = ${userId}`;

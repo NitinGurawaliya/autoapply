@@ -9,16 +9,17 @@ const NO_STORE = { "Cache-Control": "no-store" };
 // What is still moving (needs the user, or the agent is on it) is always returned in full: it is bounded by the queue
 // cap and is what the user came to see. Finished applications (sent, or did not go through) come a page at a time,
 // newest first, so the list stays small however many a user has.
-const ACTIVE = ["needs_input", "queued", "inspecting", "filling"];
+// Listed first, unpaged: everything that is moving or waits for the user (pending_verification: "Check your email").
+const ACTIVE = ["needs_input", "pending_verification", "queued", "inspecting", "filling"];
 const FINISHED: Record<string, string[]> = { all: ["submitted", "failed", "blocked", "cancelled"], sent: ["submitted"], failed: ["failed", "blocked", "cancelled"] };
 const PAGE = 25;
 
-const SELECT = { id: true, jobId: true, status: true, error: true, attempt: true, submittedAt: true, createdAt: true, pendingQuestions: true } as const;
+const SELECT = { id: true, jobId: true, status: true, error: true, attempt: true, submittedAt: true, createdAt: true, updatedAt: true, pendingQuestions: true } as const;
 
 /** "createdAt_id" of the last finished row of a page: the next page starts after it. */
 function readCursor(raw: string | null) {
   const match = raw?.match(/^(\d{4}-\d\d-\d\dT[\d:.]+Z)_(\w+)$/);
-  return match ? { createdAt: new Date(match[1]), id: match[2] } : null;
+  return match ? { updatedAt: new Date(match[1]), id: match[2] } : null;
 }
 
 /**
@@ -40,9 +41,11 @@ export async function GET(request: Request) {
       where: {
         userId,
         status: { in: finished },
-        ...(cursor ? { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] } : {}),
+        ...(cursor ? { OR: [{ updatedAt: { lt: cursor.updatedAt } }, { updatedAt: cursor.updatedAt, id: { lt: cursor.id } }] } : {}),
       },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      // Latest outcome first (21 Oct: applications re-run and sent today were listed under the day they were first
+      // swiped, below today's new ones, and looked missing from Sent).
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
       take: PAGE + 1,
       select: SELECT,
     }),
@@ -95,7 +98,7 @@ export async function GET(request: Request) {
       }),
       // Counts per status over all the user's applications (first page only), so the chips stay right while pages load.
       counts: cursor ? null : Object.fromEntries(byStatus.map((row) => [row.status, row._count])),
-      nextCursor: more && last ? `${last.createdAt.toISOString()}_${last.id}` : null,
+      nextCursor: more && last ? `${last.updatedAt.toISOString()}_${last.id}` : null,
     },
     { headers: NO_STORE },
   );

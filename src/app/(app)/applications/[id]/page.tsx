@@ -160,11 +160,11 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
 
         {!sent ? (
           <FailureCard
-            eyebrow={stopped ? "What happened" : application.status === "needs_input" ? "What it needs" : "Where it is"}
+            eyebrow={stopped ? "What happened" : ["needs_input", "pending_verification"].includes(application.status) ? "What it needs" : "Where it is"}
             headline={outcome.headline}
             text={outcome.next}
             actions={
-              [...RUNNING, "failed", "cancelled"].includes(application.status) ? (
+              [...RUNNING, "pending_verification", "failed", "cancelled"].includes(application.status) ? (
                 <ApplicationActions id={application.id} status={application.status} company={company} look="panel" />
               ) : undefined
             }

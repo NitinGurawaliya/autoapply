@@ -55,6 +55,12 @@ export function explainOutcome(status: string, error: string | null, waitingFor?
       return waitingFor === "code"
         ? { headline: "Waiting for your security code", next: "Enter the code Greenhouse emailed you in the popup.", tone: "warning" }
         : { headline: "Waiting for your answer", next: "Answer the question in the popup and it continues.", tone: "warning" };
+    case "pending_verification":
+      return {
+        headline: "Check your email",
+        next: "Submit was pressed, but the job board did not confirm it. If the employer emailed you a confirmation, it was sent. If not, mark it not sent and retry.",
+        tone: "warning",
+      };
     case "cancelled":
       return { headline: "Cancelled", next: "Retry if you still want to apply.", tone: "neutral" };
     case "blocked": {

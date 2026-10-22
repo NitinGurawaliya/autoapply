@@ -14,13 +14,13 @@ async function main() {
     data: { status: "cancelled", error: "Cancelled: queue cleared", pendingQuestions: [], verificationCode: null },
   });
   const jobs = await db.$executeRawUnsafe(
-    `update pgboss.job set state = 'cancelled', completed_on = now() where name = 'apply' and state in ('created', 'retry', 'active')`,
+    `update pgboss.job set state = 'cancelled', completed_on = now() where name in ('apply', 'apply-handoff') and state in ('created', 'retry', 'active')`,
   );
   for (const id of ids) {
     await db.applicationEvent.create({ data: { applicationId: id, type: "cancel", message: "Cancelled: queue cleared" } });
   }
   const left = await db.$queryRawUnsafe<Array<{ n: bigint }>>(
-    `select count(*) n from pgboss.job where name = 'apply' and state in ('created', 'retry', 'active')`,
+    `select count(*) n from pgboss.job where name in ('apply', 'apply-handoff') and state in ('created', 'retry', 'active')`,
   );
   console.log(`CLEARED applications cancelled: ${marked.count}, queue jobs cancelled: ${jobs}, still in queue: ${Number(left[0].n)}`);
   await db.$disconnect();

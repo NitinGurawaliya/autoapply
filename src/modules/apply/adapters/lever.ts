@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Page } from "playwright";
 import { customQuestionKey } from "@/modules/answers";
 import type { AtsAdapter, FilledField, FormField, ResolvedValue, SubmitResult } from "../adapter";
-import { NeedsAnswerError, NoRetryError } from "../adapter";
+import { NeedsAnswerError, NoRetryError, NotSentError } from "../adapter";
 import { assertJobOpen, dismissOverlays, firstVisible, friendlyError, inField } from "./common";
 
 // Lever hosts every company's form on jobs.lever.co/<company>/<id>/apply (jobs.eu.lever.co for the EU).
@@ -239,7 +239,7 @@ export const leverAdapter: AtsAdapter = {
     }
     return filled;
   },
-  async submit(page): Promise<SubmitResult> {
+  async submit(page, ctx): Promise<SubmitResult> {
     await dismissOverlays(page);
     // Lever's own validation says what is missing; clicking Submit with a hole in the form only costs a bad attempt.
     const missing = await invalidFieldLabels(page);
@@ -247,10 +247,11 @@ export const leverAdapter: AtsAdapter = {
     const button = await firstVisible(page, ["#hcaptchaSubmitBtn", "button[type=submit].postings-btn", "#btn-submit", "button[type=submit]"], 20000);
     if (!button) throw new NoRetryError("The Submit button never appeared on the Lever form. Open the form and submit it yourself.");
     await button.scrollIntoViewIfNeeded().catch(() => undefined);
+    await ctx.markAttempted?.();
     try {
       await button.click({ timeout: 15000 });
     } catch (error) {
-      throw new NoRetryError(`Could not press Submit on the Lever form: ${friendlyError(error)}`);
+      throw new NotSentError(`Could not press Submit on the Lever form: ${friendlyError(error)}`);
     }
     const evidence = await waitForLeverConfirmation(page);
     return { confirmed: true, evidence };

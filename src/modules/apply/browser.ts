@@ -33,6 +33,12 @@ export function stateKeyFor(owner: string) {
 }
 
 /** A screen to show a window on: always on Windows and macOS; on Linux only with an X or Wayland display (not in Docker). */
+/** The page still open in this page's window: itself, or the one Chrome replaced it with; null when the window is gone. */
+export function livePage(page: Page): Page | null {
+  if (!page.isClosed()) return page;
+  return page.context().pages().filter((open) => !open.isClosed()).at(-1) ?? null;
+}
+
 export function canShowWindow() {
   return process.platform !== "linux" || Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
 }

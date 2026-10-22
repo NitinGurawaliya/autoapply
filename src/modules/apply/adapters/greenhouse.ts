@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright";
 import type { AtsAdapter, FilledField, FormField, ResolvedValue, SubmitContext, SubmitResult } from "../adapter";
-import { NeedsAnswerError, NoRetryError } from "../adapter";
+import { MaybeSentError, NeedsAnswerError, NoRetryError, NotSentError } from "../adapter";
 import { customQuestionKey } from "@/modules/answers";
 import { assertJobOpen, dismissOverlays, fillText, friendlyError, inField, selectOption } from "./common";
 
@@ -384,37 +384,45 @@ export async function waitForGreenhouseConfirmation(page: Page, ctx: SubmitConte
   let deadline = Date.now() + timeoutMs;
   let codeTries = 0;
   while (Date.now() < deadline) {
-    const confirmed = await confirmation(page);
-    if (confirmed) return codeTries > 0 ? `${confirmed} after security code` : confirmed;
-    if (await securityCodeVisible(page)) {
-      // The inputs stay up while Greenhouse checks a code; only treat it as rejected after 15s with no confirmation.
-      if (codeTries > 0) {
-        const settle = Date.now() + 15000;
-        while (Date.now() < settle && !(await confirmation(page))) await page.waitForTimeout(1000);
-        if (await confirmation(page)) continue;
+    try {
+      const confirmed = await confirmation(page);
+      if (confirmed) return codeTries > 0 ? `${confirmed} after security code` : confirmed;
+      if (await securityCodeVisible(page)) {
+        // The inputs stay up while Greenhouse checks a code; only treat it as rejected after 15s with no confirmation.
+        if (codeTries > 0) {
+          const settle = Date.now() + 15000;
+          while (Date.now() < settle && !(await confirmation(page))) await page.waitForTimeout(1000);
+          if (await confirmation(page)) continue;
+        }
+        if (codeTries >= MAX_CODE_TRIES) throw new NotSentError("Greenhouse did not accept the security code after 3 tries.");
+        const prompt =
+          codeTries === 0
+            ? "Greenhouse emailed you a security code to finish this application. Enter it here."
+            : "Greenhouse did not accept that code. Check the latest email and enter the code again.";
+        const code = await ctx.requestCode(prompt);
+        if (!code) throw new NotSentError("Security code was not entered in time. Open the form and apply by hand.");
+        codeTries += 1;
+        await enterSecurityCode(page, code);
+        deadline = Date.now() + timeoutMs;
+        continue;
       }
-      if (codeTries >= MAX_CODE_TRIES) throw new NoRetryError("Greenhouse did not accept the security code after 3 tries.");
-      const prompt =
-        codeTries === 0
-          ? "Greenhouse emailed you a security code to finish this application. Enter it here."
-          : "Greenhouse did not accept that code. Check the latest email and enter the code again.";
-      const code = await ctx.requestCode(prompt);
-      if (!code) throw new NoRetryError("Security code was not entered in time. Open the form and apply by hand.");
-      codeTries += 1;
-      await enterSecurityCode(page, code);
-      deadline = Date.now() + timeoutMs;
-      continue;
+      if (await captchaChallengeVisible(page)) {
+        throw new NotSentError("Greenhouse showed a CAPTCHA. Open the form and submit it yourself.");
+      }
+      const errors = await visibleErrors(page);
+      if (errors.length > 0) {
+        throw new NotSentError(`Greenhouse rejected the form: ${errors.slice(0, 5).join(", ")}`);
+      }
+      await page.waitForTimeout(1000);
+    } catch (error) {
+      if (error instanceof NoRetryError) throw error;
+      // Greenhouse moves to its confirmation page right after Submit; a read during that move fails with "Execution
+      // context was destroyed" (21 Oct: ConnectWise was sent and recorded unconfirmed). Look again in a moment.
+      if (!/execution context was destroyed|navigat|frame was detached/i.test(String(error))) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
-    if (await captchaChallengeVisible(page)) {
-      throw new NoRetryError("Greenhouse showed a CAPTCHA. Open the form and submit it yourself.");
-    }
-    const errors = await visibleErrors(page);
-    if (errors.length > 0) {
-      throw new NoRetryError(`Greenhouse rejected the form: ${errors.slice(0, 5).join(", ")}`);
-    }
-    await page.waitForTimeout(1000);
   }
-  throw new NoRetryError("Submit clicked but no confirmation appeared. Check your email before applying again.");
+  throw new MaybeSentError("Submit clicked but no confirmation appeared. Check your email before applying again.");
 }
 
 export const greenhouseAdapter: AtsAdapter = {
@@ -457,9 +465,11 @@ export const greenhouseAdapter: AtsAdapter = {
     try {
       const button = page.getByRole("button", { name: /submit application/i });
       await button.scrollIntoViewIfNeeded().catch(() => undefined);
+      await ctx.markAttempted?.();
       await button.click({ timeout: 20000 });
     } catch (error) {
-      throw new NoRetryError(`Could not press Submit on the Greenhouse form: ${friendlyError(error)}`);
+      // Playwright gives up before dispatching the click when the button cannot be clicked, so nothing was sent.
+      throw new NotSentError(`Could not press Submit on the Greenhouse form: ${friendlyError(error)}`);
     }
     const evidence = await waitForGreenhouseConfirmation(page, ctx);
     return { confirmed: true, evidence };

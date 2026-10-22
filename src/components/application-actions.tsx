@@ -17,7 +17,7 @@ const NEEDS_CONFIRM = ["inspecting", "filling", "needs_input"];
 type Props = { id: string; status: string; company: string; onChanged?: () => void; look?: "inline" | "panel"; className?: string };
 
 export function ApplicationActions({ id, status, company, onChanged, look = "inline", className }: Props) {
-  const [busy, setBusy] = useState<"cancel" | "retry" | null>(null);
+  const [busy, setBusy] = useState<"cancel" | "retry" | "verify" | null>(null);
   const [confirming, setConfirming] = useState(false);
 
   // An unanswered "are you sure" goes away by itself.
@@ -29,16 +29,23 @@ export function ApplicationActions({ id, status, company, onChanged, look = "inl
 
   const canCancel = CANCELLABLE.includes(status);
   const canRetry = RETRYABLE.includes(status);
-  if (!canCancel && !canRetry) return null;
+  // Submit may have gone out unconfirmed: the user says whether the employer's email came. No Retry until they do.
+  const canVerify = status === "pending_verification";
+  if (!canCancel && !canRetry && !canVerify) return null;
 
-  async function call(action: "cancel" | "retry") {
-    setBusy(action);
+  async function call(action: "cancel" | "retry" | "sent" | "not-sent") {
+    setBusy(action === "cancel" || action === "retry" ? action : "verify");
     setConfirming(false);
     try {
-      const response = await fetch(`/api/applications/${id}/${action}`, { method: "POST" });
+      const verify = action === "sent" || action === "not-sent";
+      const response = await fetch(`/api/applications/${id}/${verify ? "verify" : action}`, {
+        method: "POST",
+        ...(verify ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sent: action === "sent" }) } : {}),
+      });
       const body = (await response.json().catch(() => ({}))) as { blocked?: string; error?: string };
       if (response.ok) {
-        toast.success(action === "cancel" ? `Cancelled ${company}` : `Retrying ${company}`);
+        const done = { cancel: `Cancelled ${company}`, retry: `Retrying ${company}`, sent: `Marked ${company} as sent`, "not-sent": `Marked ${company} as not sent. You can retry it.` };
+        toast.success(done[action]);
         void forgetVisitedPages();
         onChanged?.();
       } else if (response.status === 403 && body.blocked) {
@@ -48,10 +55,10 @@ export function ApplicationActions({ id, status, company, onChanged, look = "inl
         void forgetVisitedPages();
         onChanged?.();
       } else {
-        toast.error(`Could not ${action} the application for ${company}.`);
+        toast.error(`Could not update the application for ${company}.`);
       }
     } catch {
-      toast.error(`Could not ${action} the application for ${company}.`);
+      toast.error(`Could not update the application for ${company}.`);
     } finally {
       setBusy(null);
     }
@@ -60,6 +67,19 @@ export function ApplicationActions({ id, status, company, onChanged, look = "inl
   const panel = look === "panel";
   const main = panel ? { variant: "primary" as const, size: "lg" as const, className: "w-full rounded-field" } : { variant: "underline" as const, size: "text" as const, className: "h-9 text-sm" };
   const second = panel ? { variant: "plain" as const, size: "md" as const, className: "w-full rounded-field" } : { variant: "quiet" as const, size: "text" as const, className: "h-9 text-sm" };
+
+  if (canVerify) {
+    return (
+      <span className={cn(panel ? "flex w-full flex-col gap-2.5" : "flex items-center gap-3", className)} role="group" aria-label={`Did your application to ${company} arrive?`}>
+        <Button type="button" variant={main.variant} size={main.size} className={main.className} disabled={busy !== null} onClick={() => void call("sent")}>
+          {busy === "verify" ? "Saving..." : "I got their email"}
+        </Button>
+        <Button type="button" variant={second.variant} size={second.size} className={second.className} disabled={busy !== null} onClick={() => void call("not-sent")}>
+          It was not sent
+        </Button>
+      </span>
+    );
+  }
 
   if (canRetry) {
     return (

@@ -180,6 +180,8 @@ export function ApplicationsList() {
     const group = statusMeta(row.status).group;
     if (group === "needs") {
       const code = row.waitingFor === "code";
+      // Submit may have gone out unconfirmed: the user checks their email (the actions below say which it was).
+      const verify = row.status === "pending_verification";
       return (
         <NeedsRow
           key={row.id}
@@ -187,8 +189,8 @@ export function ApplicationsList() {
           company={row.company}
           role={row.title}
           when={short(row.createdAt)}
-          ask={code ? "Their job board emailed you a code." : "Their form asked something only you can answer."}
-          cta={code ? "Enter code" : "Answer"}
+          ask={verify ? "Submit was pressed but their job board did not confirm it. Check your email for their confirmation." : code ? "Their job board emailed you a code." : "Their form asked something only you can answer."}
+          cta={verify ? "See what happened" : code ? "Enter code" : "Answer"}
           actions={<ApplicationActions id={row.id} status={row.status} company={row.company} onChanged={changed} />}
         />
       );

@@ -1,9 +1,19 @@
 import { PgBoss } from "pg-boss";
-import { loadEnvFile } from "@/lib/db";
+import { db, loadEnvFile } from "@/lib/db";
 
 loadEnvFile();
 
 const APPLY_QUEUE = "apply";
+/**
+ * Boards where a person presses Submit (human handoff): the worker fills the form in a visible window and waits.
+ * Ashby's reCAPTCHA stops a Submit the worker presses itself before anything is sent (21 Oct: 1 of 23 through, and a
+ * traced automated run never sent its submit request), while a person's Submit went through 7 of 7.
+ */
+export const HANDOFF_BOARDS: readonly string[] = ["ashby"];
+/** Handoff applications have their own queue: only a worker with a screen takes it (worker/index.ts). */
+export const HANDOFF_QUEUE = "apply-handoff";
+/** Every queue an application can be on, for code that reads or cancels its queue jobs. */
+export const APPLY_QUEUES = [APPLY_QUEUE, HANDOFF_QUEUE];
 const INGEST_QUEUE = "ingest";
 const PRESCAN_QUEUE = "prescan";
 const DISCOVER_QUEUE = "discover";
@@ -26,6 +36,7 @@ export function getBoss() {
     boss.on("error", (error: Error) => console.error(`queue: ${error.message.slice(0, 160)}`));
     bossPromise = boss.start().then(async (started) => {
       await ensureQueue(started, APPLY_QUEUE);
+      await ensureQueue(started, HANDOFF_QUEUE);
       await ensureQueue(started, INGEST_QUEUE);
       await ensureQueue(started, PRESCAN_QUEUE);
       await ensureQueue(started, DISCOVER_QUEUE);
@@ -35,11 +46,19 @@ export function getBoss() {
   return bossPromise;
 }
 
+/** The queue an application of this board goes on: handoff boards need a worker with a screen. */
+export function queueFor(source: string | undefined) {
+  return source && HANDOFF_BOARDS.includes(source) ? HANDOFF_QUEUE : APPLY_QUEUE;
+}
+
 export async function enqueueApply(applicationId: string, delaySeconds = 0) {
   const boss = await getBoss();
-  // One hour covers a form plus waiting behind another application's security code; no automatic pg-boss retry,
-  // because the runner retries on its own and a blind re-run of a submitted form could apply twice.
-  return boss.send(APPLY_QUEUE, { applicationId }, { expireInSeconds: 3600, retryLimit: 0, ...(delaySeconds > 0 ? { startAfter: delaySeconds } : {}) });
+  const [row] = await db.$queryRaw<Array<{ source: string }>>`
+    SELECT j.source FROM "Application" a JOIN "Job" j ON j.id = a."jobId" WHERE a.id = ${applicationId}`;
+  const queue = queueFor(row?.source);
+  // One hour covers a form plus waiting behind another application's security code, or a person pressing Submit (15
+  // minutes); no automatic pg-boss retry, because the runner retries on its own and a blind re-run could apply twice.
+  return boss.send(queue, { applicationId }, { expireInSeconds: 3600, retryLimit: 0, ...(delaySeconds > 0 ? { startAfter: delaySeconds } : {}) });
 }
 
 export async function enqueueIngest(days: number) {

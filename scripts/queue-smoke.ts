@@ -166,7 +166,7 @@ async function main() {
     // takes a fresh 120 s lease, which is not a lock the reaper failed to free (16 Oct: failed with a live worker).
     const lockLeft = await db.$queryRaw<Array<{ n: bigint }>>`SELECT count(*) AS n FROM "SubmitLock" WHERE "holderId" = ${deadApp.id} AND "expiresAt" < now() + interval '90 seconds'`;
     check("reaper picks up again a run cut off before Submit (nothing was sent)", d?.status === "queued" && Number(requeued[0].n) === 1, `${d?.status}; queued jobs ${requeued[0].n}; reaped ${reaped}`);
-    check("reaper fails a run cut off after the submit check, saying it may have been sent", s?.status === "failed" && s.error === STALE_AFTER_SUBMIT, `${s?.status}: ${s?.error}`);
+    check("reaper marks a run cut off after the submit check pending_verification, saying it may have been sent (never retried)", s?.status === "pending_verification" && s.error === STALE_AFTER_SUBMIT, `${s?.status}: ${s?.error}`);
     check("reaper cancels that run's queue job", jobState[0]?.state === "cancelled", jobState[0]?.state);
     check("reaper frees that run's submit lock", Number(lockLeft[0].n) === 0);
     check("reaper leaves a run with a fresh heartbeat alone", l?.status === "filling");

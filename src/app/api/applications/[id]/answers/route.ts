@@ -79,6 +79,9 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
+  // Which questions the user answered for this application (keys only, never the answers): the runner gives up on a
+  // question only when it was answered here twice and still does not fit the form (runner.ts repeatedQuestion).
+  await writeEvent(application.id, "answer", `You answered ${parsed.data.answers.length} question${parsed.data.answers.length === 1 ? "" : "s"}`, undefined, { keys: parsed.data.answers.map((row) => row.key) });
   await db.application.update({
     where: { id: application.id },
     data: { status: "queued", pendingQuestions: [], error: null },

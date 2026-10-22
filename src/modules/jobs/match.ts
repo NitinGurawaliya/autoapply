@@ -12,8 +12,8 @@ export { daysAgoLabel };
 
 // Boards the agent applies on: the feed, its filters, swipes, retries and the runner all read this list.
 // The Lever adapter exists (modules/apply/adapters) but is switched off until it submits reliably (hCaptcha); its jobs
-// are still ingested. Ashby is on (owner, 15 Oct): submitted automatically like Greenhouse, with its spam refusals
-// measured by scripts/ashby-report.ts; ENABLE_ASHBY=0 switches it off, ASHBY_HANDOFF=1 makes the user press Submit.
+// are still ingested. Ashby is on: the agent fills the form and a person presses Submit (human handoff, 21 Oct; see
+// lib/queue.ts HANDOFF_BOARDS); ENABLE_ASHBY=0 switches it off.
 export const APPLY_BOARDS: readonly string[] = ["greenhouse", ...(process.env.ENABLE_ASHBY === "0" ? [] : ["ashby"])];
 const BOARDS = APPLY_BOARDS;
 // Where a job is, for the feed's Location filter (T80): IN = in India and REMOTE = remote and open to India (Job.eligibility,

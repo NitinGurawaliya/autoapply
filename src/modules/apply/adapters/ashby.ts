@@ -1,11 +1,13 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Locator, Page } from "playwright";
+import type { Locator, Page, Request, Response } from "playwright";
 import { customQuestionKey } from "@/modules/answers";
 import type { AtsAdapter, FilledField, FormField, ResolvedValue, SubmitContext, SubmitResult } from "../adapter";
-import { NeedsAnswerError, NoRetryError } from "../adapter";
-import { assertJobOpen, dismissOverlays, firstVisible, friendlyError, inField, toDatePickerText } from "./common";
+import { MaybeSentError, NeedsAnswerError, NoRetryError, NotSentError, RefusedError, WindowClosedError } from "../adapter";
+import { livePage } from "../browser";
+import { categorize, watchAshby } from "./ashbyDiagnostics";
+import { assertJobOpen, dismissOverlays, firstVisible, inField, toDatePickerText } from "./common";
 
 // Ashby hosts every company's form on jobs.ashbyhq.com/<company>/<id>/application.
 function formUrl(job: { applyUrl: string }) {
@@ -242,46 +244,19 @@ async function fillCombobox(page: Page, value: ResolvedValue) {
 
 const CONFIRMATION = /successfully submitted|application (has been )?(submitted|received)|thank you for (applying|your application)/i;
 const REFUSED = /flagged as (possible )?spam|couldn.t be submitted|unable to submit your application/i;
-const MISSING = /Missing entry for required field:\s*([^\n]+)/g;
 
-/** Ashby's server said required fields were empty: the form was not accepted, so nothing was sent. */
-class MissingEntriesError extends NoRetryError {
-  constructor(readonly labels: string[]) {
-    super(`Ashby said these required fields were empty: ${labels.slice(0, 5).join(", ")}`);
-  }
-}
-
-async function captchaChallengeVisible(page: Page) {
-  const frames = page.locator('iframe[src*="recaptcha"][src*="bframe"], iframe[title*="recaptcha challenge" i]');
-  const count = await frames.count();
-  for (let index = 0; index < count; index += 1) {
-    const box = await frames.nth(index).boundingBox();
-    if (box && box.height > 120 && (await frames.nth(index).isVisible())) return true;
-  }
-  return false;
-}
-
-async function entriesWithErrors(page: Page) {
-  return (await page.evaluate(`Array.from(document.querySelectorAll('[data-field-path]')).filter((el) => !el.parentElement.closest('[data-field-path]')).filter((entry) => entry.querySelector('[class*="_error"], [role="alert"]')).map((entry) => ((entry.querySelector('.ashby-application-form-question-title') || {}).textContent || '').replace(/\\s+/g, ' ').trim()).filter(Boolean)`)) as string[];
-}
-
-export async function waitForAshbyConfirmation(page: Page, timeoutMs = 60000) {
-  const started = Date.now();
-  while (Date.now() - started < timeoutMs) {
-    const body = await page.locator("body").innerText().catch(() => "");
-    const done = body.match(CONFIRMATION);
-    if (done) return `text "${done[0]}"`;
-    if (REFUSED.test(body)) throw new NoRetryError("Ashby refused the application as possible spam. Open the form and submit it yourself.");
-    const missing = [...body.matchAll(MISSING)].map((match) => match[1].trim());
-    if (missing.length > 0 && Date.now() - started > 3000) throw new MissingEntriesError(missing);
-    if (await captchaChallengeVisible(page)) throw new NoRetryError("Ashby showed a CAPTCHA. Open the form and submit it yourself.");
-    const errors = await entriesWithErrors(page);
-    if (errors.length > 0 && Date.now() - started > 6000) {
-      throw new NoRetryError(`Ashby rejected the form: ${[...new Set(errors)].slice(0, 5).join(", ")}`);
-    }
-    await page.waitForTimeout(1000);
-  }
-  throw new NoRetryError("Submit clicked but no confirmation appeared. Check your email before applying again.");
+/**
+ * Ashby's success state: a known phrase, or Ashby's own "Success" banner with the form gone. Companies write their own
+ * message under the banner (21 Oct: Bjak's "Thank you so much for your interest in joining Bjak…" matched no phrase, and
+ * a sent application was recorded "check your email").
+ */
+async function successShown(page: Page): Promise<string | null> {
+  const body = await page.locator("body").innerText().catch(() => "");
+  const known = body.match(CONFIRMATION);
+  if (known) return `text "${known[0]}"`;
+  if (!/(^|\n)\s*Success\s*(\n|$)/.test(body)) return null;
+  const formLeft = await page.locator("button.ashby-application-form-submit-button, [data-field-path]").count().catch(() => 1);
+  return formLeft === 0 ? 'Ashby\'s "Success" banner, with the form gone' : null;
 }
 
 /** Selects a radio or checkbox option by clicking its label, as a person does; a forced check only if that fails. */
@@ -293,58 +268,110 @@ async function clickOption(entry: Locator, option: Locator) {
   if (!(await option.isChecked().catch(() => false))) await option.check({ force: true });
 }
 
-/** Types again, key by key, the on-screen text of each named entry. Returns how many were typed. */
-async function retypeEntries(page: Page, labels: string[]) {
-  let typed = 0;
-  for (const label of labels) {
-    const entry = page.locator("[data-field-path]").filter({ has: page.locator(".ashby-application-form-question-title", { hasText: label }) }).first();
-    const input = entry.locator("input:not([type=file]):not([type=hidden]):not([type=checkbox]):not([type=radio]), textarea").first();
-    if ((await input.count()) === 0) {
-      const radios = entry.locator('input[type="radio"]');
-      const chosen = entry.locator('input[type="radio"]:checked').first();
-      if ((await chosen.count()) === 0 || (await radios.count()) < 2) continue;
-      const chosenId = await chosen.getAttribute("id");
-      const other = entry.locator(`input[type="radio"]:not([id="${chosenId}"])`).first();
-      await clickOption(entry, other);
-      await clickOption(entry, entry.locator(`input[type="radio"][id="${chosenId}"]`));
-      typed += 1;
-      continue;
-    }
-    const value = await input.inputValue().catch(() => "");
-    if (!value.trim()) continue;
-    await input.scrollIntoViewIfNeeded().catch(() => undefined);
-    await input.click();
-    await input.fill("");
-    await input.pressSequentially(value, { delay: 25 });
-    await input.press("Tab");
-    typed += 1;
-  }
-  return typed;
-}
-
 export const HANDOFF_WAIT_MS = 15 * 60 * 1000;
 
+/** Ashby's answer to a submission the window sent, read off the network so it survives the page going away. */
+type SentSubmission = { ok: boolean; body: string };
+
+// Ashby's submit operation, seen on the network on 21 Oct (an accepted handoff sent it; a refused automated run did not).
+const SUBMIT_OPERATION = "ApiSubmitSingleApplicationFormAction";
+
+/** The form's own submission: a POST to Ashby carrying the submit operation. */
+function isSubmission(response: Response) {
+  const request = response.request();
+  if (request.method() !== "POST" || !/ashbyhq\.com/i.test(response.url())) return false;
+  return (request.postData() ?? "").includes(`"${SUBMIT_OPERATION}"`);
+}
+
+/** Accepted when the server answered OK with no GraphQL errors and no spam refusal in its body. */
+function accepted(sent: SentSubmission) {
+  return sent.ok && !/"errors"\s*:\s*\[\s*\{/.test(sent.body) && !/spam|captcha/i.test(sent.body);
+}
+
 /**
- * Hand-off (owner, 15 Oct): Ashby's spam check refuses applications an automated browser submits by itself (7 of 26
- * runs to 9 Oct), so the form is filled in a visible Chrome window and the user presses Submit, answering anything Ashby
- * asks. This waits for Ashby's answer: the confirmation, a refusal, the window closed, a cancel, or no Submit in time.
+ * What this window sends Ashby: POSTs counted as they leave (once counting is on) and Ashby's answer to each submit,
+ * read off the network so it survives the page going away.
+ */
+function watchSubmissions(page: Page, onFirstPost?: () => void) {
+  const context = page.context();
+  const state = { counting: false, posts: 0, sent: [] as SentSubmission[] };
+  // Counted when a request leaves, not when Ashby answers: a window closed between the two must not read as "nothing sent".
+  const onRequest = (request: Request) => {
+    if (!state.counting || request.method() !== "POST" || !/ashbyhq\.com/i.test(request.url())) return;
+    state.posts += 1;
+    if (state.posts === 1) onFirstPost?.();
+  };
+  const onResponse = (response: Response) => {
+    if (!isSubmission(response)) return;
+    response.text().then(
+      (body) => state.sent.push({ ok: response.ok(), body: body.slice(0, 4000) }),
+      () => state.sent.push({ ok: response.ok(), body: "" }),
+    );
+  };
+  context.on("request", onRequest);
+  context.on("response", onResponse);
+  return {
+    state,
+    accepted: () => state.sent.some(accepted),
+    stop: () => {
+      context.off("request", onRequest);
+      context.off("response", onResponse);
+    },
+  };
+}
+
+/**
+ * Human handoff, the only way an Ashby application is sent: the form is filled in a visible Chrome window and the person
+ * presses Submit, answering anything Ashby asks. A Submit the worker pressed itself was stopped by Ashby's reCAPTCHA
+ * before anything was sent (21 Oct: 1 of 23 through; a traced run never sent its submit request), while a person's
+ * Submit went through 7 of 7. This waits for Ashby's answer: the Success page, a refusal, the window closed, a cancel,
+ * or no Submit in time. Only the Success text counts as sent.
  */
 async function waitForUserSubmit(page: Page, ctx: SubmitContext): Promise<SubmitResult> {
-  const button = await firstVisible(page, ["button.ashby-application-form-submit-button", "button[type=submit]"], 20000);
-  await button?.scrollIntoViewIfNeeded().catch(() => undefined);
-  await page.bringToFront().catch(() => undefined);
-  await ctx.announceHandoff?.("Ready to send: check the form in the Chrome window on your computer and press Submit");
-  const deadline = Date.now() + HANDOFF_WAIT_MS;
-  while (Date.now() < deadline) {
-    if (page.isClosed()) throw new NoRetryError("The Ashby window was closed before Submit was pressed. Nothing was sent.");
-    if (await ctx.cancelled?.()) throw new NoRetryError("Cancelled before Submit was pressed. Nothing was sent.");
-    const body = await page.locator("body").innerText().catch(() => "");
-    const done = body.match(CONFIRMATION);
-    if (done) return { confirmed: true, evidence: `text "${done[0]}" after you pressed Submit` };
-    if (REFUSED.test(body)) throw new NoRetryError("Ashby refused the application as possible spam, even with you pressing Submit. Open the posting and apply in your usual browser.");
-    await page.waitForTimeout(2000).catch(() => undefined);
+  // Every submission that leaves this window, with Ashby's answer. 21 Oct: the page often went away right after the
+  // user pressed Submit (Success opens as a new page, or the user closed it), and "window closed" was read as "nothing
+  // sent": Bjak and Techtorch were recorded failed while Ashby had them, and Techtorch was then sent a second time.
+  // "Nothing was sent" is believed only when the window sent Ashby no POST at all once the form was ready.
+  // The person presses Submit, so the first request to Ashby once the form is ready is the moment it may have been sent.
+  const watcher = watchSubmissions(page, () => void ctx.markAttempted?.());
+  const { state } = watcher;
+  const outcomeWithoutPage = (): SubmitResult => {
+    if (state.sent.length === 0 && state.posts === 0) throw new WindowClosedError("The Ashby window was closed before Submit was pressed. Nothing was sent.");
+    // Only Ashby's Success page counts as confirmation: which request is the submit, and what its answer means, are not
+    // verified yet, so an OK from the server is reported as unconfirmed, never as sent.
+    if (watcher.accepted()) throw new MaybeSentError("Ashby's server answered the submission without an error, but its Success page was not seen. Check your email to confirm.");
+    throw new MaybeSentError("The window closed after it sent something to Ashby, so the application may have been sent. Check your email before applying again.");
+  };
+  try {
+    const button = await firstVisible(page, ["button.ashby-application-form-submit-button", "button[type=submit]"], 20000);
+    await button?.scrollIntoViewIfNeeded().catch(() => undefined);
+    await page.bringToFront().catch(() => undefined);
+    state.counting = true;
+    await ctx.announceHandoff?.("Ready to send: check the form in the Chrome window on your computer and press Submit");
+    const deadline = Date.now() + HANDOFF_WAIT_MS;
+    while (Date.now() < deadline) {
+      // The page may be replaced by a new one in the same window when Ashby shows Success: follow it.
+      const live = livePage(page);
+      if (!live) return outcomeWithoutPage();
+      if (await ctx.cancelled?.()) {
+        if (state.sent.length > 0 || state.posts > 0) return outcomeWithoutPage();
+        throw new NotSentError("Cancelled before Submit was pressed. Nothing was sent.");
+      }
+      const done = await successShown(live);
+      if (done) return { confirmed: true, evidence: `${done} after you pressed Submit` };
+      const body = await live.locator("body").innerText().catch(() => "");
+      if (REFUSED.test(body)) throw new RefusedError("Ashby refused the application as possible spam, even with you pressing Submit. Open the posting and apply in your usual browser.");
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    if (state.sent.length > 0 || state.posts > 0) return outcomeWithoutPage();
+    throw new NotSentError("Submit was not pressed within 15 minutes. Nothing was sent; retry when you are at your computer.");
+  } catch (error) {
+    // A Playwright error because the page went away mid-wait is decided by what was sent, like a closed window.
+    if (!(error instanceof NoRetryError) && !livePage(page)) return outcomeWithoutPage();
+    throw error;
+  } finally {
+    watcher.stop();
   }
-  throw new NoRetryError("Submit was not pressed within 15 minutes. Nothing was sent; retry when you are at your computer.");
 }
 
 export const ashbyAdapter: AtsAdapter = {
@@ -356,6 +383,23 @@ export const ashbyAdapter: AtsAdapter = {
   uploadFile: attachFile,
   inspect(page: Page) {
     return readFields(page);
+  },
+  // The window is the person's from the moment it opens: they can press Submit while the agent is still filling, or while
+  // it waits its turn (21 Oct: Sarvam AI and Matter Labs were sent that way and their runs never saw it).
+  watchSubmit(page: Page, onSubmit: () => void) {
+    const context = page.context();
+    let seen = false;
+    const onRequest = (request: Request) => {
+      if (seen || request.method() !== "POST" || !/ashbyhq\.com/i.test(request.url())) return;
+      if (!(request.postData() ?? "").includes(`"${SUBMIT_OPERATION}"`)) return;
+      seen = true;
+      onSubmit();
+    };
+    context.on("request", onRequest);
+    return () => context.off("request", onRequest);
+  },
+  confirmation(page: Page) {
+    return successShown(page);
   },
   async fill(page, values) {
     const filled: FilledField[] = [];
@@ -422,30 +466,25 @@ export const ashbyAdapter: AtsAdapter = {
     return filled;
   },
   async submit(page, ctx): Promise<SubmitResult> {
-    await dismissOverlays(page);
-    // Catch an unfilled required field here, before Submit: a form sent half empty is the kind Ashby's spam check dislikes.
-    const empty = await emptyRequired(page);
-    if (empty.length > 0) throw new NoRetryError(`These required questions are still empty: ${empty.slice(0, 5).join(", ")}`);
-    if (ctx.handoff) return waitForUserSubmit(page, ctx);
-    const button = await firstVisible(page, ["button.ashby-application-form-submit-button", "button[type=submit]"], 20000);
-    if (!button) throw new NoRetryError("The Submit button never appeared on the Ashby form. Open the form and submit it yourself.");
-    const press = async () => {
-      await button.scrollIntoViewIfNeeded().catch(() => undefined);
-      try {
-        await button.click({ timeout: 15000 });
-      } catch (error) {
-        throw new NoRetryError(`Could not press Submit on the Ashby form: ${friendlyError(error)}`);
-      }
-    };
-    await press();
+    // ASHBY_DIAGNOSTICS=1 only (ashbyDiagnostics.ts): watches, never changes anything.
+    const diagnostics = watchAshby(page, ctx.diagnosticsTag ?? "-");
+    let outcome = "error";
     try {
-      return { confirmed: true, evidence: await waitForAshbyConfirmation(page) };
+      await dismissOverlays(page);
+      // Catch an unfilled required field here, before Submit: a form sent half empty is the kind Ashby's spam check dislikes.
+      const empty = await emptyRequired(page);
+      diagnostics.mark(`checked required fields empty=${empty.length}`);
+      if (empty.length > 0) throw new NoRetryError(`These required questions are still empty: ${empty.slice(0, 5).join(", ")}`);
+      // Always the person's Submit (lib/queue.ts HANDOFF_BOARDS): this adapter never presses it.
+      const result = await waitForUserSubmit(page, ctx);
+      outcome = "confirmed";
+      return result;
     } catch (error) {
-      // Ashby sometimes keeps a typed value on screen but not in its form state and rejects the form as missing it
-      // (15 Oct, Legal Name). Nothing was sent, so type those values again key by key and press Submit once more.
-      if (!(error instanceof MissingEntriesError) || (await retypeEntries(page, error.labels)) === 0) throw error;
-      await press();
-      return { confirmed: true, evidence: `${await waitForAshbyConfirmation(page)} (after Ashby's empty-field check)` };
+      // The error's class and a fixed category: its message can carry a form label or a page's text, so it is not logged.
+      outcome = error instanceof Error ? `${error.constructor.name}/${categorize(error.message)}` : "error";
+      throw error;
+    } finally {
+      await diagnostics.finish(outcome);
     }
   },
 };

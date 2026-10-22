@@ -1,7 +1,7 @@
 import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { db } from "@/lib/db";
-import { enqueueApply } from "@/lib/queue";
+import { APPLY_QUEUES, enqueueApply } from "@/lib/queue";
 import { pruneRateEvents } from "@/lib/rate-limit";
 import { PROFILE_ROOT } from "@/modules/apply/browser";
 import { writeEvent } from "@/modules/governance";
@@ -20,21 +20,32 @@ const MAX_RESUMES = 2;
  * that reason rather than risk a second application. Safe to run from every worker.
  */
 export async function reapStaleRuns(staleMinutes = STALE_AFTER_MINUTES) {
-  const stale = await db.$queryRaw<Array<{ applicationId: string; jobId: string; startedOn: Date }>>`
+  const stale = await db.$queryRaw<Array<{ applicationId: string; jobId: string | null; startedOn: Date }>>`
     SELECT a."id" AS "applicationId", j."id"::text AS "jobId", j.started_on AS "startedOn"
     FROM "Application" a
-    JOIN pgboss.job j ON j.name = 'apply' AND j.state = 'active' AND j.data->>'applicationId' = a."id"
+    JOIN pgboss.job j ON j.name = ANY(${APPLY_QUEUES}) AND j.state = 'active' AND j.data->>'applicationId' = a."id"
     WHERE a."status" IN ('queued', 'inspecting', 'filling', 'needs_input')
       -- The newer of the last heartbeat and this queue job's start: a run that resumes after the user answered keeps the
       -- heartbeat of its earlier attempt until its first beat, and must not be reaped in those first seconds.
-      AND GREATEST(a."heartbeatAt", j.started_on) < now() - (${staleMinutes}::int * interval '1 minute')`;
+      AND GREATEST(a."heartbeatAt", j.started_on) < now() - (${staleMinutes}::int * interval '1 minute')
+    UNION ALL
+    -- A run left "running" with no queue job alive at all: its job failed or expired because the worker lost the database
+    -- mid-run (21 Oct: AiPrise stayed "inspecting" until re-queued by hand). Applications waiting for the user have no job
+    -- and are left alone.
+    SELECT a."id", NULL, COALESCE((SELECT max(e."createdAt") FROM "ApplicationEvent" e WHERE e."applicationId" = a."id" AND e.type = 'rule_check' AND e.rule = 'start'), a."updatedAt")
+    FROM "Application" a
+    WHERE a."status" IN ('queued', 'inspecting', 'filling')
+      AND GREATEST(a."heartbeatAt", a."updatedAt") < now() - (${staleMinutes}::int * interval '1 minute')
+      AND NOT EXISTS (SELECT 1 FROM pgboss.job j WHERE j.name = ANY(${APPLY_QUEUES}) AND j.state IN ('created', 'retry', 'active') AND j.data->>'applicationId' = a."id")`;
 
   let reaped = 0;
   for (const row of stale) {
-    await db.$executeRaw`UPDATE pgboss.job SET state = 'cancelled', completed_on = now() WHERE id = ${row.jobId}::uuid AND state = 'active'`;
+    if (row.jobId) await db.$executeRaw`UPDATE pgboss.job SET state = 'cancelled', completed_on = now() WHERE id = ${row.jobId}::uuid AND state = 'active'`;
     await db.$executeRaw`DELETE FROM "SubmitLock" WHERE "holderId" = ${row.applicationId}`;
+    // Submit may have gone out once the submit check passed, or once a handoff window sent its submission (a person can
+    // press Submit before the agent is ready, which writes "submit_attempt").
     const [reachedSubmit, resumes] = await Promise.all([
-      db.applicationEvent.count({ where: { applicationId: row.applicationId, type: "rule_check", rule: "submit", createdAt: { gte: row.startedOn } } }),
+      db.applicationEvent.count({ where: { applicationId: row.applicationId, createdAt: { gte: row.startedOn }, OR: [{ type: "rule_check", rule: "submit" }, { type: "submit_attempt" }] } }),
       db.applicationEvent.count({ where: { applicationId: row.applicationId, type: "retry", message: { startsWith: "Picked up again" } } }),
     ]);
     if (reachedSubmit === 0 && resumes < MAX_RESUMES) {
@@ -49,13 +60,16 @@ export async function reapStaleRuns(staleMinutes = STALE_AFTER_MINUTES) {
       }
       continue;
     }
+    // Past the submit check, Submit may have been pressed: the outcome is unknown, so it waits for the user to verify it
+    // and is never retried (apply/outcome.ts). Before it, nothing was sent and the run simply failed.
     const message = reachedSubmit > 0 ? STALE_AFTER_SUBMIT : STALE_MESSAGE;
+    const status = reachedSubmit > 0 ? "pending_verification" : "failed";
     const marked = await db.application.updateMany({
       where: { id: row.applicationId, status: { in: ["queued", "inspecting", "filling", "needs_input"] } },
-      data: { status: "failed", error: message, pendingQuestions: [], verificationCode: null },
+      data: { status, error: message, pendingQuestions: [], verificationCode: null },
     });
     if (marked.count > 0) {
-      await writeEvent(row.applicationId, "error", message);
+      await writeEvent(row.applicationId, reachedSubmit > 0 ? "verify" : "error", message);
       reaped += 1;
     }
   }
