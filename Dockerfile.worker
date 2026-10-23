@@ -15,4 +15,7 @@ COPY . .
 
 # Browser profiles (per-user cookies) on a volume when the host offers one; the worker works without it too.
 RUN mkdir -p /data/browser-profiles
-CMD ["npm", "run", "worker:prod"]
+# One Node process with tsx as a loader (not npm, not the tsx wrapper, which run the worker as a child and pass the
+# stop signal on a second time): the worker gets SIGTERM once and finishes the runs in progress (worker/index.ts).
+# Run with `init: true` or `docker run --init`. Same code as `npm run worker:prod`.
+CMD ["node", "--import", "tsx", "src/worker/index.ts"]

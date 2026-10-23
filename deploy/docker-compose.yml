@@ -1,0 +1,47 @@
+# The home server (docs/DEPLOY.md, "Home server"): two SwipeApply workers from the Docker Hub image, for Greenhouse and the
+# background jobs (ingest, discovery, pre-scan). They have no screen, so they never take Ashby handoff jobs; those run
+# on a worker where a person can press Submit (`npm run worker` on your own computer).
+#
+# Files next to this one, never committed (.env* is gitignored):
+#   .env         DOCKERHUB_USERNAME=<your Docker Hub username>          (see env.example)
+#   .env.worker  the worker's secrets: database, OpenAI, storage, app URL (see env.worker.example)
+#
+# Start:   docker compose up -d
+# Update:  ./update.sh   (the systemd timer runs it every 5 minutes)
+
+x-worker: &worker
+  image: ${DOCKERHUB_USERNAME:?set DOCKERHUB_USERNAME in deploy/.env}/swipeapply-worker:latest
+  restart: unless-stopped
+  # tini as PID 1 passes the stop signal on, so the worker finishes the runs in progress (worker/index.ts).
+  init: true
+  # Up to a handoff's 15-minute wait, then a little: a restart or an update never cuts a run off after its Submit.
+  stop_grace_period: 16m
+  env_file: .env.worker
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "5"
+
+services:
+  worker-1:
+    <<: *worker
+    container_name: swipeapply-home-1
+    environment:
+      WORKER_NAME: home-1
+      APPLY_CONCURRENCY: "4"
+    volumes:
+      - profiles-1:/data/browser-profiles
+
+  worker-2:
+    <<: *worker
+    container_name: swipeapply-home-2
+    environment:
+      WORKER_NAME: home-2
+      APPLY_CONCURRENCY: "4"
+    volumes:
+      - profiles-2:/data/browser-profiles
+
+volumes:
+  profiles-1:
+  profiles-2:

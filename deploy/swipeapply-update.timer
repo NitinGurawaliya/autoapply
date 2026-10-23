@@ -1,0 +1,11 @@
+# Runs swipeapply-update.service every 5 minutes, and once shortly after boot.
+[Unit]
+Description=Check Docker Hub for a new SwipeApply worker image every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

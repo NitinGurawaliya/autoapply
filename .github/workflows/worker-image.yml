@@ -1,0 +1,67 @@
+# Builds the worker image on every push to main that touches the worker, and pushes it to Docker Hub as
+# <DOCKERHUB_USERNAME>/swipeapply-worker:latest and :<commit>. The home server pulls :latest every few minutes
+# (deploy/update.sh), so a push reaches it without anyone logging in. Guide: docs/DEPLOY.md ("Home server").
+# Repository secrets needed: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN (a Docker Hub access token with write access).
+name: Worker image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "prisma/**"
+      - "config/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "Dockerfile.worker"
+      - ".dockerignore"
+      - ".github/workflows/worker-image.yml"
+  workflow_dispatch:
+
+# A newer push replaces a build still running: only the latest main matters.
+concurrency:
+  group: worker-image
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Typecheck and lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Next's route types (LayoutProps and the like) are generated, not committed.
+      - run: npx next typegen
+      - run: npm run typecheck
+      - run: npm run lint
+
+  image:
+    name: Build and push to Docker Hub
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.worker
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/swipeapply-worker:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/swipeapply-worker:${{ github.sha }}
+          # Layers that did not change (the Playwright base, node_modules) are reused between builds.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

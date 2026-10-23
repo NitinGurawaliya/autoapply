@@ -70,18 +70,18 @@ In Google Cloud Console, edit your OAuth client:
 
 Use the official Playwright image so Chromium and its system libraries are present. **The image tag must match the installed Playwright version (1.63.0).**
 
-`Dockerfile.worker` is in the repo (Playwright 1.63.0 image, `npm ci`, `npm run worker:prod`, browser profiles under `/data/browser-profiles`). Locally:
+`Dockerfile.worker` is in the repo (Playwright 1.63.0 image, `npm ci`, runs `node --import tsx src/worker/index.ts`, one process, so a stop signal reaches the worker once, browser profiles under `/data/browser-profiles`). Locally:
 
 ```bash
 docker build -f Dockerfile.worker -t swipeapply-worker .
-docker run --env-file .env -v swipeapply-profiles:/data/browser-profiles swipeapply-worker
+docker run --init --env-file .env -v swipeapply-profiles:/data/browser-profiles swipeapply-worker
 ```
 
 - `npm run worker:prod` runs `tsx` without watching (`npm run worker` is `tsx watch`, for development).
 - The worker needs the same variables as the web app except the `AUTH_*` ones, plus `VAPID_*` and `APP_URL`. Leave `DEMO_HEADED` unset (headless; there is no screen).
 - No volume is needed: since T100 users' browser cookies are kept in the database (`browser-state/` files), so any worker replica can run any user. `/data/browser-profiles` holds only the pid lock.
 - A restart is safe: an application cut off before Submit is picked up again by the next worker (up to twice); one cut off after Submit is marked "may have been sent, check your email", never sent twice.
-- Parallelism: set `APPLY_CONCURRENCY` (default 3, max 8). Budget about 0.5 GB RAM per concurrent run plus headroom, so 3 runs want roughly 2 GB. A run waiting for a security code holds a slot for up to 10 minutes. More simultaneous submissions from one cloud IP may raise how often the employer asks for a verification code.
+- Parallelism: set `APPLY_CONCURRENCY` (default 3, max 24 per worker). Budget about 0.5 GB RAM per concurrent run plus headroom, so 3 runs want roughly 2 GB. A run waiting for a security code holds a slot for up to 10 minutes. More simultaneous submissions from one cloud IP may raise how often the employer asks for a verification code.
 - Several replicas are safe for the queue and the per-user submit lock (it lives in the database), and each runs the stale-run reaper. Still start with **one replica** until the first end-to-end test passes. Two workers are safe for the queue, but run them only after the first end-to-end test passes.
 - Give it at least 1 GB RAM (Chromium) and keep it always on (no scale-to-zero): it holds a browser open while it waits for a security code.
 - Railway: New Project → Deploy from GitHub → set the Dockerfile path to `Dockerfile.worker` → add the variables. Fly: `fly launch --dockerfile Dockerfile.worker`, `fly secrets set ...`, `fly scale count 1`.
@@ -107,5 +107,15 @@ docker run --env-file .env -v swipeapply-profiles:/data/browser-profiles swipeap
 ## 7. Updating
 
 - Web: push to `main`; Vercel redeploys.
-- Worker: redeploy the container after any change under `src/modules` or `src/worker`.
+- Worker: a push to `main` that touches the worker builds the image in GitHub Actions and pushes it to Docker Hub (`.github/workflows/worker-image.yml`); the home server picks it up within 5 minutes (section 8). Elsewhere, redeploy the container after any change under `src/modules` or `src/worker`.
 - Schema change: run `npx prisma migrate deploy` first, then deploy web and worker.
+
+## 8. Home server (a spare computer instead of a VPS)
+
+The workers run on a computer that stays on, from the image GitHub Actions builds on every push to `main` and pushes to Docker Hub as `<DOCKERHUB_USERNAME>/swipeapply-worker:latest` (and `:<commit>`). The full setup is in the "SwipeApply home server" guide; the files are in `deploy/`.
+
+- `deploy/docker-compose.yml`: two workers (`home-1`, `home-2`, 4 runs each), `restart: unless-stopped`, `init: true`, `stop_grace_period: 16m` so a restart or update lets the runs in progress finish (the worker stops taking jobs on SIGTERM and waits for them). Secrets in `deploy/.env.worker` and the image owner in `deploy/.env`, both gitignored (examples: `env.worker.example`, `env.example`).
+- Updates: `deploy/update.sh` (`docker compose pull` then `up -d`) every 5 minutes from a systemd timer (`swipeapply-update.service` and `.timer`). An unchanged image leaves the workers alone.
+- These workers have no screen, so they never take the `apply-handoff` queue (Ashby). Ashby applications wait there for a worker on a computer where a person presses Submit (`npm run worker:prod` on your own machine).
+- GitHub repository secrets: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (write). The home server logs in with a separate read-only token. Keep the Docker Hub repository private: the image holds the code (never the secrets).
+- Uptime: point a monitor at `/api/health` (503 when no worker has beaten for 5 minutes).
