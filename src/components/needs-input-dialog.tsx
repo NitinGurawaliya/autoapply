@@ -1,5 +1,6 @@
 "use client";
 
+import { joinChoices, splitChoices } from "@/lib/choices";
 import { forgetVisitedPages } from "@/lib/forget-pages";
 import { useEffect, useState } from "react";
 import { useApplicationsSummary } from "@/components/applications-summary";
@@ -178,12 +179,28 @@ export function NeedsInputDialog() {
                 );
               }
               const options = question.options ?? [];
+              // "Select all that apply": several choices, kept one per line in the answer (lib/choices.ts).
+              const multi = question.type === "checkbox-group" && options.length > 0;
+              const chosen = multi ? splitChoices(value) : [];
+              const toggle = (option: string) =>
+                setValue(question.key, joinChoices(options.filter((item) => (item === option ? !chosen.includes(item) : chosen.includes(item)))));
               return (
                 <div key={question.key} id={`question-${question.key}`} className="flex flex-col">
-                  <label htmlFor={options.length > 0 && options.length <= MAX_ANSWER_BUTTONS ? undefined : id} className={single ? "mt-[22px] type-title" : "mt-[18px] type-lead font-semibold"}>
+                  <label htmlFor={multi || (options.length > 0 && options.length <= MAX_ANSWER_BUTTONS) ? undefined : id} className={single ? "mt-[22px] type-title" : "mt-[18px] type-lead font-semibold"}>
                     {question.label}
                   </label>
-                  {options.length > 0 && options.length <= MAX_ANSWER_BUTTONS ? (
+                  {multi ? (
+                    <>
+                      <span className="mt-1.5 text-sm text-muted-foreground">Choose all that apply.</span>
+                      <div id={id} role="group" aria-label={question.label} className="mt-4 grid gap-2.5">
+                        {options.map((option) => (
+                          <Chip key={option} shape="answer" selected={chosen.includes(option)} onClick={() => toggle(option)}>
+                            {option}
+                          </Chip>
+                        ))}
+                      </div>
+                    </>
+                  ) : options.length > 0 && options.length <= MAX_ANSWER_BUTTONS ? (
                     <div id={id} role="group" aria-label={question.label} className={options.length === 2 ? "mt-5 grid grid-cols-2 gap-2.5" : "mt-5 grid gap-2.5"}>
                       {options.map((option) => (
                         <Chip key={option} shape="answer" selected={value === option} onClick={() => setValue(question.key, option)}>

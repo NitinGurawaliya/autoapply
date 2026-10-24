@@ -2,6 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Page } from "playwright";
+import { joinChoices, splitChoices } from "@/lib/choices";
 import { customQuestionKey } from "@/modules/answers";
 import type { AtsAdapter, FilledField, FormField, ResolvedValue, SubmitResult } from "../adapter";
 import { NeedsAnswerError, NoRetryError, NotSentError } from "../adapter";
@@ -221,10 +222,16 @@ export const leverAdapter: AtsAdapter = {
         }
         if (value.type === "radio" || value.type === "checkbox-group") {
           const labels = await target.evaluateAll((nodes) => nodes.map((node) => ((node.closest("label") ?? node.parentElement)?.textContent ?? "").replace(/\s+/g, " ").trim()));
-          const index = pickLabel(labels, value.value);
-          if (index < 0) throw new Error(`No option "${value.value}" for "${value.label}"`);
-          await target.nth(index).check({ force: true });
-          return labels[index];
+          // A checkbox group may hold several choices, one per line (lib/choices.ts); a radio holds one.
+          const wanted = value.type === "checkbox-group" ? splitChoices(value.value) : [value.value];
+          const picked: string[] = [];
+          for (const choice of wanted) {
+            const index = pickLabel(labels, choice);
+            if (index < 0) throw new Error(`No option "${choice}" for "${value.label}"`);
+            await target.nth(index).check({ force: true });
+            picked.push(labels[index]);
+          }
+          return joinChoices(picked);
         }
         if (value.type === "checkbox") {
           if (/^(yes|true|checked|agree|i agree|1)$/i.test(value.value.trim())) await target.first().check({ force: true });

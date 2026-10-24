@@ -2,6 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Locator, Page, Request, Response } from "playwright";
+import { joinChoices, splitChoices } from "@/lib/choices";
 import { customQuestionKey } from "@/modules/answers";
 import type { AtsAdapter, FilledField, FormField, ResolvedValue, SubmitContext, SubmitResult } from "../adapter";
 import { BotCheckError, MaybeSentError, NeedsAnswerError, NoRetryError, NotSentError, RefusedError, WindowClosedError } from "../adapter";
@@ -505,11 +506,17 @@ export const ashbyAdapter: AtsAdapter = {
           const labels = await inputs.evaluateAll((nodes) =>
             nodes.map((node) => (((node.id ? document.querySelector(`label[for="${CSS.escape(node.id)}"]`) : null) ?? node.closest("label") ?? node.parentElement)?.textContent ?? "").replace(/\s+/g, " ").trim()),
           );
-          const index = pickLabel(labels, value.value);
-          if (index < 0) throw new Error(`No option "${value.value}" for "${value.label}"`);
-          // A forced check shows the dot but Ashby's form state can miss it ("Missing entry", 15 Oct, ElevenLabs).
-          await clickOption(entry, inputs.nth(index));
-          return labels[index];
+          // A checkbox group may hold several choices, one per line (lib/choices.ts); a radio holds one.
+          const wanted = value.type === "checkbox-group" ? splitChoices(value.value) : [value.value];
+          const picked: string[] = [];
+          for (const choice of wanted) {
+            const index = pickLabel(labels, choice);
+            if (index < 0) throw new Error(`No option "${choice}" for "${value.label}"`);
+            // A forced check shows the dot but Ashby's form state can miss it ("Missing entry", 15 Oct, ElevenLabs).
+            await clickOption(entry, inputs.nth(index));
+            picked.push(labels[index]);
+          }
+          return joinChoices(picked);
         }
         if (value.type === "checkbox") {
           const box = entry.locator('input[type="checkbox"]').first();

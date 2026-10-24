@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { Locator, Page } from "playwright";
 import type { AtsAdapter, FilledField, FormField, ResolvedValue, SubmitContext, SubmitResult } from "../adapter";
 import { MaybeSentError, NeedsAnswerError, NoRetryError, NotSentError } from "../adapter";
+import { joinChoices, splitChoices } from "@/lib/choices";
 import { customQuestionKey } from "@/modules/answers";
 import { assertJobOpen, dismissOverlays, fillText, friendlyError, inField, selectOption } from "./common";
 
@@ -275,10 +276,16 @@ async function pickInGroup(page: Page, value: ResolvedValue) {
       ((node.id ? document.querySelector(`label[for="${CSS.escape(node.id)}"]`)?.textContent : "") || node.closest("label")?.textContent || (node as HTMLInputElement).value || "").replace(/\s+/g, " ").trim(),
     ),
   );
-  const choice = bestOption(labels, value.value);
-  if (!choice) throw new NeedsAnswerError({ key: customQuestionKey(value.label), label: value.label, type: value.type, required: true, options: labels });
-  await boxes.nth(labels.indexOf(choice)).check({ force: true });
-  return choice;
+  // A checkbox group may hold several choices, one per line (lib/choices.ts); a radio holds one.
+  const wanted = value.type === "checkbox-group" ? splitChoices(value.value) : [value.value];
+  const picked: string[] = [];
+  for (const want of wanted) {
+    const choice = bestOption(labels, want);
+    if (!choice) throw new NeedsAnswerError({ key: customQuestionKey(value.label), label: value.label, type: value.type, required: true, options: labels });
+    await boxes.nth(labels.indexOf(choice)).check({ force: true });
+    picked.push(choice);
+  }
+  return joinChoices(picked);
 }
 
 /**

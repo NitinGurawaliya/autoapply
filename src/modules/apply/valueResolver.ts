@@ -1,3 +1,4 @@
+import { joinChoices, splitChoices } from "@/lib/choices";
 import { customQuestionKey, detectConcept, getAnswerKey, matchKeyBySynonym, RISKY } from "@/modules/answers";
 import { loadRules } from "@/modules/governance";
 import { ACKNOWLEDGEMENT_KEY, ACKNOWLEDGEMENT_QUESTION, acknowledgementValue } from "./acknowledgement";
@@ -113,6 +114,14 @@ function fitOption(value: string, options: string[] | undefined, eeo: boolean) {
   return starts.length === 1 ? starts[0] : null;
 }
 
+/** A "select all that apply" answer: every choice must be one of the form's options, else the user is asked. */
+function fitChoices(value: string, options: string[] | undefined, eeo: boolean) {
+  const choices = splitChoices(value);
+  if (choices.length <= 1) return fitOption(value, options, eeo);
+  const fitted = choices.map((choice) => fitOption(choice, options, eeo));
+  return fitted.every((choice): choice is string => choice != null) ? joinChoices([...new Set(fitted)]) : null;
+}
+
 /** An answer we had for a field but could not place on its options (the runner may re-word it, optionMap.ts). */
 export type UnfitAnswer = { label: string; answer: string; options: string[]; key: string; sensitive: boolean };
 
@@ -174,7 +183,8 @@ export function resolveValues(
     const foreignCurrency = askedCurrency && askedCurrency !== homeCurrency(profile.country) ? askedCurrency : null;
     const push = (valueKey: string, raw: string, source: string, eeo = false) => {
       if (foreignCurrency && valueKey !== questionKey && currencyOf(raw) !== foreignCurrency) return false;
-      let value = field.type === "file" ? raw : field.type === "number" ? fitNumber(raw) : fitOption(raw, field.options, eeo);
+      let value =
+        field.type === "file" ? raw : field.type === "number" ? fitNumber(raw) : field.type === "checkbox-group" ? fitChoices(raw, field.options, eeo) : fitOption(raw, field.options, eeo);
       let reworded = false;
       if (value == null && field.options?.length) {
         const mapped = optionMatches?.get(optionKey(field.label, raw));
