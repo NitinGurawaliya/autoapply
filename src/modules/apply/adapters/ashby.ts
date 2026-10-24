@@ -5,7 +5,7 @@ import type { Locator, Page, Request, Response } from "playwright";
 import { customQuestionKey } from "@/modules/answers";
 import type { AtsAdapter, FilledField, FormField, ResolvedValue, SubmitContext, SubmitResult } from "../adapter";
 import { MaybeSentError, NeedsAnswerError, NoRetryError, NotSentError, RefusedError, WindowClosedError } from "../adapter";
-import { livePage } from "../browser";
+import { autoSubmitAshby, livePage } from "../browser";
 import { categorize, watchAshby } from "./ashbyDiagnostics";
 import { assertJobOpen, dismissOverlays, firstVisible, inField, toDatePickerText } from "./common";
 
@@ -243,7 +243,9 @@ async function fillCombobox(page: Page, value: ResolvedValue) {
 }
 
 const CONFIRMATION = /successfully submitted|application (has been )?(submitted|received)|thank you for (applying|your application)/i;
-const REFUSED = /flagged as (possible )?spam|couldn.t be submitted|unable to submit your application/i;
+// 24 Oct, ElevenLabs: "We couldn't submit your application … you have applied for a position in this domain within the
+// last 90 days" — the company's own limit, nothing sent.
+const REFUSED = /flagged as (possible )?spam|couldn.t be submitted|couldn.t submit your application|unable to submit your application/i;
 
 /**
  * Ashby's success state: a known phrase, or Ashby's own "Success" banner with the form gone. Companies write their own
@@ -268,7 +270,27 @@ async function clickOption(entry: Locator, option: Locator) {
   if (!(await option.isChecked().catch(() => false))) await option.check({ force: true });
 }
 
+/** Types the named questions' values again, key by key, so Ashby's form state takes them. Returns how many it typed. */
+async function retypeEntries(page: Page, labels: string[]) {
+  let typed = 0;
+  for (const label of labels) {
+    const entry = page.locator("[data-field-path]").filter({ has: page.locator(".ashby-application-form-question-title", { hasText: label }) }).first();
+    const input = entry.locator("input:not([type=file]):not([type=hidden]):not([type=checkbox]):not([type=radio]), textarea").first();
+    if ((await input.count()) === 0) continue;
+    const value = await input.inputValue().catch(() => "");
+    if (!value.trim()) continue;
+    await input.scrollIntoViewIfNeeded().catch(() => undefined);
+    await input.click();
+    await input.fill("");
+    await input.pressSequentially(value, { delay: 25 });
+    await input.press("Tab");
+    typed += 1;
+  }
+  return typed;
+}
+
 export const HANDOFF_WAIT_MS = 15 * 60 * 1000;
+const AUTO_WAIT_MS = 2 * 60 * 1000;
 
 /** Ashby's answer to a submission the window sent, read off the network so it survives the page going away. */
 type SentSubmission = { ok: boolean; body: string };
@@ -285,7 +307,7 @@ function isSubmission(response: Response) {
 
 /** Accepted when the server answered OK with no GraphQL errors and no spam refusal in its body. */
 function accepted(sent: SentSubmission) {
-  return sent.ok && !/"errors"\s*:\s*\[\s*\{/.test(sent.body) && !/spam|captcha/i.test(sent.body);
+  return sent.ok && !/"errors"\s*:\s*\[\s*\{/.test(sent.body) && !/spam|captcha|missing entry/i.test(sent.body);
 }
 
 /**
@@ -347,8 +369,18 @@ async function waitForUserSubmit(page: Page, ctx: SubmitContext): Promise<Submit
     await button?.scrollIntoViewIfNeeded().catch(() => undefined);
     await page.bringToFront().catch(() => undefined);
     state.counting = true;
-    await ctx.announceHandoff?.("Ready to send: check the form in the Chrome window on your computer and press Submit");
-    const deadline = Date.now() + HANDOFF_WAIT_MS;
+    // ASHBY_AUTO_SUBMIT=1 (browser.ts autoSubmitAshby): the worker presses Submit once itself, a plain click with nothing
+    // about the browser changed, and reCAPTCHA decides. 24 Oct, visible Chrome: 8 clicks, none blocked, 4 sent.
+    const auto = autoSubmitAshby();
+    if (auto && button) {
+      await button.click().catch(() => undefined);
+      setTimeout(() => console.log(`ashby auto submit: posts=${state.posts} submits=${state.sent.length} accepted=${watcher.accepted()}`), 15000);
+    } else {
+      await ctx.announceHandoff?.("Ready to send: check the form in the Chrome window on your computer and press Submit");
+    }
+    let retyped = false;
+    // Ashby answers a click within seconds; the 15 minutes are for a person.
+    const deadline = Date.now() + (auto ? AUTO_WAIT_MS : HANDOFF_WAIT_MS);
     while (Date.now() < deadline) {
       // The page may be replaced by a new one in the same window when Ashby shows Success: follow it.
       const live = livePage(page);
@@ -358,12 +390,31 @@ async function waitForUserSubmit(page: Page, ctx: SubmitContext): Promise<Submit
         throw new NotSentError("Cancelled before Submit was pressed. Nothing was sent.");
       }
       const done = await successShown(live);
-      if (done) return { confirmed: true, evidence: `${done} after you pressed Submit` };
+      if (done) return { confirmed: true, evidence: `${done} after ${auto ? "the worker pressed Submit" : "you pressed Submit"}` };
       const body = await live.locator("body").innerText().catch(() => "");
-      if (REFUSED.test(body)) throw new RefusedError("Ashby refused the application as possible spam, even with you pressing Submit. Open the posting and apply in your usual browser.");
+      if (REFUSED.test(body)) {
+        const refusal = body.match(REFUSED)?.[0] ?? "refused";
+        throw new RefusedError(`Ashby refused the application ("${refusal}"). Nothing was sent. Open the posting and apply in your usual browser.`);
+      }
+      // The worker's click met Ashby's own validation, so nothing was accepted. With a person at the window they fix the
+      // field and press Submit again, so a handoff keeps waiting.
+      const missing = [...body.matchAll(/Missing entry for required field:\s*([^\n]+)/g)].map((match) => match[1].trim());
+      if (missing.length > 0 && auto) {
+        // The box shows the value but Ashby's form state does not have it (24 Oct: DDN's Notice Period showed "7").
+        // Typed again key by key it registers; then Submit once more, once.
+        if (retyped) throw new NotSentError(`Ashby did not accept the form: missing ${missing.join(", ").slice(0, 120)}. Nothing was sent.`);
+        retyped = true;
+        const typed = await retypeEntries(live, missing);
+        console.log(`ashby auto submit: retyped ${typed} of ${missing.length} field(s), pressing Submit again`);
+        await live.locator("button.ashby-application-form-submit-button").first().click().catch(() => undefined);
+        // Let Ashby replace the old notice before it is read again.
+        await new Promise((resolve) => setTimeout(resolve, 8000));
+        continue;
+      }
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
     if (state.sent.length > 0 || state.posts > 0) return outcomeWithoutPage();
+    if (auto) throw new NotSentError("The worker pressed Submit but nothing reached Ashby (its bot check may have stopped it). Nothing was sent.");
     throw new NotSentError("Submit was not pressed within 15 minutes. Nothing was sent; retry when you are at your computer.");
   } catch (error) {
     // A Playwright error because the page went away mid-wait is decided by what was sent, like a closed window.
@@ -457,8 +508,11 @@ export const ashbyAdapter: AtsAdapter = {
           await entry.locator("input").first().fill(number);
           return number;
         }
-        await entry.locator("input:not([type=file]), textarea").first().fill(value.value);
-        return value.value;
+        // A profile link saved without its scheme ("linkedin.com/in/…") is the same link with https://: Ashby dropped the
+        // bare form and answered "Missing entry for required field: LinkedIn URL" (24 Oct, Sardine).
+        const text = /^(linkedin|github|portfolio|website)$/.test(value.key) && /^(www\.)?[a-z0-9-]+(\.[a-z0-9-]+)+\/\S*$/i.test(value.value.trim()) ? `https://${value.value.trim()}` : value.value;
+        await entry.locator("input:not([type=file]), textarea").first().fill(text);
+        return text;
       });
       if (written === null) continue;
       filled.push({ key: value.key, label: value.label, value: written, source: value.source, selector: value.selector });
@@ -475,7 +529,7 @@ export const ashbyAdapter: AtsAdapter = {
       const empty = await emptyRequired(page);
       diagnostics.mark(`checked required fields empty=${empty.length}`);
       if (empty.length > 0) throw new NoRetryError(`These required questions are still empty: ${empty.slice(0, 5).join(", ")}`);
-      // Always the person's Submit (lib/queue.ts HANDOFF_BOARDS): this adapter never presses it.
+      // The person's Submit (lib/queue.ts HANDOFF_BOARDS), or the worker's own with ASHBY_AUTO_SUBMIT=1.
       const result = await waitForUserSubmit(page, ctx);
       outcome = "confirmed";
       return result;

@@ -116,6 +116,6 @@ The workers run on a computer that stays on, from the image GitHub Actions build
 
 - `deploy/docker-compose.yml`: two workers (`home-1`, `home-2`, 4 runs each), `restart: unless-stopped`, `init: true`, `stop_grace_period: 16m` so a restart or update lets the runs in progress finish (the worker stops taking jobs on SIGTERM and waits for them). Secrets in `deploy/.env.worker` and the image owner in `deploy/.env`, both gitignored (examples: `env.worker.example`, `env.example`).
 - Updates: `deploy/update.sh` (`docker compose pull` then `up -d`) every 5 minutes from a systemd timer (`swipeapply-update.service` and `.timer`). An unchanged image leaves the workers alone.
-- These workers have no screen, so they never take the `apply-handoff` queue (Ashby). Ashby applications wait there for a worker on a computer where a person presses Submit (`npm run worker:prod` on your own machine).
+- These workers have no screen, so they never take the `apply-handoff` queue (Ashby). Ashby applications wait there for a worker on a computer where a person presses Submit (`npm run worker:prod` on your own machine). With `ASHBY_AUTO_SUBMIT=1` in `deploy/.env.worker` they take Ashby too and press Submit themselves (see ARCHITECTURE.md, "Auto submit").
 - GitHub repository secrets: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (write). The home server logs in with a separate read-only token. Keep the Docker Hub repository private: the image holds the code (never the secrets).
 - Uptime: point a monitor at `/api/health` (503 when no worker has beaten for 5 minutes).

@@ -43,11 +43,20 @@ export function canShowWindow() {
   return process.platform !== "linux" || Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
 }
 
+/**
+ * ASHBY_AUTO_SUBMIT=1: the worker presses Ashby's Submit itself (adapters/ashby.ts), so a worker without a screen can take
+ * the handoff queue too, in a headless browser. Off by default: a person presses Submit.
+ */
+export function autoSubmitAshby() {
+  return process.env.ASHBY_AUTO_SUBMIT === "1";
+}
+
 type Shared = { browser: Promise<Browser>; opened: number; open: number; retiring: boolean };
 const shared = new Map<"main" | "handoff", Shared>();
 
 async function launch(kind: "main" | "handoff"): Promise<Browser> {
-  const headless = !(process.env.DEMO_HEADED === "1" || kind === "handoff");
+  // A handoff window is visible where there is a screen; a worker without one (ASHBY_AUTO_SUBMIT) runs it headless.
+  const headless = !(process.env.DEMO_HEADED === "1" || (kind === "handoff" && canShowWindow()));
   if (kind === "handoff") {
     // Maximized, with the page sized to the window (no fixed viewport): a 1280x800 page in a smaller window hid the
     // Submit button below the screen's edge (21 Oct).
@@ -124,7 +133,7 @@ async function saveState(context: BrowserContext, key: string, owner: string) {
  * Chrome is not installed. It needs a screen, so it runs only where the worker runs on the user's own computer.
  */
 export async function openBrowser(url: string, owner: string, options: { handoff?: boolean } = {}): Promise<OpenBrowser> {
-  if (options.handoff && !canShowWindow()) {
+  if (options.handoff && !canShowWindow() && !autoSubmitAshby()) {
     throw new NoRetryError("This form needs you to press Submit yourself, and the worker is running without a screen. Run the worker on your own computer, or open the form and apply by hand.");
   }
   const kind = options.handoff ? "handoff" : "main";

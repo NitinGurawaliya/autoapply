@@ -1,7 +1,7 @@
 import { hostname } from "node:os";
 import { db } from "@/lib/db";
 import { getBoss, HANDOFF_QUEUE } from "@/lib/queue";
-import { canShowWindow } from "@/modules/apply/browser";
+import { autoSubmitAshby, canShowWindow } from "@/modules/apply/browser";
 import { runDiscovery } from "@/modules/jobs/discovery";
 import { handleApply } from "./handlers/apply";
 import { handleIngest } from "./handlers/ingest";
@@ -19,15 +19,15 @@ async function main() {
   const concurrency = Math.min(Math.max(Number(process.env.APPLY_CONCURRENCY) || 3, 1), 24);
   await boss.work("apply", { localConcurrency: concurrency }, handleApply);
   // Handoff applications (Ashby) open a visible window for a person to press Submit, so only a worker with a screen
-  // takes them: a Docker worker (Linux, no display) never does, and they wait for the machine where someone is.
-  const handoff = canShowWindow();
+  // takes them: a Docker worker (Linux, no display) does not, unless ASHBY_AUTO_SUBMIT=1 lets it press Submit itself.
+  const handoff = canShowWindow() || autoSubmitAshby();
   if (handoff) await boss.work(HANDOFF_QUEUE, { localConcurrency: concurrency }, handleApply);
   await boss.work("ingest", handleIngest);
   await boss.work("prescan", handlePrescan);
   await boss.work("discover", async () => {
     await runDiscovery();
   });
-  console.log(`worker listening for apply (x${concurrency})${handoff ? `, ${HANDOFF_QUEUE} (x${concurrency})` : ", no handoff (no screen)"} and ingest`);
+  console.log(`worker listening for apply (x${concurrency})${handoff ? `, ${HANDOFF_QUEUE} (x${concurrency}${autoSubmitAshby() ? ", auto submit" : ""})` : ", no handoff (no screen)"} and ingest`);
 
   // Graceful stop (Ctrl+C, `docker stop -t 960`): take no new jobs and let the runs in progress finish, up to a handoff's
   // 15-minute wait, so a restart never cuts off a run after its Submit (21 Oct: a restart seconds after Rubrik's Submit
