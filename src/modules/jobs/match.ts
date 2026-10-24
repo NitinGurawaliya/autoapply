@@ -56,6 +56,8 @@ export type FeedJob = {
   requiredYears: number | null;
   skillHits: string[];
   stage: string | null;
+  /** The company's logo (Company.logoUrl), when we have one. */
+  logoUrl: string | null;
   track: string | null;
   /** First seen by ingest in the last 24 hours and posted in the last 7 days: the card says "New". */
   isNew: boolean;
@@ -242,18 +244,18 @@ export function scoreFeatures(
 
   const parts: string[] = [];
   const trackName = job.track ? TRACK_LABELS[job.track as Track] ?? job.track : null;
-  if (fit === "same" && trackName) parts.push(`${trackName} role`);
-  else if (fit === "adjacent" && trackName) parts.push(`Close to your field: ${trackName}`);
-  else if (titleHits.length > 0) parts.push(`Title matches ${titleHits.slice(0, 2).join(", ")}`);
-  if (skillHits.length > 0) parts.push(`Skills: ${skillHits.slice(0, 3).join(", ")}`);
-  if (gap >= 2 && asks != null) parts.unshift(`Asks for about ${asks}+ years, you have ${have}`);
-  else if (asks != null && gap <= 0) parts.push("Experience fits");
-  else if (asks != null) parts.push("Experience is close");
-  if (locationScore === 10 && prefs.length > 0) parts.push("Location fits");
+  if (fit === "same" && trackName) parts.push(`${trackName} work, like yours`);
+  else if (fit === "adjacent" && trackName) parts.push(`${trackName} work, close to your field`);
+  else if (titleHits.length > 0) parts.push("Similar to roles you've had");
+  if (skillHits.length > 0) parts.push(usesSkills(skillHits));
+  if (gap >= 2 && asks != null) parts.unshift(`They want about ${asks}+ years; you have ${have}`);
+  else if (asks != null && gap <= 0) parts.push("Fits your experience");
+  else if (asks != null) parts.push("Close to your experience level");
+  if (locationScore === 10 && prefs.length > 0) parts.push("In a place you want");
 
   return {
     score: Math.min(ceiling, clamp(titleScore + skillScore + experienceScore + locationScore)),
-    reason: parts.slice(0, fit ? 3 : 2).join(". ") || "Little overlap with your profile.",
+    reason: parts.slice(0, fit ? 3 : 2).join(". ") || "A stretch for your profile",
     requiredYears: asks,
     skillHits,
   };
@@ -295,10 +297,10 @@ function scoreByMeaning(
   const parts: string[] = [];
   const close = closeness >= 0.6 ? "Very close to your experience" : "Close to your experience";
   parts.push(verdict ? sentence(verdict.why) : trackName ? `${close} (${trackName})` : close);
-  if (job.skillHits.length > 0) parts.push(`Skills: ${job.skillHits.slice(0, 3).join(", ")}`);
-  if (gap >= 2 && asks != null) parts.unshift(`Asks for about ${asks}+ years, you have ${have}`);
-  else if (asks != null && gap <= 0) parts.push("Experience fits");
-  else if (asks != null) parts.push("Experience is close");
+  if (job.skillHits.length > 0) parts.push(usesSkills(job.skillHits));
+  if (gap >= 2 && asks != null) parts.unshift(`They want about ${asks}+ years; you have ${have}`);
+  else if (asks != null && gap <= 0) parts.push("Fits your experience");
+  else if (asks != null) parts.push("Close to your experience level");
 
   // The model's verdict is the floor when nothing else holds the job back (no years over the candidate's, the place
   // fits): closeness by meaning only orders such jobs. A posting padded with the company's story scored 0.39 and showed
@@ -313,6 +315,12 @@ function scoreByMeaning(
 }
 
 const sentence = (text: string) => text.trim().replace(/[.\s]+$/, "").replace(/^./, (c) => c.toUpperCase());
+
+/** "Uses your Python, SQL and Airflow": the reason reads as the agent talking, not a checklist (24 Oct, owner). */
+function usesSkills(hits: string[]) {
+  const shown = hits.slice(0, 3);
+  return `Uses your ${shown.length > 1 ? `${shown.slice(0, -1).join(", ")} and ${shown[shown.length - 1]}` : shown[0]}`;
+}
 
 function daysAgo(postedAt: Date) {
   const elapsed = Date.now() - postedAt.getTime();
@@ -352,6 +360,7 @@ type FeedRow = {
   companyId: string;
   company: string;
   stage: string | null;
+  logoUrl: string | null;
   track: string | null;
   similarity: number | null;
   firstSeenAt: Date;
@@ -412,7 +421,7 @@ export async function feedRows(input: {
     ),
     candidates AS (
       SELECT j.id, j.title, j."contentHash", j.location, j.source, j.country, j."remoteType", j."experienceMin", j."applyUrl", j."postedAt",
-             j."companyId", c.name AS company, c.stage, j.track, j."firstSeenAt", coalesce(h.hits, '{}') AS hits,
+             j."companyId", c.name AS company, c.stage, c."logoUrl", j.track, j."firstSeenAt", coalesce(h.hits, '{}') AS hits,
              CASE WHEN ${input.vector}::text IS NULL OR j.embedding IS NULL THEN NULL
                   ELSE (1 - (j.embedding <=> ${input.vector}::halfvec))::float8 END AS similarity
       FROM "Job" j
@@ -544,6 +553,7 @@ async function scoreFeed(userId: string, filters: FeedFilters): Promise<FeedJob[
         skillHits: match.skillHits.slice(0, 4),
         remoteType: job.remoteType,
         stage: job.stage,
+        logoUrl: job.logoUrl,
         track: job.track,
         // New to us AND recently posted: a company added today brings old postings, and "New" beside "Posted 52d ago"
         // read as a contradiction (16 Oct QA).
@@ -592,6 +602,7 @@ async function scoreFeed(userId: string, filters: FeedFilters): Promise<FeedJob[
       requiredYears: job.requiredYears,
       skillHits: job.skillHits,
       stage: job.stage,
+      logoUrl: job.logoUrl,
       track: job.track,
       isNew: job.isNew,
       hint: job.verdict.hint,

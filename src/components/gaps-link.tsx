@@ -21,7 +21,7 @@ export async function GapsLink({ userId }: { userId: string }) {
   return (
     <Link href="/gaps" className="inline-flex min-h-8 items-center gap-1.5 self-start text-[13px] font-semibold text-foreground underline underline-offset-3">
       <Icon name="info" size={14} strokeWidth={2.25} />
-      Answer {gaps} {gaps === 1 ? "question" : "questions"} to unblock {blocked} {blocked === 1 ? "job" : "jobs"}
+      Your agent needs {gaps} {gaps === 1 ? "answer" : "answers"} to apply to {blocked} more {blocked === 1 ? "job" : "jobs"}
     </Link>
   );
 }

@@ -14,8 +14,8 @@ export default async function ApplicationsPage() {
     db.application.count({ where: { userId: user.id, status: { in: ["queued", "inspecting", "filling"] } } }),
   ]);
   const cap = loadRules().max_applications_per_day;
-  // "19 sent today · 81 left · Your agent is working on 3" (design/applications.html).
-  const sub = [`${sent} sent today`, used >= cap ? "Daily limit reached" : `${cap - used} left`, working > 0 ? `Your agent is working on ${working}` : null]
+  // "19 sent today · Your agent is working on 3"; how many are left only as the daily limit comes near (24 Oct, owner).
+  const sub = [`${sent} sent today`, used >= cap ? "Done for today" : cap - used <= 5 ? `${cap - used} left` : null, working > 0 ? `Your agent is working on ${working}` : null]
     .filter(Boolean)
     .join(" · ");
   return (

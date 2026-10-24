@@ -67,13 +67,13 @@ async function main() {
       else if (request.url().includes(`/applications/${queued.id}`) && request.headers()["rsc"]) pageLoads.push(request.url());
     });
     await page.goto(`${BASE}/applications/${queued.id}`, { timeout: 90000 });
-    await page.getByText("Waiting in line").first().waitFor({ timeout: 60000 });
+    await page.getByText(/Getting ready to apply|Up next/).first().waitFor({ timeout: 60000 });
     await page.waitForTimeout(7000);
     check("while nothing changes it only checks the version", versions.length >= 2 && pageLoads.length === 0, `${versions.length} version checks, ${pageLoads.length} page renders`);
     await db.application.update({ where: { id: queued.id }, data: { status: "filling" } });
     await db.applicationEvent.create({ data: { applicationId: queued.id, type: "inspect", message: "Found 3 fields" } });
-    await page.getByText("Filling it in").first().waitFor({ timeout: 15000 }).catch(() => undefined);
-    check("a change re-renders the page", (await page.getByText("Filling it in").count()) > 0 && pageLoads.length >= 1, `${pageLoads.length} page renders`);
+    await page.getByText("Writing your answers").first().waitFor({ timeout: 15000 }).catch(() => undefined);
+    check("a change re-renders the page", (await page.getByText("Writing your answers").count()) > 0 && pageLoads.length >= 1, `${pageLoads.length} page renders`);
     await db.application.update({ where: { id: queued.id }, data: { status: "submitted", submittedAt: new Date() } });
     await page.getByText(/^Sent /).first().waitFor({ timeout: 15000 }).catch(() => undefined);
     const after = versions.length;

@@ -77,6 +77,13 @@ const PATHS = {
     </>
   ),
   chevronRight: <path d="M9 5l7 7-7 7" />,
+  // The agent: a four-point spark with a small one beside it (AgentStatus).
+  agent: (
+    <>
+      <path d="M11 4c.7 4.2 2.3 5.8 6.5 6.5-4.2.7-5.8 2.3-6.5 6.5-.7-4.2-2.3-5.8-6.5-6.5 4.2-.7 5.8-2.3 6.5-6.5z" />
+      <path d="M18.5 15.5v4M16.5 17.5h4" />
+    </>
+  ),
 } as const;
 
 export type IconName = keyof typeof PATHS;

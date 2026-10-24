@@ -23,6 +23,7 @@ import { Callout, EmptyState, InfoNote, Row, SectionCard, TrustPanel } from "@/c
 import { DeckDoneArt, DeckEmptyArt, ResumeSketch, SignInArt } from "@/components/patterns/drawings";
 import { JobCard } from "@/components/patterns/job-card";
 import { AgentToast } from "@/components/patterns/agent-toast";
+import { AgentStatus } from "@/components/patterns/agent-status";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -200,6 +201,7 @@ const JOB = {
   where: "Bengaluru · Hybrid",
   asks: "Asks 2+ yrs",
   score: 86,
+  board: "Greenhouse",
 };
 
 function Patterns() {
@@ -227,9 +229,21 @@ function Patterns() {
               <JobCard job={JOB} />
             </article>
           </div>
+          <div className="relative mt-[18px] grid">
+            <article className="relative">
+              <JobCard job={{ ...JOB, company: "Anthropic", logoUrl: "https://s8-recruiting.cdn.greenhouse.io/external_greenhouse_job_boards/logos/400/040/300/original/2025-04-07-greenhouse.png?1744056137", score: 64, board: "Ashby" }} />
+            </article>
+          </div>
         </Section>
         <Section title="After-swipe toast">
           <AgentToast company="Lumen Pay" stage={1} href="#" visible />
+          <AgentToast company="Lumen Pay" stage={3} href="#" visible />
+        </Section>
+        <Section title="Agent at work">
+          <AgentStatus text="Getting ready to apply" />
+          <AgentStatus text="Reading the application form" detail="Your agent is applying to Lumen Pay" />
+          <AgentStatus text="Writing your answers" size={28} />
+          <AgentStatus text="Sent" active={false} />
         </Section>
         <Section title="Page intro and notes">
           <PageIntro title="Start with your resume" sub="We read it once, so you never retype your details again." />

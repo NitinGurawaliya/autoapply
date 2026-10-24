@@ -12,30 +12,30 @@ function check(name: string, ok: boolean, detail = "") {
 // Every block rule the governance module can produce has its own wording and a next step.
 for (const rule of ["min_match_score", "no_duplicate_role", "max_per_company_per_week", "max_applications_per_day", "test_profile_mock_only", "board_not_supported", "profile_required"]) {
   const o = explainOutcome("blocked", rule);
-  check(`blocked by ${rule} is explained`, o.tone === "danger" && o.headline !== "Blocked by a rule" && !!o.next, o.headline);
+  check(`blocked by ${rule} is explained`, o.tone === "danger" && o.headline !== "Your agent held this one back" && !!o.next, o.headline);
 }
-check("an unknown rule still names the rule", explainOutcome("blocked", "some_new_rule").next === "Rule: some_new_rule.");
+check("an unknown rule is never named on screen", !/some_new_rule/.test(JSON.stringify(explainOutcome("blocked", "some_new_rule"))) && !!explainOutcome("blocked", "some_new_rule").next);
 
 const failures: Array<[string, RegExp]> = [
-  ["Security code was not entered in time. Open the form and apply by hand.", /Security code not entered/],
-  ["Greenhouse did not accept the security code after 3 tries.", /Security code rejected/],
-  ["Greenhouse showed a CAPTCHA. Open the form and submit it yourself.", /human check/],
-  ["Greenhouse rejected the form: Phone, Email", /rejected some answers/],
-  ["Submit clicked but no confirmation appeared. Check your email before applying again.", /No confirmation seen/],
-  ["The worker stopped while running this application. Retry it.", /worker stopped/],
-  ['Your saved answer for "Location" does not match this form\'s options', /saved answer does not fit/],
-  ["Resume upload failed: file too large", /resume would not upload/],
-  ["lever adapter is not ready", /Not supported yet/],
-  ['No option "Greater Delhi" for "Location (City)"', /did not match the form/],
-  ["page.goto: Timeout 30000ms exceeded.", /page did not load/],
-  ["page.goto: net::ERR_ABORTED at http://x", /page did not load/],
+  ["Security code was not entered in time. Open the form and apply by hand.", /security code didn.t arrive/],
+  ["Greenhouse did not accept the security code after 3 tries.", /security code didn.t work/],
+  ["Greenhouse showed a CAPTCHA. Open the form and submit it yourself.", /wanted a person/],
+  ["Greenhouse rejected the form: Phone, Email", /didn.t accept some answers/],
+  ["Submit clicked but no confirmation appeared. Check your email before applying again.", /No confirmation yet/],
+  ["The worker stopped while running this application. Retry it.", /interrupted/],
+  ['Your saved answer for "Location" does not match this form\'s options', /saved answer doesn.t fit/],
+  ["Resume upload failed: file too large", /resume wouldn.t upload/],
+  ["lever adapter is not ready", /Apply on the posting/],
+  ['No option "Greater Delhi" for "Location (City)"', /didn.t match the form/],
+  ["page.goto: Timeout 30000ms exceeded.", /page didn.t load/],
+  ["page.goto: net::ERR_ABORTED at http://x", /page didn.t load/],
 ];
 for (const [message, expected] of failures) {
   const o = explainOutcome("failed", message);
   check(`failure "${message.slice(0, 48)}" is explained`, expected.test(o.headline) && !!o.next && o.tone === "danger", o.headline);
 }
 const unknown = explainOutcome("failed", "Totally unexpected thing");
-check("an unrecognised failure gets a safe default with a next step", unknown.headline === "Something went wrong" && /Retry/.test(unknown.next ?? ""));
+check("an unrecognised failure gets a safe default with a next step", unknown.headline === "Your agent couldn't send this one" && /Retry/.test(unknown.next ?? ""));
 check("the rejected-form message carries the field names", /Phone, Email/.test(explainOutcome("failed", "Greenhouse rejected the form: Phone, Email").next ?? ""));
 check("a waiting code and a waiting answer read differently", explainOutcome("needs_input", null, "code").headline !== explainOutcome("needs_input", null, "answers").headline);
 check("submitted and cancelled have the right tone", explainOutcome("submitted", null).tone === "success" && explainOutcome("cancelled", "Cancelled by you").tone === "neutral");
@@ -61,11 +61,13 @@ check("fields keep their fill order inside a group", grouped[0].fields.map((f) =
 const ev = (type: string, message = "", rule?: string) => ({ type, message, rule });
 const states = (steps: ReturnType<typeof buildSteps>) => steps.map((s) => `${s.key}:${s.state}`).join(" ");
 const full = buildSteps([ev("rule_check", "ok", "swipe_right"), ev("rule_check", "ok", "start"), ev("inspect", "Found 10 fields"), ev("resolve", "Resolved 9, pending 0"), ev("fill", "Filled a"), ev("screenshot", "k"), ev("rule_check", "ok", "submit"), ev("submit", 'Application submitted. Confirmation: text "Thank you for applying"')], "submitted");
-check("a submitted application shows every step done with the confirmation", full.every((s) => s.state === "done") && /Thank you for applying/.test(full.at(-1)?.note ?? ""), states(full));
+check("a submitted application shows every step done, confirmed, with no raw page text", full.every((s) => s.state === "done") && full.at(-1)?.note === "The job board confirmed it" && !JSON.stringify(full).includes("Thank you"), states(full));
+check("the story never mentions rule checks", !full.some((s) => /rule/i.test(s.label)));
+check("the form step counts its questions", full.find((s) => s.key === "read")?.note === "10 questions");
 const filling = buildSteps([ev("rule_check", "ok"), ev("inspect", "Found"), ev("resolve", "Resolved 9, pending 0")], "filling");
 check("a running application has exactly one current step", filling.filter((s) => s.state === "current").length === 1 && filling.find((s) => s.state === "current")?.key === "filled", states(filling));
 const blockedSteps = buildSteps([ev("block", "Match score 35 is below 40", "min_match_score")], "blocked");
-check("a blocked application stops at the first step", blockedSteps[0].state === "stopped" && blockedSteps.slice(1).every((s) => s.state === "todo"), states(blockedSteps));
+check("a blocked application is one held-back step", blockedSteps.length === 1 && blockedSteps[0].state === "stopped" && !/rule/i.test(blockedSteps[0].label), states(blockedSteps));
 const failedMid = buildSteps([ev("rule_check", "ok"), ev("inspect", "Found"), ev("error", "page.goto: Timeout")], "failed");
 check("a failure stops at the step it reached", failedMid.find((s) => s.state === "stopped")?.key === "prepared", states(failedMid));
 const waiting = buildSteps([ev("rule_check", "ok"), ev("inspect", "Found"), ev("resolve", "Resolved 5, pending 2"), ev("ask_user", "Need 2 answers")], "needs_input");

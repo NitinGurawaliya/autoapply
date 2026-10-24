@@ -14,11 +14,11 @@ export type JobCardData = {
   where: string;
   /** "Asks 2+ yrs", "Entry level"; null when the posting does not say. */
   asks: string | null;
-  hint?: string | null;
   score: number;
   tier?: "strong" | "good" | "stretch" | null;
-  /** "MNC", "Mid-size", "Startup"; null when the company is not tagged. */
-  stage?: string | null;
+  /** The job board it came from: "Greenhouse", "Lever", "Ashby". */
+  board?: string | null;
+  logoUrl?: string | null;
   /** First seen in the last 24 hours. */
   isNew?: boolean;
   applyUrl?: string;
@@ -30,7 +30,7 @@ export function JobCard({ job, stamps }: { job: JobCardData; stamps?: ReactNode 
     <>
       <div className="relative box-border flex h-full flex-col rounded-card border-2 border-edge bg-surface p-[22px] shadow-hard-lg">
         <div className="flex items-center gap-3">
-          <CompanyMark name={job.company} size={48} />
+          <CompanyMark name={job.company} logoUrl={job.logoUrl} size={48} />
           <div className="flex min-w-0 flex-col gap-0.5">
             <span className="truncate text-base font-semibold">{job.company}</span>
             <span className="text-sm text-muted-foreground">{job.posted}</span>
@@ -38,20 +38,15 @@ export function JobCard({ job, stamps }: { job: JobCardData; stamps?: ReactNode 
         </div>
         <h2 className="m-0 mt-6 max-w-[290px] type-display-xl text-balance">{job.role}</h2>
         <div className="mt-[22px] flex flex-col gap-1.5">
-          <Eyebrow>Why it fits</Eyebrow>
-          <p className="m-0 type-lead text-pretty">{job.why}</p>
+          <Eyebrow>Why your agent picked it</Eyebrow>
+          <p className="m-0 type-lead text-pretty">{/[.!?]$/.test(job.why) ? job.why : `${job.why}.`}</p>
         </div>
         <div className="mt-[18px] flex flex-wrap gap-2">
           {job.isNew ? <AccentPill className="h-[34px] px-3 text-sm">New</AccentPill> : null}
           <Tag>{job.where}</Tag>
           {job.asks ? <Tag>{job.asks}</Tag> : null}
-          {job.stage ? <Tag>{job.stage}</Tag> : null}
-          {job.hint ? (
-            <Tag className="gap-1.5">
-              <Icon name="info" size={14} strokeWidth={2.25} />
-              {job.hint}
-            </Tag>
-          ) : null}
+          {/* Under the badge the header has no room: the board is a chip with the others. */}
+          {job.board ? <Tag className="text-muted-foreground">via {job.board}</Tag> : null}
         </div>
         {job.applyUrl ? (
           <a

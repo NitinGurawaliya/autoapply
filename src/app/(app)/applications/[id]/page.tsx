@@ -10,13 +10,16 @@ import { CompanyMark, StatusPill } from "@/components/ui/marks";
 import { EmptyState, TrustPanel } from "@/components/patterns/content";
 import { FailureCard, FieldList, ScreenshotFrame, Timeline, type StoryStep } from "@/components/patterns/detail";
 import { DeckEmptyArt } from "@/components/patterns/drawings";
+import { AgentStatus } from "@/components/patterns/agent-status";
 import { BackTopBar } from "@/components/patterns/top-bar";
+import { isAdmin } from "@/lib/admin";
+import { boardLabel } from "@/lib/board-label";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { EVENT_LABEL } from "@/lib/event-labels";
 import { explainOutcome } from "@/lib/explain";
 import { groupFields } from "@/lib/field-groups";
-import { applicationVersion, statusMeta } from "@/lib/status-meta";
+import { applicationVersion, STAGES, statusMeta } from "@/lib/status-meta";
 import { buildSteps } from "@/lib/steps";
 
 const fieldsSchema = z.array(
@@ -43,7 +46,6 @@ function when(date: Date) {
 
 // Which audit event marks each step of buildSteps(), for the time beside it in the story.
 const STEP_EVENT: Record<string, (event: { type: string; message: string }) => boolean> = {
-  checks: (event) => event.type === "rule_check",
   read: (event) => event.type === "inspect",
   prepared: (event) => event.type === "resolve" && !/security code/i.test(event.message),
   asked: (event) => event.type === "ask_user" && !/security code/i.test(event.message),
@@ -52,21 +54,20 @@ const STEP_EVENT: Record<string, (event: { type: string; message: string }) => b
   submitted: (event) => event.type === "submit",
 };
 
-const SOURCE_WORDS: Record<string, string> = { resume: "your resume", user: "you", matched: "you", derived: "your profile", default: "a standard default" };
-
+/** One line on where the answers came from: "Every answer came from your resume or from you. 1 note was written by your agent, marked below." */
 function trustText(sources: string[]) {
-  const words = [...new Set(Object.keys(SOURCE_WORDS).filter((source) => sources.includes(source)).map((source) => SOURCE_WORDS[source]))];
-  const list = words.length <= 1 ? words.join("") : `${words.slice(0, -1).join(", ")} or ${words[words.length - 1]}`;
-  const base = list ? `Every answer came from ${list}.` : "";
   const drafts = sources.filter((source) => source === "ai_draft").length;
-  const draftText = drafts === 0 ? "" : drafts === 1 ? " The one open-text answer is an AI draft, marked below." : " The open-text answers are AI drafts, marked below.";
+  const base = sources.some((source) => source !== "ai_draft") ? "Every answer came from your resume or from you." : "";
+  const draftText = drafts === 0 ? "" : ` ${drafts} ${drafts === 1 ? "note was" : "notes were"} written by your agent, marked below.`;
   return `${base}${draftText}`.trim();
 }
 
-export default async function ApplicationPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ApplicationPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ debug?: string }> }) {
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
   const { id } = await params;
+  // The raw audit log is for the operator only (ADMIN_EMAILS) and only on ?debug=1 (24 Oct, owner).
+  const debug = isAdmin(user.email) && (await searchParams).debug === "1";
   const application = await db.application.findFirst({
     where: { id, userId: user.id },
     include: { events: { orderBy: { createdAt: "asc" } } },
@@ -74,7 +75,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
   const job = application
     ? await db.job.findUnique({
         where: { id: application.jobId },
-        select: { title: true, location: true, applyUrl: true, company: { select: { name: true } } },
+        select: { title: true, location: true, applyUrl: true, source: true, company: { select: { name: true, logoUrl: true } } },
       })
     : null;
 
@@ -108,11 +109,12 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
 
   // The story: the swipe, then each step that has happened (or is happening) with the time of its event.
   // Like the design, steps still to come are not listed.
+  const answers = { yours: fields.filter((field) => field.source !== "ai_draft").length, drafted: fields.filter((field) => field.source === "ai_draft").length };
   const story: StoryStep[] = [
-    { key: "swiped", time: clock(application.createdAt), title: "You swiped right", state: "done" as const },
-    ...buildSteps(application.events, application.status).map((step): StoryStep => {
+    { key: "swiped", time: clock(application.createdAt), title: "You picked this job", state: "done" as const },
+    ...buildSteps(application.events, application.status, answers).map((step): StoryStep => {
       const event = application.events.find((item) => STEP_EVENT[step.key]?.(item));
-      const sub = step.state === "current" ? "in progress" : step.state === "stopped" ? "stopped here" : (step.note ?? null);
+      const sub = step.state === "current" ? "working on it now" : step.state === "stopped" ? "stopped here" : (step.note ?? null);
       const state: StoryStep["state"] = step.key === "submitted" && step.state === "done" ? "end" : step.state;
       return { key: step.key, time: event && step.state !== "todo" ? clock(event.createdAt) : "", title: step.label, sub, state };
     }),
@@ -122,6 +124,10 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
     .map((source) => ({ source, count: fields.filter((field) => field.source === source).length }))
     .filter((item) => item.count > 0);
   const shot = application.events.find((event) => event.type === "screenshot");
+  // Where a failed run stopped: the page as the agent last saw it (runner.ts captureFailure), newest attempt.
+  const failShot = stopped ? application.events.findLast((event) => event.type === "screenshot" && /\/fail-\d+\.(png|jpg)$/.test(event.message ?? "")) : undefined;
+  const board = boardLabel(job?.source);
+  const working = ["queued", "inspecting", "filling"].includes(application.status);
   // The job board's own confirmation, taken after Submit (runner.ts captureConfirmation).
   const sentShot = sent ? application.events.findLast((event) => event.type === "screenshot" && /\/sent-\d+\.(png|jpg)$/.test(event.message ?? "")) : undefined;
   const address = (() => {
@@ -145,11 +151,12 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
       />
       <div className="flex flex-col px-5 pb-10">
         <header className="flex flex-col gap-1.5 pt-3.5">
-          <CompanyMark name={company} size={56} />
+          <CompanyMark name={company} logoUrl={job?.company.logoUrl} size={56} />
           <h1 className="m-0 mt-2.5 type-display-md">{role}</h1>
           <span className="text-[15px] text-muted-foreground">
             {company}
             {job?.location ? ` · ${job.location}` : ""}
+            {board ? ` · via ${board}` : ""}
           </span>
           <span className="mt-2 flex">
             <StatusPill kind={stopped ? "stop" : "ok"}>
@@ -158,7 +165,12 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
           </span>
         </header>
 
-        {!sent ? (
+        {working ? (
+          <section aria-label="Where this stands" className="mt-5 flex flex-col gap-3 rounded-panel bg-inverse p-4 text-inverse-foreground">
+            <AgentStatus text={STAGES[statusMeta(application.status).stage ?? 0]} detail={`Your agent is applying to ${company}`} />
+            <ApplicationActions id={application.id} status={application.status} company={company} look="panel" />
+          </section>
+        ) : !sent ? (
           <FailureCard
             eyebrow={stopped ? "What happened" : ["needs_input", "pending_verification"].includes(application.status) ? "What it needs" : "Where it is"}
             headline={outcome.headline}
@@ -168,7 +180,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
                 <ApplicationActions id={application.id} status={application.status} company={company} look="panel" />
               ) : undefined
             }
-            note={application.status === "blocked" ? "Nothing was sent. The rule stopped it before the form was opened." : undefined}
+            note={application.status === "blocked" ? "Nothing was sent. Your agent held it back before opening the form." : undefined}
           />
         ) : null}
 
@@ -183,7 +195,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
 
         <section aria-label="What was filled in" className="mt-6">
           <Eyebrow as="h2" className="mb-1.5">
-            {sent ? "Everything we filled in" : stopped ? "What we filled in before it stopped" : "What we have filled in so far"}
+            {sent ? "Everything your agent filled in" : stopped ? "What your agent filled in before it stopped" : "What your agent has filled in so far"}
             {fields.length > 0 ? ` · ${fields.length} fields` : ""}
           </Eyebrow>
           {fields.length === 0 ? (
@@ -197,12 +209,12 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
 
         {application.screenshotKey ? (
           <section aria-label="Screenshot" className="mt-8 flex flex-col gap-3">
-            <Eyebrow as="h2">{sent ? "The form just before we sent it" : "The form when it stopped"}</Eyebrow>
+            <Eyebrow as="h2">{sent ? "The form just before your agent sent it" : "The form as your agent filled it"}</Eyebrow>
             <ScreenshotFrame src={`/api/files/${application.screenshotKey}`} alt="The filled application form" address={address} />
             {shot ? (
               <span className="text-[13px] text-muted-foreground">
                 Taken at {clock(shot.createdAt, true)}
-                {sent ? ", right before we pressed Submit." : "."}
+                {sent ? ", right before your agent pressed Submit." : "."}
               </span>
             ) : null}
             <a
@@ -232,6 +244,14 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
           </section>
         ) : null}
 
+        {failShot?.message ? (
+          <section aria-label="Where it stopped" className="mt-8 flex flex-col gap-3">
+            <Eyebrow as="h2">Where it stopped</Eyebrow>
+            <ScreenshotFrame src={`/api/files/${failShot.message}`} alt="The page when the application stopped" address={address} />
+            <span className="text-[13px] text-muted-foreground">What your agent saw at {clock(failShot.createdAt, true)}.</span>
+          </section>
+        ) : null}
+
         {job?.applyUrl ? (
           <a
             href={job.applyUrl}
@@ -244,6 +264,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
           </a>
         ) : null}
 
+        {debug ? (
         <details className="group mt-4 rounded-[18px] border-[1.5px] border-line bg-surface">
           <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-4 text-[15px] font-semibold marker:hidden">
             Technical details
@@ -267,6 +288,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
             </ol>
           </div>
         </details>
+        ) : null}
       </div>
     </>
   );

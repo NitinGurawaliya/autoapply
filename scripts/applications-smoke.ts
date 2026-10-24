@@ -80,7 +80,7 @@ async function main() {
     const blockedRow = page.locator(`li:has(a[href="/applications/${blockedApp.id}"])`);
     const failedText = await failedRow.innerText();
     check("a failed row says what went wrong in plain words", /The form rejected some answers/.test(failedText) && !/Greenhouse rejected the form:/.test(failedText), failedText.replace(/\s+/g, " ").slice(0, 120));
-    check("a blocked row names the rule in plain words and has nothing to do", /Match too low/.test(await blockedRow.innerText()) && /Nothing to do/.test(await blockedRow.innerText()));
+    check("a blocked row names the rule in plain words and has nothing to do", /Not a close enough match/.test(await blockedRow.innerText()) && /Nothing to do/.test(await blockedRow.innerText()));
     check("a failed row offers Retry", await failedRow.getByRole("button", { name: "Retry" }).isVisible());
     check("rows show a company tile", (await failedRow.locator("[data-company-mark]").count()) === 1);
     check("a sent row shows the ink check and says Sent", /Sent/.test(await page.locator(`li:has(a[href="/applications/${sent.id}"])`).innerText()));
@@ -106,10 +106,10 @@ async function main() {
     check("every filled value shows its source", ["You", "Resume", "AI draft", "Default"].every((s) => main.includes(s)));
     check("reused and worked-out answers show their badge and why", main.includes("You · reused") && main.includes("Worked out") && main.includes('Why: your answer to "How did you hear about this job?" (OpenAI)') && main.includes("Why: derived from your location: Pune, India"));
     const stepNames = await page.locator('section[aria-label="Progress"] [data-step-title]').allInnerTexts();
-    check("the story shows the steps, all done, ending in Submitted", ["You swiped right", "Rules checked", "Application form read", "Answers prepared", "Form filled in", "Submitted"].every((s) => stepNames.join("|").includes(s)) && (await page.locator('section[aria-label="Progress"] li[data-step="end"]').count()) === 1);
+    check("the story shows the agent steps, all done, ending in Submitted", ["You picked this job", "Read the application form", "Wrote your answers", "Filled in the form", "Submitted"].every((s) => stepNames.join("|").includes(s)) && (await page.locator('section[aria-label="Progress"] li[data-step="end"]').count()) === 1);
     check("the confirmation appears under the Submitted step", main.includes('Confirmation: text "Thank you for applying"'));
     check("a submitted application has no problem callout", (await page.locator('section[aria-label="Where this stands"]').count()) === 0);
-    check("the trust panel says nothing was made up", main.includes("Nothing here was made up"));
+    check("the trust panel says where the answers came from", main.includes("Where your answers came from"));
     // The design shows the screenshot in its browser frame straight away, with a full-size link.
     const shotImg = page.locator('img[alt="The filled application form"]');
     await shotImg.scrollIntoViewIfNeeded();
@@ -138,7 +138,7 @@ async function main() {
     // ---------- detail: blocked and running
     await page.goto(`${BASE}/applications/${blockedApp.id}`, { timeout: 90000 });
     await page.locator('section[aria-label="Where this stands"]').waitFor({ timeout: 30000 });
-    check("a blocked application names the rule in plain words", /Match too low/.test(await page.locator('section[aria-label="Where this stands"]').innerText()));
+    check("a blocked application names the rule in plain words", /Not a close enough match/.test(await page.locator('section[aria-label="Where this stands"]').innerText()));
     await page.goto(`${BASE}/applications/${running.id}`, { timeout: 90000 });
     await page.getByText("in progress").first().waitFor({ timeout: 30000 });
     check("a running application shows its current step and a Cancel action", (await page.getByText("in progress").count()) >= 1 && (await page.getByRole("button", { name: "Cancel" }).isVisible()));

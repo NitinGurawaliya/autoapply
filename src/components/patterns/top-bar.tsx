@@ -43,9 +43,13 @@ export function BackTopBar({ href, label, backLabel }: { href: string; label: st
   );
 }
 
-/** "18/100" with a tiny bar: applications sent today against the daily cap. */
+/**
+ * "18 sent today": what the agent has done today. The cap shows only as it comes near (5 or fewer left) or is reached,
+ * so the header reads as the agent's work, not a quota (24 Oct, owner).
+ */
 export function UsagePill({ used, cap }: { used: number; cap: number }) {
   const percent = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0;
+  const near = cap - used <= 5;
   return (
     <div
       data-daily-usage=""
@@ -54,12 +58,14 @@ export function UsagePill({ used, cap }: { used: number; cap: number }) {
     >
       <span className="text-sm font-semibold tabular-nums">
         {used}
-        <span className="font-medium text-muted-foreground">/{cap}</span>
+        <span className="font-medium text-muted-foreground"> {near ? (used >= cap ? "· done for today" : `· ${cap - used} left`) : "sent today"}</span>
       </span>
-      <span className="sr-only">applications started today{used >= cap ? ". Daily limit reached." : ""}</span>
-      <span aria-hidden="true" className="block h-1 w-8 overflow-hidden rounded-full bg-track">
-        <span className="block h-full bg-bar transition-[width] duration-400 ease-settle" style={{ width: `${percent}%` }} />
-      </span>
+      <span className="sr-only">{used >= cap ? ". Daily limit reached." : ""}</span>
+      {near ? (
+        <span aria-hidden="true" className="block h-1 w-8 overflow-hidden rounded-full bg-track">
+          <span className="block h-full bg-bar transition-[width] duration-400 ease-settle" style={{ width: `${percent}%` }} />
+        </span>
+      ) : null}
     </div>
   );
 }

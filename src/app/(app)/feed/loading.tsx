@@ -1,3 +1,4 @@
+import { AgentStatus } from "@/components/patterns/agent-status";
 import { Skeleton } from "@/components/ui/eyebrow";
 
 export default function FeedLoading() {
@@ -9,7 +10,8 @@ export default function FeedLoading() {
         <Skeleton className="h-9 w-24 rounded-full" />
         <Skeleton className="size-11 rounded-full" />
       </div>
-      <Skeleton className="mt-[18px] h-[420px] rounded-card" />
+      <AgentStatus text="Your agent is finding jobs for you" className="mt-[18px] justify-center" />
+      <Skeleton className="h-[420px] rounded-card" />
     </div>
   );
 }

@@ -4,6 +4,13 @@ The look comes from the owner's design in `design/` (exported from Claude Design
 
 Rules from CLAUDE.md still apply: mobile first at 390 px, centred at 480 px on desktop, shadcn/ui, one brand accent, no gradients, no emoji.
 
+**Agent voice (owner, 24 Oct), where the app knowingly departs from the design's copy.** The user sees their agent at work, never the pipeline behind it:
+- Words: stages read "Getting ready to apply", "Reading the application form", "Writing your answers", "Sent" (`lib/status-meta.ts STAGES`); outcomes say what happened and what to do, never a rule name, worker, queue count or raw page text (`lib/explain.ts`); the card's eyebrow is "Why your agent picked it", its reason written as sentences (`modules/jobs/match.ts`); the application story is the agent's steps with counts, without rule checks (`lib/steps.ts`).
+- The agent: `patterns/agent-status.tsx`, a lime disc with the agent spark (icon `agent`) that pulses while it works, and its words with three thinking dots; still under reduced motion. It replaces the segmented progress on in-progress rows and the after-swipe toast, and is the live card on the application page and the feed's loading line.
+- Logos and the board: `CompanyMark` shows the company's logo (`Company.logoUrl`, white behind it, initials until it loads or when it fails, `ui/logo-image.tsx`); the card has a "via Greenhouse" chip (`lib/board-label.ts`). The match badge always shows its tier word, never a number.
+- Hidden: the daily cap appears only within 5 of the limit ("18 sent today"); the raw event log on the application page shows only for an `ADMIN_EMAILS` user with `?debug=1`.
+Colours, type, sizes, radii, shadows and motion tokens are unchanged: ink and lime only, lime a fill.
+
 ## How the UI is built
 
 Four layers. Each uses only the one below it.

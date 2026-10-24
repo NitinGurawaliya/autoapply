@@ -76,11 +76,11 @@ export function Callout({ children, className }: { children: ReactNode; classNam
   );
 }
 
-/** "Nothing here was made up" with how many answers came from each source. */
+/** "Where your answers came from" with how many came from each source. */
 export function TrustPanel({ text, counts, className }: { text: ReactNode; counts: Array<{ source: string; count: number }>; className?: string }) {
   return (
     <section className={cn("flex flex-col gap-2.5 rounded-panel bg-subtle p-4", className)}>
-      <h2 className="m-0 text-lg font-semibold tracking-[-0.01em]">Nothing here was made up</h2>
+      <h2 className="m-0 text-lg font-semibold tracking-[-0.01em]">Where your answers came from</h2>
       <p className="m-0 text-sm leading-normal">{text}</p>
       {counts.length ? (
         <div className="mt-0.5 flex flex-wrap gap-1.5">

@@ -20,6 +20,7 @@ type Row = {
   error: string | null;
   title: string;
   company: string;
+  logoUrl?: string | null;
   location: string;
   submittedAt: string | null;
   createdAt: string;
@@ -56,7 +57,8 @@ function day(iso: string) {
 
 function progressLabel(row: Row) {
   const stage = statusMeta(row.status).stage ?? 0;
-  if (row.status === "queued" && row.ahead != null) return `${STAGES[0]} · ${row.ahead === 0 ? "you are next" : `${row.ahead} ahead`}`;
+  // No queue counts: "Up next" while others are ahead of it, the agent's own words once it starts (24 Oct, owner).
+  if (row.status === "queued" && row.ahead != null && row.ahead > 0) return "Up next";
   return STAGES[stage];
 }
 
@@ -187,9 +189,10 @@ export function ApplicationsList() {
           key={row.id}
           href={href}
           company={row.company}
+          logoUrl={row.logoUrl}
           role={row.title}
           when={short(row.createdAt)}
-          ask={verify ? "Submit was pressed but their job board did not confirm it. Check your email for their confirmation." : code ? "Their job board emailed you a code." : "Their form asked something only you can answer."}
+          ask={verify ? "Your agent pressed Submit, but the job board didn't confirm it. Check your email for their confirmation." : code ? "The job board emailed you a code. Your agent needs it to send this." : "Your agent needs an answer only you can give."}
           cta={verify ? "See what happened" : code ? "Enter code" : "Answer"}
           actions={<ApplicationActions id={row.id} status={row.status} company={row.company} onChanged={changed} />}
         />
@@ -201,6 +204,7 @@ export function ApplicationsList() {
           key={row.id}
           href={href}
           company={row.company}
+          logoUrl={row.logoUrl}
           role={row.title}
           stage={statusMeta(row.status).stage ?? 0}
           label={progressLabel(row)}
@@ -208,13 +212,14 @@ export function ApplicationsList() {
         />
       );
     }
-    if (group === "sent") return <SentRow key={row.id} href={href} company={row.company} role={row.title} when={day(row.submittedAt ?? row.createdAt)} />;
+    if (group === "sent") return <SentRow key={row.id} href={href} company={row.company} logoUrl={row.logoUrl} role={row.title} when={day(row.submittedAt ?? row.createdAt)} />;
     const outcome = explainOutcome(row.status, row.error, row.waitingFor);
     return (
       <FailedRow
         key={row.id}
         href={href}
         company={row.company}
+        logoUrl={row.logoUrl}
         role={row.title}
         reason={outcome.headline}
         action={["failed", "cancelled"].includes(row.status) ? <ApplicationActions id={row.id} status={row.status} company={row.company} onChanged={changed} /> : undefined}

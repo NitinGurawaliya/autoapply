@@ -2,6 +2,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { callJson } from "@/lib/llm";
 import { BOARDS as ALL_BOARDS, type BoardDiscovery, type BoardSource } from "./boards";
+import { fetchLogoUrl } from "./logos";
 
 /**
  * Discovery that runs by itself (T89): every day the worker finds companies that are not on our list yet, checks each
@@ -194,6 +195,9 @@ export async function recordChecked(
         create: { source, slug: result.slug, name: ((candidate.from === "crawl" || candidate.from === "import") && (await board.nameOf?.(result.slug))) || candidate.name, stage: candidate.stage, addedBy: "discovery" },
         update: {},
       });
+      // Its logo for the cards, from the same public board page (logos.ts); a miss is looked at again later.
+      const logoUrl = await fetchLogoUrl(source, result.slug).catch(() => null);
+      await db.$executeRaw`UPDATE "Company" SET "logoUrl" = ${logoUrl}, "logoCheckedAt" = now() WHERE source = ${source} AND slug = ${result.slug} AND "logoUrl" IS NULL`;
       log(`discovery ${source}: added ${candidate.name} (${result.slug}): ${result.indiaJobs} India jobs, ${result.freshIndiaJobs} in the last ${FRESH_DAYS} days`);
     }
   }

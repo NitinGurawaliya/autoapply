@@ -156,6 +156,9 @@ model Company {
   // "seed" (prisma/companies.ts) or "discovery" (modules/jobs/discovery.ts, added by its rule)
   addedBy        String    @default("seed")
   addedAt        DateTime  @default(now())
+  // The logo on its public job board page (modules/jobs/logos.ts), shown on its cards; checked again after 30 days when missing.
+  logoUrl        String?
+  logoCheckedAt  DateTime?
   jobs           Job[]
 
   @@unique([source, slug])

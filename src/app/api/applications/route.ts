@@ -71,7 +71,7 @@ export async function GET(request: Request) {
       : [],
     db.job.findMany({
       where: { id: { in: applications.map((application) => application.jobId) } },
-      select: { id: true, title: true, location: true, applyUrl: true, company: { select: { name: true } } },
+      select: { id: true, title: true, location: true, applyUrl: true, company: { select: { name: true, logoUrl: true } } },
     }),
     applications.some((application) => application.status === "queued")
       ? db.application.findMany({ where: { status: "queued" }, select: { createdAt: true } })
@@ -93,6 +93,7 @@ export async function GET(request: Request) {
           ahead: application.status === "queued" ? waitingInLine.filter((other) => other.createdAt < application.createdAt).length : null,
           title: job?.title ?? "Unknown role",
           company: job?.company.name ?? "Unknown company",
+          logoUrl: job?.company.logoUrl ?? null,
           location: job?.location ?? "",
         };
       }),

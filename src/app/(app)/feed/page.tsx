@@ -1,3 +1,4 @@
+import { AgentStatus } from "@/components/patterns/agent-status";
 import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -263,7 +264,8 @@ async function GapsLine({ userId }: { userId: string }) {
 function DeckSkeleton() {
   return (
     <div className="flex flex-1 flex-col justify-center gap-6 px-5 pb-2" aria-busy="true" aria-label="Loading jobs">
-      <Skeleton className="mt-[18px] h-[420px] rounded-card" />
+      <AgentStatus text="Your agent is finding jobs for you" className="mt-[18px] justify-center" />
+      <Skeleton className="h-[420px] rounded-card" />
       <div className="flex items-center justify-center gap-8">
         <Skeleton className="size-16 rounded-full" />
         <Skeleton className="size-18 rounded-full" />
@@ -329,8 +331,8 @@ async function FeedDeck({
   return (
     <EmptyState
       art={<DeckEmptyArt />}
-      title="No jobs match these filters"
-      text="Jobs you have not applied to yet will show up here as companies post them."
+      title="No new jobs right now"
+      text="Your agent keeps looking. New jobs land through the day, and we'll let you know."
       actions={
         <Link href="/applications" className={buttonVariants({ variant: "primary", size: "xl", className: "w-full" })}>
           See my applications

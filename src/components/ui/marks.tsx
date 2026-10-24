@@ -2,6 +2,7 @@ import * as React from "react";
 import { cva } from "class-variance-authority";
 import { cn } from "cn";
 import { Icon } from "@/components/ui/icons";
+import { LogoImage } from "@/components/ui/logo-image";
 
 /** First letters of up to two words: "Lumen Pay" → "LP". */
 export function initialsOf(text: string, split: RegExp = /[\s._-]+/) {
@@ -33,21 +34,24 @@ const markVariants = cva("box-border inline-flex flex-none items-center justify-
   defaultVariants: { size: 48, tone: "inverse" },
 });
 
-/** Company initials tile. */
+/** Company tile: its logo when we have one (Company.logoUrl), over its initials, which show if the logo fails. */
 export function CompanyMark({
   name,
+  logoUrl,
   size = 48,
   tone = "inverse",
   className,
 }: {
   name: string;
+  logoUrl?: string | null;
   size?: 36 | 40 | 44 | 48 | 56;
   tone?: "inverse" | "subtle" | "outline" | "accent";
   className?: string;
 }) {
   return (
-    <span aria-hidden="true" data-company-mark="" className={cn(markVariants({ size, tone }), className)}>
+    <span aria-hidden="true" data-company-mark="" className={cn(markVariants({ size, tone }), logoUrl && "relative overflow-hidden", className)}>
       {initialsOf(name)}
+      {logoUrl ? <LogoImage src={logoUrl} /> : null}
     </span>
   );
 }
@@ -55,24 +59,20 @@ export function CompanyMark({
 /** The tilted lime "86 match" badge. */
 const TIER_WORD = { strong: "Strong", good: "Good", stretch: "Stretch" } as const;
 
-/** The lime badge: the tier ("Strong match") when given (T82), else the score. */
+/** The lime badge: the tier's word ("Strong match"), worked out from the score when no tier is given; never a number. */
 export function MatchBadge({ score, tier, size = "lg", className }: { score: number; tier?: keyof typeof TIER_WORD | null; size?: "lg" | "md"; className?: string }) {
-  const word = tier ? TIER_WORD[tier] : null;
+  const word = TIER_WORD[tier ?? (score >= 75 ? "strong" : score >= 60 ? "good" : "stretch")];
   return (
     <span
       role="img"
-      aria-label={word ? `${word} match` : `Match score ${score} percent`}
+      aria-label={`${word} match`}
       className={cn(
         "box-border flex -rotate-8 flex-col items-center justify-center rounded-full border-2 border-ink bg-primary leading-none text-ink",
         size === "lg" ? "size-21 shadow-hard" : "size-[66px] shadow-[0_4px_0_var(--ink)]",
         className,
       )}
     >
-      {word ? (
-        <span className={cn("font-display font-extrabold tracking-[-0.03em]", size === "lg" ? "text-[19px]" : "text-[15px]")}>{word}</span>
-      ) : (
-        <span className={cn("font-display font-extrabold tracking-[-0.04em]", size === "lg" ? "text-[32px]" : "text-2xl")}>{score}</span>
-      )}
+      <span className={cn("font-display font-extrabold tracking-[-0.03em]", size === "lg" ? "text-[19px]" : "text-[15px]")}>{word}</span>
       <span className={cn("mt-0.5 font-bold tracking-[0.06em] uppercase", size === "lg" ? "text-[11px]" : "text-[9px]")}>match</span>
     </span>
   );

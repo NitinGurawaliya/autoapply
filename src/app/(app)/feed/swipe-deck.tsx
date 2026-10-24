@@ -10,6 +10,7 @@ import { DeckDoneArt } from "@/components/patterns/drawings";
 import type { JobCardData } from "@/components/patterns/job-card";
 import { SwipeStage, type Direction, type SwipeStageHandle } from "@/components/patterns/swipe-stage";
 import { AgentToast } from "@/components/patterns/agent-toast";
+import { boardLabel } from "@/lib/board-label";
 import { explainOutcome } from "@/lib/explain";
 import { statusMeta } from "@/lib/status-meta";
 import type { FeedJob } from "@/modules/jobs";
@@ -20,7 +21,6 @@ const TOAST_MAX_MS = 8000;
 const TOAST_AFTER_SENT_MS = 1600;
 
 const REMOTE_LABEL: Record<string, string> = { remote: "Remote", hybrid: "Hybrid", onsite: "On-site" };
-const STAGE_LABEL: Record<string, string> = { startup: "Startup", midsize: "Mid-size", mnc: "MNC" };
 
 function cardData(job: FeedJob): JobCardData {
   const remote = REMOTE_LABEL[job.remoteType];
@@ -33,10 +33,10 @@ function cardData(job: FeedJob): JobCardData {
     why: job.reason,
     where,
     asks,
-    hint: job.hint,
     score: job.score,
     tier: job.tier,
-    stage: job.stage ? STAGE_LABEL[job.stage] ?? null : null,
+    board: boardLabel(job.source),
+    logoUrl: job.logoUrl,
     isNew: job.isNew,
     applyUrl: job.applyUrl,
   };
@@ -104,11 +104,11 @@ export function SwipeDeck({
         // The queue is full. Nothing was saved, so the card goes back on top.
         seen.current.delete(job.id);
         setDeck([job, ...deck.current.filter((card) => card.id !== job.id)]);
-        toast.error("Your queue is full", { description: "Wait for a few applications to finish, then swipe again." });
+        toast.error("Your agent is busy", { description: "Several applications are still on the way. Swipe again in a minute." });
         return;
       }
       if (response.status === 403 && body.blocked) {
-        toast.error(`${job.company}: ${explainOutcome("blocked", body.blocked).headline}`, { description: `Rule: ${body.blocked}` });
+        toast.error(`${job.company}: ${explainOutcome("blocked", body.blocked).headline}`, { description: explainOutcome("blocked", body.blocked).next ?? undefined });
         return;
       }
       if (response.status === 409 && body.error === "already_swiped") return;

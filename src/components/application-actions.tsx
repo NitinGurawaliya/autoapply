@@ -49,7 +49,7 @@ export function ApplicationActions({ id, status, company, onChanged, look = "inl
         void forgetVisitedPages();
         onChanged?.();
       } else if (response.status === 403 && body.blocked) {
-        toast.error(`${company}: ${explainOutcome("blocked", body.blocked).headline}`, { description: `Rule: ${body.blocked}` });
+        toast.error(`${company}: ${explainOutcome("blocked", body.blocked).headline}`, { description: explainOutcome("blocked", body.blocked).next ?? undefined });
       } else if (response.status === 409) {
         toast.message("That application already changed. Refreshing.");
         void forgetVisitedPages();

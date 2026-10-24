@@ -6,6 +6,8 @@ export default auth(async (req) => {
   const { pathname } = req.nextUrl;
   // Switched off (production): a real 404 status, not a "not found" page answered with 200 (16 Oct QA).
   if (pathname.startsWith("/mock")) return mockFormEnabled() ? NextResponse.next() : new NextResponse("Not found", { status: 404 });
+  // The UI gallery (src/app/dev/ui) holds no data and is a 404 in production: open it without signing in in development.
+  if (pathname.startsWith("/dev/") && process.env.NODE_ENV !== "production") return NextResponse.next();
 
   const signedIn = Boolean(req.auth?.user?.id);
 
