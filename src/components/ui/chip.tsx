@@ -15,8 +15,9 @@ const chipVariants = cva(
         tab: "h-10 flex-none rounded-full px-3.5 text-sm whitespace-nowrap",
         // Two-up choices inside a card (visa sponsorship).
         block: "h-11 justify-center rounded-tile text-[15px]",
-        // Big answer buttons in the needs-you sheet.
-        answer: "h-14 justify-center rounded-control text-[17px]",
+        // Big answer buttons in the needs-you sheet. 56px tall; a long option (24 Oct: Juniper Square's AI-use answers)
+        // wraps inside the button and the button grows, instead of spilling over its neighbours.
+        answer: "min-h-14 justify-center rounded-control px-4 py-3 text-center text-[17px] leading-snug text-balance",
       },
       selected: { true: "", false: "" },
     },
