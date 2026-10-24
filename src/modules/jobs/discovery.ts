@@ -21,7 +21,7 @@ const PER_RUN = 40;
 // over time); up to RECHECK_PER_RUN a day. The model alone knows few new names by now (0-2 a day, 11 Oct).
 const RECHECK_DAYS = 14;
 const RECHECK_PER_RUN = 60;
-const CONCURRENCY = 4;
+export const CONCURRENCY = 4;
 
 // A different focus each day, so the model does not keep proposing the same famous names.
 const SECTORS = [
@@ -47,7 +47,7 @@ export const normalName = (name: string) => name.toLowerCase().replace(/&/g, "an
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** A board discovery runs on: the registry entry's name and slug rule with its discovery settings. */
-type Board = BoardDiscovery & { source: BoardSource; label: string; slugOf: (text: string) => string };
+export type Board = BoardDiscovery & { source: BoardSource; label: string; slugOf: (text: string) => string };
 
 /** The boards discovery covers, in order (Greenhouse, then Ashby). */
 export const BOARDS: Board[] = ALL_BOARDS.flatMap((board) => (board.discovery ? [{ source: board.source, label: board.label, slugOf: board.slugOf, ...board.discovery }] : []));
@@ -60,14 +60,21 @@ export const BOARDS: Board[] = ALL_BOARDS.flatMap((board) => (board.discovery ? 
 const MAX_CALLS = 3;
 // 50 a call ran past the model's output limit and came back cut off (15 Oct, Ashby): no names at all.
 const NAMES_PER_CALL = 25;
-export async function proposeCandidates(known: { keys: Set<string>; names: string[] }, count = PER_RUN, day = new Date(), board: Board = BOARDS[0]) {
+/** Which companies the model is asked for: the daily run looks past household names; a "large" run asks for them. */
+export type DiscoveryFocus = "broad" | "large";
+const FOCUS_TEXT: Record<DiscoveryFocus, string> = {
+  broad: "Go beyond the obvious household names: mid-size companies, well-funded startups, and global software companies with smaller Indian teams are what we need.",
+  large: "Large, established employers only: global software and internet companies, public companies, unicorns and late-stage companies with a sizeable engineering team in India (hundreds of employees or more there).",
+};
+
+export async function proposeCandidates(known: { keys: Set<string>; names: string[] }, count = PER_RUN, day = new Date(), board: Board = BOARDS[0], focus: DiscoveryFocus = "broad") {
   const index = Math.floor(day.getTime() / (24 * 60 * 60 * 1000));
   const out: Array<{ name: string; stage: string | null; slugs: string[] }> = [];
   for (let call = 0; call < MAX_CALLS && out.length < count; call += 1) {
     const sector = SECTORS[(index + call * 5) % SECTORS.length];
     const result = await callJson(
       proposalSchema,
-      `You help find employers for job seekers in India. List real companies that hire software, data, security or other tech roles in India (an office in India, or remote roles open to India) and that likely use ${board.label} as their applicant tracking system (job board at ${board.boardUrl}). Go beyond the obvious household names: mid-size companies, well-funded startups, and global software companies with smaller Indian teams are what we need. Never list a company in "avoid" (already checked). For each: name, stage (startup | midsize | mnc) and up to 3 likely ${board.label} board slugs (lowercase, e.g. the company name without spaces). Return {"companies":[{"name","stage","slugs"}]} with ${NAMES_PER_CALL} companies.`,
+      `You help find employers for job seekers in India. List real companies that hire software, data, security or other tech roles in India (an office in India, or remote roles open to India) and that likely use ${board.label} as their applicant tracking system (job board at ${board.boardUrl}). ${FOCUS_TEXT[focus]} Never list a company in "avoid" (already checked). For each: name, stage (startup | midsize | mnc) and up to 3 likely ${board.label} board slugs (lowercase, e.g. the company name without spaces). Return {"companies":[{"name","stage","slugs"}]} with ${NAMES_PER_CALL} companies.`,
       JSON.stringify({ sector, avoid: [...known.names, ...out.map((item) => item.name)] }),
     );
     for (const company of result.companies) {
@@ -126,13 +133,18 @@ export async function slugsFromCrawl(host: string, crawls = CRAWLS, log: (line: 
       if (attempt > 0) await pause(5000 * 2 ** attempt);
       meta = (await fetch(`${base}&showNumPages=true`, { signal: AbortSignal.timeout(60000) }).then((r) => (r.ok ? r.json() : null)).catch(() => null)) as { pages?: number } | null;
     }
-    for (let page = 0; page < Math.min(meta?.pages ?? 0, options.maxPages ?? Infinity); page += 1) {
+    // A busy index (503) used to read as an empty crawl: 24 Oct, Lever 284 boards one run and 27 the next, Ashby 0.
+    if (!meta) log(`discovery: ${id} ${host}: the index did not say how many pages it has; this crawl was skipped`);
+    const pages = Math.min(meta?.pages ?? 0, options.maxPages ?? Infinity);
+    let unread = 0;
+    for (let page = 0; page < pages; page += 1) {
       // The index is often busy (503): a page is tried up to 4 times, waiting longer each time, before it counts as empty.
       let text = "";
       for (let attempt = 0; attempt < 4 && !text; attempt += 1) {
         if (attempt > 0) await pause(5000 * 2 ** attempt);
         text = await fetch(`${base}&page=${page}`, { signal: AbortSignal.timeout(120000) }).then((r) => (r.ok ? r.text() : "")).catch(() => "");
       }
+      if (!text) unread += 1;
       for (const line of text.split("\n")) {
         try {
           if (options.slugFromUrl) {
@@ -148,7 +160,7 @@ export async function slugsFromCrawl(host: string, crawls = CRAWLS, log: (line: 
       }
       await pause(1000);
     }
-    log(`discovery: ${id} → ${slugs.size} ${host} boards so far`);
+    log(`discovery: ${id} → ${slugs.size} ${host} boards so far${unread > 0 ? ` (${unread} of ${pages} index pages could not be read)` : ""}`);
   }
   return [...slugs];
 }
@@ -156,14 +168,45 @@ export async function slugsFromCrawl(host: string, crawls = CRAWLS, log: (line: 
 type Totals = { proposed: number; rechecked: number; onBoard: number; added: number; indiaJobsAdded: number; errors: number };
 
 /** Today's discovery on every board (BOARDS), one after the other. */
-export async function runDiscovery(options: { count?: number; crawlLimit?: number; boards?: string[]; log?: (line: string) => void } = {}) {
+export async function runDiscovery(options: { count?: number; crawlLimit?: number; boards?: string[]; focus?: DiscoveryFocus; log?: (line: string) => void } = {}) {
   const totals: Record<string, Totals> = {};
   for (const board of BOARDS.filter((item) => !options.boards || options.boards.includes(item.source))) totals[board.source] = await discoverOn(board, options);
   return totals;
 }
 
+/**
+ * Saves one checked board: a DiscoveryCandidate row (so it is never checked as new again) and, when it passes the
+ * board's rule, the Company that the ingest then reads. Used by the daily run and by scripts/discover-boards.ts.
+ */
+export async function recordChecked(
+  board: Board,
+  candidate: { name: string; stage: string | null; from: string },
+  result: Awaited<ReturnType<typeof checkCandidate>>,
+  log: (line: string) => void = () => undefined,
+) {
+  const source = board.source;
+  let status = "not_on_board";
+  if (result.slug) {
+    status = result.indiaJobs >= board.minIndiaJobs && (!board.needsFresh || result.freshIndiaJobs >= 1) ? "added" : "few_india_jobs";
+    if (status === "added") {
+      await db.company.upsert({
+        where: { source_slug: { source, slug: result.slug } },
+        create: { source, slug: result.slug, name: ((candidate.from === "crawl" || candidate.from === "import") && (await board.nameOf?.(result.slug))) || candidate.name, stage: candidate.stage, addedBy: "discovery" },
+        update: {},
+      });
+      log(`discovery ${source}: added ${candidate.name} (${result.slug}): ${result.indiaJobs} India jobs, ${result.freshIndiaJobs} in the last ${FRESH_DAYS} days`);
+    }
+  }
+  await db.discoveryCandidate.upsert({
+    where: { source_name: { source, name: candidate.name } },
+    create: { source, name: candidate.name, slug: result.slug, stage: candidate.stage, from: candidate.from, status, openJobs: result.openJobs, indiaJobs: result.indiaJobs, freshIndiaJobs: result.freshIndiaJobs },
+    update: { slug: result.slug, status, openJobs: result.openJobs, indiaJobs: result.indiaJobs, freshIndiaJobs: result.freshIndiaJobs, checkedAt: new Date() },
+  });
+  return status;
+}
+
 /** One board: propose, check, record every name, add the ones that pass the rule. */
-async function discoverOn(board: Board, options: { count?: number; crawlLimit?: number; log?: (line: string) => void }) {
+async function discoverOn(board: Board, options: { count?: number; crawlLimit?: number; focus?: DiscoveryFocus; log?: (line: string) => void }) {
   const log = options.log ?? ((line: string) => console.log(line));
   const source = board.source;
   const [checked, companies, everywhere] = await Promise.all([
@@ -175,7 +218,7 @@ async function discoverOn(board: Board, options: { count?: number; crawlLimit?: 
   const names = [...new Set([...checked.map((row) => row.name), ...everywhere.map((row) => row.name)])];
   const known = { keys: new Set(names.map(normalName)), names };
   const knownSlugs = new Set([...checked.map((row) => row.slug), ...companies.map((row) => row.slug)].filter((slug): slug is string => !!slug));
-  const proposals = await (board.fromModel === false ? Promise.resolve([]) : proposeCandidates(known, options.count ?? PER_RUN, new Date(), board)).catch((error) => {
+  const proposals = await (board.fromModel === false ? Promise.resolve([]) : proposeCandidates(known, options.count ?? PER_RUN, new Date(), board, options.focus)).catch((error) => {
     log(`discovery ${source}: the model gave no names (${error instanceof Error ? error.message.slice(0, 80) : "failed"})`);
     return [] as Awaited<ReturnType<typeof proposeCandidates>>;
   });
@@ -188,7 +231,8 @@ async function discoverOn(board: Board, options: { count?: number; crawlLimit?: 
   const rechecks = due.filter((row) => !companies.some((company) => company.slug === row.slug)).map((row) => ({ name: row.name, stage: row.stage, slugs: [row.slug!], recheck: true }));
   // Every host of the board (Greenhouse has two), each slug written the board's way and listed once.
   const fromCrawl: string[] = [];
-  for (const host of board.crawlHosts ?? []) {
+  // A crawl limit of 0 (scripts/discover-now.ts --no-crawl) skips the index download too: it can take many minutes.
+  for (const host of options.crawlLimit === 0 ? [] : (board.crawlHosts ?? [])) {
     const slugs = await slugsFromCrawl(host, CRAWLS, log, { slugFromUrl: board.slugFromUrl, maxPages: board.crawlPages }).catch((error) => {
       log(`discovery ${source}: the crawl index gave no boards for ${host} (${error instanceof Error ? error.message.slice(0, 80) : "failed"})`);
       return [] as string[];
@@ -207,27 +251,15 @@ async function discoverOn(board: Board, options: { count?: number; crawlLimit?: 
       const candidate = queue[next++];
       try {
         const result = await checkCandidate({ slugs: candidate.recheck ? candidate.slugs : candidate.slugs.filter((slug) => !knownSlugs.has(slug)) }, board);
-        let status = "not_on_board";
+        const status = await recordChecked(board, candidate, result, log);
         if (result.slug) {
           totals.onBoard += 1;
           knownSlugs.add(result.slug);
-          status = result.indiaJobs >= board.minIndiaJobs && (!board.needsFresh || result.freshIndiaJobs >= 1) ? "added" : "few_india_jobs";
-          if (status === "added") {
-            await db.company.upsert({
-              where: { source_slug: { source, slug: result.slug } },
-              create: { source, slug: result.slug, name: (candidate.from === "crawl" && (await board.nameOf?.(result.slug))) || candidate.name, stage: candidate.stage, addedBy: "discovery" },
-              update: {},
-            });
-            totals.added += 1;
-            totals.indiaJobsAdded += result.indiaJobs;
-            log(`discovery ${source}: added ${candidate.name} (${result.slug}): ${result.indiaJobs} India jobs, ${result.freshIndiaJobs} in the last ${FRESH_DAYS} days`);
-          }
         }
-        await db.discoveryCandidate.upsert({
-          where: { source_name: { source, name: candidate.name } },
-          create: { source, name: candidate.name, slug: result.slug, stage: candidate.stage, from: candidate.from, status, openJobs: result.openJobs, indiaJobs: result.indiaJobs, freshIndiaJobs: result.freshIndiaJobs },
-          update: { slug: result.slug, status, openJobs: result.openJobs, indiaJobs: result.indiaJobs, freshIndiaJobs: result.freshIndiaJobs, checkedAt: new Date() },
-        });
+        if (status === "added") {
+          totals.added += 1;
+          totals.indiaJobsAdded += result.indiaJobs;
+        }
       } catch (error) {
         totals.errors += 1;
         await db.discoveryCandidate
