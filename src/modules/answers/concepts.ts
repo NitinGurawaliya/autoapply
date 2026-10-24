@@ -56,12 +56,18 @@ const COUNTRY_ALIASES: Record<string, string> = {
   india: "in", bharat: "in",
 };
 
-/** Lower-case words only, countries folded to one code ("United States", "USA", "US" → "us"). */
+// Two names for one city (24 Oct: "Bengaluru" vs "Bangalore" kept a relocation answer from being reused).
+const CITY_ALIASES: Record<string, string> = {
+  bangalore: "bengaluru", gurgaon: "gurugram", bombay: "mumbai", madras: "chennai", calcutta: "kolkata", poona: "pune",
+  mysore: "mysuru", trivandrum: "thiruvananthapuram", cochin: "kochi", baroda: "vadodara",
+};
+
+/** Lower-case words only, countries folded to one code ("United States", "USA", "US" → "us"), cities to one name. */
 export function normalizeParam(value: string | null | undefined) {
   if (!value) return null;
   const words = value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/^the /, "");
   if (!words) return null;
-  return COUNTRY_ALIASES[words] ?? words;
+  return COUNTRY_ALIASES[words] ?? words.split(" ").map((word) => CITY_ALIASES[word] ?? word).join(" ");
 }
 
 const wordsOf = (text: string) => ` ${text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
@@ -72,7 +78,8 @@ export function grounded(param: string, texts: Array<string | null | undefined>)
   const target = normalizeParam(param);
   if (!target) return false;
   const spellings = [target, ...Object.entries(COUNTRY_ALIASES).filter(([, code]) => code === target).map(([name]) => name)];
-  return texts.some((text) => text && spellings.some((spelling) => wordsOf(text).includes(` ${spelling} `)));
+  // Texts are read with their cities folded too, so "Bangalore Office" grounds "Bengaluru".
+  return texts.some((text) => text && spellings.some((spelling) => ` ${normalizeParam(text) ?? ""} `.includes(` ${spelling} `) || wordsOf(text).includes(` ${spelling} `)));
 }
 
 /** Same parameter: equal after normalising, or one place contains the other ("london" vs "london uk"). */
