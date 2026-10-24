@@ -66,6 +66,11 @@ export type SubmitContext = {
 
 export interface AtsAdapter {
   source: "greenhouse" | "lever" | "ashby" | "mock";
+  /**
+   * Fills and submits in the same real Chrome window as a handoff (visible where the worker has a screen, headless
+   * where it has none), with the worker pressing Submit itself (25 Oct: Greenhouse, as Ashby).
+   */
+  window?: boolean;
   matches(url: string): boolean;
   /** URL of the actual application form, when the listing URL is not the form itself. */
   formUrl?(job: { applyUrl: string; externalId: string; companySlug: string }): string;

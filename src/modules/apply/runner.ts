@@ -214,7 +214,7 @@ async function execute(applicationId: string) {
   // A person presses Submit on handoff boards (lib/queue.ts HANDOFF_BOARDS: Ashby), in a visible window opened when the
   // form is ready (adapters/ashby.ts waitForUserSubmit); other boards submit by themselves.
   const handoff = HANDOFF_BOARDS.includes(adapter.source);
-  const early = !handoff && !questionsCached(job) ? openBrowser(formUrl, application.userId, { handoff: false }) : null;
+  const early = !handoff && !questionsCached(job) ? openBrowser(formUrl, application.userId, { handoff: false, window: adapter.window }) : null;
   let submitting = false;
   // Set by the adapter right before Submit is pressed (outcome.ts): from then on a failure is never retried automatically.
   let attempted = false;
@@ -252,7 +252,7 @@ async function execute(applicationId: string) {
       }
       await writeEvent(applicationId, "resolve", "Every question on the form can be answered; opening it");
     }
-    session = early ? await early : await openBrowser(formUrl, application.userId, { handoff });
+    session = early ? await early : await openBrowser(formUrl, application.userId, { handoff, window: adapter.window });
     // A handoff window is the person's from the moment it opens: a Submit pressed before the agent is ready still counts.
     if (handoff) stopWatchingSubmit = adapter.watchSubmit?.(session.page, () => void markAttempted());
     const fields = await adapter.inspect(session.page);

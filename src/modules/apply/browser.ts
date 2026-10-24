@@ -132,11 +132,12 @@ async function saveState(context: BrowserContext, key: string, owner: string) {
  * browser makes on its own): a visible window in the user's installed Google Chrome, or the bundled Chromium when
  * Chrome is not installed. It needs a screen, so it runs only where the worker runs on the user's own computer.
  */
-export async function openBrowser(url: string, owner: string, options: { handoff?: boolean } = {}): Promise<OpenBrowser> {
+export async function openBrowser(url: string, owner: string, options: { handoff?: boolean; window?: boolean } = {}): Promise<OpenBrowser> {
   if (options.handoff && !canShowWindow() && !autoSubmitAshby()) {
     throw new NoRetryError("This form needs you to press Submit yourself, and the worker is running without a screen. Run the worker on your own computer, or open the form and apply by hand.");
   }
-  const kind = options.handoff ? "handoff" : "main";
+  // `window` (AtsAdapter.window): the same real Chrome window as a handoff, but the worker presses Submit itself.
+  const kind = options.handoff || options.window ? "handoff" : "main";
   const stateKey = stateKeyFor(owner);
   const savedState = await loadState(stateKey);
 
@@ -145,7 +146,8 @@ export async function openBrowser(url: string, owner: string, options: { handoff
   for (let tries = 0; tries < 2 && !context; tries += 1) {
     try {
       const browser = await entry.browser;
-      const viewport = kind === "handoff" ? null : { width: 1280, height: 800 };
+      // A visible window takes the screen's size; headless (no screen) keeps the fixed page every form was tried at.
+      const viewport = kind === "handoff" && canShowWindow() ? null : { width: 1280, height: 800 };
       context = await browser.newContext({ viewport, ...(savedState ? { storageState: savedState } : {}) });
     } catch (error) {
       // The shared browser died between runs: launch a new one once.

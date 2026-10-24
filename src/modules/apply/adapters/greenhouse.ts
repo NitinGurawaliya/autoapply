@@ -434,6 +434,8 @@ export async function waitForGreenhouseConfirmation(page: Page, ctx: SubmitConte
 
 export const greenhouseAdapter: AtsAdapter = {
   source: "greenhouse",
+  // In the real Chrome window like Ashby (visible on a computer with a screen), the worker pressing Submit (25 Oct).
+  window: true,
   matches(url: string) {
     return /greenhouse\.io/i.test(url) || /[?&]gh_jid=/i.test(url);
   },
