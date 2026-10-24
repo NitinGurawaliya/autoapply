@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Locator, Page, Request, Response } from "playwright";
 import { customQuestionKey } from "@/modules/answers";
 import type { AtsAdapter, FilledField, FormField, ResolvedValue, SubmitContext, SubmitResult } from "../adapter";
-import { MaybeSentError, NeedsAnswerError, NoRetryError, NotSentError, RefusedError, WindowClosedError } from "../adapter";
+import { BotCheckError, MaybeSentError, NeedsAnswerError, NoRetryError, NotSentError, RefusedError, WindowClosedError } from "../adapter";
 import { autoSubmitAshby, livePage } from "../browser";
 import { categorize, watchAshby } from "./ashbyDiagnostics";
 import { assertJobOpen, dismissOverlays, firstVisible, inField, toDatePickerText } from "./common";
@@ -292,6 +292,17 @@ async function retypeEntries(page: Page, labels: string[]) {
 export const HANDOFF_WAIT_MS = 15 * 60 * 1000;
 const AUTO_WAIT_MS = 2 * 60 * 1000;
 
+/** A reCAPTCHA challenge (the image grid) is on screen: its "bframe" frame is shown at a real size. */
+async function challengeShown(page: Page) {
+  const frames = page.locator('iframe[src*="recaptcha"][src*="bframe"]');
+  const count = await frames.count().catch(() => 0);
+  for (let index = 0; index < count; index += 1) {
+    const box = await frames.nth(index).boundingBox().catch(() => null);
+    if (box && box.width > 100 && box.height > 100 && (await frames.nth(index).isVisible().catch(() => false))) return true;
+  }
+  return false;
+}
+
 /** Ashby's answer to a submission the window sent, read off the network so it survives the page going away. */
 type SentSubmission = { ok: boolean; body: string };
 
@@ -391,6 +402,11 @@ async function waitForUserSubmit(page: Page, ctx: SubmitContext): Promise<Submit
       }
       const done = await successShown(live);
       if (done) return { confirmed: true, evidence: `${done} after ${auto ? "the worker pressed Submit" : "you pressed Submit"}` };
+      // 24 Oct, Airbound (headless, Docker): reCAPTCHA answered the worker's click with an image challenge and nothing left
+      // the page. It is never solved: the run stops as not sent and the runner tries once more.
+      if (auto && state.posts === 0 && (await challengeShown(live))) {
+        throw new BotCheckError("Ashby's bot check showed a challenge when the worker pressed Submit. Nothing was sent.");
+      }
       const body = await live.locator("body").innerText().catch(() => "");
       if (REFUSED.test(body)) {
         const refusal = body.match(REFUSED)?.[0] ?? "refused";
@@ -414,7 +430,7 @@ async function waitForUserSubmit(page: Page, ctx: SubmitContext): Promise<Submit
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
     if (state.sent.length > 0 || state.posts > 0) return outcomeWithoutPage();
-    if (auto) throw new NotSentError("The worker pressed Submit but nothing reached Ashby (its bot check may have stopped it). Nothing was sent.");
+    if (auto) throw new BotCheckError("The worker pressed Submit but nothing reached Ashby (its bot check may have stopped it). Nothing was sent.");
     throw new NotSentError("Submit was not pressed within 15 minutes. Nothing was sent; retry when you are at your computer.");
   } catch (error) {
     // A Playwright error because the page went away mid-wait is decided by what was sent, like a closed window.

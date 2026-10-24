@@ -110,3 +110,9 @@ export class WindowClosedError extends NotSentError {}
 
 /** The board said on the page that it refused the submission (a spam refusal): nothing was sent, even after a Submit. */
 export class RefusedError extends NotSentError {}
+
+/**
+ * The worker's own Submit was stopped by the board's bot check (a CAPTCHA challenge shown) before anything was sent.
+ * Never solved; the runner runs the whole application once more, straight away (runner.ts BOT_CHECK_RETRY).
+ */
+export class BotCheckError extends NotSentError {}

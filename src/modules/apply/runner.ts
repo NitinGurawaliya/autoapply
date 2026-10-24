@@ -6,7 +6,7 @@ import { storage } from "@/lib/storage";
 import { notifyNeedsInput } from "@/lib/notify";
 import { ONE_TIME_CODE_KEY } from "@/modules/answers";
 import { check, loadRules, writeEvent } from "@/modules/governance";
-import { MaybeSentError, NeedsAnswerError, NoRetryError, type FilledField, type PendingQuestion } from "./adapter";
+import { BotCheckError, MaybeSentError, NeedsAnswerError, NoRetryError, type FilledField, type PendingQuestion } from "./adapter";
 import { decideAfterError, SUBMIT_ATTEMPT } from "./outcome";
 import { uploadResume } from "./adapters/mock";
 import { livePage, openBrowser } from "./browser";
@@ -106,6 +106,7 @@ async function captureConfirmation(page: Awaited<ReturnType<typeof openBrowser>>
 // window opened again after the user closed it before Submit.
 const HANDOFF_SUCCESS_SHOWN_MS = 3000;
 const WINDOW_REOPENED = "The window was closed before Submit, so it opened again";
+const BOT_CHECK_RETRY = "Ashby's bot check stopped the worker's Submit; trying once more now";
 
 /** What the page looked like when a run failed, so "why" is an answer and not a guess. Never blocks the failure path. */
 async function captureFailure(session: Awaited<ReturnType<typeof openBrowser>> | null, applicationId: string, attempt: number, userId: string) {
@@ -420,6 +421,23 @@ async function execute(applicationId: string) {
       } else if (state === "gone") {
         await db.job.update({ where: { id: job.id }, data: { closedAt: new Date() } }).catch(() => undefined);
       }
+    }
+    // The board's bot check stopped the worker's own Submit and nothing was sent (24 Oct: Airbound's reCAPTCHA challenge).
+    // Never solved: the whole application runs again once, straight away, in a new browser context; stopped twice, it
+    // fails for the user to retry.
+    if (error instanceof BotCheckError && !attempted) {
+      const triedBefore = (await db.applicationEvent.count({ where: { applicationId, type: "retry", message: { startsWith: BOT_CHECK_RETRY } } })) > 0;
+      await captureFailure(session, applicationId, attempt, application.userId);
+      if (!triedBefore) {
+        await writeEvent(applicationId, "retry", `${BOT_CHECK_RETRY}. ${message}`.slice(0, 300));
+        await setApp(applicationId, { status: "queued", error: null });
+        await enqueueApply(applicationId);
+        return;
+      }
+      const stopped = `Ashby's bot check stopped the worker twice. Nothing was sent; press Retry, or apply on the posting yourself.`;
+      await writeEvent(applicationId, "error", stopped);
+      await setApp(applicationId, { status: "failed", error: stopped });
+      return;
     }
     // The user closed the handoff window before Submit, often by mistake: 21 Oct, after one job's Success the next job's
     // window came to the front where it had been, and the click meant for the finished window closed that form. It opens
