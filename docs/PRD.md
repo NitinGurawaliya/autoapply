@@ -60,10 +60,11 @@ Indian software engineers with 0–5 years' experience applying to startups and 
 - **FR7** Live progress: the application page updates while the worker runs; the worker runs Playwright headed during the demo.
 - **FR8** Governance enforced in code (ARCHITECTURE §7); every decision writes an audit event.
 - **FR9** Mock Greenhouse form for test profiles and the smoke test.
+- **FR10** (Phase K, after Phase J; owner, 29 Oct) Naukri and LinkedIn: the user connects their own account by signing in themselves in a visible browser; the worker reads job listings with that session into the same Job model and applies with it under the same submit rules. The user sees the account risk before connecting and can disconnect at any time, which deletes the saved session. See ARCHITECTURE §6.20.
 
 ## 8. Out of scope
 
-Payments, mobile app, push notifications, WhatsApp / extension / MCP, Workday, Naukri, LinkedIn, resume tailoring, cover-letter studio, interview prep, admin panel, cloud deployment of the worker (it runs on the laptop for the demo but is a separate process already).
+Payments, mobile app, push notifications, WhatsApp / extension / MCP, Workday apply, resume tailoring, cover-letter studio, interview prep, admin panel, cloud deployment of the worker (it runs on the laptop for the demo but is a separate process already).
 
 ## 9. Hard rules (also in CLAUDE.md)
 
@@ -71,6 +72,7 @@ Payments, mobile app, push notifications, WhatsApp / extension / MCP, Workday, N
 - Never invent a fact. Values come from the resume, the user, a default, or an AI draft that is labelled and limited to free-text fields.
 - Sensitive keys (CTC, notice period, work authorization, sponsorship, relocation, salary) are never AI-drafted. EEO defaults to "Decline to answer".
 - Daily cap per user (default 20). Minimum match score (default 40).
+- Naukri and LinkedIn only through the user's own signed-in account, only after Phase J; we never handle their password or OTP and never bypass a CAPTCHA.
 - Demo rule: the presenter applies with their own real resume and swipes right only on jobs they genuinely want.
 
 ## 10. Demo success criteria

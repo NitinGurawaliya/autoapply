@@ -390,6 +390,15 @@ Sponsorship asked once (10 Oct, owner's decision): visa sponsorship is a per-cou
 
 Visibility (T57): `components/ui/source-badge.tsx` shows `matched` as "You · reused" and `derived` as "Worked out"; the application page shows each such field's basis ("Why: your answer to …", "Why: derived from your location: …", "Why: AI draft from your resume and the job"); `governanceOverview` counts today's fields answered from the user's data (fill events with source matched / derived / ai_draft) as "Answered from your data" next to "Questions asked". Checks: `scripts/applications-smoke.ts`, `scripts/governance-smoke.ts`.
 
+### 6.20 Signed-in sources: Naukri and LinkedIn (Phase K, owner, 29 Oct)
+
+Rule change: until 29 Oct jobs came only from public, no-login APIs and Naukri and LinkedIn were out. The owner decided to add both through the user's own account, after Phase J (T94–T97) is done, because most Indian jobs are listed there and not on an ATS board.
+- **Connect.** The user starts "Connect Naukri / LinkedIn" in the app, sees what we read and do with the account and that the site may limit or suspend accounts it finds automated, and signs in themselves in the visible handoff browser (6.17). We never see, type, store or log the password or OTP. The signed-in browser state is saved per user and site through `lib/storage.ts` (`browser-state/<userId>/<site>.json`, as T100) and restored on the next run; "Disconnect" deletes it. An expired session puts the source in `needs_signin`, never a silent re-login.
+- **Read.** Ingest for a signed-in source runs per user (not per company): job searches built from the user's preferences, each listing normalized into the same Job model (`source = naukri | linkedin`, `externalId` = the site's job id) and tagged by the same eligibility code. Only job listings and the user's own profile are read; never other people's profiles, contacts or messages. A per-user, per-site budget (pages per run, runs per day) in `config/rules.json` keeps traffic close to a person browsing.
+- **Apply.** Same rules as every board: right-swipe, `isTest === false`, `governance.check('submit')`, the daily cap, source on every value. Jobs that apply on the site itself (Naukri apply, LinkedIn Easy Apply) get an adapter under `modules/apply/adapters`; jobs that send the user to a company ATS go through that ATS's adapter when we have one, otherwise they are not offered for apply.
+- **Challenges.** A CAPTCHA, a security check or a "verify it's you" screen hands off to the user (6.17) and the run waits; it is never solved or bypassed, and no stealth browser or fingerprint spoofing is used.
+- **Tooling.** K1 decides whether the adapters are our own Playwright code or built with webcmd (`webcmd.dev`, Apache-2.0, a CLI that keeps per-profile cookie jars); either way they run only in the worker and the stack table changes in the same commit if webcmd is adopted.
+
 ## 7. Governance (`config/rules.json` + `modules/governance/rules.ts`)
 
 ```json

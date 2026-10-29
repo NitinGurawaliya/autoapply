@@ -546,3 +546,27 @@ Why: at 20,000 users (about 1M applications a day, 14 a second) a Chromium per r
 Do: `browser.ts` keeps one Chromium per worker process (one more, headed, for the handoff) and gives each run its own incognito context; a user's cookies and local storage are saved through `lib/storage.ts` (`browser-state/<userId>.json`) when the run closes and restored when the next run opens, on any worker. The shared browser is relaunched if it dies and recycled after many runs. The runner opens the form only once the job's published questions are answered when they are already known (cached), so the browser is open for inspect, fill and submit only. `APPLY_CONCURRENCY` may go above 8.
 **Done when:** `scripts/profile-isolation-smoke.ts` (rewritten) PASSes: users do not see each other's cookies or local storage, a user gets theirs back on the next run, two runs of one user run side by side, an owner name cannot escape its key, a crashed browser is relaunched; 8 runs at once use one browser process tree with measured memory below the old 8 browsers; `security-test` and `queue-smoke` PASS; typecheck and lint pass.
 Done 18 Oct: `profile-isolation-smoke` PASS (12 checks). 8 runs at once, this script's own process tree on Windows: 23 processes and 970 MB private memory, against 78 processes and 2,345 MB as 8 browsers (a heavier page: 1,240 MB against 2,708 MB), about 2.4x more runs per machine. `security-test` and `queue-smoke` PASS; `ats-smoke` dry run on a live Greenhouse form (Yugabyte) fills 9 fields and attaches the resume in a shared-browser context. Cookies kept in the old profile folders are not carried over (each user starts fresh once). Not yet run: a real submit through the worker with the shared browser, and the Lever / Ashby handoff window on the new handoff browser.
+
+## Phase K — Naukri and LinkedIn through the user's own account (owner, 29 Oct)
+
+Starts only when Phase J is done: T94 (Lever handoff), T95 (SmartRecruiters), T96 (Keka) in `APPLY_BOARDS`, T97 (board report). Rules in CLAUDE.md and ARCHITECTURE §6.20.
+
+### [ ] K1 — Tooling decision and connect flow
+Do: try webcmd against our own Playwright code on Naukri and LinkedIn job search (signed in as the owner) and record the choice in ARCHITECTURE §6.20; "Connect" / "Disconnect" per site in settings with the account-risk notice; sign-in in the handoff browser; saved state through `lib/storage.ts`; `needs_signin` when it expires.
+**Done when:** the owner connects both accounts, a worker restart keeps them signed in, Disconnect deletes the saved state; typecheck and lint pass.
+
+### [ ] K2 — Naukri job ingest
+Do: per-user search from the profile's preferences, listings normalized into Job (`source = naukri`), eligibility tags, the per-site budget from `config/rules.json`; a challenge hands off.
+**Done when:** one ingest for the owner stores Naukri jobs that show in their feed with tags; the budget stops the run at its limit.
+
+### [ ] K3 — LinkedIn job ingest
+Do: as K2 for LinkedIn (`source = linkedin`); jobs whose Apply leaves for a company ATS keep that URL.
+**Done when:** as K2 for LinkedIn.
+
+### [ ] K4 — Naukri apply adapter
+Do: adapter for Naukri's own apply (questions through the answer bank, `needs_input` for the rest).
+**Done when:** dry runs on 3 jobs fill everything they can; one real submit before Naukri goes into `APPLY_BOARDS`.
+
+### [ ] K5 — LinkedIn Easy Apply adapter
+Do: adapter for Easy Apply's multi-step dialog; external-apply jobs go to the ATS adapter we have, else are not offered.
+**Done when:** dry runs on 3 Easy Apply jobs fill everything they can; one real submit before LinkedIn goes into `APPLY_BOARDS`.
