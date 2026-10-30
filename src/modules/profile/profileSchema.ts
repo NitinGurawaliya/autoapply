@@ -10,7 +10,23 @@ function nullableText(max = 500) {
   }, z.string().nullable());
 }
 
-const short = (max: number) => z.string().default("").transform((value) => value.slice(0, max));
+// A link must be an address: a resume's link text ("LinkedIn") read as the link is dropped, or a job form gets a value
+// it rejects (30 Oct: Ashby refused Dhanush's LinkedIn twice and the run failed). A bare "linkedin.com/in/x" gets https://.
+function nullableLink(max = 300) {
+  return z.preprocess((value) => {
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim().slice(0, max);
+    if (!trimmed || /\s/.test(trimmed)) return null;
+    try {
+      const link = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+      return new URL(link).hostname.includes(".") ? link : null;
+    } catch {
+      return null;
+    }
+  }, z.string().nullable());
+}
+
+const short =(max: number) => z.string().default("").transform((value) => value.slice(0, max));
 
 export const experienceItemSchema = z.object({
   title: short(200),
@@ -32,9 +48,9 @@ export const profileSchema = z.object({
   phone: nullableText(40),
   city: nullableText(120),
   country: nullableText(120),
-  linkedin: nullableText(300),
-  github: nullableText(300),
-  portfolio: nullableText(300),
+  linkedin: nullableLink(),
+  github: nullableLink(),
+  portfolio: nullableLink(),
   yearsExperience: z.preprocess((value) => {
     if (value == null || value === "") return null;
     const number = typeof value === "number" ? value : Number(value);

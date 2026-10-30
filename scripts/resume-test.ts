@@ -8,7 +8,7 @@ import { db } from "../src/lib/db";
 import { storage } from "../src/lib/storage";
 import { deleteAccount } from "../src/modules/account";
 import { mergeResumeProfile, parseResumePdf, saveParsedResume } from "../src/modules/profile/parseResume";
-import type { ParsedProfile } from "../src/modules/profile/profileSchema";
+import { profileSchema, type ParsedProfile } from "../src/modules/profile/profileSchema";
 
 let failed = 0;
 function check(name: string, ok: boolean, detail = "") {
@@ -54,6 +54,8 @@ async function main() {
   check("details the resume had differently are reported as kept", changes.keptCore.includes("phone") && changes.keptCore.includes("city") && !changes.keptCore.includes("github"), changes.keptCore.join(","));
   const first = mergeResumeProfile(null, parsed({}));
   check("a first resume takes everything", first.core.fullName === "Resume Name" && first.core.city === "Pune" && !first.changes.replaced);
+  const links = profileSchema.parse({ ...parsed({}), linkedin: "LinkedIn", github: "github.com/me", portfolio: "https://me.dev/work" });
+  check("a link's text is not taken as the link, a bare address gets https://", links.linkedin === null && links.github === "https://github.com/me" && links.portfolio === "https://me.dev/work", JSON.stringify([links.linkedin, links.github, links.portfolio]));
 
   // 3. A replace against the database.
   const user = await db.user.create({ data: { email: `resume-test-${Date.now()}@swipeapply.local`, name: "Resume Test" } });
