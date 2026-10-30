@@ -11,6 +11,16 @@
       "port": 3000
     },
     {
+      "name": "dev-webpack",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "next",
+        "dev",
+        "--webpack"
+      ],
+      "port": 3000
+    },
+    {
       "name": "prod-check",
       "runtimeExecutable": "npx",
       "runtimeArgs": [

@@ -96,7 +96,8 @@ export async function retryApplication(applicationId: string, userId: string): P
     data: { status: "queued", error: null, attempt: 0, pendingQuestions: [], verificationCode: null, heartbeatAt: null },
   });
   if (claimed.count === 0) return { ok: false, reason: "not_retryable" };
-  const queued = await enqueueApply(applicationId);
+  // The user's Retry starts afresh, also after a person handoff (lib/queue.ts withPerson).
+  const queued = await enqueueApply(applicationId, 0, { person: false });
   if (!queued) {
     await db.application.update({ where: { id: applicationId }, data: { status: "failed", error: "Could not queue the retry" } });
     return { ok: false, reason: "queue_failed" };

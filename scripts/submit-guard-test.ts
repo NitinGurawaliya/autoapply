@@ -3,7 +3,7 @@
 // Part A is pure. Part B uses the test profile and the mock job only, opens no browser, and deletes what it creates.
 // npx tsx scripts/submit-guard-test.ts
 import { db } from "../src/lib/db";
-import { APPLY_QUEUES, HANDOFF_BOARDS, HANDOFF_QUEUE, queueFor } from "../src/lib/queue";
+import { APPLY_QUEUES, HANDOFF_BOARDS, HANDOFF_QUEUE, PERSON_QUEUE, queueFor, UNPROTECTED_QUEUE } from "../src/lib/queue";
 import { MaybeSentError, NoRetryError, NotSentError, RefusedError, WindowClosedError } from "../src/modules/apply/adapter";
 import { retryApplication, resolveVerification } from "../src/modules/apply/lifecycle";
 import { decideAfterError, lastRunMaySendTwice, SUBMIT_ATTEMPT } from "../src/modules/apply/outcome";
@@ -64,7 +64,11 @@ check("no automatic retry or reopen after a possible submission (all 192 combina
 check("Ashby applications go to the handoff queue", queueFor("ashby") === HANDOFF_QUEUE);
 check("Greenhouse, Lever and mock applications go to the normal queue", ["greenhouse", "lever", "mock"].every((source) => queueFor(source) === "apply"));
 check("an application whose board is unknown goes to the normal queue", queueFor(undefined) === "apply");
-check("both queues are read by code that cancels or reaps apply jobs", APPLY_QUEUES.includes("apply") && APPLY_QUEUES.includes(HANDOFF_QUEUE));
+check("Ashby at protection none goes to the queue a Docker worker takes", queueFor("ashby", "job_apply_none") === UNPROTECTED_QUEUE);
+check("Ashby at low, medium, high or an unseen level goes to the screen queue", ["job_apply_low", "job_apply_medium", "job_apply_high", "job_apply_very_high"].every((level) => queueFor("ashby", level) === HANDOFF_QUEUE));
+check("Ashby with an unread level goes to the screen queue", queueFor("ashby", null) === HANDOFF_QUEUE && queueFor("ashby", undefined) === HANDOFF_QUEUE);
+check("a level never moves Greenhouse or Lever off the normal queue", queueFor("greenhouse", "job_apply_none") === "apply" && queueFor("lever", "job_apply_high") === "apply");
+check("every apply queue is read by code that cancels or reaps apply jobs", ["apply", HANDOFF_QUEUE, UNPROTECTED_QUEUE, PERSON_QUEUE].every((queue) => APPLY_QUEUES.includes(queue)));
 check("handoff boards are exactly Ashby", HANDOFF_BOARDS.length === 1 && HANDOFF_BOARDS[0] === "ashby");
 
 // The last run's Submit attempt, read from events (for a cancelled application's Retry).

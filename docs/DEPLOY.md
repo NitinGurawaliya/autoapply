@@ -87,6 +87,20 @@ docker run --init --env-file .env -v swipeapply-profiles:/data/browser-profiles 
 - Railway: New Project → Deploy from GitHub → set the Dockerfile path to `Dockerfile.worker` → add the variables. Fly: `fly launch --dockerfile Dockerfile.worker`, `fly secrets set ...`, `fly scale count 1`.
 - Check the logs for `worker listening for apply and ingest`, then `<your-domain>/api/health`: `"worker": "up"` (the worker beats every minute), `lastIngest` within 3 hours, `lastDiscovery` within a day. It answers 503 when no worker has beaten for 5 minutes: point an uptime monitor at it.
 
+### Docker worker with a screen (every Ashby level on one machine)
+
+A headless worker sends Ashby only for companies with no spam protection (`job_apply_none`); low, medium and high wait on `apply-handoff` for a worker that can show a window (ARCHITECTURE.md, Routing). Given the host's display, the same container is that worker: it opens a visible Google Chrome window on the host's screen for protected Ashby, presses Submit itself with `ASHBY_AUTO_SUBMIT=1`, and leaves the window to the person at the computer when Ashby shows a challenge. Greenhouse, Lever and unprotected Ashby stay headless. Nothing about the browser is changed; it is the same window a person could use.
+
+Windows (Docker Desktop on WSL 2 with WSLg; `wsl --version` lists a WSLg version). In Git Bash put `MSYS_NO_PATHCONV=1` in front, so the `/run/...` paths are not rewritten:
+
+```bash
+docker run -d --init --name swipeapply-worker --restart unless-stopped --env-file .env.worker   -e ASHBY_AUTO_SUBMIT=1 -e WORKER_NAME=laptop-docker   -v /run/desktop/mnt/host/wslg/.X11-unix:/tmp/.X11-unix -v /run/desktop/mnt/host/wslg:/mnt/wslg   -e DISPLAY=:0 -e WAYLAND_DISPLAY=wayland-0 -e XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir   -v swipeapply-profiles:/data/browser-profiles swipeapply-worker
+```
+
+Linux desktop: run `xhost +local:` once per login, then the same command with `-v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY=$DISPLAY` in place of the four WSLg lines.
+
+Check the first log line: `apply-unprotected (x3, auto submit), apply-handoff (x3, auto submit), apply-person`. If it says `no screen: no protected Ashby`, the display socket is not mounted (`canShowWindow()` checks it); the worker still runs, headless. Someone must be at the machine for a challenge: an unanswered handoff ends after 15 minutes, nothing sent. Stop any separate `npm run worker` on that machine, so windows open in one place only.
+
 ## 5. End-to-end test (do this before trusting it)
 
 1. Sign in on the production URL with a **test user** and upload a resume.

@@ -1,12 +1,12 @@
 import { hostname } from "node:os";
 import { db } from "@/lib/db";
-import { getBoss, HANDOFF_QUEUE } from "@/lib/queue";
+import { getBoss, HANDOFF_QUEUE, PERSON_QUEUE, UNPROTECTED_QUEUE } from "@/lib/queue";
 import { autoSubmitAshby, canShowWindow } from "@/modules/apply/browser";
 import { runDiscovery } from "@/modules/jobs/discovery";
 import { handleApply } from "./handlers/apply";
 import { handleIngest } from "./handlers/ingest";
 import { handlePrescan } from "./handlers/prescan";
-import { housekeeping, reapStaleRuns } from "./reaper";
+import { expirePersonHandoffs, housekeeping, reapStaleRuns } from "./reaper";
 import { registerSchedules } from "./schedule";
 import { claimWorkerLock } from "./single";
 
@@ -18,16 +18,22 @@ async function main() {
   // A run waiting on a security code holds one slot for up to 10 minutes.
   const concurrency = Math.min(Math.max(Number(process.env.APPLY_CONCURRENCY) || 3, 1), 24);
   await boss.work("apply", { localConcurrency: concurrency }, handleApply);
-  // Handoff applications (Ashby) open a visible window for a person to press Submit, so only a worker with a screen
-  // takes them: a Docker worker (Linux, no display) does not, unless ASHBY_AUTO_SUBMIT=1 lets it press Submit itself.
-  const handoff = canShowWindow() || autoSubmitAshby();
+  // Ashby applications by the company's spam protection (lib/queue.ts queueFor). "none": a Docker worker (Linux, no display)
+  // with ASHBY_AUTO_SUBMIT=1 presses Submit itself, as does a worker with a screen. Low, medium, high or unread: only a
+  // worker with a screen, in a visible Chrome window, since a headless Submit there was challenged every time.
+  const unprotected = canShowWindow() || autoSubmitAshby();
+  if (unprotected) await boss.work(UNPROTECTED_QUEUE, { localConcurrency: concurrency }, handleApply);
+  const handoff = canShowWindow();
   if (handoff) await boss.work(HANDOFF_QUEUE, { localConcurrency: concurrency }, handleApply);
+  // The applications Ashby asked a person for: a window a person can see, so a screen is needed whatever the settings.
+  if (canShowWindow()) await boss.work(PERSON_QUEUE, { localConcurrency: concurrency }, handleApply);
   await boss.work("ingest", handleIngest);
   await boss.work("prescan", handlePrescan);
   await boss.work("discover", async () => {
     await runDiscovery();
   });
-  console.log(`worker listening for apply (x${concurrency})${handoff ? `, ${HANDOFF_QUEUE} (x${concurrency}${autoSubmitAshby() ? ", auto submit" : ""})` : ", no handoff (no screen)"} and ingest`);
+  const auto = autoSubmitAshby() ? ", auto submit" : "";
+  console.log(`worker listening for apply (x${concurrency})${unprotected ? `, ${UNPROTECTED_QUEUE} (x${concurrency}${auto})` : ""}${handoff ? `, ${HANDOFF_QUEUE} (x${concurrency}${auto}), ${PERSON_QUEUE}` : ", no screen: no protected Ashby"} and ingest`);
 
   // Graceful stop (Ctrl+C, `docker stop -t 960`): take no new jobs and let the runs in progress finish, up to a handoff's
   // 15-minute wait, so a restart never cuts off a run after its Submit (21 Oct: a restart seconds after Rubrik's Submit
@@ -58,6 +64,8 @@ async function main() {
     try {
       const count = await reapStaleRuns();
       if (count > 0) console.log(`reaped ${count} stale application(s)`);
+      const expired = await expirePersonHandoffs();
+      if (expired > 0) console.log(`${expired} person handoff(s) waited too long for a screen`);
     } catch (error) {
       console.error("reaper failed:", error instanceof Error ? error.message : error);
     }

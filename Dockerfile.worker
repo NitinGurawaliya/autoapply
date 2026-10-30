@@ -10,6 +10,10 @@ ENV NODE_ENV=production \
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
 RUN npm ci --include=dev
+# Google Chrome for the visible window (modules/apply/browser.ts prefers it for handoffs), the browser the worker's own
+# Submit went through in on Windows at Ashby's "low" (27 Oct). Used only when the container is given a screen
+# (docs/DEPLOY.md, "Docker worker with a screen"); headless runs keep the bundled Chromium.
+RUN npx playwright install --with-deps chrome
 
 COPY . .
 

@@ -1,7 +1,7 @@
 import { listingState } from "@/modules/jobs";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { enqueueApply, HANDOFF_BOARDS } from "@/lib/queue";
+import { enqueueApply, HANDOFF_BOARDS, PERSON_HANDOFF } from "@/lib/queue";
 import { storage } from "@/lib/storage";
 import { notifyNeedsInput } from "@/lib/notify";
 import { ONE_TIME_CODE_KEY } from "@/modules/answers";
@@ -74,9 +74,10 @@ export function codeRequester(applicationId: string) {
   };
 }
 
-export async function runApplication(applicationId: string) {
+/** `person`: the board already asked for a person on this application (lib/queue.ts PERSON_QUEUE). */
+export async function runApplication(applicationId: string, options: { person?: boolean } = {}) {
   try {
-    await execute(applicationId);
+    await execute(applicationId, options);
   } catch (error) {
     if (error instanceof CancelledError) return;
     throw error;
@@ -106,7 +107,6 @@ async function captureConfirmation(page: Awaited<ReturnType<typeof openBrowser>>
 // window opened again after the user closed it before Submit.
 const HANDOFF_SUCCESS_SHOWN_MS = 3000;
 const WINDOW_REOPENED = "The window was closed before Submit, so it opened again";
-const BOT_CHECK_RETRY = "Ashby's bot check stopped the worker's Submit; trying once more now";
 
 /** What the page looked like when a run failed, so "why" is an answer and not a guess. Never blocks the failure path. */
 async function captureFailure(session: Awaited<ReturnType<typeof openBrowser>> | null, applicationId: string, attempt: number, userId: string) {
@@ -126,7 +126,7 @@ async function captureFailure(session: Awaited<ReturnType<typeof openBrowser>> |
   }
 }
 
-async function execute(applicationId: string) {
+async function execute(applicationId: string, options: { person?: boolean }) {
   const application = await db.application.findUnique({ where: { id: applicationId } });
   if (!application) throw new Error("Application not found");
   if (["submitted", "blocked", "cancelled"].includes(application.status)) return;
@@ -337,6 +337,7 @@ async function execute(applicationId: string) {
       return adapter.submit(page, {
         requestCode: codeRequester(applicationId),
         handoff,
+        person: options.person,
         announceHandoff: async (message) => {
           await writeEvent(applicationId, "ask_user", message);
           void sendPush(application.userId, { title: `${jobInfo.company}: ready to send`, body: `Press Submit in the Chrome window to send your ${jobInfo.title} application.`, url: `/applications/${applicationId}`, tag: `app-${applicationId}` });
@@ -422,21 +423,23 @@ async function execute(applicationId: string) {
         await db.job.update({ where: { id: job.id }, data: { closedAt: new Date() } }).catch(() => undefined);
       }
     }
-    // The board's bot check stopped the worker's own Submit and nothing was sent (24 Oct: Airbound's reCAPTCHA challenge).
-    // Never solved: the whole application runs again once, straight away, in a new browser context; stopped twice, it
-    // fails for the user to retry.
+    // The board's bot check stopped the worker's own Submit on a worker with no screen, and nothing was sent (24 Oct:
+    // Airbound's reCAPTCHA challenge). Never solved, and never rerun as it was: 24-25 Oct, none of 7 immediate reruns got
+    // past it. A person takes it over: the run goes on the queue only a worker with a screen takes, where the form is filled
+    // again in a window they can see and they press Submit (adapters/ashby.ts). The attempt is not counted.
     if (error instanceof BotCheckError && !attempted) {
-      const triedBefore = (await db.applicationEvent.count({ where: { applicationId, type: "retry", message: { startsWith: BOT_CHECK_RETRY } } })) > 0;
       await captureFailure(session, applicationId, attempt, application.userId);
-      if (!triedBefore) {
-        await writeEvent(applicationId, "retry", `${BOT_CHECK_RETRY}. ${message}`.slice(0, 300));
-        await setApp(applicationId, { status: "queued", error: null });
-        await enqueueApply(applicationId);
+      if (!options.person) {
+        // This window is closed before the person's run can open another, so only one is ever open for the form.
+        await session?.close();
+        await writeEvent(applicationId, "ask_user", `${PERSON_HANDOFF}. A Chrome window opens on your computer running SwipeApply: check the form, press Submit and complete Ashby's check.`);
+        await setApp(applicationId, { status: "queued", attempt: application.attempt, error: null });
+        await enqueueApply(applicationId, 0, { person: true });
+        void sendPush(application.userId, { title: `${jobInfo.company}: Ashby wants you`, body: `Ashby asked to confirm a person is applying for ${jobInfo.title}. Open SwipeApply on your computer to press Submit.`, url: `/applications/${applicationId}`, tag: `app-${applicationId}` });
         return;
       }
-      const stopped = `Ashby's bot check stopped the worker twice. Nothing was sent; press Retry, or apply on the posting yourself.`;
-      await writeEvent(applicationId, "error", stopped);
-      await setApp(applicationId, { status: "failed", error: stopped });
+      await writeEvent(applicationId, "error", message);
+      await setApp(applicationId, { status: "failed", error: message });
       return;
     }
     // The user closed the handoff window before Submit, often by mistake: 21 Oct, after one job's Success the next job's

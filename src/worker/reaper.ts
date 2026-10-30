@@ -1,13 +1,14 @@
 import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { db } from "@/lib/db";
-import { APPLY_QUEUES, enqueueApply } from "@/lib/queue";
+import { APPLY_QUEUES, enqueueApply, HANDOFF_QUEUE, PERSON_QUEUE, PERSON_WAIT_HOURS } from "@/lib/queue";
 import { pruneRateEvents } from "@/lib/rate-limit";
 import { PROFILE_ROOT } from "@/modules/apply/browser";
 import { writeEvent } from "@/modules/governance";
 
 export const STALE_AFTER_MINUTES = 3;
 export const STALE_MESSAGE = "The worker stopped while running this application. Retry it.";
+export const PERSON_WAIT_EXPIRED = `No computer with a screen opened it within ${PERSON_WAIT_HOURS} hours, which this company's Ashby form needs. Nothing was sent; press Retry when SwipeApply runs on your computer, or apply on the posting.`;
 export const STALE_AFTER_SUBMIT = "The worker stopped right after pressing Submit, so it may have been sent. Check your email before applying again.";
 // A run cut off before Submit is picked up again this many times (worker restarts, deploys) before it fails.
 const MAX_RESUMES = 2;
@@ -74,6 +75,32 @@ export async function reapStaleRuns(staleMinutes = STALE_AFTER_MINUTES) {
     }
   }
   return reaped;
+}
+
+/**
+ * A person handoff (lib/queue.ts PERSON_QUEUE), or an application of a protected Ashby company (HANDOFF_QUEUE), waits for
+ * a worker with a screen. With none running it would wait until
+ * pg-boss deletes the job (14 days), the application "Up next" all that time, and then go back to a worker without one.
+ * After PERSON_WAIT_HOURS it fails instead, nothing sent (no run took it), for the user to retry. Safe from every worker.
+ */
+export async function expirePersonHandoffs(hours = PERSON_WAIT_HOURS) {
+  const waiting = await db.$queryRaw<Array<{ applicationId: string; jobId: string }>>`
+    SELECT a."id" AS "applicationId", j."id"::text AS "jobId"
+    FROM "Application" a
+    JOIN pgboss.job j ON j.name = ANY(${[PERSON_QUEUE, HANDOFF_QUEUE]}) AND j.state IN ('created', 'retry') AND j.data->>'applicationId' = a."id"
+    WHERE a."status" = 'queued' AND j.created_on < now() - (${hours}::int * interval '1 hour')`;
+  let expired = 0;
+  for (const row of waiting) {
+    // Only a job no worker has taken yet: one that started meanwhile is a live run and is left alone.
+    const taken = await db.$executeRaw`UPDATE pgboss.job SET state = 'cancelled', completed_on = now() WHERE id = ${row.jobId}::uuid AND state IN ('created', 'retry')`;
+    if (taken === 0) continue;
+    const marked = await db.application.updateMany({ where: { id: row.applicationId, status: "queued" }, data: { status: "failed", error: PERSON_WAIT_EXPIRED } });
+    if (marked.count > 0) {
+      await writeEvent(row.applicationId, "error", PERSON_WAIT_EXPIRED);
+      expired += 1;
+    }
+  }
+  return expired;
 }
 
 /**

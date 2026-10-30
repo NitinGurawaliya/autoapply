@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { z } from "zod";
 import { storage } from "@/lib/storage";
@@ -39,8 +41,18 @@ export function livePage(page: Page): Page | null {
   return page.context().pages().filter((open) => !open.isClosed()).at(-1) ?? null;
 }
 
+/**
+ * Whether a window this worker opens is seen on a screen. Linux needs a display: a desktop, or a Docker worker given the
+ * host's (docs/DEPLOY.md, "Docker worker with a screen": WSLg's X server on Windows, the X socket on a Linux desktop).
+ * A local X display (":0") counts only while its socket is there, so a container whose mount is missing stays headless
+ * and leaves protected Ashby to a worker that can show it, instead of failing to open a window.
+ */
 export function canShowWindow() {
-  return process.platform !== "linux" || Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
+  if (process.platform !== "linux") return true;
+  if (process.env.WAYLAND_DISPLAY && process.env.XDG_RUNTIME_DIR && existsSync(join(process.env.XDG_RUNTIME_DIR, process.env.WAYLAND_DISPLAY))) return true;
+  const display = process.env.DISPLAY?.match(/^:(\d+)/);
+  if (display) return existsSync(`/tmp/.X11-unix/X${display[1]}`);
+  return Boolean(process.env.DISPLAY);
 }
 
 /**

@@ -51,6 +51,8 @@ export type SubmitContext = {
   requestCode(prompt: string): Promise<string | null>;
   /** True when the user presses Submit themselves (the form is filled in a visible window; see browser.ts). */
   handoff?: boolean;
+  /** The board already asked for a person on this application (Ashby's bot check): the worker never presses Submit itself. */
+  person?: boolean;
   /** Tell the user the form is filled and waiting for them to press Submit (an event and a push). */
   announceHandoff?(message: string): Promise<void>;
   /** True once the user cancelled this application. */
@@ -117,7 +119,8 @@ export class WindowClosedError extends NotSentError {}
 export class RefusedError extends NotSentError {}
 
 /**
- * The worker's own Submit was stopped by the board's bot check (a CAPTCHA challenge shown) before anything was sent.
- * Never solved; the runner runs the whole application once more, straight away (runner.ts BOT_CHECK_RETRY).
+ * The worker's own Submit was stopped by the board's bot check (a CAPTCHA challenge shown, or a code emailed) before
+ * anything was sent, on a worker with no screen to show it on. Never solved; the runner hands the application to a person
+ * at a worker with a screen (runner.ts, lib/queue.ts PERSON_QUEUE).
  */
 export class BotCheckError extends NotSentError {}
