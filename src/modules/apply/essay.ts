@@ -5,7 +5,8 @@ import { detectConcept } from "@/modules/answers";
 /**
  * Essay questions ("Why do you want to work here?", "Tell us about a project you're proud of") drafted by AI (T55), a
  * product decision: candidates write these with AI anyway. Rules:
- * - only after the user's one-time permission (`accept_ai_essays`), like acknowledgements;
+ * - drafted without asking first (30 Oct, owner: a permission question was needless friction); a user who answered No
+ *   to `accept_ai_essays` (saved before 30 Oct, or set on the Answers page) answers essays themselves;
  * - only from the resume and the job: a draft that names an organisation, school or product absent from both is thrown
  *   away and the question is asked;
  * - "best project" is drafted once, saved as an editable answer (`essay_best_project`) and reused everywhere;

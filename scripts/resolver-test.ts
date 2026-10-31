@@ -12,10 +12,10 @@ const profile = { fullName: "Test User", email: "t@example.com", phone: "123", c
 const field = (label: string, over: Partial<FormField> = {}): FormField => ({ selector: `[name="${label}"]`, label, type: "textarea", required: true, ...over });
 const why = field("What excites you about Fam?");
 
-// Essay questions (T55): without the one-time permission it is asked first; with "No" the essay is asked under its
-// own key; a "why us" answer is reused for the same company (here the question names it).
+// Essay questions (T55; 30 Oct no permission question): pending under its own key for the runner to draft; with "No"
+// to drafts it is the user's; a "why us" answer is reused for the same company (here the question names it).
 const permission = resolveValues([{ field: why, key: "free_text" }], profile, []);
-check("an essay question first asks the one-time drafting permission", permission.pending.length === 1 && permission.pending[0].key === "accept_ai_essays", permission.pending[0]?.key);
+check("an essay question is pending for drafting, no permission question first", permission.pending.length === 1 && permission.pending[0].key === customQuestionKey(why.label), permission.pending[0]?.key);
 const asked = resolveValues([{ field: why, key: "free_text" }], profile, [{ key: "accept_ai_essays", answer: "No", source: "user" }]);
 check("a free-text question is asked under its own key", asked.pending.length === 1 && asked.pending[0].key === customQuestionKey(why.label) && asked.pending[0].key !== "free_text", asked.pending[0]?.key);
 

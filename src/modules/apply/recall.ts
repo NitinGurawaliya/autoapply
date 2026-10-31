@@ -56,7 +56,7 @@ const PART_FAMILIES = [
 // Words that name the same part: "postal code" is a zip code, a province a state, a branch (of study) a major.
 const SAME_PART: Record<string, string> = { postal: "zip", postcode: "zip", pincode: "zip", pin: "zip", province: "state", branch: "major" };
 const tokens = (text: string) => new Set(text.toLowerCase().split(/[^a-z]+/).filter(Boolean).map((word) => SAME_PART[word] ?? word));
-function differentParts(a: string, b: string) {
+export function differentParts(a: string, b: string) {
   const x = tokens(a);
   const y = tokens(b);
   return PART_FAMILIES.some((family) => {
@@ -68,9 +68,9 @@ function differentParts(a: string, b: string) {
 
 // Leading tags such as "[Relocation]" do not change what is asked.
 const opening = (question: string) => question.replace(/^\s*\[[^\]]*\]\s*/, "").trim();
-const isYesNo = (answer: string) => /^(yes|no|y|n|true|false)\b/i.test(answer.trim());
-const asksYesNo = (question: string) => /^(are|do|does|did|have|has|had|is|was|were|will|would|can|could|should|may|might)\b/i.test(opening(question));
-const asksOpen = (question: string) => /^(what|which|when|where|who|whom|whose|how|why|please (list|provide|describe|enter|share|specify|select)|list|describe|enter|share|specify)\b/i.test(opening(question));
+export const isYesNo = (answer: string) => /^(yes|no|y|n|true|false)\b/i.test(answer.trim());
+export const asksYesNo = (question: string) => /^(are|do|does|did|have|has|had|is|was|were|will|would|can|could|should|may|might)\b/i.test(opening(question));
+export const asksOpen = (question: string) => /^(what|which|when|where|who|whom|whose|how|why|please (list|provide|describe|enter|share|specify|select)|list|describe|enter|share|specify)\b/i.test(opening(question));
 
 /**
  * Newest wins: a later answer of the user's about the same country (and the same place, for "other" countries), to a

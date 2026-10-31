@@ -4,7 +4,7 @@ import { loadRules } from "@/modules/governance";
 import { ACKNOWLEDGEMENT_KEY, ACKNOWLEDGEMENT_QUESTION, acknowledgementValue } from "./acknowledgement";
 import { abroadAnswer } from "./abroad";
 import type { FormField, PendingQuestion, ResolvedValue } from "./adapter";
-import { BEST_PROJECT_KEY, essayKind, ESSAY_PERMISSION_KEY, ESSAY_PERMISSION_QUESTION } from "./essay";
+import { BEST_PROJECT_KEY, essayKind } from "./essay";
 import { historyValue } from "./history";
 import type { MemoryAnswer } from "./recall";
 import { outsideHome, SPONSORSHIP_ABROAD_KEY, SPONSORSHIP_ABROAD_OPTIONS, sponsorshipAbroadQuestion, standingSponsorship } from "./sponsorship";
@@ -271,7 +271,8 @@ export function resolveValues(
     // Essay questions (essay.ts). "Why this role / why us" is about one company, so neither a global free-text answer
     // nor the same wording answered for another company counts: only an answer given for this company, or a draft
     // written for this application. Other essays may reuse the user's answer to the same wording or the saved "best
-    // project". Without those: the one-time permission, then the runner drafts it (Yes) or the user answers (No).
+    // project". Without those the runner drafts it (30 Oct, owner: no permission question first); a user who said No
+    // to drafts (`accept_ai_essays`) answers it themselves.
     const essay = essayKind(field.label, field.type);
     if (essay) {
       // A field whose id IS the canonical free-text key (our mock form) keeps its saved answer when there is one.
@@ -295,12 +296,7 @@ export function resolveValues(
         values[values.length - 1].basis = draft.basis;
         continue;
       }
-      if (!bank.get(ESSAY_PERMISSION_KEY)) {
-        if (field.required && !pending.some((q) => q.key === ESSAY_PERMISSION_KEY)) {
-          pending.push({ key: ESSAY_PERMISSION_KEY, label: ESSAY_PERMISSION_QUESTION, type: "select", options: ["Yes", "No"], required: true });
-        }
-        continue;
-      }
+      // Pending here means drafted by the runner (resolveForm), unless the user said No to drafts, then it is theirs.
       ask(questionKey);
       continue;
     }

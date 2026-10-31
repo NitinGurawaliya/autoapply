@@ -9,6 +9,7 @@ import { customQuestionKey, detectConcept, isCustomQuestionKey } from "../src/mo
 import { mapFields, resolveValues } from "../src/modules/apply";
 import type { FormField } from "../src/modules/apply";
 import { deriveAnswers } from "../src/modules/apply/derive";
+import { inferAnswers } from "../src/modules/apply/infer";
 import { answerFromMemory } from "../src/modules/apply/recall";
 import { loadRules } from "../src/modules/governance";
 
@@ -51,6 +52,13 @@ async function replayUser(userId: string) {
       // T54: what the profile and resume prove (residence, previous employers, years of experience).
       const derived = await deriveAnswers({ profile, fields: [item.field] });
       if (derived.size > 0) values = resolveValues([item], profile, others, derived).values;
+    }
+    if (values.length === 0 && useMemory) {
+      // 30 Oct: what the rest of the user's data settles, by reasoning over all of it (infer.ts). No job: the replay
+      // does not know which job each question came from, so questions about "this role's country" stay asked (safe).
+      const inferred = await inferAnswers({ userId, fields: [item.field], answers: others, profile, job: null, excludeKeys: [ownKey] });
+      // Tagged, so the scoreboard can tell this step's answers from the others' (its disagreements are listed under it).
+      if (inferred.answers.size > 0) values = resolveValues([item], profile, others, inferred.answers).values.map((value) => ({ ...value, source: `${value.source}+infer` }));
     }
     const value = values[0];
     const sensitive = (item.key ? SENSITIVE.has(item.key) : false) || detectConcept(item.field.label) !== null;

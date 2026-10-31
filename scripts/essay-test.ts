@@ -32,7 +32,7 @@ async function main() {
   const why = area("Why do you want to work here?");
   const best = area("Tell us about the best project you've built");
   const permission = resolveValues(map([why, best]), PROFILE, []);
-  check("without permission, one permission question is asked for all essays", permission.pending.length === 1 && permission.pending[0].key === "accept_ai_essays" && permission.values.length === 0, JSON.stringify(permission.pending.map((q) => q.key)));
+  check("no permission question is asked: both essays are pending for the runner to draft", permission.pending.length === 2 && permission.pending.every((q) => q.key.startsWith("q_")) && permission.values.length === 0, JSON.stringify(permission.pending.map((q) => q.key)));
   const yes = [{ key: "accept_ai_essays", answer: "Yes", source: "user" }];
   const asked = resolveValues(map([why, best]), PROFILE, yes);
   check("with permission and no draft yet, both are pending for the runner to draft", asked.pending.length === 2 && asked.pending.every((q) => q.key.startsWith("q_")));

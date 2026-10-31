@@ -104,19 +104,24 @@ export async function emptyRequired(page: Page) {
 
 // Ashby's own description of the form, the query the page itself sends (atsfill, read 29 Oct): which questions are
 // required, straight from Ashby. The page's markup marks some required pickers on the input, not the title (16 Oct, Tekion).
+// Also a picker's fixed choices (ValueSelect): the page shows them only after typing, so the agent matched blind and the
+// user was asked with no choices to pick from (30 Oct, Netgear "How did you hear": "Job board" and "Company website" missed).
 const READ_SCHEMA = `(async () => {
   const [org, job] = location.pathname.split('/').filter(Boolean);
   const query = 'query ApiJobPosting($org: String!, $job: String!) { jobPosting(organizationHostedJobsPageName: $org, jobPostingId: $job) { applicationForm { ...Form } surveyForms { ...Form } } } fragment Form on FormRender { sections { fieldEntries { isRequired field } } }';
   const response = await fetch('/api/non-user-graphql?op=ApiJobPosting', { method: 'POST', headers: { 'content-type': 'application/json', 'apollographql-client-name': 'frontend_non_user' }, body: JSON.stringify({ operationName: 'ApiJobPosting', query, variables: { org, job } }) });
   const posting = (await response.json()).data.jobPosting;
   const out = {};
-  for (const form of [posting.applicationForm, ...(posting.surveyForms || [])]) for (const section of form.sections) for (const entry of section.fieldEntries) out[entry.field.path] = Boolean(entry.isRequired);
+  for (const form of [posting.applicationForm, ...(posting.surveyForms || [])]) for (const section of form.sections) for (const entry of section.fieldEntries) {
+    const values = (entry.field.selectableValues || []).filter((v) => v && !v.isArchived).map((v) => String(v.label || v.value || '').trim()).filter(Boolean);
+    out[entry.field.path] = { required: Boolean(entry.isRequired), options: values.length ? values : null };
+  }
   return out;
 })()`;
 
-/** Per question path, whether Ashby requires it; null when the query fails (the page's markup decides then). */
-async function readRequired(page: Page): Promise<Record<string, boolean> | null> {
-  return ((await page.evaluate(READ_SCHEMA).catch(() => null)) as Record<string, boolean> | null) ?? null;
+/** Per question path, whether Ashby requires it and its fixed choices; null when the query fails (the markup decides then). */
+async function readSchema(page: Page): Promise<Record<string, { required: boolean; options: string[] | null }> | null> {
+  return ((await page.evaluate(READ_SCHEMA).catch(() => null)) as Record<string, { required: boolean; options: string[] | null }> | null) ?? null;
 }
 
 async function readFields(page: Page): Promise<FormField[]> {
@@ -133,10 +138,12 @@ async function readFields(page: Page): Promise<FormField[]> {
   await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => undefined);
   const rows = (await page.evaluate(READ_FORM)) as Row[];
   if (rows.length === 0) throw new Error("The application form did not load properly (it had no fields)");
-  const schema = await readRequired(page);
+  const schema = await readSchema(page);
   const fields: FormField[] = [];
   for (const raw of rows) {
-    const row = schema && raw.path in schema ? { ...raw, required: schema[raw.path] } : raw;
+    const known = schema?.[raw.path];
+    // A picker's choices come from Ashby when the page does not list them (a type-to-search box).
+    const row = known ? { ...raw, required: known.required, options: raw.options ?? (raw.kind === "combobox" ? known.options ?? undefined : undefined) } : raw;
     // A question type the agent cannot answer yet: skip it when optional, stop before filling anything when required.
     if (row.kind === 'unsupported') {
       if (row.required) throw new NoRetryError(`This form has a required question the agent cannot answer yet: ${(row.label || row.path).slice(0, 90)}`);

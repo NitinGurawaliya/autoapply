@@ -5,6 +5,7 @@ import { abroadAnswer } from "./abroad";
 import { deriveAnswers, type ProfileForDerive, yesNoOf } from "./derive";
 import { BEST_PROJECT_KEY, draftEssays, essayKind, ESSAY_PERMISSION_KEY, type EssayKind, type EssayProfile } from "./essay";
 import { mapFields } from "./fieldMapper";
+import { inferAnswers } from "./infer";
 import { mapToOptions } from "./optionMap";
 import { answerFromMemory, type MemoryAnswer } from "./recall";
 import { resolveValues } from "./valueResolver";
@@ -17,7 +18,7 @@ import { resolveValues } from "./valueResolver";
  * the question stays pending.
  */
 
-type AnswerRow = { key: string; answer: string; source: string; updatedAt: Date; context?: unknown };
+type AnswerRow = { key: string; question?: string | null; answer: string; source: string; updatedAt: Date; context?: unknown };
 export type FormProfile = ProfileForDerive & EssayProfile & {
   email: string;
   phone: string | null;
@@ -84,9 +85,29 @@ export async function resolveForm(input: {
     }
   }
 
-  // Essays with the user's permission (essay.ts), at most max_ai_drafts_per_application per application.
+  // What the candidate's data already settles, by reasoning over all of it (infer.ts): open questions, and the ones only
+  // a default filled ("How did you hear about us?" → their own answer to another wording, not "Job board").
+  const defaulted = new Set(resolved.values.filter((value) => value.source === "default").map((value) => value.label));
+  if (resolved.pending.length > 0 || defaulted.size > 0) {
+    try {
+      const open = new Set([...resolved.pending.map((question) => question.label), ...defaulted]);
+      const fields = mapped.filter((item) => open.has(item.field.label)).map((item) => item.field);
+      const inferred = await inferAnswers({ userId: input.userId, fields, answers, profile, job: { company: job.company, title: job.title, location: job.location, country: job.country } });
+      if (inferred.answers.size > 0) {
+        memoryAnswers = new Map([...(memoryAnswers ?? []), ...inferred.answers]);
+        resolved = resolveValues(mapped, profile, answers, memoryAnswers, undefined, jobRef);
+        await log(`Answered ${inferred.answers.size} from what you already told us`, { inferred: [...inferred.answers.entries()].map(([label, found]) => `${label.slice(0, 80)}: ${found.basis.slice(0, 160)}`) });
+      }
+      if (inferred.rejected.length > 0) await log(`Did not use ${inferred.rejected.length} answers the agent was unsure of`, { rejected: inferred.rejected.slice(0, 10) });
+    } catch (error) {
+      await log(`Could not work out answers from your data (${why(error)}); asking instead`);
+    }
+  }
+
+  // Essays are drafted unless the user said No to drafts (essay.ts; 30 Oct, owner: no permission question first), at
+  // most max_ai_drafts_per_application per application.
   const permission = answers.find((row) => row.key === ESSAY_PERMISSION_KEY);
-  const essaysAllowed = !!permission && /^yes$/i.test(permission.answer.trim());
+  const essaysAllowed = !permission || !/^no$/i.test(permission.answer.trim());
   let willDraft: string[] = [];
   if (resolved.pending.length > 0 && essaysAllowed) {
     const pendingLabels = new Set(resolved.pending.map((question) => question.label));

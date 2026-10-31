@@ -28,14 +28,16 @@ async function main() {
   };
   try {
     await db.answer.deleteMany({ where: { userId: user.id, key: { in: keys } } });
+    // 30 Oct: no permission question; "No" to drafts makes the essay the user's.
+    await db.answer.create({ data: { userId: user.id, key: "accept_ai_essays", question: "May SwipeApply draft essay answers?", answer: "No", source: "user" } });
     const first = await run();
     const asked = (first.pendingQuestions as Array<{ key: string }>) ?? [];
-    check("without permission the run asks for it once", first.status === "needs_input" && asked.some((q) => q.key === "accept_ai_essays"), `${first.status} ${JSON.stringify(asked.map((q) => q.key))}`);
+    check("after 'No' to drafts the essay is asked", first.status === "needs_input" && asked.some((q) => q.key === customQuestionKey("Why this role?")), `${first.status} ${JSON.stringify(asked.map((q) => q.key))}`);
 
-    await db.answer.create({ data: { userId: user.id, key: "accept_ai_essays", question: "May SwipeApply draft essay answers?", answer: "Yes", source: "user" } });
+    await db.answer.deleteMany({ where: { userId: user.id, key: "accept_ai_essays" } });
     const before = await db.mockSubmission.count();
     const done = await run();
-    check("with permission the run submits without asking", done.status === "submitted", `${done.status} ${done.error ?? ""} ${JSON.stringify(done.pendingQuestions).slice(0, 160)}`);
+    check("without any permission answer the run drafts and submits without asking", done.status === "submitted", `${done.status} ${done.error ?? ""} ${JSON.stringify(done.pendingQuestions).slice(0, 160)}`);
     const essay = (done.fields as Array<{ label: string; value: string; source: string; basis?: string }>).find((field) => field.label === "Why this role?");
     check("'Why this role?' is an AI draft with its basis", essay?.source === "ai_draft" && (essay.value?.length ?? 0) > 40 && /AI draft/.test(essay.basis ?? ""), `${essay?.source} ${essay?.value?.slice(0, 80)}`);
     const event = await db.applicationEvent.findFirst({ where: { applicationId: done.id, message: { contains: "essay answers (AI draft)" } } });
