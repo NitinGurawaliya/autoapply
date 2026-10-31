@@ -55,9 +55,9 @@ export const swipe = {
   exitRotate: 10,
   /** How far a committed card travels before it is removed. */
   exitDistance: 520,
-  /** The card behind the top one: scale and drop while the top card rests. */
+  /** The card behind the top one: scale and drop while the top card rests (scaled from its bottom edge, so it peeks out). */
   backScale: 0.95,
-  backOffsetY: 10,
+  backOffsetY: 12,
   /** How much the Apply or Skip button grows at full drag. */
   buttonGrow: 0.08,
 } as const;

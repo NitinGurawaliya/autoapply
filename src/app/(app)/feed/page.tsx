@@ -16,6 +16,7 @@ import { Icon } from "@/components/ui/icons";
 import { ChipGroup } from "@/components/patterns/chip-group";
 import { EmptyState } from "@/components/patterns/content";
 import { DeckEmptyArt } from "@/components/patterns/drawings";
+import { CARD_HEIGHT } from "@/components/patterns/job-card";
 import { FeedTopBar } from "@/components/patterns/top-bar";
 import { FilterSheet } from "./filter-sheet";
 import { SwipeDeck } from "./swipe-deck";
@@ -265,7 +266,7 @@ function DeckSkeleton() {
   return (
     <div className="flex flex-1 flex-col justify-center gap-6 px-5 pb-2" aria-busy="true" aria-label="Loading jobs">
       <AgentStatus text="Your agent is finding jobs for you" className="mt-[18px] justify-center" />
-      <Skeleton className="h-[420px] rounded-card" />
+      <Skeleton className={`${CARD_HEIGHT} rounded-card`} />
       <div className="flex items-center justify-center gap-8">
         <Skeleton className="size-16 rounded-full" />
         <Skeleton className="size-18 rounded-full" />

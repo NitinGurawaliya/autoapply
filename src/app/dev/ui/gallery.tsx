@@ -22,6 +22,7 @@ import { ChipGroup } from "@/components/patterns/chip-group";
 import { Callout, EmptyState, InfoNote, Row, SectionCard, TrustPanel } from "@/components/patterns/content";
 import { DeckDoneArt, DeckEmptyArt, ResumeSketch, SignInArt } from "@/components/patterns/drawings";
 import { JobCard } from "@/components/patterns/job-card";
+import { StackCount, SwipeStage } from "@/components/patterns/swipe-stage";
 import { AgentToast } from "@/components/patterns/agent-toast";
 import { AgentStatus } from "@/components/patterns/agent-status";
 
@@ -204,6 +205,28 @@ const JOB = {
   board: "Greenhouse",
 };
 
+const DECK = [
+  { ...JOB, board: "Greenhouse" },
+  { ...JOB, company: "Northwind Logistics", role: "Platform Engineer", board: "Lever", score: 78 },
+  { ...JOB, company: "Acme Health", role: "Senior Data Engineer, Clinical Analytics and Reporting", board: "Ashby", score: 71 },
+  { ...JOB, company: "Lumen Pay", role: "Site Reliability Engineer", board: "Greenhouse", score: 69 },
+].map((card, index) => ({ id: `demo-${index}`, card: { ...card, detailHref: "#" } }));
+
+function DeckDemo() {
+  const [cards, setCards] = useState(DECK);
+  const [opened, setOpened] = useState<string | null>(null);
+  const counts = new Map<string, number>();
+  for (const item of cards) counts.set(item.card.board, (counts.get(item.card.board) ?? 0) + 1);
+  if (cards.length === 0) return <Button variant="line" size="row" onClick={() => setCards(DECK)}>Deal again</Button>;
+  return (
+    <div className="flex flex-col">
+      <StackCount total={cards.length} boards={[...counts.entries()].sort((a, b) => b[1] - a[1])} />
+      <SwipeStage top={cards[0]} next={cards[1]} after={cards[2]} onCommit={() => setCards((current) => current.slice(1))} onOpen={() => setOpened(cards[0].card.company)} />
+      {opened ? <p className="m-0 mt-3 text-center text-sm text-muted-foreground">Opened {opened}</p> : null}
+    </div>
+  );
+}
+
 function Patterns() {
   const [places, setPlaces] = useState(["India", "Remote"]);
   return (
@@ -224,16 +247,35 @@ function Patterns() {
           <div className="-mx-5"><TabBar placement="static" /></div>
         </Section>
         <Section title="Job card">
-          <div className="relative mt-[18px] grid">
-            <article className="relative">
+          <div className="relative mt-[18px] grid grid-cols-[minmax(0,1fr)]">
+            <article className="relative h-[460px]">
               <JobCard job={JOB} />
             </article>
           </div>
-          <div className="relative mt-[18px] grid">
-            <article className="relative">
+          <div className="relative mt-[18px] grid grid-cols-[minmax(0,1fr)]">
+            <article className="relative h-[460px]">
+              <JobCard
+                job={{
+                  ...JOB,
+                  company: "International Business Machines Corporation India Private Limited",
+                  role: "Senior Staff Software Engineer, Distributed Systems Infrastructure and Developer Productivity Platform",
+                  why: "Your Go, Postgres and Kafka work lines up with their platform team, your 3 years of backend work fits the 2 to 4 they ask for, and your open-source work on queues is close to what they run in production every day.",
+                  where: "Bengaluru, Karnataka, India · Hyderabad, Telangana, India · Hybrid",
+                  isNew: true,
+                  board: "Lever",
+                  detailHref: "#",
+                }}
+              />
+            </article>
+          </div>
+          <div className="relative mt-[18px] grid grid-cols-[minmax(0,1fr)]">
+            <article className="relative h-[460px]">
               <JobCard job={{ ...JOB, company: "Anthropic", logoUrl: "https://s8-recruiting.cdn.greenhouse.io/external_greenhouse_job_boards/logos/400/040/300/original/2025-04-07-greenhouse.png?1744056137", score: 64, board: "Ashby" }} />
             </article>
           </div>
+        </Section>
+        <Section title="Swipe deck">
+          <DeckDemo />
         </Section>
         <Section title="After-swipe toast">
           <AgentToast company="Lumen Pay" stage={1} href="#" visible />

@@ -56,6 +56,21 @@ export function CompanyMark({
   );
 }
 
+/** The job board's tile: its first letter in an ink outline ("G" for Greenhouse), beside "via Greenhouse". */
+export function BoardMark({ board, className }: { board: string; className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "box-border inline-flex size-5 flex-none items-center justify-center rounded-md border-[1.5px] border-edge font-display text-[11px] font-extrabold leading-none",
+        className,
+      )}
+    >
+      {board[0]?.toUpperCase() ?? "?"}
+    </span>
+  );
+}
+
 /** The tilted lime "86 match" badge. */
 const TIER_WORD = { strong: "Strong", good: "Good", stretch: "Stretch" } as const;
 

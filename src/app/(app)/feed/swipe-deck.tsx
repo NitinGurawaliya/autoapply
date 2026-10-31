@@ -2,13 +2,14 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { buttonVariants } from "@/components/ui/button";
 import { SoftChip } from "@/components/ui/chip";
 import { EmptyState } from "@/components/patterns/content";
 import { DeckDoneArt } from "@/components/patterns/drawings";
 import type { JobCardData } from "@/components/patterns/job-card";
-import { SwipeStage, type Direction, type SwipeStageHandle } from "@/components/patterns/swipe-stage";
+import { StackCount, SwipeStage, type Direction, type SwipeStageHandle } from "@/components/patterns/swipe-stage";
 import { AgentToast } from "@/components/patterns/agent-toast";
 import { boardLabel } from "@/lib/board-label";
 import { explainOutcome } from "@/lib/explain";
@@ -22,7 +23,7 @@ const TOAST_AFTER_SENT_MS = 1600;
 
 const REMOTE_LABEL: Record<string, string> = { remote: "Remote", hybrid: "Hybrid", onsite: "On-site" };
 
-function cardData(job: FeedJob): JobCardData {
+function cardData(job: FeedJob, query: string): JobCardData {
   const remote = REMOTE_LABEL[job.remoteType];
   const where = [job.location, remote].filter(Boolean).join(" · ") || "Location not listed";
   const asks = job.requiredYears == null ? null : job.requiredYears <= 0 ? "Entry level" : `Asks ${job.requiredYears}+ yrs`;
@@ -38,8 +39,23 @@ function cardData(job: FeedJob): JobCardData {
     board: boardLabel(job.source),
     logoUrl: job.logoUrl,
     isNew: job.isNew,
-    applyUrl: job.applyUrl,
+    detailHref: jobHref(job.id, query),
   };
+}
+
+/** The job's page; it carries the feed's filters so its score matches the card and Back returns to the same feed. */
+function jobHref(id: string, query: string) {
+  return `/jobs/${id}?${query}`;
+}
+
+/** How many cards are left from each board, biggest first: "Greenhouse 24", "Lever 12". */
+function boardCounts(jobs: FeedJob[]) {
+  const counts = new Map<string, number>();
+  for (const job of jobs) {
+    const label = boardLabel(job.source);
+    if (label) counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]);
 }
 
 type Toast = { id: string; company: string; stage: number; visible: boolean };
@@ -47,6 +63,11 @@ type Toast = { id: string; company: string; stage: number; visible: boolean };
 // Jobs swiped since this tab opened. It outlives the deck: a feed page kept in the browser for a minute (staleTimes)
 // still lists cards swiped since it was built, and they must not come back.
 const swipedThisVisit = new Set<string>();
+
+/** A job applied to or skipped from its own page: the deck drops its card when the feed opens again. */
+export function markSwiped(jobId: string) {
+  swipedThisVisit.add(jobId);
+}
 
 export function SwipeDeck({
   jobs,
@@ -67,6 +88,7 @@ export function SwipeDeck({
   const refilling = useRef(false);
   // Keys and buttons throw the card through the stage, which commits the swipe when the card is off screen.
   const stage = useRef<SwipeStageHandle>(null);
+  const router = useRouter();
 
   const [agent, setAgent] = useState<Toast | null>(null);
 
@@ -184,6 +206,7 @@ export function SwipeDeck({
 
   const top = cards[0];
   const next = cards[1];
+  const after = cards[2];
 
   const toastNode = agent ? (
     <div className="fixed inset-x-0 top-[calc(max(12px,env(safe-area-inset-top))+52px)] z-40 mx-auto box-border w-full max-w-[480px] px-4">
@@ -220,12 +243,17 @@ export function SwipeDeck({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col justify-center gap-6 px-5 pb-2">
-      <SwipeStage
-        ref={stage}
-        top={{ id: top.id, source: top.source, card: cardData(top) }}
-        next={next ? { id: next.id, card: cardData(next) } : undefined}
-        onCommit={swipe}
-      />
+      <div className="flex flex-col">
+        <StackCount total={cards.length} boards={boardCounts(cards)} />
+        <SwipeStage
+          ref={stage}
+          top={{ id: top.id, source: top.source, card: cardData(top, query) }}
+          next={next ? { id: next.id, card: cardData(next, query) } : undefined}
+          after={after ? { id: after.id, card: cardData(after, query) } : undefined}
+          onCommit={swipe}
+          onOpen={() => router.push(jobHref(top.id, query))}
+        />
+      </div>
       <p className="m-0 hidden text-center text-xs text-muted-foreground md:block">Use the left and right arrow keys to skip or apply.</p>
       {toastNode}
     </div>

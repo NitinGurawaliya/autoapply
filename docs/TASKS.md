@@ -554,6 +554,12 @@ Do: in `adapters/ashby.ts`: required flags from `ApiJobPosting`; the fill waits 
 **Done when:** `ashby-saves-test`, `ashby-challenge-test`, `ashby-diagnostics-test`, `adapters-test`, `adapters-robust-test` PASS; dry runs on 3 live Ashby forms pass with the read-back seen; typecheck and lint pass.
 Done 29 Oct: all five PASS (new: one save in flight at most, a dropped answer given again then the run stopped, the submit answers); `ats-smoke` dry runs on Metaforms, Astronomer and Supabase PASS (Astronomer: 10 of 10 answers held by Ashby, 11 forms read back, 31 s). Not yet: a real submit with the new code.
 
+### [x] T102 — Fixed-shape feed card, deck depth and the job page (owner, 1 Nov)
+Why: the feed looked static and one card at a time hid that there are many jobs from Greenhouse, Lever and Ashby; a long title or reason changed the card's shape from job to job (owner, 1 Nov).
+Do: one height for every card (`CARD_HEIGHT`), name, title and reason clamped, chips on one row, a bottom line with the board mark and "See details"; two cards peeking under the top one and a "N jobs for you" line with per-board counts; `/jobs/[id]`: the job in full with Apply/Skip that send the same swipe as the deck and return to the same feed. Deviation from `design/feed.html` written in `docs/DESIGN.md`.
+**Done when:** every card in `/dev/ui` (including a long IBM sample) keeps the same frame at 390 px, light and dark; a tap opens the job page and Apply drops the card; typecheck and lint pass.
+Done 1 Nov: checked in `/dev/ui` at 390x844, light and dark (clamps hold, chips stay on one row, badge clear of the name, two cards peek 12 and 24 px, tokens match the DESIGN.md table); typecheck and lint pass. Not yet: the signed-in `/feed` and `/jobs/[id]` in a browser (needs a Google sign-in).
+
 ## Phase K — Naukri and LinkedIn through the user's own account (owner, 29 Oct)
 
 Starts only when Phase J is done: T94 (Lever handoff), T95 (SmartRecruiters), T96 (Keka) in `APPLY_BOARDS`, T97 (board report). Rules in CLAUDE.md and ARCHITECTURE §6.20.

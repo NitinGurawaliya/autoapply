@@ -43,6 +43,7 @@ swipeapply/
       onboarding/resume|confirm|questions/page.tsx
       (app)/layout.tsx               # shell for signed-in pages: header, nav, account menu, input popup
       (app)/feed/page.tsx
+      (app)/jobs/[id]/page.tsx        # one job in full, opened from the feed card; Apply/Skip swipe it and return to the feed
       (app)/applications/page.tsx, (app)/applications/[id]/page.tsx
       (app)/answers/page.tsx         # saved answers (6.13)
       (app)/governance/page.tsx      # rules, counters, audit log (6.14)

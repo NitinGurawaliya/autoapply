@@ -35,8 +35,11 @@ One meaning, one place: every status's design label, group and stage come from `
 | `/feed` (Discover) | 08–12 | FeedTopBar, JobCard in SwipeStage, AgentToast following the real status, FilterSheet, EmptyState (caught up, no matches) |
 | Needs-you sheet | 13, 14 | `components/needs-input-dialog.tsx`: Sheet, AccentPill, answer chips or InputBox, OtpInput (8 boxes) for `security_code`; opens by itself and cannot be dismissed |
 | `/applications` | 16 | TitleTopBar with today's line, tab chips, NeedsRow / ProgressRow / SentRow / FailedRow |
+| `/jobs/[id]` | none | Opened by a tap on the feed card. BackTopBar to the same feed (its filters ride in the query), a header like the card (CompanyMark, posted, title, MatchBadge, location, experience and board tags), the "Why your agent picked it" panel, the description in paragraphs with "Read the full description", a link to the original posting, and a sticky Apply/Skip pair that sends the same swipe as the deck and returns to the feed. States: loading, error, not found, already applied ("See your application"), skipped, closed by the company |
 | `/applications/[id]` | 17, 18 | BackTopBar, StatusPill, FailureCard, TrustPanel, Timeline, FieldList, ScreenshotFrame |
 | `/answers`, `/gaps`, `/account`, `/governance` | none | the same parts; reached from the profile menu |
+
+Feed card, deliberate change from `feed.html` (owner, 1 Nov: every card the same shape whatever the job, and the deck must show there are more jobs behind it): the card has one height (`CARD_HEIGHT` in `patterns/job-card.tsx`, 400 to 470 px with the viewport); the company name is one line, the title is `type-display-lg` clamped to 3 lines, and the reason is clamped to 3 lines; the location and experience chips are one row, never wrapping, with the location cut short; a bottom line holds the board (BoardMark, an outlined letter tile, plus "via Greenhouse") and "See details". Two cards show their bottom edge under the top one (scaled from the bottom, 12 px apart), and over the deck a line reads "N jobs for you" with a BoardMark and count per board. The whole card opens `/jobs/[id]` on a tap; a drag still swipes.
 
 Board 15 (phone notifications) is the operating system's; the app sends the same browser notifications as before.
 
