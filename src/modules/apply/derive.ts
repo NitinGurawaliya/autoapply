@@ -71,8 +71,12 @@ export function yesNoOf(text: string): "yes" | "no" | null {
 const opening = (question: string) => question.replace(/^\s*\[[^\]]*\]\s*/, "").trim();
 // A yes/no question, also when it opens with a statement and asks at the end ("... let us know if you're residing in X?").
 // Also a request to confirm ("Please confirm you're based in BC or Ontario").
+// The question is often the last sentence after a statement ("This role requires residency in London, UK. Are you currently
+// living in that area?", 31 Oct, Supabase): it was read as an open question and asked of someone whose profile is in India.
+const lastSentence = (question: string) => question.trim().split(/(?<=[.!])\s+(?=[A-Z])/).pop() ?? question;
 export const asksYesNo = (question: string) =>
   /^(are|do|does|did|have|has|had|is|was|were|will|would|can|could)\b/i.test(opening(question)) ||
+  /^(are|do|does|did|have|has|had|is|was|were|will|would|can|could)\b[^?]*\?\s*$/i.test(lastSentence(question)) ||
   /\b(if|whether) (you|you're|you are)\b[^.]*\?\s*$/i.test(question) ||
   /\bconfirm (that )?(you|you're|you are)\b/i.test(question);
 

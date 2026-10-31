@@ -21,6 +21,8 @@ const map = (fields: FormField[]) => fields.map((field) => ({ field, key: null }
 async function main() {
   check("why-us questions are motivation essays", essayKind("Why do you want to work at Stripe?", "textarea") === "motivation" && essayKind("Why this role?", "textarea") === "motivation" && essayKind("What excites you about joining us?", "textarea") === "motivation");
   check("best-project questions are recognised", essayKind("Tell us about the best project you've built", "textarea") === "best_project" && essayKind("Describe a system you are proud of", "textarea") === "best_project");
+  // 31 Oct, Supabase: writing prompts that are not phrased as a question, in a long text box, are drafted too.
+  check("a writing prompt in a long text box is an essay, even without a question mark", essayKind("Show us how you teach through code:", "textarea") === "other" && essayKind("DevRel at Supabase is hands-on - you'll be writing TypeScript, deploying full-stack apps, and building with tools like React, Stripe, and of course, Postgres.", "textarea") === "other" && essayKind("Home address", "textarea") === null);
   check("factual and sensitive questions are never essays", essayKind("What are your salary expectations?", "textarea") === null && essayKind("Why do you require visa sponsorship?", "textarea") === null && essayKind("Why this role?", "select") === null);
 
   check("a draft naming only resume and job facts is grounded", draftIsGrounded("At Acme Labs I built React dashboards; Stripe's payments work fits that.", ["Acme Labs", "React", "Stripe"], ["Engineer at Acme Labs. React, Node.", "Stripe", "Payments engineer"]));

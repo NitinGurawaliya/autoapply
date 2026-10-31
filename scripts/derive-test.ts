@@ -61,6 +61,10 @@ async function main() {
   check("'currently living in the UK?' → No", j(q.uk)?.answer === "No");
   check("'residing in Northern Ireland?' → No for someone in India", j(q.ni)?.answer === "No");
   check("'live in India?' → Yes", j(q.india)?.answer === "Yes");
+  // 31 Oct, Supabase: the question after a statement.
+  const london = "This role requires residency in London, UK. Are you currently living in that area?";
+  const l = await derive(junior, [london]);
+  check("'requires residency in London. Are you living in that area?' → No for a profile in India", l(london)?.answer === "No", l(london)?.basis);
   check("'based in Bangalore?' is not settled by the country alone", j(q.bangalore) === undefined);
   check("a residence question mixed with relocation is left to the user", j(q.austin) === undefined);
   check("'worked at MongoDB?' → No, naming the resume's employers", j(q.mongodb)?.answer === "No" && /Psquare Company/.test(j(q.mongodb)?.basis ?? ""), j(q.mongodb)?.basis);

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { callJson } from "@/lib/llm";
-import { detectConcept } from "@/modules/answers";
+import { detectConcept, matchKeyBySynonym } from "@/modules/answers";
 
 /**
  * Essay questions ("Why do you want to work here?", "Tell us about a project you're proud of") drafted by AI (T55), a
@@ -28,7 +28,6 @@ const MOTIVATION = /why (do you want|would you like|are you interested|are you a
 const OTHER = /tell us (about|why|how)|describe (a|your|how|the)|what makes you|walk us through|share (a|an|your)|what qualities|how (do|does|would|have|will) your (skills|experience|background)|what (would|do|will) you bring|hard(est)? problem|achievement/i;
 // A long free-text question that asks for a hard fact is not an essay: the AI must not write an address or a date.
 const FACTUAL = /\b(address|phone|e-?mail|url|link|website|portfolio|github|linkedin|salary|ctc|visa|date|year|month|number|name|pronoun|gpa|grade|cgpa|percentage|reference|referr|notice|location|city|country|time ?zone|if other|please specify)\b/i;
-const OPEN_QUESTION = /^\s*(what|how|why|tell|describe|share|walk|explain|give|in your own words)\b|\?\s*$/i;
 
 /** The essay kind of a free-text question, or null when it is not an essay (or is a factual / sensitive question). */
 export function essayKind(label: string, type: string): EssayKind | null {
@@ -37,8 +36,12 @@ export function essayKind(label: string, type: string): EssayKind | null {
   if (BEST_PROJECT.test(label)) return "best_project";
   if (MOTIVATION.test(label)) return "motivation";
   if (type === "textarea" && OTHER.test(label)) return "other";
-  // Any other open question asked in a long text box (owner, 15 Oct: essays are drafted, never asked).
-  if (type === "textarea" && OPEN_QUESTION.test(label) && !FACTUAL.test(label)) return "other";
+  // Any other long text box that does not ask for a hard fact (owner, 15 Oct: essays are drafted, never asked). Also a
+  // prompt that is not phrased as a question (31 Oct, Supabase: "Show us how you teach through code:", "DevRel at
+  // Supabase is hands-on - you'll be writing TypeScript…" were asked of the user).
+  // Not a box for one of the user's own saved fields ("Cover letter" keeps its saved letter; free text has its own path).
+  const known = matchKeyBySynonym(label);
+  if (type === "textarea" && !FACTUAL.test(label) && (!known || known === "free_text")) return "other";
   return null;
 }
 
