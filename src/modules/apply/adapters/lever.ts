@@ -1,11 +1,12 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Page } from "playwright";
+import type { Page, Request } from "playwright";
 import { joinChoices, splitChoices } from "@/lib/choices";
 import { customQuestionKey } from "@/modules/answers";
-import type { AtsAdapter, FilledField, FormField, ResolvedValue, SubmitResult } from "../adapter";
-import { NeedsAnswerError, NoRetryError, NotSentError } from "../adapter";
+import type { AtsAdapter, FilledField, FormField, ResolvedValue, SubmitContext, SubmitResult } from "../adapter";
+import { BotCheckError, MaybeSentError, NeedsAnswerError, NoRetryError, NotSentError, WindowClosedError } from "../adapter";
+import { canShowWindow, livePage } from "../browser";
 import { assertJobOpen, dismissOverlays, firstVisible, friendlyError, inField } from "./common";
 
 // Lever hosts every company's form on jobs.lever.co/<company>/<id>/apply (jobs.eu.lever.co for the EU).
@@ -27,8 +28,11 @@ function hintFor(name: string): string | undefined {
   if (lower === "location") return "city";
   if (lower === "resume") return "resume";
   if (lower === "urls[linkedin]") return "linkedin";
-  if (lower === "urls[github]") return "github";
-  if (lower === "urls[portfolio]") return "portfolio";
+  // Companies name their own link fields ("urls[Github / Stack Overflow]", "urls[Website]"); Naukri, Twitter and the like
+  // are no facts we hold (T94 research, 31 Oct).
+  if (/^urls\[.*github/.test(lower)) return "github";
+  if (/^urls\[.*linkedin/.test(lower)) return "linkedin";
+  if (/^urls\[(portfolio|website|personal (site|website)|blog)\]$/.test(lower)) return "portfolio";
   return undefined;
 }
 
@@ -45,7 +49,8 @@ const READ_FORM = `(() => {
     const labelEl = li.querySelector('.application-label');
     const textEl = labelEl ? labelEl.querySelector('.text') : null;
     const label = clean(textEl ? textEl.textContent : labelEl ? labelEl.textContent : '');
-    const required = Boolean(li.querySelector('.required-field, .application-label .required, .text .required'));
+    // Some controls carry only the required attribute (consent[store], T94 research).
+    const required = Boolean(li.querySelector('.required-field, .application-label .required, .text .required, input[required], select[required], textarea[required]'));
     const controls = Array.from(li.querySelectorAll('input, select, textarea')).filter((c) => c.type !== 'hidden' && c.name);
     const groups = new Map();
     controls.forEach((c) => groups.set(c.name, [...(groups.get(c.name) || []), c]));
@@ -140,10 +145,17 @@ async function fillLocation(page: Page, value: ResolvedValue) {
   await input.scrollIntoViewIfNeeded();
   await input.click();
   await input.fill("");
-  await input.pressSequentially(value.value, { delay: 60 });
   const results = page.locator(".dropdown-results .dropdown-location");
-  await results.first().waitFor({ timeout: 8000 }).catch(() => undefined);
-  const texts = (await results.allInnerTexts()).map((text) => text.trim());
+  // Lever's search lists "Bengaluru, Bengaluru Urban, Karnataka, IND": a full "City, State, India" can find nothing, the
+  // city alone finds it (T94 research).
+  let texts: string[] = [];
+  for (const term of [...new Set([value.value.trim(), value.value.split(",")[0].trim()])].filter(Boolean)) {
+    await input.fill("");
+    await input.pressSequentially(term, { delay: 60 });
+    await results.first().waitFor({ timeout: 8000 }).catch(() => undefined);
+    texts = (await results.allInnerTexts()).map((text) => text.trim());
+    if (texts.length > 0) break;
+  }
   if (texts.length === 0) {
     await input.fill("");
     // An optional location with no match is skipped; a required one asks the user for another search word.
@@ -162,7 +174,7 @@ async function captchaChallengeVisible(page: Page) {
   const frames = page.locator('iframe[src*="hcaptcha.com"][title*="challenge" i]');
   const count = await frames.count();
   for (let index = 0; index < count; index += 1) {
-    const box = await frames.nth(index).boundingBox();
+    const box = await frames.nth(index).boundingBox({ timeout: 1000 }).catch(() => null);
     if (box && box.height > 120 && (await frames.nth(index).isVisible())) return true;
   }
   return false;
@@ -178,21 +190,101 @@ async function invalidFieldLabels(page: Page) {
   ) as Promise<string[]>;
 }
 
-export async function waitForLeverConfirmation(page: Page, timeoutMs = 60000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (/\/thanks\b|\/confirmation\b/i.test(page.url())) return `url ${page.url().replace(/[0-9a-f-]{36}/i, "<id>")}`;
-    const body = await page.locator("body").innerText().catch(() => "");
-    const match = body.match(CONFIRMATION);
-    if (match) return `text "${match[0]}"`;
-    if (await captchaChallengeVisible(page)) throw new NoRetryError("Lever showed a CAPTCHA. Open the form and submit it yourself.");
-    const invalid = await invalidFieldLabels(page);
-    if (invalid.length > 0 && Date.now() > deadline - timeoutMs + 6000) {
-      throw new NoRetryError(`Lever rejected the form: ${[...new Set(invalid)].slice(0, 5).join(", ")}`);
+/** Lever's own success state on the page, as evidence, or null. */
+async function successShown(page: Page) {
+  if (/\/thanks\b|\/confirmation\b/i.test(page.url())) return `url ${page.url().replace(/[0-9a-f-]{36}/i, "<id>")}`;
+  // Still on the form: its own wording ("Thank you for your interest…") is no answer from Lever.
+  if (/\/apply\b/i.test(page.url())) return null;
+  const body = await page.locator("body").innerText().catch(() => "");
+  const match = body.match(CONFIRMATION);
+  return match ? `text "${match[0]}"` : null;
+}
+
+// How long the worker's own Submit has to show Lever's thanks page; a person gets 15 minutes (a challenge to complete).
+const AUTO_WAIT_MS = 60000;
+const PERSON_WAIT_MS = 15 * 60 * 1000;
+// Lever's form posts to the posting's own /apply address (hCaptcha's requests go to hcaptcha.com, not this).
+const APPLY_POST = /^https:\/\/jobs(\.eu)?\.lever\.co\/[^/]+\/[0-9a-f-]{36}\/apply/i;
+
+/**
+ * T94: Lever forms carry hCaptcha on Submit (#hcaptchaSubmitBtn). As Ashby's reCAPTCHA (adapters/ashby.ts): the worker
+ * presses Submit once itself, a plain click with nothing about the browser changed, and hCaptcha decides. A challenge is
+ * never solved: in a visible window (the handoff queue, a worker with a screen) the same window becomes the person's,
+ * the filled form kept, and they complete it and press Submit; without a screen the run stops as not sent and the runner
+ * passes it to a worker with one (BotCheckError, runner.ts). On a run already with a person (ctx.person) the worker never
+ * presses Submit. Only Lever's thanks page counts as sent; a Submit request that left with no thanks page seen is
+ * "may have been sent", never "not sent".
+ */
+async function submitLever(page: Page, ctx: SubmitContext): Promise<SubmitResult> {
+  await dismissOverlays(page);
+  // Lever's own validation says what is missing; clicking Submit with a hole in the form only costs a bad attempt.
+  const missing = await invalidFieldLabels(page);
+  if (missing.length > 0) throw new NoRetryError(`Lever needs these filled before it will submit: ${[...new Set(missing)].slice(0, 5).join(", ")}`);
+  const button = await firstVisible(page, ["#hcaptchaSubmitBtn", "button[type=submit].postings-btn", "#btn-submit", "button[type=submit]"], 20000);
+  if (!button) throw new NoRetryError("The Submit button never appeared on the Lever form. Open the form and submit it yourself.");
+  await button.scrollIntoViewIfNeeded().catch(() => undefined);
+  let posted = false;
+  const stopWatching = leverAdapter.watchSubmit!(page, () => {
+    posted = true;
+  });
+  let withPerson = Boolean(ctx.person);
+  let deadline = Date.now() + (withPerson ? PERSON_WAIT_MS : AUTO_WAIT_MS);
+  const askPerson = async (what: string) => {
+    if (!ctx.handoff || !canShowWindow()) throw new BotCheckError(`${what} when the worker pressed Submit. Nothing was sent.`);
+    withPerson = true;
+    deadline = Date.now() + PERSON_WAIT_MS;
+    await ctx.announceHandoff?.(`${what}: complete it in the Chrome window on your computer, then press Submit if the form is still there`);
+  };
+  try {
+    if (withPerson) {
+      await page.bringToFront().catch(() => undefined);
+      await ctx.announceHandoff?.("Lever asked to confirm a person is applying: check the form in the Chrome window on your computer, press Submit and complete the check");
+    } else {
+      // Attempted only once the form's own POST leaves (runner.ts watchSubmit), as Ashby: a click hCaptcha holds sends
+      // nothing, and a challenge, a closed window or Lever's validation must not read as "check your email".
+      try {
+        await button.click({ timeout: 15000 });
+      } catch (error) {
+        throw new NotSentError(`Could not press Submit on the Lever form: ${friendlyError(error)}`);
+      }
     }
-    await page.waitForTimeout(1000);
+    let challenged = false;
+    for (;;) {
+      const live = livePage(page);
+      if (!live) {
+        if (posted) throw new MaybeSentError("The Lever window closed after the form was sent, before its thanks page showed. Check your email before applying again.");
+        throw new WindowClosedError("The Lever window was closed before the form was sent. Nothing was sent.");
+      }
+      // The thanks page opens with a plain GET too (T94 research): it counts only after the form's own POST left.
+      const evidence = posted ? await successShown(live) : null;
+      if (evidence) return { confirmed: true, evidence };
+      if (!challenged && (await captchaChallengeVisible(live))) {
+        challenged = true;
+        if (!withPerson) await askPerson("Lever's hCaptcha showed a challenge");
+      }
+      // Lever's validation after the click: nothing was sent while it shows (only before the form went out).
+      if (!posted && !withPerson) {
+        const invalid = await invalidFieldLabels(live);
+        if (invalid.length > 0 && Date.now() > deadline - AUTO_WAIT_MS + 6000) throw new NotSentError(`Lever rejected the form: ${[...new Set(invalid)].slice(0, 5).join(", ")}`);
+      }
+      if (Date.now() >= deadline) {
+        if (posted) throw new MaybeSentError("Submit was pressed but Lever's thanks page did not show. Check your email before applying again.");
+        // Nothing left the window after the worker's click: hCaptcha may have held it without showing a challenge.
+        if (!withPerson) {
+          await askPerson("Nothing reached Lever after the worker pressed Submit (its hCaptcha may have stopped it)");
+          continue;
+        }
+        throw new NotSentError("Submit was not pressed within 15 minutes. Nothing was sent; press Retry when you are ready.");
+      }
+      if (await ctx.cancelled?.()) {
+        if (posted) throw new MaybeSentError("Cancelled after the form was sent to Lever, before its thanks page showed. Check your email before applying again.");
+        throw new WindowClosedError("Cancelled by you before the form was sent. Nothing was sent.");
+      }
+      await live.waitForTimeout(1000).catch(() => undefined);
+    }
+  } finally {
+    stopWatching();
   }
-  throw new NoRetryError("Submit clicked but no confirmation appeared. Check your email before applying again.");
 }
 
 export const leverAdapter: AtsAdapter = {
@@ -228,7 +320,11 @@ export const leverAdapter: AtsAdapter = {
           for (const choice of wanted) {
             const index = pickLabel(labels, choice);
             if (index < 0) throw new Error(`No option "${choice}" for "${value.label}"`);
-            await target.nth(index).check({ force: true });
+            // A forced check sometimes does not take (31 Oct, JumpCloud: something covered the input): the label, then a click.
+            await target.nth(index).check({ force: true }).catch(async () => {
+              await target.nth(index).evaluate((input) => ((input.closest("label") as HTMLElement | null) ?? (input as HTMLElement)).click());
+              if (!(await target.nth(index).isChecked())) await target.nth(index).evaluate((input) => (input as HTMLInputElement).click());
+            });
             picked.push(labels[index]);
           }
           return joinChoices(picked);
@@ -246,21 +342,20 @@ export const leverAdapter: AtsAdapter = {
     }
     return filled;
   },
-  async submit(page, ctx): Promise<SubmitResult> {
-    await dismissOverlays(page);
-    // Lever's own validation says what is missing; clicking Submit with a hole in the form only costs a bad attempt.
-    const missing = await invalidFieldLabels(page);
-    if (missing.length > 0) throw new NoRetryError(`Lever needs these filled before it will submit: ${[...new Set(missing)].slice(0, 5).join(", ")}`);
-    const button = await firstVisible(page, ["#hcaptchaSubmitBtn", "button[type=submit].postings-btn", "#btn-submit", "button[type=submit]"], 20000);
-    if (!button) throw new NoRetryError("The Submit button never appeared on the Lever form. Open the form and submit it yourself.");
-    await button.scrollIntoViewIfNeeded().catch(() => undefined);
-    await ctx.markAttempted?.();
-    try {
-      await button.click({ timeout: 15000 });
-    } catch (error) {
-      throw new NotSentError(`Could not press Submit on the Lever form: ${friendlyError(error)}`);
-    }
-    const evidence = await waitForLeverConfirmation(page);
-    return { confirmed: true, evidence };
+  // The window is the person's from the moment it opens (a handoff board): the form's own POST is the moment it may be sent.
+  watchSubmit(page: Page, onSubmit: () => void) {
+    const context = page.context();
+    let seen = false;
+    const onRequest = (request: Request) => {
+      if (seen || request.method() !== "POST" || !APPLY_POST.test(request.url())) return;
+      seen = true;
+      onSubmit();
+    };
+    context.on("request", onRequest);
+    return () => context.off("request", onRequest);
   },
+  confirmation(page: Page) {
+    return successShown(page);
+  },
+  submit: submitLever,
 };

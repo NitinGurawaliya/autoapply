@@ -11,7 +11,8 @@ const APPLY_QUEUE = "apply";
  * traced automated run never sent its submit request), while a person's Submit went through 7 of 7.
  */
 // Keka (T96): every application form has an image CAPTCHA, which only a person types (adapters/keka.ts).
-export const HANDOFF_BOARDS: readonly string[] = ["ashby", "keka"];
+// Lever (T94): hCaptcha on Submit; the worker presses it in a visible window and a challenge goes to the person (adapters/lever.ts).
+export const HANDOFF_BOARDS: readonly string[] = ["ashby", "keka", "lever"];
 /**
  * Handoff applications of a company that set Ashby's spam protection (low, medium, high, or unreadable): only a worker with
  * a screen takes them (worker/index.ts). It fills the form in a visible Chrome window and, with ASHBY_AUTO_SUBMIT=1,

@@ -14,7 +14,9 @@ export { daysAgoLabel };
 // The Lever adapter exists (modules/apply/adapters) but is switched off until it submits reliably (hCaptcha); its jobs
 // are still ingested. Ashby is on: the agent fills the form and a person presses Submit (human handoff, 21 Oct; see
 // lib/queue.ts HANDOFF_BOARDS); ENABLE_ASHBY=0 switches it off.
-export const APPLY_BOARDS: readonly string[] = ["greenhouse", ...(process.env.ENABLE_ASHBY === "0" ? [] : ["ashby"])];
+// Lever (T94) only where ENABLE_LEVER=1: on for the worker and test runs that try its first real handoff submits, off in
+// the feed until they pass (INGEST_CONTRACT: a board goes in after one real submit).
+export const APPLY_BOARDS: readonly string[] = ["greenhouse", ...(process.env.ENABLE_ASHBY === "0" ? [] : ["ashby"]), ...(process.env.ENABLE_LEVER === "1" ? ["lever"] : [])];
 const BOARDS = APPLY_BOARDS;
 // Where a job is, for the feed's Location filter (T80): IN = in India and REMOTE = remote and open to India (Job.eligibility,
 // tagging.ts); US and OTHER = jobs abroad, shown only when the user picks them.
