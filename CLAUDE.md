@@ -1,6 +1,6 @@
 # CLAUDE.md — SwipeApply
 
-SwipeApply is a governed AI agent that applies to jobs for a candidate after they swipe right. Built for the AgentForge hackathon (3 Oct 2026) with the production architecture from day 1: Next.js web + a separate Playwright worker, Postgres (Neon), pg-boss queue, files in Postgres behind a storage interface, Google auth.
+SwipeApply is a governed AI agent that applies to jobs for a candidate after they swipe right. The goal: a right-swipe ends in a submitted application, end to end, with no human step. Built for the AgentForge hackathon (3 Oct 2026) with the production architecture from day 1: Next.js web + a separate Playwright worker, Postgres (Neon), pg-boss queue, files in Postgres behind a storage interface, Google auth.
 
 Always read before a task: `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/TASKS.md`. ARCHITECTURE.md is the source of truth. If you must deviate, update it in the same change and say why.
 
@@ -38,7 +38,7 @@ npx playwright test
 - EEO keys default to "Decline to answer". Never guess gender, race, veteran or disability.
 - Required privacy-notice, "my answers are true" and arbitration acknowledgements are ticked only under the user's standing permission (`accept_acknowledgements` = Yes, asked once); without it each is asked. Marketing opt-ins and certifications of facts (work authorization, age, record) are never auto-ticked. See `modules/apply/acknowledgement.ts`.
 - Every governance check writes an `ApplicationEvent`. Blocked runs end in `status = blocked` with the rule name.
-- Jobs come from public, no-login job APIs (Greenhouse, Lever, Ashby, SmartRecruiters, Keka, Workday, Zoho Recruit) and, from Phase K on, from Naukri and LinkedIn through the user's own signed-in account (ARCHITECTURE §6.20). Phase K starts only after Phase J is done (T94–T97: Lever, SmartRecruiters and Keka in `APPLY_BOARDS`, the board report written). Signed-in sources: the user signs in themselves in the visible browser (handoff); we never ask for, type, store or log their password or OTP; we read only job listings and the user's own profile, never other people's profiles or messages; a CAPTCHA or bot challenge is handed to the user, never bypassed. No other login-walled site, and no site whose bot challenge blocks a public read (Darwinbox), without a rule change here.
+- Jobs come from public, no-login job APIs (Greenhouse, Lever, Ashby, SmartRecruiters, Keka, Workday, Zoho Recruit) and, from Phase K on, from Naukri and LinkedIn through the user's own signed-in account (ARCHITECTURE §6.20). Phase K starts only after Phase J is done (T94–T97: Lever, SmartRecruiters and Keka in `APPLY_BOARDS`, the board report written). Signed-in sources: the user signs in themselves in the visible browser (handoff); we never ask for, type, store or log their password or OTP; we read only job listings and the user's own profile, never other people's profiles or messages.
 - No data in local files: companies, jobs, profiles, answers, applications → Postgres; resumes, screenshots → `lib/storage.ts` (FileBlob table; never the filesystem). Only `lib/storage.ts` touches `FileBlob`. Temp files for Playwright uploads are deleted in `finally`.
 - Resumes are personal data: never log resume text, phone numbers or emails.
 

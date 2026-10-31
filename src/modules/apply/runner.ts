@@ -424,7 +424,7 @@ async function execute(applicationId: string, options: { person?: boolean }) {
       }
     }
     // The board's bot check stopped the worker's own Submit on a worker with no screen, and nothing was sent (24 Oct:
-    // Airbound's reCAPTCHA challenge). Never solved, and never rerun as it was: 24-25 Oct, none of 7 immediate reruns got
+    // Airbound's reCAPTCHA challenge). Never rerun as it was: 24-25 Oct, none of 7 immediate reruns got
     // past it. A person takes it over: the run goes on the queue only a worker with a screen takes, where the form is filled
     // again in a window they can see and they press Submit (adapters/ashby.ts). The attempt is not counted.
     if (error instanceof BotCheckError && !attempted) {

@@ -678,7 +678,7 @@ async function waitForUserSubmit(page: Page, ctx: SubmitContext): Promise<Submit
     // Ashby answers a click within seconds; the 15 minutes are for a person.
     let deadline = Date.now() + (auto ? AUTO_WAIT_MS : HANDOFF_WAIT_MS);
     // Ashby wants a person: a reCAPTCHA challenge on the worker's Submit (24-25 Oct, Docker: 8 applications, and none of the 7
-    // immediate reruns got past it), or a code emailed to the candidate. Never solved or worked around. With a screen this
+    // immediate reruns got past it), or a code emailed to the candidate. With a screen this
     // same window becomes a handoff, the filled form kept as it is; without one the run stops as not sent and the runner
     // passes it to a worker with a screen (runner.ts).
     const askPerson = async (what: string) => {

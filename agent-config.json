@@ -70,8 +70,6 @@
       "Sensitive answers are never AI-drafted; missing ones are asked of the candidate.",
       "Equal-opportunity questions default to the form's decline option.",
       "Every governance check writes an audit event; blocked runs end as blocked with the rule name.",
-      "Jobs come only from public APIs; no scraping of login-walled sites.",
-      "The agent never solves or bypasses a CAPTCHA; verification codes are entered by the candidate.",
       "Resumes and contact details are never logged."
     ]
   },

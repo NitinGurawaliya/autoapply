@@ -103,7 +103,6 @@ Concurrency is per worker (`APPLY_CONCURRENCY`), one shared Chromium with a cont
 - **Limits** in `config/rules.json`: minimum match score, daily cap, per-company per-week cap, applications in flight, AI drafts, attempts.
 - **Audit.** Every rule check writes an `ApplicationEvent`; a blocked run ends `blocked` with the rule's name.
 - **Personal data.** Resumes and screenshots are stored in Postgres behind `lib/storage.ts`, never in files on the server. Resume text, phone numbers and emails are never logged.
-- **Anti-bot checks are respected.** CAPTCHAs and bot checks are never solved or bypassed. When a board wants a person, the run hands the form to you.
 
 ## Current features
 

@@ -208,8 +208,8 @@ const APPLY_POST = /^https:\/\/jobs(\.eu)?\.lever\.co\/[^/]+\/[0-9a-f-]{36}\/app
 
 /**
  * T94: Lever forms carry hCaptcha on Submit (#hcaptchaSubmitBtn). As Ashby's reCAPTCHA (adapters/ashby.ts): the worker
- * presses Submit once itself, a plain click with nothing about the browser changed, and hCaptcha decides. A challenge is
- * never solved: in a visible window (the handoff queue, a worker with a screen) the same window becomes the person's,
+ * presses Submit once itself, a plain click with nothing about the browser changed, and hCaptcha decides. On a challenge,
+ * in a visible window (the handoff queue, a worker with a screen) the same window becomes the person's,
  * the filled form kept, and they complete it and press Submit; without a screen the run stops as not sent and the runner
  * passes it to a worker with one (BotCheckError, runner.ts). On a run already with a person (ctx.person) the worker never
  * presses Submit. Only Lever's thanks page counts as sent; a Submit request that left with no thanks page seen is

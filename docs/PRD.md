@@ -72,7 +72,7 @@ Payments, mobile app, push notifications, WhatsApp / extension / MCP, Workday ap
 - Never invent a fact. Values come from the resume, the user, a default, or an AI draft that is labelled and limited to free-text fields.
 - Sensitive keys (CTC, notice period, work authorization, sponsorship, relocation, salary) are never AI-drafted. EEO defaults to "Decline to answer".
 - Daily cap per user (default 20). Minimum match score (default 40).
-- Naukri and LinkedIn only through the user's own signed-in account, only after Phase J; we never handle their password or OTP and never bypass a CAPTCHA.
+- Naukri and LinkedIn only through the user's own signed-in account, only after Phase J; we never handle their password or OTP.
 - Demo rule: the presenter applies with their own real resume and swipes right only on jobs they genuinely want.
 
 ## 10. Demo success criteria

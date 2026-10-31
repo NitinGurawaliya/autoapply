@@ -120,7 +120,7 @@ export class RefusedError extends NotSentError {}
 
 /**
  * The worker's own Submit was stopped by the board's bot check (a CAPTCHA challenge shown, or a code emailed) before
- * anything was sent, on a worker with no screen to show it on. Never solved; the runner hands the application to a person
+ * anything was sent, on a worker with no screen to show it on. The runner hands the application to a person
  * at a worker with a screen (runner.ts, lib/queue.ts PERSON_QUEUE).
  */
 export class BotCheckError extends NotSentError {}
