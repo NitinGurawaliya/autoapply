@@ -6,7 +6,7 @@ import type { AtsAdapter, FilledField, FormField, ResolvedValue, SubmitResult } 
 import { BotCheckError, MaybeSentError, NoRetryError, RefusedError, WindowClosedError } from "../adapter";
 import { livePage } from "../browser";
 import { assertJobOpen, dismissOverlays, inField } from "./common";
-
+import { analyzeTestImage } from "../captcha/ai";
 /**
  * Keka career portals (T96): `{company}.keka.com/careers/applyjob/{id}`. A plain server-rendered form with stable ids,
  * described by public JSON (`/careers/{id}/2/applicationform`: each field's identifier, type, required, options), so the
@@ -57,6 +57,8 @@ function formUrl(job: { applyUrl: string; externalId: string }) {
   if (slug && id) return `https://${slug}.keka.com/careers/applyjob/${id}`;
   return job.applyUrl.replace("/jobdetails/", "/applyjob/");
 }
+
+
 
 const jobIdOf = (url: string) => url.match(/\/applyjob\/(\d+)/)?.[1] ?? null;
 
@@ -132,8 +134,20 @@ async function readFields(page: Page): Promise<FormField[]> {
     } else if (element.tag === "textarea") fields.push({ selector, label, type: "textarea", required: field.required, hintKey });
     else if (field.fieldType === DATE) fields.push({ selector, label, type: "date", required: field.required, hintKey });
     else if (field.fieldType === NUMBER || element.type === "number") fields.push({ selector, label, type: "number", required: field.required, hintKey });
-    else fields.push({ selector, label, type: "text", required: field.required, hintKey });
+    else fields.push({ selector, label, type: "text", required: field.required, hintKey });}); 
+  const captcha = page.locator("#captcha");
+
+  
+
+
+if (await captcha.count()) {
+  const visible = await captcha.isVisible();
+
+  console.log("[Keka] CAPTCHA input:", {
+    detected: true,
+    visible,
   });
+}
   // The privacy consent: Apply stays disabled until it is ticked. A privacy-notice acknowledgement (acknowledgement.ts):
   // ticked only under the user's standing permission, asked otherwise.
   const consent = page.locator("#candidateConsent");
@@ -150,8 +164,10 @@ async function readFields(page: Page): Promise<FormField[]> {
     });
     fields.push({ selector: "#candidateConsent", label: text || "I accept the data processing terms under the Privacy Policy", type: "checkbox", required: true });
   }
+
   return fields;
 }
+
 
 /** Through the page's own uploader: it parses the resume and fills the hidden `resume.*` inputs the submit sends. */
 async function attachFile(page: Page, value: ResolvedValue, bytes: Uint8Array) {
@@ -276,6 +292,19 @@ async function successShown(page: Page) {
   return match ? `text "${match[0]}"` : null;
 }
 
+
+async function captureKekaCaptcha(page: Page): Promise<Buffer> {
+  const captchaImage = page.locator("#imgCaptcha");
+
+  await captchaImage.waitFor({
+    state: "visible",
+    timeout: 10000,
+  });
+
+  return captchaImage.screenshot({
+    type: "png",
+  });
+}
 export const HANDOFF_WAIT_MS = 15 * 60 * 1000;
 
 export const kekaAdapter: AtsAdapter = {
@@ -315,46 +344,131 @@ export const kekaAdapter: AtsAdapter = {
     }
     return filled;
   },
-  async submit(page, ctx): Promise<SubmitResult> {
-    // Only a person can answer Keka's CAPTCHA: never pressed by the worker, never on a worker with no screen.
-    if (!ctx.handoff) throw new BotCheckError("Keka's form has a CAPTCHA that a person types. Nothing was sent.");
-    await dismissOverlays(page);
-    const button = page.locator("button:has-text('Apply Now')").first();
-    await button.scrollIntoViewIfNeeded().catch(() => undefined);
-    await page.locator("#captcha").scrollIntoViewIfNeeded().catch(() => undefined);
-    await page.bringToFront().catch(() => undefined);
-    await ctx.announceHandoff?.("Ready to send: type the CAPTCHA shown on the Keka form and press Apply Now in the Chrome window on your computer");
+async submit(page, ctx): Promise<SubmitResult> {
+  if (!ctx.handoff) {
+    throw new BotCheckError(
+      "Keka requires a person to enter the CAPTCHA. Nothing was sent."
+    );
+  }
+
+  await dismissOverlays(page);
+
+  const captcha = page.locator("#captcha");
+
+  try {
+    await captcha.waitFor({
+      state: "visible",
+      timeout: 10000,
+    });
+  } catch {
+    throw new BotCheckError(
+      "Keka CAPTCHA input was not visible. Manual submission cannot continue."
+    );
+  }
+
+  await captcha.scrollIntoViewIfNeeded();
+
+  const button = page.locator("button:has-text('Apply Now')").first();
+
+  await button.waitFor({
+    state: "visible",
+    timeout: 10000,
+  });
+
+  await button.scrollIntoViewIfNeeded();
+  await page.bringToFront();
+
+  const image = await captureKekaCaptcha(page);
+
+  const output = await analyzeTestImage(image)
+
+
+  await captcha.focus();
+  await captcha.fill(output)
+
+  
+
+  let applied = false;
+
+  // Register before announcing handoff to avoid missing a quick user click.
+  const stop = kekaAdapter.watchSubmit!(page, () => {
+    applied = true;
+  });
+
+  try {
+
+const apply = page.locator("button:has-text('Apply Now')").first();
+await apply.waitFor({ state: "visible" });
+await apply.click();
+
+    await ctx.announceHandoff?.(
+      "All application fields are filled. Please enter the CAPTCHA and click Apply Now in Chrome."
+    );
+
     const deadline = Date.now() + HANDOFF_WAIT_MS;
     let invalidSeen = false;
-    // Whether Apply was pressed at all (its POST left the window): decides what a timeout means.
-    let applied = false;
-    const stop = kekaAdapter.watchSubmit!(page, () => {
-      applied = true;
-    });
-    try {
+
     while (Date.now() < deadline) {
-      if (await ctx.cancelled?.()) throw new WindowClosedError("Cancelled by you before Apply was pressed. Nothing was sent.");
-      const live = livePage(page);
-      if (!live) throw new WindowClosedError("The Keka window was closed before Apply was pressed. Nothing was sent.");
-      const evidence = await successShown(live).catch(() => null);
-      if (evidence) return { confirmed: true, evidence };
-      if (ERROR_URL.test(live.url())) {
-        const text = (await live.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ").trim().slice(0, 160);
-        throw new RefusedError(`Keka refused the application${text ? ` ("${text}")` : ""}. Nothing was sent.`);
+      if (await ctx.cancelled?.()) {
+        throw new WindowClosedError(
+          "Cancelled before Apply was pressed. Nothing was sent."
+        );
       }
-      // A wrong CAPTCHA keeps the form as it is: the person types the new one and presses Apply again.
-      const invalid = /invalid captcha/i.test(await live.locator("body").innerText().catch(() => ""));
+
+      const live = livePage(page);
+
+      if (!live) {
+        throw new WindowClosedError(
+          "The Keka window was closed before Apply was pressed."
+        );
+      }
+
+      const evidence = await successShown(live).catch(() => null);
+
+      if (evidence) {
+        return { confirmed: true, evidence };
+      }
+
+      if (ERROR_URL.test(live.url())) {
+        const text = (await live.locator("body").innerText().catch(() => ""))
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 160);
+
+        throw new RefusedError(
+          `Keka refused the application${text ? ` ("${text}")` : ""}.`
+        );
+      }
+
+      const invalid = await live
+        .locator("#invalidCaptcha")
+        .isVisible()
+        .catch(() => false);
+
       if (invalid && !invalidSeen) {
         invalidSeen = true;
-        await ctx.announceHandoff?.("Keka said the CAPTCHA was wrong: type the new one and press Apply Now again");
+
+        await ctx.announceHandoff?.(
+          "Keka rejected the CAPTCHA. Please enter the new CAPTCHA and click Apply Now again."
+        );
       }
+
       if (!invalid) invalidSeen = false;
+
       await live.waitForTimeout(1500).catch(() => undefined);
     }
-    } finally {
-      stop();
-    }
-    if (!applied) throw new WindowClosedError("Apply Now was not pressed within 15 minutes. Nothing was sent; press Retry when you are ready.");
-    throw new MaybeSentError("Apply Now was pressed but Keka's success page was not seen. Check your email before applying again.");
-  },
+  } finally {
+    stop();
+  }
+
+  if (!applied) {
+    throw new WindowClosedError(
+      "Apply Now was not pressed within 15 minutes. Nothing was sent."
+    );
+  }
+
+  throw new MaybeSentError(
+    "Apply Now was pressed, but Keka's success page was not detected. Check your email before retrying."
+  );
+},
 };

@@ -425,7 +425,7 @@ This is the checked-in file as it is now. The daily cap is 120 here; PRD §9 nam
 
 ## 8. LLM gateway (`lib/llm.ts`)
 
-`callJson<T>(schema, system, user, {cacheKey?})`: JSON-only system prompt, strip fences, parse, Zod-validate, one retry. Calls OpenAI `POST /v1/chat/completions` with `response_format: json_object`. Cache: in-memory per process + `FieldMappingCache` for field labels. Logs tokens/latency. One model for the MVP (`gpt-4o-mini`). Switched off Anthropic because that key was never issued; `OPENAI_API_KEY` is the one in `.env`.
+`callJson<T>(schema, system, user, {cacheKey?})`: JSON-only system prompt, strip fences, parse, Zod-validate, one retry. Calls OpenAI `POST /v1/chat/completions` with `response_format: json_object`. Cache: in-memory per process + `FieldMappingCache` for field labels. Logs tokens/latency. One model for the MVP (`gpt-4o-mini`). Switched off Anthropic because that key was never issued; `OPENAI_API_KEY` is the one in `.env`. `lib/claude.ts` (1 Nov) is the same helper for Claude: `callClaude(system, user)` returns text, `callClaudeJson(schema, system, user, {cacheKey?})` validated JSON; text only, `claude-opus-5-5` by default (`ANTHROPIC_MODEL`), server-side fallback on a refusal. It needs `ANTHROPIC_API_KEY`; nothing calls it yet.
 
 ## 9. Storage (`lib/storage.ts`)
 
@@ -467,7 +467,7 @@ BROWSER_RECYCLE_AFTER=200        # runs before the shared Chromium is replaced (
 INGEST_CRON=0 */3 * * *          # scheduled ingest, UTC (6.2)
 INGEST_DAYS=60
 ```
-`ANTHROPIC_API_KEY` is no longer read by the code (the LLM is OpenAI, §8) and can be removed from `.env`.
+`ANTHROPIC_API_KEY` is read only by `lib/claude.ts` (§8); the main LLM is OpenAI.
 
 ## 12. Deployment shape (after the hackathon)
 
