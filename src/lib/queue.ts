@@ -10,7 +10,8 @@ const APPLY_QUEUE = "apply";
  * Ashby's reCAPTCHA stops a Submit the worker presses itself before anything is sent (21 Oct: 1 of 23 through, and a
  * traced automated run never sent its submit request), while a person's Submit went through 7 of 7.
  */
-export const HANDOFF_BOARDS: readonly string[] = ["ashby"];
+// Keka (T96): every application form has an image CAPTCHA, which only a person types (adapters/keka.ts).
+export const HANDOFF_BOARDS: readonly string[] = ["ashby", "keka"];
 /**
  * Handoff applications of a company that set Ashby's spam protection (low, medium, high, or unreadable): only a worker with
  * a screen takes them (worker/index.ts). It fills the form in a visible Chrome window and, with ASHBY_AUTO_SUBMIT=1,
@@ -102,7 +103,8 @@ export async function enqueueApply(applicationId: string, delaySeconds = 0, opti
       withPerson(await db.applicationEvent.findMany({ where: { applicationId, OR: [{ type: "ask_user", message: { startsWith: PERSON_HANDOFF } }, { type: "retry", message: { startsWith: RETRIED_BY_YOU } }] }, select: { type: true, message: true, createdAt: true } })));
   // Read on every enqueue (a company can change its setting); a short wait, since a swipe waits on it, and a level not read
   // in time sends the application to a worker with a screen.
-  const level = row && handoff && !person ? await protectionLevel(row.applyUrl, 4000) : null;
+  // Ashby only: a Keka form always has its CAPTCHA, so it never goes to the no-screen queue.
+  const level = row && handoff && !person && row.source === "ashby" ? await protectionLevel(row.applyUrl, 4000) : null;
   const queue = person ? PERSON_QUEUE : queueFor(row?.source, level);
   // One hour covers a form plus waiting behind another application's security code, or a person pressing Submit (15
   // minutes); no automatic pg-boss retry, because the runner retries on its own and a blind re-run could apply twice.

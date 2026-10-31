@@ -67,7 +67,7 @@ export type SubmitContext = {
 };
 
 export interface AtsAdapter {
-  source: "greenhouse" | "lever" | "ashby" | "mock";
+  source: "greenhouse" | "lever" | "ashby" | "keka" | "mock";
   /**
    * Fills and submits in the same real Chrome window as a handoff (visible where the worker has a screen, headless
    * where it has none), with the worker pressing Submit itself (25 Oct: Greenhouse, as Ashby).

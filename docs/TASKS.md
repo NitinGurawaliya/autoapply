@@ -522,9 +522,10 @@ Do: Lever forms always carry hCaptcha: the agent fills, the user presses Submit 
 Do: fetcher on `api.smartrecruiters.com/v1/companies/{id}/postings` (`country=in`, then each posting's detail for its description), host `jobs.smartrecruiters.com` in `urls.ts`, discovery entry, adapter for its application form.
 **Done when:** ingest stores Swiggy's and Freshworks' India jobs with eligibility tags; `ats-smoke` dry runs on 3 forms pass; one real submit before it goes into `APPLY_BOARDS`.
 
-### [ ] T96 — Keka
+### [~] T96 — Keka
 Do: fetcher on `{company}.keka.com/careers/api/embedjobs/default/active/{id}` (the id read from the careers page on each fetch, so `Company.slug` stays the subdomain), host `*.keka.com` in `urls.ts`, discovery from the crawl index, adapter for Keka's application form.
 **Done when:** ingest stores Jupiter's jobs and a few more Keka companies'; dry runs on 3 forms pass; one real submit before it goes into `APPLY_BOARDS`.
+In progress 31 Oct: `fetchers/keka.ts` reads `/careers/api/jobs/default/active` (no tenant id needed), `adapters/keka.ts` fills from the form JSON (`/careers/{id}/2/applicationform`) and uploads through Keka's parser; 479 companies from the Common Crawl index (550 live portals) loaded, about 3,000 India jobs. Every Keka form has an image CAPTCHA (56 of 56 checked), so Keka is a handoff board: a person types it and presses Apply Now (never read by the agent). Dry runs pass on Jupiter and Keka forms. Left: a wider dry run, the first real handoff submit, then `APPLY_BOARDS`. Parked by the owner for Lever (T94).
 
 ### [ ] T97 — Board report and docs
 Do: `scripts/feed-report.ts` shows companies, open India-eligible jobs and fresher jobs per board; ARCHITECTURE §5 and INGEST_CONTRACT describe every board; the Workday decision recorded (postings public, apply needs an account per employer).

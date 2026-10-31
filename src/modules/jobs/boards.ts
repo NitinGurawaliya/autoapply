@@ -2,6 +2,7 @@ import { fetchAshby } from "./fetchers/ashby";
 import { fetchGreenhouse } from "./fetchers/greenhouse";
 import { fetchLever } from "./fetchers/lever";
 import { fetchWorkday, workdayName, workdaySlugOf } from "./fetchers/workday";
+import { fetchKeka, kekaName, kekaSlugOf } from "./fetchers/keka";
 import { fetchZohoRecruit, zohoName, zohoSlugOf } from "./fetchers/zohorecruit";
 import { classifyTitle } from "./functions";
 import type { FetchedJob } from "./normalize";
@@ -13,7 +14,7 @@ import { tagPosting } from "./tagging";
  * here plus a fetcher and an adapter (docs/INGEST_CONTRACT.md).
  */
 
-export type BoardSource = "greenhouse" | "lever" | "ashby" | "workday" | "zohorecruit";
+export type BoardSource = "greenhouse" | "lever" | "ashby" | "workday" | "zohorecruit" | "keka";
 
 /** How discovery (discovery.ts) checks names against a board. */
 export type BoardDiscovery = {
@@ -224,6 +225,42 @@ export const BOARDS: Board[] = [
       slugFromUrl: zohoSlugOf,
       async nameOf(slug) {
         const name = await zohoName(slug);
+        await pause(PAUSE_MS);
+        return name;
+      },
+    },
+  },
+  {
+    // Keka (T96): an Indian HR suite; its careers portal lists every open job as public JSON (fetchers/keka.ts). Its
+    // application form has an image CAPTCHA, so a person types it and presses Apply (adapters/keka.ts, a handoff).
+    // Mostly Indian companies, some with offices abroad: only India-eligible jobs are stored.
+    source: "keka",
+    label: "Keka",
+    fetch: fetchKeka,
+    stores: indiaEligible,
+    formHost: /^[a-z0-9-]+\.keka\.com$/i,
+    // The careers subdomain ("Jupiter Money" → the model's guess "jupitermoney"; the real one comes from the crawl).
+    slugOf: (text) => {
+      const lower = text.trim().toLowerCase();
+      const host = lower.match(/^(?:https?:\/\/)?([a-z0-9-]+)\.keka\.com/);
+      return host ? host[1] : lower.replace(/[^a-z0-9-]/g, "");
+    },
+    discovery: {
+      boardUrl: "<company>.keka.com/careers",
+      async open(slug) {
+        // An unknown subdomain has no portal: fetchKeka throws, which is null here.
+        const jobs = await fetchKeka(slug).catch(() => null);
+        await pause(PAUSE_MS);
+        return jobs;
+      },
+      // Indian companies with a few openings each, as Zoho: one fresh India job is enough.
+      counts: indiaEligible,
+      minIndiaJobs: 1,
+      needsFresh: true,
+      crawlHosts: ["*.keka.com"],
+      slugFromUrl: kekaSlugOf,
+      async nameOf(slug) {
+        const name = await kekaName(slug);
         await pause(PAUSE_MS);
         return name;
       },

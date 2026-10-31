@@ -92,7 +92,12 @@ async function main() {
       else has = ((await target.first().inputValue().catch(() => "")) ?? "").trim().length > 0;
       if (!has) bad.push(f.label.slice(0, 40));
     }
-    const resumeAttached = resume ? (await session.page.locator("body").innerText()).toLowerCase().includes((resume.fileName ?? "resume.pdf").toLowerCase()) : true;
+    // On the page, or in an input: Keka shows the attached file's name in a field, not as text.
+    const fileName = (resume?.fileName ?? "resume.pdf").toLowerCase();
+    const resumeAttached = resume
+      ? (await session.page.locator("body").innerText()).toLowerCase().includes(fileName) ||
+        (await session.page.locator("input").evaluateAll((nodes, name) => nodes.some((node) => ((node as HTMLInputElement).value ?? "").toLowerCase().includes(name)), fileName))
+      : true;
     const shot = arg("--screenshot");
     if (shot) await writeFile(shot, await session.page.screenshot({ fullPage: true }));
     console.log(`filled: ${filled.length}, empty after fill: ${bad.length ? bad.join(", ") : "none"}, resume attached: ${resumeAttached}`);

@@ -51,7 +51,8 @@ function profileValue(profile: ProfileFacts, key: string) {
   return value && value.trim() ? value : null;
 }
 
-const DECLINE = /decline|don.?t wish|do not wish|prefer not|not (to )?(say|disclose|answer|self.?identify)|choose not/i;
+// Keka's gender list says "Don't want to disclose" (T96).
+const DECLINE = /decline|don.?t (wish|want) to|do not (wish|want) to|prefer not|not (to )?(say|disclose|answer|self.?identify)|choose not/i;
 
 /** "years" and "year", "LPA" and "lpa" are the same unit. */
 function unit(text: string | undefined) {
