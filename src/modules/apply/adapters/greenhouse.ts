@@ -211,8 +211,12 @@ function bestOption(options: string[], wanted: string) {
  * nothing for "Greater Delhi Area" or "Bengaluru, Karnataka, India" but do for "Delhi" and "Bengaluru" (10 Oct dry run).
  */
 export function searchTerms(value: string, label = "") {
-  // A school is matched only by its full name: "Jaypee" alone would pick "Jaypee Institute", another school.
-  if (/\b(school|university|college|institut)/i.test(label)) return [...new Set([value.trim(), value.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim()])];
+  // A school is matched only by its full name: "Jaypee" alone would pick "Jaypee Institute", another school. A numbered
+  // option the user picked ("0 - Other", 31 Oct, Coinbase) is searched without its number too: the search finds nothing
+  // for "0 - Other", and the option is then matched to the answer exactly (pickCombobox).
+  if (/\b(school|university|college|institut)/i.test(label)) {
+    return [...new Set([value.trim(), value.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim(), value.replace(/^\s*\d+\s*[-–.:]\s*/, "").trim()])].filter((term) => term.length >= 2);
+  }
   const terms = [value.trim()];
   const plain = value.replace(/\b(greater|metropolitan|metro|area|region|district|urban|rural|ncr|city of)\b/gi, " ").replace(/\s+/g, " ").trim();
   terms.push(plain, plain.split(",")[0].trim(), value.split(",")[0].trim());
@@ -230,16 +234,18 @@ async function pickCombobox(page: Page, selector: string, value: string, label: 
     await input.fill(term);
     await options.first().waitFor({ timeout: 8000 }).catch(() => undefined);
     texts = (await options.allInnerTexts()).map((text) => text.trim());
-    choice = bestOption(texts, term);
+    // The answer itself on screen first: it is often an option the user picked from this very list ("0 - Other").
+    choice = texts.find((text) => norm(text) === norm(value)) ?? bestOption(texts, term);
     if (choice) break;
   }
   // A school the list does not have: its own "Other" entry is the true answer (Greenhouse's list misses many Indian
-  // colleges, 11 Oct dry runs).
+  // colleges, 11 Oct dry runs). Also numbered ("0 - Other", Coinbase): only "Other" at the start was taken, so the user
+  // picked "0 - Other", was asked again, and again (31 Oct).
   if (!choice && /\b(school|university|college|institut)/i.test(label)) {
     await input.fill("Other");
     await options.first().waitFor({ timeout: 8000 }).catch(() => undefined);
     texts = (await options.allInnerTexts()).map((text) => text.trim());
-    choice = texts.find((text) => /^other\b/i.test(text)) ?? null;
+    choice = texts.find((text) => /^(\d+\s*[-–.:]\s*)?(other|others|not listed|none of the above)\b/i.test(text)) ?? null;
   }
   if (!choice) {
     // Nothing matched the search: a list that shows every option when empty (Discipline: 72 subjects, Degree) is asked
