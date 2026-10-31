@@ -59,5 +59,14 @@ check("a saved cover letter is still reused", cover.values[0]?.value === "My let
 const location = resolveValues([{ field: field("Current location", { type: "location", required: false }), key: "city" }], profile, []);
 check("the required flag travels with the value", location.values[0]?.required === false && location.values[0]?.value === "Mohali");
 
+// 31 Oct, Logos / IFT: a USD pay question the mapper filed as salary_expectation. The user's own answer to it counts;
+// the lakh figure saved for India never becomes dollars.
+const usd = field("What are your pay expectations? (please provide a gross, annual amount in USD).", { type: "text" });
+const indiaProfile = { ...profile, country: "India" };
+const ownUsd = resolveValues([{ field: usd, key: "salary_expectation" }], indiaProfile, [{ key: customQuestionKey(usd.label), answer: "80000", source: "user" }, { key: "salary_expectation", answer: "12", source: "user" }]);
+check("a foreign-currency pay question takes the user's own answer to it", ownUsd.values[0]?.value === "80000" && ownUsd.pending.length === 0, JSON.stringify(ownUsd.values[0]?.value));
+const lakhOnly = resolveValues([{ field: usd, key: "salary_expectation" }], indiaProfile, [{ key: "salary_expectation", answer: "12", source: "user" }]);
+check("a lakh figure is never used for a USD question", lakhOnly.values.length === 0 && lakhOnly.pending.length === 1);
+
 console.log(failed === 0 ? "PASS resolver" : `FAIL resolver (${failed})`);
 process.exit(failed === 0 ? 0 : 1);

@@ -181,8 +181,12 @@ export function resolveValues(
     // turned into euros: the user is asked (18 Oct: "46lpa" was about to become EUR 46).
     const askedCurrency = detectConcept(field.label) === "compensation" ? currencyOf(field.label) : null;
     const foreignCurrency = askedCurrency && askedCurrency !== homeCurrency(profile.country) ? askedCurrency : null;
+    // "Given to this very question" is the answer saved under the question's own key, whatever key the value is filed
+    // under: a USD pay question the mapper filed as salary_expectation threw the user's own "80000" away, asked again
+    // and failed the run (31 Oct, Logos / IFT).
+    const ownPay = bank.get(questionKey)?.answer;
     const push = (valueKey: string, raw: string, source: string, eeo = false) => {
-      if (foreignCurrency && valueKey !== questionKey && currencyOf(raw) !== foreignCurrency) return false;
+      if (foreignCurrency && valueKey !== questionKey && raw !== ownPay && currencyOf(raw) !== foreignCurrency) return false;
       let value =
         field.type === "file" ? raw : field.type === "number" ? fitNumber(raw) : field.type === "checkbox-group" ? fitChoices(raw, field.options, eeo) : fitOption(raw, field.options, eeo);
       let reworded = false;
