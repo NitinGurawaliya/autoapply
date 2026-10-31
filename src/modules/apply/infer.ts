@@ -93,7 +93,14 @@ Answer only what the profile states or plainly implies: where they live (city, c
 ${COMMON}
 Each result: index; answer (or null); profile: the profile fields it comes from (e.g. "city", "education", "linkedin"); reason: one short sentence.`;
 
-const CONFIRM = `For each item: a job application asks NEW QUESTION; we want to fill it with the candidate's SAVED ANSWER to SAVED QUESTION (as PROPOSED ANSWER). Is that correct? "same" is true only when the saved question asks for the very same fact about the candidate, so the proposed answer is right for the new question exactly as asked. Different wording, units or format are fine: in India the expected CTC IS the salary expectation and the current CTC the current salary or compensation; the notice period answers how soon the candidate can join; how they learned of a job is how they heard of it. It is false when they are about different things: a different skill, tool, company, place, time, program or part ("experience with IAM" vs "experience with Kafka"; "Codechef rating" vs "Codeforces rating"; "zip code" vs "address"; "which terms are you available" vs "internship duration"). When in doubt, false. Return {"results":[{"i","same"}]} with one result per item.`;
+const CONFIRM = `For each item: a job application asks NEW QUESTION; we want to fill it with PROPOSED ANSWER, taken from SOURCE (SOURCE VALUE). Is that correct? "same" is true only when the source states the very fact the new question asks for, so the proposed answer is right for it exactly as asked. Different wording, units or format are fine: in India the expected CTC IS the salary expectation and the current CTC the current salary or compensation; the notice period answers how soon the candidate can join; how they learned of a job is how they heard of it; a finished degree or years of work show the candidate is over 18; the profile's city answers where they live. It is false when they are about different things: a different skill, tool, company, place, time, program or part ("experience with IAM" vs "experience with Kafka"; "Codechef rating" vs "Codeforces rating"; "zip code" vs "address"; "which terms are you available" vs "internship duration"), or when the question asks the candidate to write, show or explain something and the answer is just a fact (a city for "Show us how you teach"). When in doubt, false. Return {"results":[{"i","same"}]} with one result per item.`;
+// What each profile field means, for the confirming call (a bare "yearsExperience: 2" was not taken as proof of age).
+const PROFILE_FIELD: Record<string, string> = {
+  city: "the city the candidate lives in", country: "the country the candidate lives in", yearsExperience: "the candidate's years of work experience",
+  currentTitle: "the candidate's current job title", currentCompany: "the candidate's current employer", linkedin: "the candidate's LinkedIn URL",
+  github: "the candidate's GitHub URL", portfolio: "the candidate's website", skills: "the candidate's skills", experience: "the candidate's past roles",
+  education: "the candidate's degrees (school, degree, year finished)",
+};
 const confirmSchema = z.object({ results: z.array(z.object({ i: z.coerce.number().int(), same: z.boolean() })) });
 
 const yesNo = (text: string) => (/^\s*(yes|y|true)\b/i.test(text) ? "yes" : /^\s*(no|n|false|none)\b/i.test(text) ? "no" : null);
@@ -177,7 +184,7 @@ export async function inferAnswers(input: {
   const found = await recall(input.userId, fields.map((field) => field.label), { limit: CANDIDATES, minScore: MIN_SCORE, excludeKeys: input.excludeKeys });
   const offered = fields.map((field) => (found.get(field.label) ?? []).filter((row) => row.source !== "ai_draft" && row.answer.trim() && isCustomQuestionKey(row.key)).map((row) => ({ ...row, n: ++next })));
   const saved = (row: { n: number; question: string; answer: string; context: unknown; updatedAt: Date }) => ({ n: row.n, question: row.question.slice(0, 300), answer: row.answer.slice(0, 300), answeredFor: row.context ?? null, savedOn: new Date(row.updatedAt).toISOString().slice(0, 16) });
-  const reused: Array<{ label: string; saved: string; savedAnswer: string; answer: string }> = [];
+  const toConfirm: Array<{ label: string; source: string; value: string; answer: string }> = [];
   if (standing.length > 0 || offered.some((rows) => rows.length > 0)) {
     const results = await pass(FROM_SAVED, { job: input.job, standingFacts: standing.map(saved) }, questions.map((question) => ({ ...question, candidates: offered[question.index].map(saved) })));
     for (const result of results) {
@@ -241,23 +248,7 @@ export async function inferAnswers(input: {
         }
       }
       out.set(label, { key: used[0].key, answer, basis: `your answer to "${used[0].question.slice(0, 120)}": ${result.reason.slice(0, 140)}`, score: 1, source: "matched" });
-      reused.push({ label, saved: used[0].question, savedAnswer: used[0].answer, answer });
-    }
-  }
-
-  // A second, narrow look at every answer taken from another question, one question per item and nothing else to weigh;
-  // whatever it does not confirm is asked.
-  if (reused.length > 0) {
-    try {
-      const check = await callJson(confirmSchema, CONFIRM, JSON.stringify({ items: reused.map((item, i) => ({ i, newQuestion: item.label, savedQuestion: item.saved, savedAnswer: item.savedAnswer.slice(0, 300), proposedAnswer: item.answer.slice(0, 300) })) }), { model: process.env.OPENAI_VERIFY_MODEL });
-      reused.forEach((item, i) => {
-        if (check.results.find((result) => result.i === i)?.same === true) return;
-        out.delete(item.label);
-        rejected.push(`${item.label.slice(0, 60)}: "${item.saved.slice(0, 50)}" is not the same question`);
-      });
-    } catch {
-      for (const item of reused) out.delete(item.label);
-      rejected.push(`could not double-check ${reused.length} reused answers; asking instead`);
+      toConfirm.push({ label, source: `the candidate's saved answer to "${used[0].question.slice(0, 300)}"`, value: used[0].answer.slice(0, 300), answer });
     }
   }
 
@@ -273,6 +264,8 @@ export async function inferAnswers(input: {
   // Never sensitive or risky kinds from a profile, except an open "where do you live" (the profile's place is a fact).
   const open = questions.filter((question) => {
     if (out.has(question.question)) return false;
+    // A long-text box wants writing, not a profile fact (30 Oct: "Show us how you teach through code" got the city).
+    if (question.type === "textarea") return false;
     const kind = detectConcept(question.question);
     return !kind || (kind === "residence" && asksOpen(question.question));
   });
@@ -311,6 +304,25 @@ export async function inferAnswers(input: {
         continue;
       }
       out.set(label, { key: "", answer, basis: `from your ${cited.join(", ")}: ${result.reason.slice(0, 140)}`, score: 1, source: "derived" });
+      toConfirm.push({ label, source: `the candidate's profile (${cited.join(", ")})`, value: cited.map((name) => `${PROFILE_FIELD[name] ?? name}: ${JSON.stringify((profile as Record<string, unknown>)[name])}`).join("; ").slice(0, 400), answer });
+    }
+  }
+
+  // A second, narrow look at every answer, from either pass: one question per item and nothing else to weigh; whatever
+  // it does not confirm is asked. Answering a whole form at once, the model linked look-alikes ("experience with IAM?"
+  // from "experience with Kafka?") and put a profile fact on a question it does not answer (the city for "Show us how
+  // you teach through code", 30 Oct).
+  if (toConfirm.length > 0) {
+    try {
+      const check = await callJson(confirmSchema, CONFIRM, JSON.stringify({ items: toConfirm.map((item, i) => ({ i, newQuestion: item.label, source: item.source, sourceValue: item.value, proposedAnswer: item.answer.slice(0, 300) })) }), { model: process.env.OPENAI_VERIFY_MODEL });
+      toConfirm.forEach((item, i) => {
+        if (check.results.find((result) => result.i === i)?.same === true) return;
+        out.delete(item.label);
+        rejected.push(`${item.label.slice(0, 60)}: not confirmed from ${item.source.slice(0, 60)}`);
+      });
+    } catch {
+      for (const item of toConfirm) out.delete(item.label);
+      rejected.push(`could not double-check ${toConfirm.length} answers; asking instead`);
     }
   }
   return { answers: out, rejected };

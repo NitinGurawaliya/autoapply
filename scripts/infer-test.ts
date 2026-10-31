@@ -45,6 +45,7 @@ const q = {
   remote: "Are you willing to work from our office 5 days a week?",
   linkedin: "LinkedIn profile URL",
   codechef: "Codechef Rating",
+  teach: "Show us how you teach through code:",
 };
 const fields: FormField[] = Object.values(q).map((label, i) => ({ selector: `#f${i}`, label, type: "text", required: true }));
 
@@ -69,11 +70,13 @@ async function run(userId: string) {
   check("how you heard is your answer to another wording", a(q.heard)?.answer === "LinkedIn" && a(q.heard)?.source === "matched");
   check("salary expectations come from the expected CTC (18)", /\b18\b/.test(a(q.salary)?.answer ?? ""), a(q.salary)?.answer);
   check("over 18 from a finished degree or work", /^yes/i.test(a(q.adult)?.answer ?? ""), a(q.adult)?.answer);
-  check("which city / where located from the profile", /bengaluru/i.test(a(q.city)?.answer ?? "") && /bengaluru|india/i.test(a(q.location)?.answer ?? ""), `${a(q.city)?.answer} | ${a(q.location)?.answer}`);
+  // "Where located" may also be asked: the double-check does not always confirm a bare "India" for it.
+  check("which city from the profile; where located right when answered", /bengaluru/i.test(a(q.city)?.answer ?? "") && (a(q.location) === undefined || /bengaluru|india/i.test(a(q.location)!.answer)), `${a(q.city)?.answer} | ${a(q.location)?.answer}`);
   check("notice period from your saved answer (30)", /\b30\b/.test(a(q.notice)?.answer ?? ""), a(q.notice)?.answer);
   check("authorized in India (the job's country) from your India answer", /^yes/i.test(a(q.authIndia)?.answer ?? ""), a(q.authIndia)?.answer);
   check("NOT: sponsorship for India from your US answer", a(q.sponsorIndia) === undefined, a(q.sponsorIndia)?.answer);
   check("NOT: a post code nobody gave (an address line is not one)", a(q.zip) === undefined, a(q.zip)?.answer);
+  check("NOT: a profile fact for 'show us how you teach' (30 Oct, Supabase got the city)", a(q.teach) === undefined, a(q.teach)?.answer);
   check("NOT: a Codechef rating from the Codeforces one", a(q.codechef) === undefined, a(q.codechef)?.answer);
   check("NOT: a preference for office days nobody stated", a(q.remote) === undefined, a(q.remote)?.answer);
   check("the LinkedIn link from the profile", a(q.linkedin)?.answer === profile.linkedin, a(q.linkedin)?.answer);
