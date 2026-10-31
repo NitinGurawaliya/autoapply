@@ -9,6 +9,8 @@ const BOARD_PAGE: Record<string, (slug: string) => string> = {
   greenhouse: (slug) => `https://job-boards.greenhouse.io/${encodeURIComponent(slug)}`,
   lever: (slug) => `https://jobs.lever.co/${encodeURIComponent(slug)}`,
   ashby: (slug) => `https://jobs.ashbyhq.com/${encodeURIComponent(slug)}`,
+  // Keka's careers page is an empty shell; its portal settings (JSON) name the logo (1 Nov).
+  keka: (slug) => `https://${encodeURIComponent(slug)}.keka.com/careers/api/organization/default/careerportalinfo`,
 };
 export const LOGO_SOURCES = Object.keys(BOARD_PAGE);
 const RETRY_DAYS = 30;
@@ -19,10 +21,19 @@ const httpsOnly = (url: string | undefined) => (url && /^https:\/\/[^\s"'<>]+$/i
 
 /**
  * The logo address in a board page, or null. Greenhouse marks it `<img class="logo">`, Lever with "logo" in the alt
- * text, Ashby as `logoSquareImageUrl` in the page's data. The page's social image (`og:image`) is not used: it is a wide
+ * text, Ashby as `logoSquareImageUrl` in the page's data, Keka as `logoPath` in its portal settings. The page's social image (`og:image`) is not used: it is a wide
  * banner on Lever and Ashby (24 Oct).
  */
 export function logoFromHtml(source: string, html: string): string | null {
+  // Keka: `logoPath` is relative to the tenant's documents folder, whose id is in `careersBackgroundPath`
+  // ("/ats/documents/<id>/...") or, when that is empty, in the careers page appended after the JSON (fetchLogoUrl),
+  // on the portal's own host (careersPortalDomain).
+  if (source === "keka") {
+    const logoPath = html.match(/"logoPath"\s*:\s*"([^"]+)"/)?.[1];
+    const tenant = html.match(/\/ats\/documents\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\//i)?.[1];
+    const host = html.match(/"careersPortalDomain"\s*:\s*"([a-z0-9.-]+)"/i)?.[1];
+    return logoPath && tenant && host ? httpsOnly(`https://${host}/ats/documents/${tenant}/${logoPath.replace(/^\/+/, "")}`) : null;
+  }
   // Ashby: the square logo, else the wordmark (wide, but it still names the company better than initials).
   if (source === "ashby") return httpsOnly(html.match(/"logoSquareImageUrl"\s*:\s*"([^"]+)"/)?.[1]) ?? httpsOnly(html.match(/"logoWordmarkImageUrl"\s*:\s*"([^"]+)"/)?.[1]);
   // Greenhouse keeps every board's logo in one folder of its CDN, often without the "logo" class (Addepar, Anthropic).
@@ -43,10 +54,16 @@ export function logoFromHtml(source: string, html: string): string | null {
 export async function fetchLogoUrl(source: string, slug: string): Promise<string | null> {
   const page = BOARD_PAGE[source];
   if (!page) return null;
-  const html = await fetch(page(slug), { signal: AbortSignal.timeout(15000), headers: { accept: "text/html" } })
-    .then((response) => (response.ok ? response.text() : ""))
-    .catch(() => "");
-  return html ? logoFromHtml(source, html) : null;
+  const read = (url: string) =>
+    fetch(url, { signal: AbortSignal.timeout(15000), headers: { accept: "text/html" } })
+      .then((response) => (response.ok ? response.text() : ""))
+      .catch(() => "");
+  const html = await read(page(slug));
+  if (!html) return null;
+  const logo = logoFromHtml(source, html);
+  // A Keka portal with a logo but no background image names its documents folder only in the careers page.
+  if (logo || source !== "keka" || !/"logoPath"\s*:\s*"[^"]+"/.test(html)) return logo;
+  return logoFromHtml(source, html + (await read(`https://${encodeURIComponent(slug)}.keka.com/careers/`)));
 }
 
 export type LogoRefresh = { checked: number; found: number; missing: number; examples: string[] };

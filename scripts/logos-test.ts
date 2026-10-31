@@ -5,7 +5,12 @@ const greenhouse = `<meta property="og:image" content="https://s7-recruiting.cdn
 const lever = `<meta property="og:image" content="https://lever-client-logos.s3.us-west-2.amazonaws.com/banner.png" /><img alt="Saviynt logo" src="https://lever-client-logos.s3.us-west-2.amazonaws.com/ce99b770-1764798903876.png">`;
 const ashby = `{"logoWordmarkImageUrl":"https://app.ashbyhq.com/api/images/org-theme-wordmark/a.png","logoSquareImageUrl":"https://app.ashbyhq.com/api/images/org-theme-logo/b.png"}`;
 
+const keka = `{"name":"Techdome","logoPath":"careerportal/35329207318a4920b84683c4dcbed55f.png","careersBackgroundPath":"/ats/documents/db914ff9-927c-40ee-8942-23c09ee515ce/https://cdn.keka.com/shared/assets/images/components/careers/banner.jpg","careersPortalDomain":"techdome.keka.com"}`;
+
 const checks: Array<[string, boolean]> = [
+  ["keka: logoPath in the tenant's documents folder on the portal host", logoFromHtml("keka", keka) === "https://techdome.keka.com/ats/documents/db914ff9-927c-40ee-8942-23c09ee515ce/careerportal/35329207318a4920b84683c4dcbed55f.png"],
+  ["keka: no background path, the folder id from the careers page", logoFromHtml("keka", `{"logoPath":"orglogo/9ca0.png","careersBackgroundPath":"","careersPortalDomain":"accredian.keka.com"}<script>fetch('/ats/documents/0cb335b6-2fec-4b9f-8166-dbbeddd36c41/careerportal/1.html')</script>`) === "https://accredian.keka.com/ats/documents/0cb335b6-2fec-4b9f-8166-dbbeddd36c41/orglogo/9ca0.png"],
+  ["keka: no logoPath, null", logoFromHtml("keka", `{"name":"X","careersBackgroundPath":"/ats/documents/db914ff9-927c-40ee-8942-23c09ee515ce/x","careersPortalDomain":"x.keka.com"}`) === null],
   ["greenhouse: the image marked class=logo", logoFromHtml("greenhouse", greenhouse)?.endsWith("Logo-01_(1).jpg?1700670705") === true],
   ["lever: the image whose alt says logo, not the og:image banner", logoFromHtml("lever", lever)?.endsWith("1764798903876.png") === true],
   ["ashby: the square logo, not the wordmark", logoFromHtml("ashby", ashby) === "https://app.ashbyhq.com/api/images/org-theme-logo/b.png"],
