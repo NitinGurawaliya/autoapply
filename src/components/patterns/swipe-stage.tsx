@@ -1,10 +1,10 @@
 "use client";
 
-import { useImperativeHandle, useLayoutEffect, useRef, type Ref } from "react";
+import { useImperativeHandle, useLayoutEffect, useRef, type DragEvent, type Ref } from "react";
 import { animate, motion, useMotionValue, useTransform } from "framer-motion";
 import { IconButton } from "@/components/ui/icon-button";
 import { Icon } from "@/components/ui/icons";
-import { BoardMark, stampClass } from "@/components/ui/marks";
+import { stampClass } from "@/components/ui/marks";
 import { CARD_HEIGHT, JobCard, type JobCardData } from "@/components/patterns/job-card";
 import { swipe as physics, transition } from "@/lib/motion";
 
@@ -14,23 +14,12 @@ export type SwipeStageHandle = { fling: (direction: Direction) => void };
 /** How far each card behind the top one shows below it, so the stack reads as more jobs waiting. */
 const PEEK = physics.backOffsetY;
 
-/** Over the deck: how many jobs are waiting and how many came from each board ("Greenhouse 24", "Lever 12"). */
-export function StackCount({ total, boards }: { total: number; boards: Array<[board: string, count: number]> }) {
+/** Over the deck: how many jobs are in the user's feed, and nothing else (owner, 1 Nov: no per-board counts). */
+export function StackCount({ total, label = "in your feed" }: { total: number; label?: string }) {
   return (
-    <div className="flex h-6 items-center justify-between gap-3 text-sm" aria-live="polite">
-      <span className="font-semibold">
-        {total} {total === 1 ? "job" : "jobs"} for you
-      </span>
-      <span className="flex min-w-0 items-center gap-3 overflow-hidden text-muted-foreground">
-        {boards.map(([board, count]) => (
-          <span key={board} className="flex flex-none items-center gap-1.5" title={`${count} from ${board}`}>
-            <BoardMark board={board} className="text-foreground" />
-            <span className="sr-only">{board}</span>
-            <span className="font-semibold tabular-nums">{count}</span>
-          </span>
-        ))}
-      </span>
-    </div>
+    <p className="m-0 flex h-6 items-center text-sm font-semibold" aria-live="polite">
+      <span className="tabular-nums">{total}</span>&nbsp;{total === 1 ? "job" : "jobs"} {label}
+    </p>
   );
 }
 
@@ -61,6 +50,10 @@ export function SwipeStage({
   const leaving = useRef(false);
   // Set once the pointer drags, so letting go after a drag is not also a tap that opens the job.
   const dragged = useRef(false);
+  // Where the pointer was over the last 100 ms of a drag (raw pointer moves), and where it went down: the speed and
+  // distance at release.
+  const trail = useRef<Array<{ t: number; x: number }>>([]);
+  const startX = useRef<number | null>(null);
   const applyOpacity = useTransform(x, [0, physics.commitAt], [0, 1]);
   const skipOpacity = useTransform(x, [-physics.commitAt, 0], [1, 0]);
   const pull = useTransform(x, (value) => Math.min(1, Math.abs(value) / physics.commitAt));
@@ -119,8 +112,16 @@ export function SwipeStage({
           dragSnapToOrigin={false}
           dragMomentum={false}
           style={{ x, rotate }}
-          onPointerDown={() => {
+          onPointerDown={(event) => {
             dragged.current = false;
+            trail.current = [{ t: event.timeStamp, x: event.clientX }];
+            startX.current = event.clientX;
+          }}
+          // Every pointer move, not the library's once-a-frame drag callback: a quick flick is only a few moves long.
+          onPointerMove={(event) => {
+            if (startX.current === null) return;
+            trail.current.push({ t: event.timeStamp, x: event.clientX });
+            while (trail.current.length > 2 && event.timeStamp - trail.current[0].t > 100) trail.current.shift();
           }}
           onDragStart={() => {
             dragged.current = true;
@@ -128,11 +129,28 @@ export function SwipeStage({
           onClick={() => {
             if (!dragged.current && !leaving.current) onOpen?.();
           }}
+          // The browser's own drag of an image or a link inside the card ("See details", the logo) would cancel the
+          // swipe that started on it (1 Nov: swiping did nothing when it began on those).
+          onDragStartCapture={(event: DragEvent) => event.preventDefault()}
           onDrag={() => rotate.set(x.get() * physics.rotatePerPx)}
-          onDragEnd={() => {
+          onDragEnd={(_, info) => {
             const offset = x.get();
-            if (offset > physics.commitAt) fling("right");
-            else if (offset < -physics.commitAt) fling("left");
+            // The finger's own movement over its last tenth of a second (raw pointer moves): a short flick is too few
+            // moves for the library's once-a-frame estimate, which read it as standing still.
+            const trailNow = trail.current;
+            const first = trailNow[0];
+            const last = trailNow[trailNow.length - 1];
+            const moved = startX.current !== null && last ? last.x - startX.current : offset;
+            const dt = first && last ? (last.t - first.t) / 1000 : 0;
+            const ownVelocity = dt > 0 ? (last.x - first.x) / dt : 0;
+            const velocity = Math.abs(ownVelocity) >= Math.abs(info.velocity.x) ? ownVelocity : info.velocity.x;
+            trail.current = [];
+            startX.current = null;
+            const travel = Math.abs(moved) > Math.abs(offset) ? moved : offset;
+            // Past the commit distance, or a quick flick that has started moving: a real thumb flicks fast and short.
+            const flick = Math.abs(velocity) > physics.flickVelocity && Math.abs(travel) > physics.flickMin && Math.sign(velocity) === Math.sign(travel);
+            if (offset > physics.commitAt || (flick && travel > 0)) fling("right");
+            else if (offset < -physics.commitAt || (flick && travel < 0)) fling("left");
             else {
               void animate(x, 0, transition.cardReturn);
               void animate(rotate, 0, transition.cardReturn);

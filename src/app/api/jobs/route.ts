@@ -16,6 +16,7 @@ export async function GET(req: Request) {
     stage: url.searchParams.get("stage") ?? undefined,
     track: url.searchParams.get("track") ?? undefined,
   });
-  const jobs = await listFeed(user.id, filters);
+  // `view=skipped`: the jobs the user swiped left, offered again once the feed runs out.
+  const jobs = await listFeed(user.id, filters, url.searchParams.get("view") === "skipped" ? "skipped" : "new");
   return NextResponse.json({ jobs });
 }

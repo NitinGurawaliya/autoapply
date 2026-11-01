@@ -215,12 +215,10 @@ const DECK = [
 function DeckDemo() {
   const [cards, setCards] = useState(DECK);
   const [opened, setOpened] = useState<string | null>(null);
-  const counts = new Map<string, number>();
-  for (const item of cards) counts.set(item.card.board, (counts.get(item.card.board) ?? 0) + 1);
   if (cards.length === 0) return <Button variant="line" size="row" onClick={() => setCards(DECK)}>Deal again</Button>;
   return (
     <div className="flex flex-col">
-      <StackCount total={cards.length} boards={[...counts.entries()].sort((a, b) => b[1] - a[1])} />
+      <StackCount total={cards.length} />
       <SwipeStage top={cards[0]} next={cards[1]} after={cards[2]} onCommit={() => setCards((current) => current.slice(1))} onOpen={() => setOpened(cards[0].card.company)} />
       {opened ? <p className="m-0 mt-3 text-center text-sm text-muted-foreground">Opened {opened}</p> : null}
     </div>

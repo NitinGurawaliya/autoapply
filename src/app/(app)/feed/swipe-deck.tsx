@@ -13,7 +13,7 @@ import { StackCount, SwipeStage, type Direction, type SwipeStageHandle } from "@
 import { AgentToast } from "@/components/patterns/agent-toast";
 import { boardLabel } from "@/lib/board-label";
 import { statusMeta } from "@/lib/status-meta";
-import type { FeedJob } from "@/modules/jobs";
+import type { FeedJob, FeedView } from "@/modules/jobs";
 import { markOpenedFromFeed } from "../jobs/[id]/feed-back-link";
 
 const REFILL_BELOW = 5;
@@ -52,16 +52,6 @@ function jobHref(id: string, query: string) {
   return query ? `/jobs/${id}?${query}` : `/jobs/${id}`;
 }
 
-/** How many cards are left from each board, biggest first: "Greenhouse 24", "Lever 12". */
-function boardCounts(jobs: FeedJob[]) {
-  const counts = new Map<string, number>();
-  for (const job of jobs) {
-    const label = boardLabel(job.source);
-    if (label) counts.set(label, (counts.get(label) ?? 0) + 1);
-  }
-  return [...counts.entries()].sort((a, b) => b[1] - a[1]);
-}
-
 /** The after-swipe card: one per right swipe (`key`), its application once /api/swipes answers (`id`), and its outcome. */
 type Toast = {
   key: number;
@@ -96,33 +86,47 @@ let toastKeys = 0;
 // Jobs swiped since this tab opened. It outlives the deck: a feed page kept in the browser for a minute (staleTimes)
 // still lists cards swiped since it was built, and they must not come back.
 const swipedThisVisit = new Set<string>();
+// The ones applied to: the "jobs you skipped" view leaves these out, and shows the ones skipped on the way.
+const appliedThisVisit = new Set<string>();
 
 /** A job applied to or skipped from its own page: the deck drops its card when the feed opens again. */
-export function markSwiped(jobId: string) {
+export function markSwiped(jobId: string, direction: Direction = "left") {
   swipedThisVisit.add(jobId);
+  if (direction === "right") appliedThisVisit.add(jobId);
 }
 
 /** A swipe from a job's page that was not saved: its card comes back to the deck. */
 export function unmarkSwiped(jobId: string) {
   swipedThisVisit.delete(jobId);
+  appliedThisVisit.delete(jobId);
 }
 
 export function SwipeDeck({
   jobs,
   query,
+  view = "new",
+  mainHref = "/feed",
+  skippedHref = "/feed?view=skipped",
   stats,
   widenFilters,
 }: {
   jobs: FeedJob[];
   query: string;
+  /** "skipped": the jobs swiped left, looked at again; a right swipe applies, a left one keeps them skipped. */
+  view?: FeedView;
+  mainHref?: string;
+  skippedHref?: string;
   stats: { sentToday: number; inProgress: number };
   widenFilters: ReactNode;
 }) {
-  const [initial] = useState(() => jobs.filter((job) => !swipedThisVisit.has(job.id)));
+  // Cards decided this visit stay gone; in the skipped view only the applied ones (a skipped one belongs there).
+  const [initial] = useState(() => jobs.filter((job) => !(view === "skipped" ? appliedThisVisit : swipedThisVisit).has(job.id)));
   const [cards, setCards] = useState(initial);
   // The ref is the source of truth so rapid taps or key presses never act on a stale top card.
   const deck = useRef(initial);
-  const seen = useRef(swipedThisVisit);
+  // Cards this deck has already dealt with, so a refill never brings one back. The skipped view keeps its own set,
+  // starting from the jobs applied to this visit.
+  const seen = useRef(view === "skipped" ? new Set(appliedThisVisit) : swipedThisVisit);
   const refilling = useRef(false);
   // Keys and buttons throw the card through the stage, which commits the swipe when the card is off screen.
   const stage = useRef<SwipeStageHandle>(null);
@@ -160,6 +164,7 @@ export function SwipeDeck({
 
   function putBack(job: FeedJob) {
     seen.current.delete(job.id);
+    unmarkSwiped(job.id);
     setDeck([job, ...deck.current.filter((card) => card.id !== job.id)]);
   }
 
@@ -212,6 +217,8 @@ export function SwipeDeck({
     const job = deck.current[0];
     if (!job) return;
     seen.current.add(job.id);
+    swipedThisVisit.add(job.id);
+    if (direction === "right") appliedThisVisit.add(job.id);
     setDeck(deck.current.slice(1));
     let toastKey: number | null = null;
     if (direction === "right") {
@@ -220,7 +227,8 @@ export function SwipeDeck({
       const started = Date.now();
       setAgent({ key: toastKey, id: null, company: job.company, stage: 0, status: "queued", error: null, started, hideAt: started + TOAST_LIVE_MAX_MS, visible: true });
     }
-    void send(job, direction, toastKey);
+    // In the skipped view a left swipe keeps the job skipped: there is nothing new to save.
+    if (!(view === "skipped" && direction === "left")) void send(job, direction, toastKey);
     if (deck.current.length <= REFILL_BELOW) void refill();
   }
 
@@ -297,6 +305,24 @@ export function SwipeDeck({
     </div>
   ) : null;
 
+  if (!top && view === "skipped") {
+    return (
+      <>
+        <EmptyState
+          art={<DeckDoneArt />}
+          title="That's every job you skipped"
+          text="Anything you skipped again stays here. New jobs land in your feed through the day."
+          actions={
+            <Link href={mainHref} className={buttonVariants({ variant: "primary", size: "xl", className: "w-full" })}>
+              Back to your feed
+            </Link>
+          }
+        />
+        {toastNode}
+      </>
+    );
+  }
+
   if (!top) {
     return (
       <>
@@ -314,6 +340,10 @@ export function SwipeDeck({
             <>
               <Link href="/applications" className={buttonVariants({ variant: "primary", size: "xl", className: "w-full" })}>
                 See my applications
+              </Link>
+              {/* The jobs skipped on the way are the next thing worth a look (owner, 1 Nov). */}
+              <Link href={skippedHref} className={buttonVariants({ variant: "line", size: "lg", className: "w-full" })}>
+                Look at the jobs you skipped
               </Link>
               {widenFilters}
             </>
@@ -333,7 +363,7 @@ export function SwipeDeck({
           if ((event.target as Element).closest('a[href^="/jobs/"]')) markOpenedFromFeed(top.id);
         }}
       >
-        <StackCount total={cards.length} boards={boardCounts(cards)} />
+        <StackCount total={cards.length} label={view === "skipped" ? "you skipped" : "in your feed"} />
         <SwipeStage
           ref={stage}
           top={{ id: top.id, source: top.source, card: cardData(top, query) }}

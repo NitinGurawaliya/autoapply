@@ -9,7 +9,7 @@ import { feedHref, feedQuery } from "@/lib/feed-url";
 import { dailySent } from "@/modules/governance";
 import { APPLY_BOARDS, DEFAULT_FEED_DAYS, DEFAULT_PLACES, listFeed, parseFeedFilters, TRACK_LABELS, tracksOf } from "@/modules/jobs";
 import type { Track } from "@/modules/jobs";
-import type { FeedFilters } from "@/modules/jobs";
+import type { FeedFilters, FeedView } from "@/modules/jobs";
 import { DailyUsage } from "@/components/daily-usage";
 import { GapsLink } from "@/components/gaps-link";
 import { buttonVariants } from "@/components/ui/button";
@@ -129,8 +129,13 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
   const profile = await db.profile.findUnique({ where: { userId: user.id }, select: { tracks: true, currentTitle: true, skills: true, experience: true } });
   const myTracks = profile ? tracksOf(profile) : [];
 
+  // "Jobs you skipped": the left-swiped jobs, offered once the feed runs out (?view=skipped).
+  const view: FeedView = one(params.view) === "skipped" ? "skipped" : "new";
   // The same minimal query as the feed's own URL, so a job page's Back returns to exactly this address.
-  const deckQuery = feedQuery(filters, FEED_DEFAULTS);
+  const filterQuery = feedQuery(filters, FEED_DEFAULTS);
+  const deckQuery = view === "skipped" ? [filterQuery, "view=skipped"].filter(Boolean).join("&") : filterQuery;
+  const mainHref = filterQuery ? `/feed?${filterQuery}` : "/feed";
+  const skippedHref = `/feed?${[filterQuery, "view=skipped"].filter(Boolean).join("&")}`;
 
   // What is narrowing the feed right now, in plain words, and the link that drops each one.
   const active: ActiveFilter[] = [];
@@ -245,9 +250,27 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
       <Suspense fallback={null}>
         <GapsLine userId={user.id} />
       </Suspense>
+      {view === "skipped" ? (
+        <div className="flex items-center justify-between gap-3 px-5 pt-3">
+          <h1 className="m-0 type-title">Jobs you skipped</h1>
+          <Link href={mainHref} className="inline-flex min-h-11 flex-none items-center text-sm font-semibold underline underline-offset-3">
+            Back to your feed
+          </Link>
+        </div>
+      ) : null}
       {/* The top bar and filters need only the URL; the cards stream in when the feed is scored. */}
       <Suspense key={deckQuery} fallback={<DeckSkeleton />}>
-        <FeedDeck userId={user.id} filters={filters} active={active} query={deckQuery} editFilters={sheet("edit")} widenFilters={sheet("widen")} />
+        <FeedDeck
+          userId={user.id}
+          filters={filters}
+          view={view}
+          active={active}
+          query={deckQuery}
+          mainHref={mainHref}
+          skippedHref={skippedHref}
+          editFilters={sheet("edit")}
+          widenFilters={sheet("widen")}
+        />
       </Suspense>
     </>
   );
@@ -274,24 +297,55 @@ function DeckSkeleton() {
 async function FeedDeck({
   userId,
   filters,
+  view,
   active,
   query,
+  mainHref,
+  skippedHref,
   editFilters,
   widenFilters,
 }: {
   userId: string;
   filters: FeedFilters;
+  view: FeedView;
   active: ActiveFilter[];
   query: string;
+  mainHref: string;
+  skippedHref: string;
   editFilters: React.ReactNode;
   widenFilters: React.ReactNode;
 }) {
   const [jobs, sentToday, inProgress] = await Promise.all([
-    listFeed(userId, filters),
+    listFeed(userId, filters, view),
     dailySent(userId),
     db.application.count({ where: { userId, status: { in: ["queued", "inspecting", "filling"] } } }),
   ]);
-  if (jobs.length > 0) return <SwipeDeck jobs={jobs} query={query} stats={{ sentToday, inProgress }} widenFilters={widenFilters} />;
+  if (jobs.length > 0) {
+    return <SwipeDeck jobs={jobs} query={query} view={view} mainHref={mainHref} skippedHref={skippedHref} stats={{ sentToday, inProgress }} widenFilters={widenFilters} />;
+  }
+
+  if (view === "skipped") {
+    return (
+      <EmptyState
+        art={<DeckEmptyArt />}
+        title="No skipped jobs to look at"
+        text="Jobs you skip wait here, in case you change your mind once your feed runs out."
+        actions={
+          <Link href={mainHref} className={buttonVariants({ variant: "primary", size: "xl", className: "w-full" })}>
+            Back to your feed
+          </Link>
+        }
+      />
+    );
+  }
+  // The feed is empty: the jobs skipped earlier are the next thing worth a look (owner, 1 Nov).
+  const skipped = (await listFeed(userId, filters, "skipped").catch(() => [])).length;
+  const lookAgain =
+    skipped > 0 ? (
+      <Link href={skippedHref} className={buttonVariants({ variant: "line", size: "lg", className: "w-full" })}>
+        Look at the {skipped} {skipped === 1 ? "job" : "jobs"} you skipped
+      </Link>
+    ) : null;
 
   if (active.length > 0) {
     return (
@@ -320,6 +374,7 @@ async function FeedDeck({
               Clear all filters
             </a>
             {editFilters}
+            {lookAgain}
           </>
         }
       />
@@ -331,9 +386,12 @@ async function FeedDeck({
       title="No new jobs right now"
       text="Your agent keeps looking. New jobs land through the day, and we'll let you know."
       actions={
-        <Link href="/applications" className={buttonVariants({ variant: "primary", size: "xl", className: "w-full" })}>
-          See my applications
-        </Link>
+        <>
+          <Link href="/applications" className={buttonVariants({ variant: "primary", size: "xl", className: "w-full" })}>
+            See my applications
+          </Link>
+          {lookAgain}
+        </>
       }
     />
   );

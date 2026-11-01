@@ -22,8 +22,8 @@ export function JobActions({ jobId, company, backHref, next }: { jobId: string; 
   const router = useRouter();
   const [busy, setBusy] = useState<"left" | "right" | null>(null);
 
-  function moveOn() {
-    markSwiped(jobId);
+  function moveOn(direction: "left" | "right") {
+    markSwiped(jobId, direction);
     const viaFeed = openedFromFeed(jobId);
     if (next) {
       // The next page's Back goes through history to the feed too (feed-back-link.tsx).
@@ -46,7 +46,7 @@ export function JobActions({ jobId, company, backHref, next }: { jobId: string; 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ jobId, direction }),
     });
-    moveOn();
+    moveOn(direction);
     const notSaved = (title: string, description: string) => {
       unmarkSwiped(jobId);
       toast.error(title, { description });

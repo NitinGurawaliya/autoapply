@@ -56,8 +56,27 @@ export function CompanyMark({
   );
 }
 
-/** The job board's tile: its first letter in an ink outline ("G" for Greenhouse), beside "via Greenhouse". */
-export function BoardMark({ board, className }: { board: string; className?: string }) {
+// The boards' own icons, from each board's website (1 Nov), served from public/boards.
+const BOARD_LOGOS: Record<string, string> = {
+  greenhouse: "/boards/greenhouse.png",
+  ashby: "/boards/ashby.png",
+  keka: "/boards/keka.svg",
+  lever: "/boards/lever.png",
+  smartrecruiters: "/boards/smartrecruiters.png",
+};
+
+/**
+ * The job board's mark beside "via Greenhouse": the board's own icon, or for a board without one here (Workday, Zoho
+ * Recruit) its first letter in an ink outline. `board` is the label ("Greenhouse") or the id ("greenhouse").
+ */
+export function BoardMark({ board, className, size = 20 }: { board: string; className?: string; size?: number }) {
+  const logo = BOARD_LOGOS[board.toLowerCase().replace(/\s+/g, "")];
+  if (logo) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- a tiny static icon; next/image adds nothing here
+      <img src={logo} alt="" aria-hidden="true" width={size} height={size} draggable={false} className={cn("flex-none rounded-[5px] select-none", className)} />
+    );
+  }
   return (
     <span
       aria-hidden="true"

@@ -14,7 +14,7 @@ import { boardLabel } from "@/lib/board-label";
 import { db } from "@/lib/db";
 import { describe, previewCount, type DescriptionBlock } from "@/lib/description";
 import { feedHref, feedQuery } from "@/lib/feed-url";
-import { APPLY_BOARDS, DEFAULT_FEED_DAYS, DEFAULT_PLACES, listFeed, parseFeedFilters } from "@/modules/jobs";
+import { APPLY_BOARDS, DEFAULT_FEED_DAYS, DEFAULT_PLACES, listFeed, parseFeedFilters, type FeedView } from "@/modules/jobs";
 import { FeedBackLink } from "./feed-back-link";
 import { JobActions, NextJobLink, type NextJob } from "./job-actions";
 
@@ -80,8 +80,11 @@ export default async function JobPage({ params, searchParams }: { params: Promis
   const [{ id }, query] = await Promise.all([params, searchParams]);
 
   const filters = parseFeedFilters(Object.fromEntries(FEED_PARAMS.map((key) => [key, one(query[key])])));
+  // Opened from the "jobs you skipped" view: its next job and its Back stay in that view.
+  const view: FeedView = one(query.view) === "skipped" ? "skipped" : "new";
+  const withView = (href: string) => (view === "skipped" ? `${href}${href.includes("?") ? "&" : "?"}view=skipped` : href);
   // Written like the feed's own URL (lib/feed-url.ts), so Back lands on the exact page the user left.
-  const backHref = feedHref(filters, { boards: APPLY_BOARDS, places: DEFAULT_PLACES, days: DEFAULT_FEED_DAYS });
+  const backHref = withView(feedHref(filters, { boards: APPLY_BOARDS, places: DEFAULT_PLACES, days: DEFAULT_FEED_DAYS }));
 
   const [job, swipe, application, feed] = await Promise.all([
     db.job.findUnique({
@@ -103,7 +106,7 @@ export default async function JobPage({ params, searchParams }: { params: Promis
     db.swipe.findUnique({ where: { userId_jobId: { userId: user.id, jobId: id } }, select: { direction: true } }),
     db.application.findFirst({ where: { userId: user.id, jobId: id }, orderBy: { createdAt: "desc" }, select: { id: true } }),
     // The feed for these filters is cached for a minute (lib/feed-cache.ts), so this is the card's own score and reason.
-    listFeed(user.id, filters).catch(() => []),
+    listFeed(user.id, filters, view).catch(() => []),
   ]);
 
   if (!job) {
@@ -142,7 +145,7 @@ export default async function JobPage({ params, searchParams }: { params: Promis
   const following = (here >= 0 ? feed.slice(here + 1) : feed).find((item) => item.id !== job.id);
   const nextQuery = feedQuery(filters, { boards: APPLY_BOARDS, places: DEFAULT_PLACES, days: DEFAULT_FEED_DAYS });
   const next: NextJob | null = following
-    ? { id: following.id, href: nextQuery ? `/jobs/${following.id}?${nextQuery}` : `/jobs/${following.id}`, company: following.company, title: following.title }
+    ? { id: following.id, href: withView(nextQuery ? `/jobs/${following.id}?${nextQuery}` : `/jobs/${following.id}`), company: following.company, title: following.title }
     : null;
 
   return (
@@ -235,11 +238,11 @@ export default async function JobPage({ params, searchParams }: { params: Promis
         </section>
 
         <div className="sticky bottom-[calc(82px+max(0px,env(safe-area-inset-bottom)-24px))] z-10 -mx-5 mt-8 border-t-[1.5px] border-line bg-background px-5 pt-3 pb-3">
-          {application || swipe || job.closedAt ? (
-            // Already decided, or closed: say so, and keep going through the feed from here.
+          {application || swipe?.direction === "right" || job.closedAt ? (
+            // Already applied to, or closed: say so, and keep going through the feed from here.
             <div className="flex flex-col gap-2">
               <p className="m-0 text-center type-caption text-muted-foreground">
-                {application ? "Your agent has this one." : swipe ? "You skipped this job." : "The company has closed this job."}
+                {application ? "Your agent has this one." : job.closedAt ? "The company has closed this job." : "You applied to this job."}
               </p>
               <div className="flex gap-3">
                 {application ? (
@@ -255,7 +258,11 @@ export default async function JobPage({ params, searchParams }: { params: Promis
               </div>
             </div>
           ) : (
-            <JobActions jobId={job.id} company={job.company.name} backHref={backHref} next={next} />
+            <>
+              {/* Skipped before: it can still be applied to (lib: swipeRight turns the skip into the apply). */}
+              {swipe?.direction === "left" ? <p className="m-0 mb-2 text-center type-caption text-muted-foreground">You skipped this job before. Apply if you&apos;ve changed your mind.</p> : null}
+              <JobActions jobId={job.id} company={job.company.name} backHref={backHref} next={next} />
+            </>
           )}
         </div>
       </div>

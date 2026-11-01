@@ -49,6 +49,9 @@ export const transition = {
 export const swipe = {
   /** Release past this distance commits the swipe; less springs back. */
   commitAt: 90,
+  /** A quick flick commits sooner: past this speed (px/s) once the card has moved `flickMin` px. */
+  flickVelocity: 500,
+  flickMin: 30,
   /** Degrees of rotation per pixel dragged (the design uses dx / 24). */
   rotatePerPx: 1 / 24,
   /** Rotation of a committed card on its way out. */

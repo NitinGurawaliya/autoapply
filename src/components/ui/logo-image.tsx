@@ -24,6 +24,8 @@ export function LogoImage({ src }: { src: string }) {
       loading="lazy"
       decoding="async"
       referrerPolicy="no-referrer"
+      // A logo dragged like a file would steal the swipe that started on it.
+      draggable={false}
       onLoad={() => setState("ok")}
       onError={() => setState("failed")}
       className={`absolute inset-0 size-full rounded-[inherit] bg-white object-contain p-[12%] transition-opacity duration-200 ${state === "ok" ? "opacity-100" : "opacity-0"}`}

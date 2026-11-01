@@ -402,6 +402,8 @@ export async function feedRows(input: {
   skills: string[];
   titleWords: string[];
   prefilter: boolean;
+  /** Only the jobs this user swiped left (the "jobs you skipped" view); otherwise only jobs not swiped either way. */
+  skippedOnly?: boolean;
 }) {
   // One row per skill: its words (all must be among the job's words, looked up in the GIN index on terms) and, for
   // a skill that is more than one word, the regex that then checks they appear in that exact spelling.
@@ -452,7 +454,10 @@ export async function feedRows(input: {
         AND j."postedAt" >= ${input.cutoff}
         AND j."closedAt" IS NULL
         AND (${input.expMax}::int IS NULL OR j."experienceMin" IS NULL OR j."experienceMin" <= ${input.expMax}::int)
-        AND NOT EXISTS (SELECT 1 FROM "Swipe" s WHERE s."userId" = ${input.userId} AND s."jobId" = j.id)
+        -- A swiped job never comes back to the feed, left or right; the skipped view is the left ones alone.
+        AND (CASE WHEN ${input.skippedOnly ?? false}::boolean
+                  THEN EXISTS (SELECT 1 FROM "Swipe" s WHERE s."userId" = ${input.userId} AND s."jobId" = j.id AND s.direction = 'left')
+                  ELSE NOT EXISTS (SELECT 1 FROM "Swipe" s WHERE s."userId" = ${input.userId} AND s."jobId" = j.id) END)
     )
     SELECT * FROM candidates
     WHERE NOT ${input.prefilter}
@@ -469,17 +474,20 @@ function titleWordsFor(currentTitle: string | null) {
   return [...wanted, ...aliases];
 }
 
-export async function listFeed(userId: string, filters: FeedFilters): Promise<FeedJob[]> {
+/** "new": jobs the user has not swiped; "skipped": the ones they swiped left, to look at again once the feed runs out. */
+export type FeedView = "new" | "skipped";
+
+export async function listFeed(userId: string, filters: FeedFilters, view: FeedView = "new"): Promise<FeedJob[]> {
   // A visit within a minute of the last one, with nothing changed since, reuses its result (lib/feed-cache.ts).
-  const filtersKey = JSON.stringify(filters);
+  const filtersKey = view === "new" ? JSON.stringify(filters) : `${JSON.stringify(filters)}|skipped`;
   const cached = cachedFeed<FeedJob[]>(userId, filtersKey);
   if (cached) return cached;
-  const feed = await scoreFeed(userId, filters);
+  const feed = await scoreFeed(userId, filters, view);
   rememberFeed(userId, filtersKey, feed);
   return feed;
 }
 
-async function scoreFeed(userId: string, filters: FeedFilters): Promise<FeedJob[]> {
+async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView): Promise<FeedJob[]> {
   // Independent reads run together: every database round trip is ~250 ms from India to the database.
   const [profile, answers] = await Promise.all([
     db.profile.findUnique({ where: { userId } }),
@@ -518,6 +526,7 @@ async function scoreFeed(userId: string, filters: FeedFilters): Promise<FeedJob[
       titleWords: titleWordsFor(profile?.currentTitle ?? null),
       // Every job in a reachable track can reach the minimum on its track alone, so none is left out early.
       prefilter: minScore > 30 && tracks.length === 0 && !vector,
+      skippedOnly: view === "skipped",
     }),
     feedHistory(userId, loadRules().max_per_company_per_week),
     companyResultsById().catch(() => new Map<string, never>()),

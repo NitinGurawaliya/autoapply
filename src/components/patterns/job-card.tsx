@@ -75,6 +75,7 @@ export function JobCard({ job, stamps }: { job: JobCardData; stamps?: ReactNode 
           {job.detailHref ? (
             <Link
               href={job.detailHref}
+              draggable={false}
               onPointerDown={(event) => event.stopPropagation()}
               // The card itself opens the job on a tap: stop here so the page is not pushed twice.
               onClick={(event) => event.stopPropagation()}

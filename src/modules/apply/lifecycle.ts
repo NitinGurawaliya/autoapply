@@ -181,7 +181,10 @@ export async function swipeRight(
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
       const counts = await historyFor(userId, { title: job.title, companyId: job.companyId }, new Date(), tx);
       if (counts.inFlight >= loadRules().max_in_flight_per_user) throw new QueueFull();
-      await tx.swipe.create({ data: { userId, jobId, direction: "right" } });
+      // A job the user skipped and now applies to (the "jobs you skipped" view): the left swipe becomes this right
+      // swipe. Anything else is a new swipe; a second right swipe on the same job hits the unique key (P2002).
+      const turned = await tx.swipe.updateMany({ where: { userId, jobId, direction: "left" }, data: { direction: "right", createdAt: new Date() } });
+      if (turned.count === 0) await tx.swipe.create({ data: { userId, jobId, direction: "right" } });
       const created = await tx.application.create({ data: { userId, jobId, status: "queued", fields: [], pendingQuestions: [] } });
       return { application: created, history: counts };
     }, { maxWait: 60000, timeout: 60000 }));
