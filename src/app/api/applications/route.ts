@@ -95,6 +95,8 @@ export async function GET(request: Request) {
           company: job?.company.name ?? "Unknown company",
           logoUrl: job?.company.logoUrl ?? null,
           location: job?.location ?? "",
+          // The posting, for rows the agent can't apply on ("Open the posting"); only a web address.
+          applyUrl: job && /^https?:\/\//i.test(job.applyUrl) ? job.applyUrl : null,
         };
       }),
       // Counts per status over all the user's applications (first page only), so the chips stay right while pages load.

@@ -235,7 +235,7 @@ function Patterns() {
         <Section title="Top bars">
           <div className="-mx-5 flex flex-col gap-5">
             <FeedTopBar
-              usage={<UsagePill used={18} cap={100} />}
+              usage={<UsagePill sent={18} used={18} cap={100} />}
               filters={<IconButton variant="line" aria-label="Filters"><Icon name="filters" size={20} /></IconButton>}
             />
             <TitleTopBar title="Applications" sub="19 sent today · 81 left · Your agent is working on 3" />
@@ -278,8 +278,11 @@ function Patterns() {
           <DeckDemo />
         </Section>
         <Section title="After-swipe toast">
-          <AgentToast company="Lumen Pay" stage={1} href="#" visible />
-          <AgentToast company="Lumen Pay" stage={3} href="#" visible />
+          <AgentToast company="Lumen Pay" stage={0} href={null} visible />
+          <AgentToast company="Lumen Pay" stage={1} status="inspecting" href="#" visible />
+          <AgentToast company="Lumen Pay" stage={3} status="submitted" href="#" visible />
+          <AgentToast company="Lumen Pay" stage={1} status="needs_input" href="#" visible />
+          <AgentToast company="Lumen Pay" stage={1} status="blocked" error="min_match_score" href="#" visible />
         </Section>
         <Section title="Agent at work">
           <AgentStatus text="Getting ready to apply" />

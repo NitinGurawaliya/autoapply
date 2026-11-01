@@ -7,7 +7,7 @@ import { FieldError, FieldLabel, InputBox } from "@/components/ui/field";
 
 const PHRASE = "DELETE MY ACCOUNT";
 
-export function AccountActions() {
+export function AccountActions({ hasResume }: { hasResume: boolean }) {
   const router = useRouter();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -36,9 +36,13 @@ export function AccountActions() {
       {/* The only way back to the upload once onboarding is done (16 Oct QA: a missing resume had no place to fix it). */}
       <section className="box-border flex flex-col gap-2.5 rounded-panel border-[1.5px] border-line bg-surface p-4">
         <h2 className="m-0 text-lg font-semibold tracking-[-0.01em]">Your resume</h2>
-        <p className="m-0 text-sm leading-normal text-muted-foreground">Replace it with a newer one. Your details and saved answers stay; skills, roles and projects come from the new resume, and you see what changed before it is used.</p>
+        <p className="m-0 text-sm leading-normal text-muted-foreground">
+          {hasResume
+            ? "Replace it with a newer one. Your details and saved answers stay; skills, roles and projects come from the new resume, and you see what changed before it is used."
+            : "Your agent has no resume for you yet, and it needs one to apply. Upload it; you see what it found before it is used."}
+        </p>
         <a href="/onboarding/resume" className={buttonVariants({ variant: "line", size: "lg", className: "mt-1 w-full" })}>
-          Replace resume
+          {hasResume ? "Replace resume" : "Upload your resume"}
         </a>
       </section>
       <section className="box-border flex flex-col gap-2.5 rounded-panel border-[1.5px] border-line bg-surface p-4">

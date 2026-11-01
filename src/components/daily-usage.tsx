@@ -1,8 +1,8 @@
-import { dailyUsage, loadRules } from "@/modules/governance";
+import { dailySent, dailyUsage, loadRules } from "@/modules/governance";
 import { UsagePill } from "@/components/patterns/top-bar";
 
-/** Applications started today against the daily cap, as the design's "18/100" pill. */
+/** Today's sent applications, and near the cap what is left of it (the daily-cap rule counts every started one). */
 export async function DailyUsage({ userId }: { userId: string }) {
-  const used = await dailyUsage(userId);
-  return <UsagePill used={used} cap={loadRules().max_applications_per_day} />;
+  const [sent, used] = await Promise.all([dailySent(userId), dailyUsage(userId)]);
+  return <UsagePill sent={sent} used={used} cap={loadRules().max_applications_per_day} />;
 }

@@ -6,12 +6,13 @@ import { SegmentedProgress } from "@/components/ui/segmented-progress";
 
 // Page structure shared by onboarding and the inner pages (design/onboarding.html).
 
-/** A full-height phone column: the page fills the screen and its footer stays at the bottom. */
+/** A full-height phone column: the page fills the screen and its footer stays at the bottom. It is the page's <main>
+ * (used only outside the signed-in shell, which has its own). */
 export function Screen({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn("mx-auto box-border flex min-h-dvh w-full max-w-[480px] flex-col bg-background pt-[max(12px,env(safe-area-inset-top))] text-foreground", className)}>
+    <main className={cn("mx-auto box-border flex min-h-dvh w-full max-w-[480px] flex-col bg-background pt-[max(12px,env(safe-area-inset-top))] text-foreground", className)}>
       {children}
-    </div>
+    </main>
   );
 }
 
@@ -24,10 +25,13 @@ export function StepHeader({ step, onBack, backHref }: { step: 1 | 2 | 3; onBack
         <a href={backHref} aria-label="Back" className="flex size-11 flex-none items-center justify-center rounded-full text-foreground">
           {back}
         </a>
-      ) : (
-        <IconButton aria-label="Back" onClick={onBack} disabled={!onBack} className="disabled:opacity-0">
+      ) : onBack ? (
+        <IconButton aria-label="Back" onClick={onBack}>
           {back}
         </IconButton>
+      ) : (
+        // Step 1 has nowhere to go back to: the same space, nothing to focus.
+        <span aria-hidden="true" className="size-11 flex-none" />
       )}
       <SegmentedProgress count={3} done={step} thickness={6} className="flex-1" />
       <span className="text-[13px] font-semibold text-muted-foreground tabular-nums">{step} of 3</span>

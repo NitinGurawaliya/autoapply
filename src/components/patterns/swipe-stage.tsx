@@ -155,7 +155,9 @@ export function SwipeStage({
           />
         </motion.article>
       </div>
-      <div className="mt-6 flex items-center justify-center gap-8">
+      {/* Always above the tab bar, like the job page's action bar: on a short phone (375x667) the stack is taller
+          than the space left, and the buttons stay on screen over its bottom edge. */}
+      <div className="sticky bottom-[calc(82px+max(0px,env(safe-area-inset-bottom)-24px))] z-10 mt-3 flex items-center justify-center gap-8 bg-background pt-3 pb-2">
         <motion.div style={{ scale: skipScale }}>
           <IconButton variant="skip" size="skip" aria-label="Skip" onClick={() => fling("left")}>
             <Icon name="close" size={26} strokeWidth={2.25} />

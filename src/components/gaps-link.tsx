@@ -18,10 +18,16 @@ export async function GapsLink({ userId }: { userId: string }) {
   const { scan, gaps } = await gapsSummary(userId);
   if (!scan || gaps === 0) return null;
   const blocked = scan.scanned - scan.covered;
+  const sentence = `Your agent needs ${gaps} ${gaps === 1 ? "answer" : "answers"} to apply to ${blocked} more ${blocked === 1 ? "job" : "jobs"}`;
+  // One line (the deck needs the height on short phones); the whole sentence is in the title.
   return (
-    <Link href="/gaps" className="inline-flex min-h-8 items-center gap-1.5 self-start text-[13px] font-semibold text-foreground underline underline-offset-3">
-      <Icon name="info" size={14} strokeWidth={2.25} />
-      Your agent needs {gaps} {gaps === 1 ? "answer" : "answers"} to apply to {blocked} more {blocked === 1 ? "job" : "jobs"}
+    <Link
+      href="/gaps"
+      title={sentence}
+      className="inline-flex min-h-8 max-w-full min-w-0 items-center gap-1.5 self-start text-[13px] font-semibold text-foreground underline underline-offset-3"
+    >
+      <Icon name="info" size={14} strokeWidth={2.25} className="flex-none" />
+      <span className="truncate">{sentence}</span>
     </Link>
   );
 }

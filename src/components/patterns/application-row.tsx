@@ -30,7 +30,7 @@ export function NeedsRow({
 }) {
   return (
     <li data-row="needs" className="box-border flex flex-col gap-3 rounded-panel border-2 border-edge bg-surface p-3.5 shadow-hard">
-      <Link href={href} className="flex flex-col gap-3 text-foreground no-underline">
+      <Link href={href} prefetch={false} className="flex flex-col gap-3 text-foreground no-underline">
         <div className="flex items-center gap-3">
           <CompanyMark name={company} logoUrl={logoUrl} size={44} />
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -42,7 +42,7 @@ export function NeedsRow({
         </div>
         <p className="m-0 text-[15px] leading-[1.4]">{ask}</p>
       </Link>
-      <Link href={href} className={buttonVariants({ variant: "primary", size: "row", className: "w-full shadow-none" })}>
+      <Link href={href} prefetch={false} className={buttonVariants({ variant: "primary", size: "row", className: "w-full shadow-none" })}>
         {cta}
       </Link>
       {actions ? <div className="-mt-1 flex justify-center">{actions}</div> : null}
@@ -70,7 +70,7 @@ export function ProgressRow({
 }) {
   return (
     <li data-row="progress" className="box-border flex flex-col gap-2 rounded-[18px] border-[1.5px] border-line bg-surface p-3.5">
-      <Link href={href} className="flex flex-col gap-3 text-foreground no-underline">
+      <Link href={href} prefetch={false} className="flex flex-col gap-3 text-foreground no-underline">
         <div className="flex items-center gap-3">
           <CompanyMark name={company} logoUrl={logoUrl} size={40} tone="subtle" />
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -93,6 +93,7 @@ export function SentRow({ href, company, logoUrl, role, when }: { href: string; 
     <li data-row="sent">
       <Link
         href={href}
+        prefetch={false}
         className="box-border flex min-h-16 items-center gap-3 rounded-[18px] border-[1.5px] border-line bg-surface py-2.5 pr-3 pl-3.5 text-foreground no-underline"
       >
         <CompanyMark name={company} logoUrl={logoUrl} size={40} tone="subtle" />
@@ -130,7 +131,7 @@ export function FailedRow({
       data-row="failed"
       className="box-border flex min-h-16 items-center gap-3 rounded-[18px] border-[1.5px] border-dashed border-dash py-3 pr-3 pl-3.5"
     >
-      <Link href={href} className="flex min-w-0 flex-1 items-center gap-3 text-foreground no-underline">
+      <Link href={href} prefetch={false} className="flex min-w-0 flex-1 items-center gap-3 text-foreground no-underline">
         <CompanyMark name={company} logoUrl={logoUrl} size={40} tone="outline" />
         <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
           <span className="text-[15px] font-semibold">

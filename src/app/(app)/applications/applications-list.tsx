@@ -26,7 +26,11 @@ type Row = {
   createdAt: string;
   waitingFor: "code" | "answers" | null;
   ahead?: number | null;
+  applyUrl?: string | null;
 };
+
+// Held back because the agent can't apply on that form: the user can, on the posting.
+const APPLY_YOURSELF = ["unsafe_form_url", "board_not_supported"];
 
 type Tab = "all" | StatusGroup;
 
@@ -222,7 +226,15 @@ export function ApplicationsList() {
         logoUrl={row.logoUrl}
         role={row.title}
         reason={outcome.headline}
-        action={["failed", "cancelled"].includes(row.status) ? <ApplicationActions id={row.id} status={row.status} company={row.company} onChanged={changed} /> : undefined}
+        action={
+          ["failed", "cancelled"].includes(row.status) ? (
+            <ApplicationActions id={row.id} status={row.status} company={row.company} onChanged={changed} />
+          ) : row.status === "blocked" && row.applyUrl && APPLY_YOURSELF.includes((row.error ?? "").trim()) ? (
+            <a href={row.applyUrl} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "underline", size: "text", className: "h-auto min-h-9 max-w-[84px] text-center text-sm leading-tight whitespace-normal" })}>
+              Open the posting
+            </a>
+          ) : undefined
+        }
       />
     );
   }

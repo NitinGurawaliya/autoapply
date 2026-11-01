@@ -30,7 +30,8 @@ export function buildSteps(events: EventLite[], status: string, answers?: Answer
 
   const steps: Array<{ key: string; label: string; done: boolean; note?: string }> = [
     { key: "read", label: "Read the application form", done: has("inspect") || submitted, note: questions > 0 ? `${questions} ${questions === 1 ? "question" : "questions"}` : undefined },
-    { key: "prepared", label: "Wrote your answers", done: has("resolve") || submitted, note: answerNote },
+    // Answers count as written once the form was read: a run that stops before opening it has "resolve" events only.
+    { key: "prepared", label: "Wrote your answers", done: (has("inspect") && has("resolve")) || submitted, note: answerNote },
   ];
   if (asked) {
     // Questions asked before the form was opened come before "read"; asked mid-form, after "wrote".

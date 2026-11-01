@@ -70,7 +70,8 @@ async function main() {
     const detail = await page.locator("main").innerText();
     check("detail shows each filled field", ["First Name", "Test", "Resume", "resume.pdf", "Decline to answer"].every((t) => detail.includes(t)));
     check("detail shows source badges", ["You", "Resume", "Default", "AI draft"].every((t) => detail.includes(t)));
-    check("detail shows confirmation in timeline", detail.includes("Thank you for applying"));
+    // The story's Submitted step says it in the agent's words; the raw page text is only in the admin debug log.
+    check("detail shows confirmation in timeline", detail.includes("The job board confirmed it"));
 
     // 3. Popup names the company
     await db.application.update({ where: { id: asking.id }, data: { status: "needs_input" } });

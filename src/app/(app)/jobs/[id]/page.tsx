@@ -11,7 +11,9 @@ import { BackTopBar } from "@/components/patterns/top-bar";
 import { getCurrentUser } from "@/lib/auth";
 import { boardLabel } from "@/lib/board-label";
 import { db } from "@/lib/db";
-import { listFeed, parseFeedFilters } from "@/modules/jobs";
+import { feedHref } from "@/lib/feed-url";
+import { APPLY_BOARDS, DEFAULT_FEED_DAYS, DEFAULT_PLACES, listFeed, parseFeedFilters } from "@/modules/jobs";
+import { FeedBackLink } from "./feed-back-link";
 import { JobActions } from "./job-actions";
 
 type Query = Record<string, string | string[] | undefined>;
@@ -47,13 +49,9 @@ export default async function JobPage({ params, searchParams }: { params: Promis
   if (!user) redirect("/sign-in");
   const [{ id }, query] = await Promise.all([params, searchParams]);
 
-  const feedQuery = new URLSearchParams();
-  for (const key of FEED_PARAMS) {
-    const value = one(query[key]);
-    if (value) feedQuery.set(key, value);
-  }
-  const backHref = feedQuery.size > 0 ? `/feed?${feedQuery.toString()}` : "/feed";
   const filters = parseFeedFilters(Object.fromEntries(FEED_PARAMS.map((key) => [key, one(query[key])])));
+  // Written like the feed's own URL (lib/feed-url.ts), so Back lands on the exact page the user left.
+  const backHref = feedHref(filters, { boards: APPLY_BOARDS, places: DEFAULT_PLACES, days: DEFAULT_FEED_DAYS });
 
   const [job, swipe, application, feed] = await Promise.all([
     db.job.findUnique({
@@ -110,7 +108,13 @@ export default async function JobPage({ params, searchParams }: { params: Promis
 
   return (
     <>
-      <BackTopBar href={backHref} label="Job" backLabel="Back to the feed" />
+      {/* BackTopBar's look; opened from the deck, Back goes through history (feed-back-link.tsx). */}
+      <div className="flex h-11 flex-none items-center gap-1 px-3">
+        <FeedBackLink jobId={job.id} href={backHref} ariaLabel="Back to the feed" className="flex size-11 items-center justify-center rounded-full text-foreground">
+          <Icon name="back" size={22} strokeWidth={2.25} />
+        </FeedBackLink>
+        <span className="text-base font-semibold">Job</span>
+      </div>
       <div className="flex flex-1 flex-col px-5">
         <header className="relative flex flex-col gap-1.5 pt-3.5">
           <div className="flex items-center gap-3 pr-[92px]">

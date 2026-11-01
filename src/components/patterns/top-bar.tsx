@@ -47,7 +47,9 @@ export function BackTopBar({ href, label, backLabel }: { href: string; label: st
  * "18 sent today": what the agent has done today. The cap shows only as it comes near (5 or fewer left) or is reached,
  * so the header reads as the agent's work, not a quota (24 Oct, owner).
  */
-export function UsagePill({ used, cap }: { used: number; cap: number }) {
+/** "18 sent today": applications submitted today. Near the cap, what is left of it, counted like the daily-cap rule
+ * (`used`: started today and not held back), with a small bar. */
+export function UsagePill({ sent, used, cap }: { sent: number; used: number; cap: number }) {
   const percent = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0;
   const near = cap - used <= 5;
   return (
@@ -57,8 +59,8 @@ export function UsagePill({ used, cap }: { used: number; cap: number }) {
       title={used >= cap ? "Daily limit reached. It resets at midnight UTC." : undefined}
     >
       <span className="text-sm font-semibold tabular-nums">
-        {used}
-        <span className="font-medium text-muted-foreground"> {near ? (used >= cap ? "· done for today" : `· ${cap - used} left`) : "sent today"}</span>
+        {sent}
+        <span className="font-medium text-muted-foreground"> {near ? (used >= cap ? "sent · done for today" : `sent · ${cap - used} left`) : "sent today"}</span>
       </span>
       <span className="sr-only">{used >= cap ? ". Daily limit reached." : ""}</span>
       {near ? (

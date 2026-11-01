@@ -112,9 +112,15 @@ async function main() {
       () => check("confirming cancels it and the row shows Cancelled", true),
       () => check("confirming cancels it and the row shows Cancelled", false),
     );
-    await row.getByRole("button", { name: "Retry" }).click();
+    // The retry answer says whether it was accepted (a refusal and a slow pass must not look the same); a retry can
+    // take several seconds on the dev server, so the row gets up to a minute to change.
+    const [retried] = await Promise.all([
+      page.waitForResponse((response) => response.url().endsWith(`/api/applications/${ui.id}/retry`), { timeout: 60000 }),
+      row.getByRole("button", { name: "Retry" }).click(),
+    ]);
+    check("Retry on the cancelled row is accepted", retried.status() === 200, retried.status() === 200 ? "" : `${retried.status()} ${await retried.text().catch(() => "")}`);
     // A live worker may run it straight away, so the row only has to leave "Cancelled".
-    await row.getByText("Cancelled", { exact: true }).waitFor({ state: "detached", timeout: 25000 }).then(
+    await row.getByText("Cancelled", { exact: true }).waitFor({ state: "detached", timeout: 60000 }).then(
       () => check("Retry on the cancelled row puts it back in progress", true),
       () => check("Retry on the cancelled row puts it back in progress", false),
     );

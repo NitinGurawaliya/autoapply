@@ -3,9 +3,11 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { boardLabel } from "@/lib/board-label";
 import { db } from "@/lib/db";
+import { feedHref, feedQuery } from "@/lib/feed-url";
 import { dailySent } from "@/modules/governance";
-import { APPLY_BOARDS, DEFAULT_PLACES, listFeed, parseFeedFilters, TRACK_LABELS, tracksOf } from "@/modules/jobs";
+import { APPLY_BOARDS, DEFAULT_FEED_DAYS, DEFAULT_PLACES, listFeed, parseFeedFilters, TRACK_LABELS, tracksOf } from "@/modules/jobs";
 import type { Track } from "@/modules/jobs";
 import type { FeedFilters } from "@/modules/jobs";
 import { DailyUsage } from "@/components/daily-usage";
@@ -21,11 +23,9 @@ import { FeedTopBar } from "@/components/patterns/top-bar";
 import { FilterSheet } from "./filter-sheet";
 import { SwipeDeck } from "./swipe-deck";
 
-const BOARDS = [
-  { id: "greenhouse", label: "Greenhouse" },
-  { id: "lever", label: "Lever" },
-  { id: "ashby", label: "Ashby" },
-].filter((board) => (APPLY_BOARDS as readonly string[]).includes(board.id));
+// Exactly the boards the feed serves (APPLY_BOARDS: Keka with ENABLE_KEKA=1, Lever with ENABLE_LEVER=1).
+const BOARDS = APPLY_BOARDS.map((id) => ({ id, label: boardLabel(id) ?? id }));
+const FEED_DEFAULTS = { boards: APPLY_BOARDS, places: DEFAULT_PLACES, days: DEFAULT_FEED_DAYS };
 
 // In India and remote-from-India by default (T80); jobs abroad only when picked.
 const COUNTRIES = [
@@ -67,18 +67,21 @@ function one(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
+/** The feed with one choice changed, written by lib/feed-url.ts like every other feed link. */
 function href(current: FeedQuery, patch: Partial<FeedQuery>) {
   const next = { ...current, ...patch };
-  const params = new URLSearchParams();
-  if (next.boards.length > 0 && next.boards.length < BOARDS.length) params.set("boards", next.boards.join(","));
-  if (next.countries.length > 0 && !sameSet(next.countries, DEFAULT_PLACES)) params.set("country", next.countries.join(","));
-  if (next.level !== "any") params.set("level", next.level);
-  if (next.stages.length > 0) params.set("stage", next.stages.join(","));
-  if (next.tracks.length > 0) params.set("track", next.tracks.join(","));
-  if (next.expMax) params.set("expMax", next.expMax);
-  if (next.days !== "60") params.set("days", next.days);
-  const query = params.toString();
-  return query ? `/feed?${query}` : "/feed";
+  return feedHref(
+    {
+      boards: next.boards,
+      countries: next.countries,
+      expMax: next.expMax ? Number(next.expMax) : null,
+      days: Number(next.days),
+      level: next.level as FeedFilters["level"],
+      stages: next.stages,
+      tracks: next.tracks,
+    },
+    FEED_DEFAULTS,
+  );
 }
 
 function sameSet(a: string[], b: string[]) {
@@ -126,15 +129,8 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
   const profile = await db.profile.findUnique({ where: { userId: user.id }, select: { tracks: true, currentTitle: true, skills: true, experience: true } });
   const myTracks = profile ? tracksOf(profile) : [];
 
-  const deckQuery = new URLSearchParams({
-    boards: current.boards.join(","),
-    country: current.countries.join(","),
-    expMax: current.expMax,
-    days: current.days,
-    level: current.level,
-    stage: current.stages.join(","),
-    track: current.tracks.join(","),
-  }).toString();
+  // The same minimal query as the feed's own URL, so a job page's Back returns to exactly this address.
+  const deckQuery = feedQuery(filters, FEED_DEFAULTS);
 
   // What is narrowing the feed right now, in plain words, and the link that drops each one.
   const active: ActiveFilter[] = [];
@@ -169,7 +165,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
   if (current.days !== "60") {
     active.push({
       label: WINDOWS.find((window) => window.id === current.days)?.label ?? `Last ${current.days} days`,
-      removeHref: href(current, { days: "60" }),
+      removeHref: href(current, { days: String(DEFAULT_FEED_DAYS) }),
     });
   }
 

@@ -43,7 +43,8 @@ async function main() {
     });
     // The top card's title, whatever job it is: real jobs share the feed with the fixtures and can rank above them
     // (16 Oct, Ashby in the feed), so the fixtures' "Software Engineer N" is no longer always on top.
-    const topCard = () => page.locator("main h2.type-display-xl").first().innerText();
+    // Only the draggable top card carries data-job-id (the two peeking behind it do not).
+    const topCard = () => page.locator("article[data-job-id] h2").first().innerText();
     // Clicked as an event: in dev, the Next.js indicator sits over the Discover tab at 390 px.
     const tab = (name: string) => ({ click: () => page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: new RegExp(`^${name}`) }).dispatchEvent("click") });
 
