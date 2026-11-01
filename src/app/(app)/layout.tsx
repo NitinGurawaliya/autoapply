@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { NeedsInputDialog } from "@/components/needs-input-dialog";
 import { NeedsInputNotifier } from "@/components/notifications";
+import { SentCelebration } from "@/components/sent-celebration";
 import { SignOutForm } from "@/components/sign-out-form";
 import { getCurrentUser } from "@/lib/auth";
 import { ApplicationsSummaryProvider } from "@/components/applications-summary";
@@ -23,6 +24,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <TabBar />
         <NeedsInputNotifier />
         <NeedsInputDialog />
+        {/* The "Sent!" moment, wherever the user is, when an application goes out. */}
+        <SentCelebration />
       </ShellProvider>
     </ApplicationsSummaryProvider>
   );

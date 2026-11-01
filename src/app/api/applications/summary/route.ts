@@ -4,19 +4,59 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
 /**
- * What the shell polls: only the applications waiting for the user, with what each waits for. Small and constant
- * however many applications the user has, unlike the full list.
+ * The applications sent after `since` (ms), for the "Sent!" moment (components/sent-celebration.tsx): the oldest five,
+ * with the company, its logo and the role, and the counts the moment can cheer about. One indexed read when none.
  */
-export async function GET() {
+async function sentSince(userId: string, since: number) {
+  const sent = await db.application.findMany({
+    where: { userId, status: "submitted", submittedAt: { gt: new Date(since) } },
+    orderBy: { submittedAt: "asc" },
+    take: 5,
+    select: { id: true, jobId: true, submittedAt: true },
+  });
+  if (sent.length === 0) return { sent: [], sentTotal: null, sentThisWeek: null };
+  const [jobs, sentTotal, sentThisWeek] = await Promise.all([
+    db.job.findMany({ where: { id: { in: sent.map((application) => application.jobId) } }, select: { id: true, title: true, company: { select: { name: true, logoUrl: true } } } }),
+    db.application.count({ where: { userId, status: "submitted" } }),
+    db.application.count({ where: { userId, status: "submitted", submittedAt: { gte: new Date(Date.now() - WEEK_MS) } } }),
+  ]);
+  const jobById = new Map(jobs.map((job) => [job.id, job]));
+  return {
+    sent: sent.map((application) => {
+      const job = jobById.get(application.jobId);
+      return {
+        id: application.id,
+        company: job?.company.name ?? "the company",
+        logoUrl: job?.company.logoUrl ?? null,
+        title: job?.title ?? "the role",
+        submittedAt: application.submittedAt?.getTime() ?? Date.now(),
+      };
+    }),
+    sentTotal,
+    sentThisWeek,
+  };
+}
+
+/**
+ * What the shell polls: the applications waiting for the user, with what each waits for, and (with `?since=`) the
+ * ones sent since the last "Sent!" moment. Small and constant however many applications the user has.
+ */
+export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const waiting = await db.application.findMany({
-    where: { userId: user.id, status: "needs_input" },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, jobId: true, pendingQuestions: true },
-  });
+  const sinceParam = Number(new URL(request.url).searchParams.get("since"));
+  const [waiting, sent] = await Promise.all([
+    db.application.findMany({
+      where: { userId: user.id, status: "needs_input" },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, jobId: true, pendingQuestions: true },
+    }),
+    Number.isFinite(sinceParam) && sinceParam > 0 ? sentSince(user.id, sinceParam) : Promise.resolve(null),
+  ]);
   const ids = waiting.map((application) => application.id);
   const [jobs, prompts] = waiting.length
     ? await Promise.all([
@@ -42,6 +82,7 @@ export async function GET() {
           promptId: promptByApp.get(application.id) ?? null,
         };
       }),
+      ...(sent ?? {}),
     },
     { headers: { "Cache-Control": "no-store" } },
   );

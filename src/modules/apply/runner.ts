@@ -376,6 +376,8 @@ async function execute(applicationId: string, options: { person?: boolean }) {
     });
     confirmedSent = true;
     await writeEvent(applicationId, "submit", `Application submitted. Confirmation: ${result.evidence}`.slice(0, 300));
+    // The big moment reaches the user even with the app closed (in the app, components/sent-celebration.tsx shows it).
+    void sendPush(application.userId, { title: `Sent to ${jobInfo.company}`, body: `Your agent sent your ${jobInfo.title} application.`, url: `/applications/${applicationId}`, tag: `app-${applicationId}` }).catch(() => undefined);
     const shown = livePage(page) ?? page;
     await captureConfirmation(shown, applicationId, attempt, application.userId);
     // The user sees Ashby's Success before the window closes by itself, so there is no window for them to close.

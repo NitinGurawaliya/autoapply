@@ -25,6 +25,32 @@ import { JobCard } from "@/components/patterns/job-card";
 import { StackCount, SwipeStage } from "@/components/patterns/swipe-stage";
 import { AgentToast } from "@/components/patterns/agent-toast";
 import { AgentStatus } from "@/components/patterns/agent-status";
+import { SentMoment } from "@/components/sent-celebration";
+import type { SentNews } from "@/components/applications-summary";
+
+/** The "Sent!" moment on demand: one application (a first, a tenth) or several sent while away. */
+function SentDemo() {
+  const [shown, setShown] = useState<SentNews | null>(null);
+  const one = (total: number): SentNews => ({ sent: [{ id: "demo", company: "Stripe", logoUrl: null, title: "Software Engineer, Payments", submittedAt: 1 }], sentTotal: total, sentThisWeek: 4 });
+  const several: SentNews = {
+    sent: [
+      { id: "a", company: "Stripe", logoUrl: null, title: "Software Engineer", submittedAt: 1 },
+      { id: "b", company: "Razorpay", logoUrl: null, title: "Frontend Engineer", submittedAt: 2 },
+      { id: "c", company: "Jupiter", logoUrl: null, title: "Backend Engineer", submittedAt: 3 },
+    ],
+    sentTotal: 7,
+    sentThisWeek: 3,
+  };
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button variant="line" size="row" onClick={() => setShown(one(1))}>First one</Button>
+      <Button variant="line" size="row" onClick={() => setShown(one(10))}>Tenth</Button>
+      <Button variant="line" size="row" onClick={() => setShown(one(3))}>This week</Button>
+      <Button variant="line" size="row" onClick={() => setShown(several)}>While away</Button>
+      {shown ? <SentMoment news={shown} onDone={() => setShown(null)} onSee={() => setShown(null)} /> : null}
+    </div>
+  );
+}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -243,6 +269,9 @@ function Patterns() {
         </Section>
         <Section title="Tab bar">
           <div className="-mx-5"><TabBar placement="static" /></div>
+        </Section>
+        <Section title="Sent moment">
+          <SentDemo />
         </Section>
         <Section title="Job card">
           <div className="relative mt-[18px] grid grid-cols-[minmax(0,1fr)]">

@@ -579,6 +579,12 @@ Do: `public/boards/` holds each board's own icon from its website (Greenhouse, A
 **Done when:** `skipped-test`, `swipe-batch-test` and `feed-sql-test` PASS; on a production build a drag from the logo, a drag from the card and a 60 px flick swipe, a slow 60 px drag springs back, and the skipped flow runs from "caught up" to "That's every job you skipped".
 Done 1 Nov: all of the above PASS on a production build as a throwaway user (6 mock jobs: 3 skipped by drag, 3 by button; the skipped view showed 6, one applied: 1 application, 1 right swipe, 5 left). Live forms read by each adapter's inspect step, nothing filled: Greenhouse 2 of 2, Keka 2 of 2, Ashby 1 of 2 (UiPath's required "Interview Recording Consent" stops the run before filling; it should be asked of the user as a needs-you question, not refused). Real users, last 7 days: Greenhouse 17 sent 0 failed, Ashby 29 sent 8 failed, Keka 53 sent 10 failed.
 
+### [x] T106 — The "Sent!" moment (1 Nov, owner)
+Why: an application going out is the big moment in the app, and the user should feel it; until now it was a 1.6 s line in the after-swipe toast, or nothing when they were elsewhere.
+Do: `/api/applications/summary?since=` adds the applications sent after `since` (one indexed read when none); the shell's poller keeps `since` per device in `localStorage` (a first visit starts from now) and `components/sent-celebration.tsx` shows the moment on any signed-in page, waiting for the needs-you sheet; the runner sends a "Sent to X" push after a confirmed submit. See DESIGN.md.
+**Done when:** on a production build an application marked submitted shows the moment within one poll; it does not come back after "Keep going" or a reload; two sent while away show as one card; a new device does not replay history.
+Done 1 Nov: all of the above on a production build as a throwaway user (shown 5.7 s after the status changed; "2 sent!" on return; nothing on a new device). Light, dark and reduced motion checked in `/dev/ui`.
+
 ## Phase K — Naukri and LinkedIn through the user's own account (owner, 29 Oct)
 
 Starts only when Phase J is done: T94 (Lever handoff), T95 (SmartRecruiters), T96 (Keka) in `APPLY_BOARDS`, T97 (board report). Rules in CLAUDE.md and ARCHITECTURE §6.20.
