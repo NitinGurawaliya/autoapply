@@ -1,7 +1,8 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { buttonVariants } from "@/components/ui/button";
-import { Tag, AccentPill } from "@/components/ui/chip";
+import { AccentPill } from "@/components/ui/chip";
 import { Eyebrow } from "@/components/ui/eyebrow";
 import { Icon } from "@/components/ui/icons";
 import { BoardMark, CompanyMark, MatchBadge } from "@/components/ui/marks";
@@ -11,10 +12,11 @@ import { BackTopBar } from "@/components/patterns/top-bar";
 import { getCurrentUser } from "@/lib/auth";
 import { boardLabel } from "@/lib/board-label";
 import { db } from "@/lib/db";
-import { feedHref } from "@/lib/feed-url";
+import { describe, previewCount, type DescriptionBlock } from "@/lib/description";
+import { feedHref, feedQuery } from "@/lib/feed-url";
 import { APPLY_BOARDS, DEFAULT_FEED_DAYS, DEFAULT_PLACES, listFeed, parseFeedFilters } from "@/modules/jobs";
 import { FeedBackLink } from "./feed-back-link";
-import { JobActions } from "./job-actions";
+import { JobActions, NextJobLink, type NextJob } from "./job-actions";
 
 type Query = Record<string, string | string[] | undefined>;
 
@@ -31,18 +33,46 @@ function postedLabel(postedAt: Date) {
   return daysAgo === 0 ? "Posted today" : `Posted ${daysAgo}d ago`;
 }
 
-/** The description is stored as one run of plain text (modules/jobs/normalize.ts): a few sentences per paragraph. */
-function paragraphs(text: string) {
-  const sentences = text.split(/(?<=[.!?])\s+(?=[A-Z0-9•\-–])/);
-  const out: string[] = [];
-  for (let index = 0; index < sentences.length; index += 3) out.push(sentences.slice(index, index + 3).join(" "));
-  return out.filter(Boolean);
+/** "Today", "Yesterday", "3 days ago", for the facts panel. */
+function postedFact(postedAt: Date) {
+  const daysAgo = Math.max(0, Math.floor((Date.now() - postedAt.getTime()) / 86_400_000));
+  return daysAgo === 0 ? "Today" : daysAgo === 1 ? "Yesterday" : `${daysAgo} days ago`;
+}
+
+/** One fact in the panel: a small label over its value. */
+function Fact({ label, children, wide }: { label: string; children: ReactNode; wide?: boolean }) {
+  return (
+    <div className={wide ? "col-span-2 flex min-w-0 flex-col gap-0.5" : "flex min-w-0 flex-col gap-0.5"}>
+      <dt className="type-caption text-muted-foreground">{label}</dt>
+      <dd className="m-0 flex min-w-0 items-center gap-2 text-[15px] leading-snug font-semibold break-words">{children}</dd>
+    </div>
+  );
+}
+
+/** One block of the description (lib/description.ts), as plain text: nothing from the job board is rendered as markup. */
+function Block({ block }: { block: DescriptionBlock }) {
+  if (block.kind === "heading") {
+    return <h3 className="m-0 pt-2 text-[17px] leading-snug font-semibold text-balance">{block.text.replace(/\s*:$/, "")}</h3>;
+  }
+  if (block.kind === "list") {
+    return (
+      <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
+        {block.items.map((item, index) => (
+          <li key={index} className="relative pl-5 text-pretty before:absolute before:top-[0.68em] before:left-1 before:size-1.5 before:rounded-full before:bg-foreground">
+            {item.label ? <span className="font-semibold">{item.label}: </span> : null}
+            {item.text}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  return <p className="m-0 text-pretty">{block.text}</p>;
 }
 
 /**
- * One job in full (opened from the feed card): what the card says, the whole description, and Apply or Skip, which
- * swipe it like the deck does and go back to the feed. The query is the feed's filters, so the match score is the one
- * on the card and Back returns to the same feed.
+ * One job in full (opened from the feed card): what the card says, the facts, the whole description set out to read,
+ * and Apply or Skip, which swipe it like the deck does and open the next job in the same feed (job-actions.tsx). The
+ * query is the feed's filters, so the match score is the one on the card and Back returns to the same feed.
  */
 export default async function JobPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Query> }) {
   const user = await getCurrentUser();
@@ -97,14 +127,23 @@ export default async function JobPage({ params, searchParams }: { params: Promis
   const match = feed.find((item) => item.id === job.id);
   const board = boardLabel(job.source);
   const remote = REMOTE_LABEL[job.remoteType];
-  const where = [job.location, remote].filter(Boolean).join(" · ") || "Location not listed";
   const years = match ? match.requiredYears : job.experienceMin;
-  const asks = years == null ? null : years <= 0 ? "Entry level" : `Asks ${years}+ yrs`;
+  const experience = years == null ? "Not stated" : years <= 0 ? "Entry level" : `${years}+ years`;
   const posted = postedLabel(job.postedAt);
   const why = match?.reason ? (/[.!?]$/.test(match.reason) ? match.reason : `${match.reason}.`) : null;
-  const text = paragraphs(job.description);
-  const lead = text.slice(0, 4);
-  const rest = text.slice(4);
+  const blocks = describe(job.description);
+  const shown = previewCount(blocks);
+  const lead = blocks.slice(0, shown);
+  const rest = blocks.slice(shown);
+
+  // The job after this one in the same feed, as the deck would show it next (the feed already leaves out every job
+  // the user swiped). Opened from elsewhere, the first job of the feed.
+  const here = feed.findIndex((item) => item.id === job.id);
+  const following = (here >= 0 ? feed.slice(here + 1) : feed).find((item) => item.id !== job.id);
+  const nextQuery = feedQuery(filters, { boards: APPLY_BOARDS, places: DEFAULT_PLACES, days: DEFAULT_FEED_DAYS });
+  const next: NextJob | null = following
+    ? { id: following.id, href: nextQuery ? `/jobs/${following.id}?${nextQuery}` : `/jobs/${following.id}`, company: following.company, title: following.title }
+    : null;
 
   return (
     <>
@@ -125,87 +164,98 @@ export default async function JobPage({ params, searchParams }: { params: Promis
             </div>
           </div>
           {match ? <MatchBadge score={match.score} tier={match.tier} className="absolute top-0 right-0" /> : null}
-          <h1 className="m-0 mt-4 type-display-md break-words">{job.title}</h1>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {match?.isNew ? <AccentPill className="h-[34px] px-3 text-sm">New</AccentPill> : null}
-            <Tag>{where}</Tag>
-            {asks ? <Tag>{asks}</Tag> : null}
-            {board ? (
-              <Tag className="gap-2 text-muted-foreground">
-                <BoardMark board={board} className="text-foreground" />
-                via {board}
-              </Tag>
-            ) : null}
-          </div>
+          <h1 className="m-0 mt-4 type-display-md break-words text-balance">{job.title}</h1>
+          {match?.isNew ? <AccentPill className="mt-1 h-7 self-start px-2.5 text-xs">New</AccentPill> : null}
         </header>
 
+        {/* The facts at a glance, each with its label, instead of chips that wrap into each other. */}
+        <dl aria-label="The job at a glance" className="m-0 mt-5 grid grid-cols-2 gap-x-4 gap-y-3.5 rounded-panel border-[1.5px] border-line bg-surface p-4">
+          <Fact label="Location" wide>
+            {job.location || "Not listed"}
+          </Fact>
+          <Fact label="Work type">{remote ?? "Not stated"}</Fact>
+          <Fact label="Experience">{experience}</Fact>
+          <Fact label="Posted">{postedFact(job.postedAt)}</Fact>
+          <Fact label="Job board">
+            {board ? (
+              <>
+                <BoardMark board={board} className="text-foreground" />
+                <span className="truncate">{board}</span>
+              </>
+            ) : (
+              "Company site"
+            )}
+          </Fact>
+        </dl>
+
         {why ? (
-          <section aria-label="Why your agent picked it" className="mt-6 flex flex-col gap-1.5 rounded-panel border-[1.5px] border-line bg-surface p-4">
+          <section aria-label="Why your agent picked it" className="mt-4 flex flex-col gap-1.5 rounded-panel border-[1.5px] border-line bg-surface p-4">
             <Eyebrow as="h2">Why your agent picked it</Eyebrow>
             <p className="m-0 type-lead text-pretty">{why}</p>
-            {match?.hint ? <p className="m-0 text-sm text-muted-foreground">{match.hint}</p> : null}
+            {match?.hint ? <p className="m-0 type-caption text-muted-foreground">{match.hint}</p> : null}
           </section>
         ) : null}
 
-        <section aria-label="About the job" className="mt-7 flex flex-col gap-3">
-          <Eyebrow as="h2">About the job</Eyebrow>
-          {text.length === 0 ? (
-            <p className="m-0 text-[15px] text-muted-foreground">The company did not post a description. The full posting is on {board ?? "their site"}.</p>
+        <section aria-labelledby="about-the-job" className="mt-8 flex flex-col gap-4">
+          <Eyebrow as="h2" id="about-the-job">
+            About the job
+          </Eyebrow>
+          {blocks.length === 0 ? (
+            <p className="m-0 text-base leading-[1.65] text-muted-foreground">The company did not post a description. The full posting is on {board ?? "their site"}.</p>
           ) : (
-            <>
-              {lead.map((paragraph, index) => (
-                <p key={index} className="m-0 text-[15px] leading-relaxed text-pretty">
-                  {paragraph}
-                </p>
+            // Body text at 16 px with room between lines; headings, paragraphs and lists come from the text itself.
+            <div className="flex flex-col gap-4 text-base leading-[1.65]">
+              {lead.map((block, index) => (
+                <Block key={index} block={block} />
               ))}
               {rest.length > 0 ? (
-                <details className="group flex flex-col gap-3">
-                  <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1 text-[15px] font-semibold underline underline-offset-3 marker:hidden group-open:hidden">
+                <details className="group flex flex-col gap-4">
+                  <summary className="flex min-h-12 cursor-pointer list-none items-center justify-center gap-1.5 rounded-control border-[1.5px] border-line text-[15px] font-semibold marker:hidden group-open:hidden">
                     Read the full description
+                    <Icon name="chevronRight" size={16} strokeWidth={2.5} className="rotate-90" />
                   </summary>
-                  <div className="flex flex-col gap-3">
-                    {rest.map((paragraph, index) => (
-                      <p key={index} className="m-0 text-[15px] leading-relaxed text-pretty">
-                        {paragraph}
-                      </p>
+                  <div className="flex flex-col gap-4">
+                    {rest.map((block, index) => (
+                      <Block key={index} block={block} />
                     ))}
                   </div>
                 </details>
               ) : null}
-            </>
+            </div>
           )}
           <a
             href={job.applyUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex min-h-11 items-center gap-1.5 self-start text-sm font-semibold text-muted-foreground underline underline-offset-3"
+            className="inline-flex min-h-11 items-center gap-1.5 self-start type-caption font-semibold text-muted-foreground underline underline-offset-3"
           >
             Original posting{board ? ` on ${board}` : ""}
             <Icon name="external" size={14} />
           </a>
         </section>
 
-        <div className="sticky bottom-[calc(82px+max(0px,env(safe-area-inset-bottom)-24px))] z-10 -mx-5 mt-auto border-t-[1.5px] border-line bg-background px-5 pt-3 pb-3">
-          {application ? (
-            <Link href={`/applications/${application.id}`} className={buttonVariants({ variant: "primary", size: "xl", className: "w-full" })}>
-              See your application
-            </Link>
-          ) : swipe ? (
+        <div className="sticky bottom-[calc(82px+max(0px,env(safe-area-inset-bottom)-24px))] z-10 -mx-5 mt-8 border-t-[1.5px] border-line bg-background px-5 pt-3 pb-3">
+          {application || swipe || job.closedAt ? (
+            // Already decided, or closed: say so, and keep going through the feed from here.
             <div className="flex flex-col gap-2">
-              <p className="m-0 text-center text-sm text-muted-foreground">You skipped this job.</p>
-              <Link href={backHref} className={buttonVariants({ variant: "line", size: "lg", className: "w-full" })}>
-                Back to the feed
-              </Link>
-            </div>
-          ) : job.closedAt ? (
-            <div className="flex flex-col gap-2">
-              <p className="m-0 text-center text-sm text-muted-foreground">The company has closed this job.</p>
-              <Link href={backHref} className={buttonVariants({ variant: "line", size: "lg", className: "w-full" })}>
-                Back to the feed
-              </Link>
+              <p className="m-0 text-center type-caption text-muted-foreground">
+                {application ? "Your agent has this one." : swipe ? "You skipped this job." : "The company has closed this job."}
+              </p>
+              <div className="flex gap-3">
+                {application ? (
+                  <Link href={`/applications/${application.id}`} className={buttonVariants({ variant: "line", size: "lg", className: "flex-1" })}>
+                    See your application
+                  </Link>
+                ) : (
+                  <Link href={backHref} className={buttonVariants({ variant: "line", size: "lg", className: "flex-1" })}>
+                    Back to the feed
+                  </Link>
+                )}
+                {next ? <NextJobLink jobId={job.id} next={next} className={buttonVariants({ variant: "primary", size: "lg", className: "flex-1" })} /> : null}
+              </div>
             </div>
           ) : (
-            <JobActions jobId={job.id} company={job.company.name} backHref={backHref} />
+            <JobActions jobId={job.id} company={job.company.name} backHref={backHref} next={next} />
           )}
         </div>
       </div>

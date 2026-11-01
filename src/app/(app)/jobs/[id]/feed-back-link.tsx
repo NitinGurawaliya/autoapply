@@ -7,6 +7,14 @@ import { useRouter } from "next/navigation";
 // Set by the feed's deck when it opens a job (feed/swipe-deck.tsx markOpenedFromFeed).
 const OPENED_FROM_FEED = "swipeapply:opened-from-feed";
 
+// Job pages that took the mark, this tab: their Apply and Skip pass it on to the next job they open (job-actions.tsx).
+const fromFeed = new Set<string>();
+
+/** Whether this job's page was opened from the deck (directly, or as the next job after one that was). */
+export function openedFromFeed(jobId: string) {
+  return fromFeed.has(jobId);
+}
+
 /** The deck calls this as it opens a job's page, so that page's Back can return through the browser's history. */
 export function markOpenedFromFeed(jobId: string) {
   try {
@@ -26,14 +34,15 @@ export function markOpenedFromFeed(jobId: string) {
 export function FeedBackLink({ jobId, href, className, ariaLabel, children }: { jobId: string; href: string; className?: string; ariaLabel?: string; children: ReactNode }) {
   const router = useRouter();
   // Read only when Back is pressed, so a ref, not state.
-  const fromFeed = useRef(false);
+  const cameFromFeed = useRef(false);
 
   useEffect(() => {
     try {
       if (sessionStorage.getItem(OPENED_FROM_FEED) !== jobId) return;
       sessionStorage.removeItem(OPENED_FROM_FEED);
       // Only ever set to true: React runs this twice in development, and the second run finds the mark already taken.
-      fromFeed.current = true;
+      cameFromFeed.current = true;
+      fromFeed.add(jobId);
     } catch {
       // Storage blocked: stay an ordinary link.
     }
@@ -45,7 +54,7 @@ export function FeedBackLink({ jobId, href, className, ariaLabel, children }: { 
       aria-label={ariaLabel}
       className={className}
       onClick={(event) => {
-        if (!fromFeed.current || window.history.length < 2 || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+        if (!cameFromFeed.current || window.history.length < 2 || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
         event.preventDefault();
         router.back();
       }}

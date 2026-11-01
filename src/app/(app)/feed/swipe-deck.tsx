@@ -102,6 +102,11 @@ export function markSwiped(jobId: string) {
   swipedThisVisit.add(jobId);
 }
 
+/** A swipe from a job's page that was not saved: its card comes back to the deck. */
+export function unmarkSwiped(jobId: string) {
+  swipedThisVisit.delete(jobId);
+}
+
 export function SwipeDeck({
   jobs,
   query,

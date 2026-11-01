@@ -567,6 +567,12 @@ Do: a tester drove every page as throwaway @swipeapply.local users on a producti
 **Done when:** typecheck, lint and the backend checks pass; navigation-cache-smoke passes on a production build; Back from a job page is under 100 ms with no feed request, also after a minute on the job page.
 Done 1 Nov: 14 backend checks and navigation-cache PASS; Back 54 / 49 / 38 ms (first, second, after 65 s), was 1.9 / 0.9 / 6.2 s; swipe through the API 3.1-4.6 s, was 4.1-7.5 s; 0 detail prefetches on the applications list, was 2 per row. Not done: the 60 s cache lifetimes (a tuning question); the Docker worker cannot open a mock form on the host (`urls.ts` allows only localhost and the APP_URL host), so a mock run end to end needs an in-process run.
 
+### [x] T104 — Job page: readable, and Apply or Skip goes to the next job (1 Nov, owner)
+Why: the job page read as one wall of text (descriptions are stored with every tag and line break stripped), and applying from it dropped the user back on the feed instead of moving on like the deck.
+Do: `lib/description.ts` recovers headings, paragraphs and lists from the plain text (section names, opening questions, "Label: text" lines, sentences that open like bullets, flattened bullet runs), never adding, dropping or reordering a word; the page shows a facts panel, 16 px body text and the structured description; Skip and Apply move on at once to the next job of the same feed, which the page prefetches in full, and save the swipe on the way (a swipe not saved puts the job back and says so); the next page replaces this one in history, so Back still goes to the feed.
+**Done when:** `description-test` PASS and, over 400 stored descriptions, joining the blocks gives every description back; on a production build Skip and Apply open the next job without a skeleton and Back returns to the feed.
+Done 1 Nov: description-test PASS (23 checks); 400 real descriptions, 0 with text lost, 343 with headings, 629 lists, paragraphs over 900 characters 131 → 3 (two Korean); production build, mock jobs: Skip 99 ms, Apply 73 ms (the applying toast follows), Back 126 ms, no console errors. A tap within ~0.2 s of a page opening, before its next page has loaded, still shows the skeleton for about a second.
+
 ## Phase K — Naukri and LinkedIn through the user's own account (owner, 29 Oct)
 
 Starts only when Phase J is done: T94 (Lever handoff), T95 (SmartRecruiters), T96 (Keka) in `APPLY_BOARDS`, T97 (board report). Rules in CLAUDE.md and ARCHITECTURE §6.20.
