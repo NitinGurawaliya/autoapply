@@ -4,6 +4,8 @@ const LABELS: Record<string, string> = {
   greenhouse: "Greenhouse",
   lever: "Lever",
   ashby: "Ashby",
+  smartrecruiters: "SmartRecruiters",
+  keka: "Keka",
   workday: "Workday",
   zohorecruit: "Zoho Recruit",
 };

@@ -32,6 +32,8 @@ export type JobCardData = {
 /**
  * The swipe card from design/feed.html. Every card has the same frame whatever the job: long names and titles are cut
  * with an ellipsis, and the facts and the board sit on the bottom edge, so the deck never changes shape between cards.
+ * The title is two lines at most: at the card's minimum height (400 px, phones under 740 px tall) a three-line title
+ * left the reason only two and a half lines, and the half line was cut through the glyphs (1 Nov, Smartsheet).
  * Stamps come from the deck, which animates them.
  */
 export function JobCard({ job, stamps }: { job: JobCardData; stamps?: ReactNode }) {
@@ -47,7 +49,7 @@ export function JobCard({ job, stamps }: { job: JobCardData; stamps?: ReactNode 
             <span className="truncate text-sm text-muted-foreground">{job.posted}</span>
           </div>
         </div>
-        <h2 className="m-0 mt-5 line-clamp-3 type-display-lg break-words text-balance" title={job.role}>
+        <h2 className="m-0 mt-5 line-clamp-2 type-display-lg break-words text-balance" title={job.role}>
           {job.role}
         </h2>
         <div className="mt-[18px] flex min-h-0 flex-col gap-1.5">
