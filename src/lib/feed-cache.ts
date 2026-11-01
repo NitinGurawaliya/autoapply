@@ -24,6 +24,20 @@ export function rememberFeed(userId: string, filtersKey: string, value: unknown)
   cache.set(`${userId}\u0000${filtersKey}`, { at: Date.now(), value });
 }
 
+/**
+ * The match score this user's feed showed for a job, from any of their cached feeds still under a minute old; null when
+ * none holds it (an older feed, another server instance, a job opened by its link). A swipe checks min_match_score
+ * against this, the number on the card, so the card and the swipe cannot disagree (1 Nov verification, finding 3).
+ */
+export function cachedFeedScore(userId: string, jobId: string): number | null {
+  for (const [key, entry] of cache) {
+    if (!key.startsWith(`${userId}\u0000`) || Date.now() - entry.at > TTL_MS || !Array.isArray(entry.value)) continue;
+    const job = (entry.value as Array<{ id?: unknown; score?: unknown }>).find((item) => item?.id === jobId);
+    if (job && typeof job.score === "number") return job.score;
+  }
+  return null;
+}
+
 /** Drop every cached feed of this user (all filters): after a swipe, a profile edit or a change of preferred locations. */
 export function forgetFeed(userId: string) {
   for (const key of cache.keys()) if (key.startsWith(`${userId}\u0000`)) cache.delete(key);

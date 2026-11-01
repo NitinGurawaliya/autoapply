@@ -147,8 +147,6 @@ async function execute(applicationId: string, options: { person?: boolean }) {
   }
 
   const rules = loadRules();
-  const attempt = application.attempt + 1;
-  await setApp(applicationId, { attempt, status: "inspecting" });
 
   // The reaper treats a running application whose heartbeat stops as belonging to a dead worker.
   const touch = () => db.application.updateMany({ where: { id: applicationId, status: { not: "cancelled" } }, data: { heartbeatAt: new Date() } }).catch(() => undefined);
@@ -168,6 +166,10 @@ async function execute(applicationId: string, options: { person?: boolean }) {
     await block(applicationId, "test_profile_mock_only", "Test profiles can only apply on the mock form");
     return;
   }
+  // An attempt, and "Reading the form", only once the guards above let the run go: a URL refused on the spot is not an
+  // attempt (1 Nov verification, finding 17). Until here the application stays queued; the reaper keys on heartbeatAt.
+  const attempt = application.attempt + 1;
+  await setApp(applicationId, { attempt, status: "inspecting" });
   // A missing resume file cannot be fixed by trying again: say so before any browser opens (16 Oct QA: it was found
   // only after the form was filled, and the run was retried).
   // An empty file counts as missing: Greenhouse waits forever on a 0-byte upload (18 Oct: 7 runs of one user, each

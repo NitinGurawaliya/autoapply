@@ -183,6 +183,8 @@ export function scoreJob(
     country: string;
     remoteType: string;
     experienceMin: number | null;
+    /** The stored track (Job.track, written at ingest from classifyTitle); null or missing = classified from the title. */
+    track?: string | null;
     /** Closeness to the resume by meaning (semantic.ts jobSimilarity); null or missing = match by tracks. */
     similarity?: number | null;
     /** The model's verdict on this job for this resume (semantic.ts judgeJobs). */
@@ -193,8 +195,10 @@ export function scoreJob(
   const title = job.title.toLowerCase();
   const description = job.description.toLowerCase();
   const skillHits = candidate.skills.filter((skill) => mentions(title, skill) || mentions(description, skill));
-  // What the posting really asks for comes from its title and text, never from a stored guess.
-  return scoreFeatures({ title: job.title, track: classifyTitle(job.title).track, similarity: job.similarity, judgement: job.judgement, country: job.country, remoteType: job.remoteType, requiredYears: requiredYears(job.title, job.description), skillHits }, candidate);
+  // The same features the feed scores with (listFeed's scoreAll): the stored track and years, each read from the title
+  // and text only when not stored. Two scorers fed differently showed a card the swipe then refused, and the reverse
+  // (1 Nov verification, finding 3).
+  return scoreFeatures({ title: job.title, track: job.track ?? classifyTitle(job.title).track, similarity: job.similarity, judgement: job.judgement, country: job.country, remoteType: job.remoteType, requiredYears: job.experienceMin ?? requiredYears(job.title, job.description), skillHits }, candidate);
 }
 
 /**
@@ -532,7 +536,8 @@ async function scoreFeed(userId: string, filters: FeedFilters): Promise<FeedJob[
     .map((job) => {
       const hits = new Set(job.hits);
       const match = scoreFeatures(
-        { title: job.title, track: job.track, similarity: job.similarity, judgement: judgements.get(job.id) ?? null, country: job.country, remoteType: job.remoteType, requiredYears: job.experienceMin, skillHits: skills.filter((_, index) => hits.has(index)) },
+        // A job stored without a track (a fixture, a row from before tracks) is classified from its title, as scoreJob does.
+        { title: job.title, track: job.track ?? classifyTitle(job.title).track, similarity: job.similarity, judgement: judgements.get(job.id) ?? null, country: job.country, remoteType: job.remoteType, requiredYears: job.experienceMin, skillHits: skills.filter((_, index) => hits.has(index)) },
         {
           currentTitle: profile?.currentTitle ?? null,
           skills,

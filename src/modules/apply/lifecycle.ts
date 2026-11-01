@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { forgetFeed } from "@/lib/feed-cache";
+import { cachedFeedScore, forgetFeed } from "@/lib/feed-cache";
 import { APPLY_QUEUES, enqueueApply } from "@/lib/queue";
 import { check, historyFor, loadRules, writeEvent } from "@/modules/governance";
 import { APPLY_BOARDS, jobSimilarity, judgeJobs, profileVector, scoreJob, tracksOf } from "@/modules/jobs";
@@ -10,9 +10,17 @@ export const CANCELLABLE = ["queued", "inspecting", "filling", "needs_input"];
 export const RETRYABLE = ["failed", "cancelled"];
 
 type ScoredProfile = { id: string; currentTitle: string | null; skills: unknown; experience: unknown; education: unknown; tracks: string[]; yearsExperience: number | null; embeddedFrom: string | null };
-type ScoredJob = { id: string; title: string; description: string; contentHash: string | null; country: string; remoteType: string; experienceMin: number | null };
+type ScoredJob = { id: string; title: string; description: string; contentHash: string | null; country: string; remoteType: string; experienceMin: number | null; track: string | null };
 
-/** The match score the swipe-time rules use: the same for a first swipe and for a retry, and the same as the feed's. */
+/**
+ * The match score the swipe-time rules use: the score this user's feed showed on the card when the feed is still
+ * cached (lib/feed-cache.ts), so the card and the swipe agree; else worked out here the way the feed does it.
+ */
+async function swipeScore(userId: string, profile: ScoredProfile, job: ScoredJob, seen = cachedFeedScore(userId, job.id)) {
+  return seen ?? candidateScore(profile, job);
+}
+
+/** The match score worked out for one job: the same for a first swipe and for a retry, from the feed's stored features. */
 export async function candidateScore(profile: ScoredProfile, job: ScoredJob) {
   const similarity = await jobSimilarity(job.id, await profileVector(profile));
   // The verdict the feed got for this job (cached), so a card the feed showed passes the same check.
@@ -78,12 +86,12 @@ export async function retryApplication(applicationId: string, userId: string): P
   if (job.closedAt) return { ok: false, reason: "blocked", rule: "job_closed" };
   if (!boardSupported(job.source)) return { ok: false, reason: "blocked", rule: "board_not_supported" };
 
-  // This application is failed or cancelled, so it does not count against itself in the history.
-  const history = await historyFor(userId, { title: job.title, companyId: job.companyId });
+  // This application is failed or cancelled, so it does not count against itself in the history. Both reads at once.
+  const [history, score] = await Promise.all([historyFor(userId, { title: job.title, companyId: job.companyId }), swipeScore(userId, profile, job)]);
   const decision = await check("swipe_right", {
     applicationId,
     profileExists: true,
-    score: await candidateScore(profile, job),
+    score,
     applicationsToday: history.applicationsToday,
     duplicateRole: history.duplicateRole,
     companyWeekCount: history.companyWeekCount,
@@ -97,7 +105,7 @@ export async function retryApplication(applicationId: string, userId: string): P
   });
   if (claimed.count === 0) return { ok: false, reason: "not_retryable" };
   // The user's Retry starts afresh, also after a person handoff (lib/queue.ts withPerson).
-  const queued = await enqueueApply(applicationId, 0, { person: false });
+  const queued = await enqueueApply(applicationId, 0, { person: false, job: { source: job.source, applyUrl: job.applyUrl } });
   if (!queued) {
     await db.application.update({ where: { id: applicationId }, data: { status: "failed", error: "Could not queue the retry" } });
     return { ok: false, reason: "queue_failed" };
@@ -142,14 +150,26 @@ export type SwipeResult =
  * A right swipe: one place for every rule, so swiping fast on many jobs behaves the same as swiping on one.
  * A swipe refused because the queue is full is not recorded at all, so the job stays in the feed to swipe again later.
  */
-export async function swipeRight(userId: string, jobId: string, enqueue: (applicationId: string) => Promise<string | null> = enqueueApply): Promise<SwipeResult> {
-  const job = await db.job.findUnique({ where: { id: jobId } });
+export async function swipeRight(
+  userId: string,
+  jobId: string,
+  enqueue: (applicationId: string, job: { source: string; applyUrl: string }) => Promise<string | null> = (applicationId, job) => enqueueApply(applicationId, 0, { job }),
+): Promise<SwipeResult> {
+  // The card's score, read before this swipe clears the cached feed (forgetFeed below).
+  const seen = cachedFeedScore(userId, jobId);
+  // Each read is a round trip of 0.3-0.45 s to the database (1 Nov), so the two independent ones go together. A job
+  // already swiped is not looked up first: the swipe's unique key refuses it in the transaction (P2002 below).
+  const [job, profile] = await Promise.all([db.job.findUnique({ where: { id: jobId } }), db.profile.findUnique({ where: { userId } })]);
   if (!job) return { ok: false, reason: "not_found" };
-  if (await db.swipe.findUnique({ where: { userId_jobId: { userId, jobId } } })) return { ok: false, reason: "already_swiped" };
-  const profile = await db.profile.findUnique({ where: { userId } });
   if (!profile) return { ok: false, reason: "profile_required" };
   if (job.closedAt) return { ok: false, reason: "blocked", rule: "job_closed" };
   if (!boardSupported(job.source)) return { ok: false, reason: "blocked", rule: "board_not_supported" };
+
+  // Started now and awaited after the transaction, so its reads (and the model, for a job the feed never judged) run
+  // while the swipe is saved. Wasted only when the swipe ends as already swiped or a full queue; a failure here is
+  // still thrown where it is awaited, as before.
+  const scoring = swipeScore(userId, profile, job, seen);
+  scoring.catch(() => undefined);
 
   let application;
   let history;
@@ -177,7 +197,7 @@ export async function swipeRight(userId: string, jobId: string, enqueue: (applic
   const decision = await check("swipe_right", {
     applicationId: application.id,
     profileExists: true,
-    score: await candidateScore(profile, job),
+    score: await scoring,
     applicationsToday: history.applicationsToday,
     duplicateRole: history.duplicateRole,
     companyWeekCount: history.companyWeekCount,
@@ -187,7 +207,7 @@ export async function swipeRight(userId: string, jobId: string, enqueue: (applic
     await db.application.update({ where: { id: application.id }, data: { status: "blocked", error: decision.rule } });
     return { ok: false, reason: "blocked", rule: decision.rule ?? "blocked", applicationId: application.id };
   }
-  const queued = await enqueue(application.id);
+  const queued = await enqueue(application.id, { source: job.source, applyUrl: job.applyUrl });
   if (!queued) {
     await db.application.update({ where: { id: application.id }, data: { status: "failed", error: "Could not queue the application" } });
     return { ok: false, reason: "queue_failed" };

@@ -62,14 +62,15 @@ check("no automatic retry or reopen after a possible submission (all 192 combina
 
 // Routing: a person presses Submit on Ashby, so its applications go to the queue only a worker with a screen takes.
 check("Ashby applications go to the handoff queue", queueFor("ashby") === HANDOFF_QUEUE);
-check("Greenhouse, Lever and mock applications go to the normal queue", ["greenhouse", "lever", "mock"].every((source) => queueFor(source) === "apply"));
+check("Greenhouse and mock applications go to the normal queue", ["greenhouse", "mock"].every((source) => queueFor(source) === "apply"));
+check("Lever and Keka applications go to the handoff queue (T94, T96)", ["lever", "keka"].every((source) => queueFor(source) === HANDOFF_QUEUE));
 check("an application whose board is unknown goes to the normal queue", queueFor(undefined) === "apply");
 check("Ashby at protection none goes to the queue a Docker worker takes", queueFor("ashby", "job_apply_none") === UNPROTECTED_QUEUE);
 check("Ashby at low, medium, high or an unseen level goes to the screen queue", ["job_apply_low", "job_apply_medium", "job_apply_high", "job_apply_very_high"].every((level) => queueFor("ashby", level) === HANDOFF_QUEUE));
 check("Ashby with an unread level goes to the screen queue", queueFor("ashby", null) === HANDOFF_QUEUE && queueFor("ashby", undefined) === HANDOFF_QUEUE);
-check("a level never moves Greenhouse or Lever off the normal queue", queueFor("greenhouse", "job_apply_none") === "apply" && queueFor("lever", "job_apply_high") === "apply");
+check("a level never moves Greenhouse off the normal queue", queueFor("greenhouse", "job_apply_none") === "apply" && queueFor("greenhouse", "job_apply_high") === "apply");
 check("every apply queue is read by code that cancels or reaps apply jobs", ["apply", HANDOFF_QUEUE, UNPROTECTED_QUEUE, PERSON_QUEUE].every((queue) => APPLY_QUEUES.includes(queue)));
-check("handoff boards are exactly Ashby", HANDOFF_BOARDS.length === 1 && HANDOFF_BOARDS[0] === "ashby");
+check("handoff boards are exactly Ashby, Keka and Lever", [...HANDOFF_BOARDS].sort().join(",") === "ashby,keka,lever");
 
 // The last run's Submit attempt, read from events (for a cancelled application's Retry).
 const at = (seconds: number) => new Date(Date.UTC(2026, 9, 21, 10, 0, seconds));

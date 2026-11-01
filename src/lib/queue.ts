@@ -92,10 +92,15 @@ export function withPerson(events: Array<{ type: string; message: string; create
   return last?.type === "ask_user";
 }
 
-/** `person`: true sends it to a person, false starts it afresh (the user's Retry); left out, it stays where it is. */
-export async function enqueueApply(applicationId: string, delaySeconds = 0, options: { person?: boolean } = {}) {
+/**
+ * `person`: true sends it to a person, false starts it afresh (the user's Retry); left out, it stays where it is.
+ * `job`: the application's job when the caller already read it (a swipe), so it is not read again.
+ */
+export async function enqueueApply(applicationId: string, delaySeconds = 0, options: { person?: boolean; job?: { source: string; applyUrl: string } } = {}) {
   const boss = await getBoss();
-  const [row] = await db.$queryRaw<Array<{ source: string; applyUrl: string }>>`
+  const [row] = options.job
+    ? [options.job]
+    : await db.$queryRaw<Array<{ source: string; applyUrl: string }>>`
     SELECT j.source, j."applyUrl" FROM "Application" a JOIN "Job" j ON j.id = a."jobId" WHERE a.id = ${applicationId}`;
   const handoff = Boolean(row && HANDOFF_BOARDS.includes(row.source));
   const person =

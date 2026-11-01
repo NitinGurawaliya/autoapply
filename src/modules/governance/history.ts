@@ -73,25 +73,36 @@ export async function feedHistory(userId: string, perCompanyPerWeek: number, now
   return { roles, companiesAtCap };
 }
 
-/** What the swipe-time rules need to know about this user's history with one job's role and company. */
+// Applications that are using, or waiting for, the shared worker. A user parked on a question is not one of them.
+const IN_FLIGHT = ["queued", "inspecting", "filling"];
+
+/**
+ * What the swipe-time rules need to know about this user's history with one job's role and company, in one statement:
+ * inside the swipe's transaction a Promise.all of four reads still ran one after another on its one connection, four
+ * round trips of 0.3-0.45 s each (1 Nov). The counts are dailyUsage's and the in-flight count; the counted applications
+ * come back as one list, compared by companyKey/roleKey here as before. Times cross as UTC epoch milliseconds, so the
+ * raw statement cannot shift them by a server time zone. `client` is the swipe's transaction when given.
+ */
 export async function historyFor(userId: string, job: { title: string; companyId: string }, now = new Date(), client: Reader = db) {
-  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  // Independent reads, so one round trip instead of five.
-  const [apps, company, inFlight, applicationsToday] = await Promise.all([
-    countedApplications(userId, client),
-    client.company.findUnique({ where: { id: job.companyId }, select: { name: true } }),
-    // Applications that are using, or waiting for, the shared worker. A user parked on a question is not one of them.
-    client.application.count({ where: { userId, status: { in: ["queued", "inspecting", "filling"] } } }),
-    dailyUsage(userId, client),
-  ]);
-  const thisCompany = companyKey(company?.name ?? job.companyId);
+  const weekAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+  const [row] = await client.$queryRaw<Array<{ companyName: string | null; inFlight: number; applicationsToday: number; apps: Array<{ title: string; companyName: string; at: number }> }>>`
+    SELECT
+      (SELECT co."name" FROM "Company" co WHERE co."id" = ${job.companyId}) AS "companyName",
+      (COUNT(a."id") FILTER (WHERE a."status" = ANY(${IN_FLIGHT})))::int AS "inFlight",
+      (COUNT(a."id") FILTER (WHERE a."createdAt" >= (to_timestamp(${startOfTodayUtc().getTime()}::double precision / 1000) AT TIME ZONE 'UTC') AND a."status" <> 'blocked'))::int AS "applicationsToday",
+      COALESCE(json_agg(json_build_object('title', j."title", 'companyName', c."name", 'at', (extract(epoch FROM a."createdAt") * 1000)::bigint)) FILTER (WHERE a."status" = ANY(${COUNTED})), '[]'::json) AS "apps"
+    FROM "Application" a
+    JOIN "Job" j ON j."id" = a."jobId"
+    JOIN "Company" c ON c."id" = j."companyId"
+    WHERE a."userId" = ${userId}`;
+  const thisCompany = companyKey(row?.companyName ?? job.companyId);
   const key = roleKey(thisCompany, job.title);
   let duplicateRole = false;
   let companyWeekCount = 0;
-  for (const app of apps) {
+  for (const app of row?.apps ?? []) {
     if (companyKey(app.companyName) !== thisCompany) continue;
     if (roleKey(thisCompany, app.title) === key) duplicateRole = true;
-    if (app.createdAt >= weekAgo) companyWeekCount += 1;
+    if (Number(app.at) >= weekAgo) companyWeekCount += 1;
   }
-  return { duplicateRole, companyWeekCount, applicationsToday, inFlight };
+  return { duplicateRole, companyWeekCount, applicationsToday: row?.applicationsToday ?? 0, inFlight: row?.inFlight ?? 0 };
 }
