@@ -89,6 +89,7 @@ async function main() {
       } else if (kind === "radio" || kind === "checkbox-group") has = (await target.evaluateAll((nodes) => nodes.some((n) => (n as HTMLInputElement).checked))) === true;
       else if (kind === "checkbox") has = await target.first().isChecked();
       else if (kind === "combobox") has = true; // react-select keeps its value outside the input; the adapter already confirmed the pick
+      else if (kind === "skills") has = (await session.page.locator('#skills-container input[type=hidden][name^="skills["]').count()) > 0; // Keka: tags, the box is cleared
       else has = ((await target.first().inputValue().catch(() => "")) ?? "").trim().length > 0;
       if (!has) bad.push(f.label.slice(0, 40));
     }

@@ -24,9 +24,10 @@ type ProfileFacts = {
   currentTitle: string | null;
   currentCompany: string | null;
   resumeKey: string;
-  /** The resume's roles and degrees, for the work-history and education sections (history.ts). */
+  /** The resume's roles, degrees and skills, for the work-history, education and skills sections (history.ts). */
   experience?: unknown;
   education?: unknown;
+  skills?: unknown;
 };
 
 function profileValue(profile: ProfileFacts, key: string) {
@@ -49,6 +50,13 @@ function profileValue(profile: ProfileFacts, key: string) {
   };
   const value = values[key];
   return value && value.trim() ? value : null;
+}
+
+const LINK_KEYS = new Set(["linkedin", "github", "portfolio"]);
+/** "https://x.dev", "www.x.dev", "linkedin.com/in/x", "github.com/x": an address, not a word or a sentence. */
+export function looksLikeLink(value: string) {
+  const text = value.trim();
+  return !/\s/.test(text) && /^(https?:\/\/|www\.)?[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}(\/\S*)?$/i.test(text);
 }
 
 // Keka's gender list says "Don't want to disclose" (T96).
@@ -344,21 +352,24 @@ export function resolveValues(
     // answer: a "City = Greater Delhi Area" saved on 8 Oct had kept beating the profile's Bangalore (10 Oct dry run).
     // The user's own answer to this very question beats the profile: it was asked because the profile value did not fit
     // the form (16 Oct, ElevenLabs "Location" wants a country; "India" was answered and then ignored for the city).
+    // A link field takes a link only: a "Yes" saved under `portfolio` from another board's question filled two Keka
+    // "Portfolio Link" boxes with "Yes" (1 Nov). An answer that is not one is passed over, as if it were not there.
+    const fits = (value: string | null | undefined) => !!value && (!LINK_KEYS.has(key) || looksLikeLink(value));
     const answeredHere = questionKey !== key ? bank.get(questionKey) : undefined;
-    if (answeredHere?.source === "user" && push(key, answeredHere.answer, "user")) continue;
+    if (answeredHere?.source === "user" && fits(answeredHere.answer) && push(key, answeredHere.answer, "user")) continue;
     let fromProfileFirst = def?.policy === "deterministic" ? profileValue(profile, key) : null;
     // A location search box finds "Bengaluru, India" by city or by country; the city alone fails on country-only lists.
     if (fromProfileFirst && key === "city" && field.type === "combobox" && profile.country && !fromProfileFirst.includes(",")) fromProfileFirst = `${fromProfileFirst}, ${profile.country}`;
-    if (fromProfileFirst && push(key, fromProfileFirst, "resume")) continue;
+    if (fits(fromProfileFirst) && push(key, fromProfileFirst!, "resume")) continue;
     const saved = bank.get(key);
-    if (saved) {
+    if (saved && fits(saved.answer)) {
       if (push(key, saved.answer, saved.source, eeo)) continue;
       ask(questionKey);
       continue;
     }
     const fromProfile = profileValue(profile, key);
-    if (fromProfile) {
-      if (push(key, fromProfile, "resume")) continue;
+    if (fits(fromProfile)) {
+      if (push(key, fromProfile!, "resume")) continue;
       ask(questionKey);
       continue;
     }

@@ -80,7 +80,9 @@ export const asksOpen = (question: string) => /^(what|which|when|where|who|whom|
  */
 async function newestSamePlace(userId: string, candidate: Candidate, kind: string | null) {
   const place = candidate.context;
-  if (!place?.country) return null;
+  // Only for a kind the wording itself shows: with none, every later general answer about the country counted as "the
+  // same kind" (1 Nov: "Other offer details" took "Preferred Location = Noida" over the user's "No").
+  if (!kind || !place?.country) return null;
   const norm = (text: string | undefined | null) => (text ?? "").trim().toLowerCase();
   const rows = await db.answer.findMany({
     where: { userId, source: "user", updatedAt: { gt: candidate.updatedAt }, context: { path: ["country"], equals: place.country } },

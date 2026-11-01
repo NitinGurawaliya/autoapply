@@ -51,7 +51,7 @@ export const ANSWER_KEYS: AnswerKeyDef[] = [
   { key: "disability", type: "select", policy: "default_only", default: EEO_DEFAULT, synonyms: [/disabilit/i] },
   { key: "pronouns", type: "select", policy: "default_only", default: EEO_DEFAULT, synonyms: [/pronouns/i] },
 
-  { key: "how_heard", type: "text", policy: "default_only", default: "Job board", synonyms: [/how\s*did\s*you\s*hear/i, /how\s*did\s*you\s*find/i] },
+  { key: "how_heard", type: "text", policy: "default_only", default: "Job board", synonyms: [/how\s*did\s*you\s*hear/i, /how\s*did\s*you\s*find/i, /how\s*did\s*you\s*(get\s*to\s*)?(know|learn)\s*about\s*(us|this)/i, /^(recruitment\s*|application\s*)?source$/i] },
   { key: "cover_letter", type: "long_text", policy: "ai_draft_ok", synonyms: [/cover\s*letter/i] },
   { key: "free_text", type: "long_text", policy: "ai_draft_ok", synonyms: [/additional\s*information/i, /anything\s*else/i] },
   // Essay drafts (modules/apply/essay.ts): the one-time permission, and the "best project" story drafted once and reused.

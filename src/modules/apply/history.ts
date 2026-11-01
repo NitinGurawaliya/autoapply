@@ -10,7 +10,7 @@ import { monthIndex } from "./derive";
 
 type Role = { title?: unknown; company?: unknown; start?: unknown; end?: unknown };
 type Degree = { school?: unknown; degree?: unknown; year?: unknown };
-export type HistoryProfile = { experience?: unknown; education?: unknown };
+export type HistoryProfile = { experience?: unknown; education?: unknown; skills?: unknown };
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const str = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : null);
@@ -63,6 +63,25 @@ export function historyValue(selector: string, profile: HistoryProfile): { value
   if (/^(start|end)-(year|date-year)--0$/.test(id)) {
     const years = degreeYears(str(degree?.year));
     return fromDegree(id.startsWith("start") ? years?.start ?? null : years?.end ?? null);
+  }
+
+  // Keka's rows (adapters/keka.ts): its date pickers take "June 2014", so a date the resume gives without a month is left out.
+  const monthYear = (value: unknown) => {
+    const parts = dateParts(str(value));
+    return parts?.month ? `${parts.month} ${parts.year}` : null;
+  };
+  if (id === "companyName_0") return fromRole(str(role?.company));
+  if (id === "designation_0") return fromRole(str(role?.title));
+  if (id === "isCurrentlyWorking_0") return role && isCurrent(str(role.end)) ? fromRole("Yes") : null;
+  if (id === "experienceDateOfJoining_0") return fromRole(monthYear(role?.start));
+  if (id === "dateOfRelieving_0") return role && !isCurrent(str(role.end)) ? fromRole(monthYear(role.end)) : null;
+  if (id === "degree_0") return fromDegree(str(degree?.degree));
+  if (id === "branch_0") return fromDegree(disciplineOf(str(degree?.degree)));
+  if (id === "university_0") return fromDegree(str(degree?.school));
+  // Keka's skills tag input: the resume's skills, one per line (the adapter adds each as a tag).
+  if (id === "skills") {
+    const skills = Array.isArray(profile.skills) ? profile.skills.map(str).filter((item): item is string => !!item).slice(0, 15) : [];
+    return skills.length ? { value: skills.join("\n"), basis: "from your resume's skills" } : null;
   }
   return null;
 }
