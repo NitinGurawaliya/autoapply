@@ -12,3 +12,4 @@ tests
 .git
 .github
 deploy
+*.zip
