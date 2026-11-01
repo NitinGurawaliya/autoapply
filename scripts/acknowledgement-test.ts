@@ -35,6 +35,15 @@ check("an optional acknowledgement is left alone", acknowledgementValue({ ...GH_
 check("ordinary questions are not acknowledgements", acknowledgementValue(field("How did you hear about Twilio?", "checkbox-group", ["LinkedIn", "Twitter"])) === null && acknowledgementValue(field("Have you ever been employed by Stripe?", "yesno", ["Yes", "No"])) === null);
 check("a choice with no single affirmative option is not guessed", acknowledgementValue(field("Do you agree to the privacy policy?", "select", ["Option A", "Option B"])) === null);
 
+// Consents seen on live forms that were asked, or stopped the run, before 1 Nov: accepted under the standing permission.
+check("interview recording consent picks its yes option", acknowledgementValue(field("Interview Recording Consent", "radio", ["Yes, I consent to be recorded", "No, I do not consent to be recorded"])) === "Yes, I consent to be recorded");
+check("a recording notice without the word consent is one", acknowledgementValue(field("To ensure we can focus fully on our conversation, we use BrightHire to record and transcribe interviews.", "radio", ["I consent", "I do not consent"])) === "I consent");
+check("an AI policy for interviews is one", acknowledgementValue(field("AI Policy for Interviewers", "checkbox")) === "Yes");
+check("a declaration that the details are correct is one", acknowledgementValue(field("I hereby declare that the information furnished above is correct to the best of my knowledge.", "checkbox")) === "Yes");
+check("\"I do not consent\" is never picked as the yes option", acknowledgementValue(field("Interview Recording Consent", "radio", ["I do not consent", "No"])) === null);
+check("an SMS opt-in that mentions consent is still never accepted", acknowledgementValue(field("I consent to receive SMS and WhatsApp updates about my application", "radio", ["Yes", "No"])) === null);
+check("a declaration about a fact (work authorization) is still asked", acknowledgementValue(field("I hereby declare that I am authorized to work in India", "checkbox")) === null);
+
 // 2. The standing permission.
 const PROFILE = { fullName: "Test Person", email: "t@example.com", phone: null, city: null, country: null, linkedin: null, github: null, portfolio: null, yearsExperience: 2, currentTitle: null, currentCompany: null, resumeKey: "resumes/x/resume.pdf" };
 const ACKS = [ARBITRATION, CERTIFY, GH_ACK];
@@ -57,6 +66,13 @@ const ASHBY = `<form>
 <div data-field-path="2ded3ef9"><fieldset class="_fieldEntry_1e3gg_28 ashby-application-form-input-checkbox-group"><label class="_heading_f7cvd_52 _required_f7cvd_91 ashby-application-form-question-title" for="2ded3ef9">Snowflake will process your personal information in accordance with the Snowflake Candidate Privacy Notice.</label><div class="ashby-application-form-input-checkbox-group-option"><span class="ashby-application-form-input-checkbox-group-option-checkbox"><input type="checkbox" id="y_2ded3ef9-labeled-checkbox-0" name="I have read and agree to the Snowflake Candidate Privacy Notice."></span><label for="y_2ded3ef9-labeled-checkbox-0">I have read and agree to the Snowflake Candidate Privacy Notice.</label></div></fieldset></div>
 <div class="_fieldEntry_1e3gg_28 ashby-application-form-field-entry" data-field-path="a7d1a4bb"><label class="_heading_f7cvd_52 _required_f7cvd_91 ashby-application-form-question-title" for="a7d1a4bb">Have you ever been directly employed by any government or military entity?</label><div class="ashby-application-form-input-yesno"><button type="button" class="ashby-application-form-input-yesno-option" aria-pressed="false" data-option="yes" onclick="this.parentElement.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b === this)))">Yes</button><button type="button" class="ashby-application-form-input-yesno-option" aria-pressed="false" data-option="no" onclick="this.parentElement.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b === this)))">No</button><input type="checkbox" tabindex="-1" name="a7d1a4bb"></div></div>
 <button type="submit" class="ashby-application-form-submit-button">Submit Application</button>
+</form>`;
+
+// Copied from UiPath's live Ashby form (1 Nov), trimmed: the phone question with its SMS/WhatsApp opt-in radios, and the
+// required interview-recording consent.
+const UIPATH = `<form>
+<div class="_fieldEntry_1e3gg_28 ashby-application-form-field-entry" data-field-path="d45b5156"><label class="_heading_f7cvd_52 _required_f7cvd_91 ashby-application-form-question-title" for="d45b5156">Phone number</label><input name="d45b5156" required id="d45b5156" type="tel" class="ashby-application-form-input-text" value=""><div class="ashby-application-form-texting-consent-description"><p>Check Yes or No to indicate your agreement to receive text message updates via SMS and/or WhatsApp.</p></div><ul class="_consentRadioGroupList_q1pga_13"><li><p>SMS</p><div class="_consentRadioGroup_q1pga_13"><label><input type="radio" name="smsConsent" value="yes">Yes</label><label><input type="radio" name="smsConsent" value="no">No</label></div></li><li><p>WhatsApp</p><div class="_consentRadioGroup_q1pga_13"><label><input type="radio" name="whatsappConsent" value="yes">Yes</label><label><input type="radio" name="whatsappConsent" value="no">No</label></div></li></ul></div>
+<fieldset class="_container_1258i_28 _fieldEntry_1e3gg_28 ashby-application-form-input-radio-group" data-field-path="_systemfield_recording_consent"><label class="_heading_f7cvd_52 _required_f7cvd_91 ashby-application-form-question-title" for="_systemfield_recording_consent">Interview Recording Consent</label><div class="ashby-application-form-question-description"><p>We use an AI Notetaker to record and transcribe our interviews. Opting out will not impact your candidacy in any way.</p></div><div class="ashby-application-form-input-radio-group-option"><span><input type="radio" id="r-0" name="x__systemfield_recording_consent" class="ashby-application-form-input-radio-group-option-radio"></span><label for="r-0" class="ashby-application-form-input-radio-group-option-label">Yes, I consent to be recorded</label></div><div class="ashby-application-form-input-radio-group-option"><span><input type="radio" id="r-1" name="x__systemfield_recording_consent" class="ashby-application-form-input-radio-group-option-radio"></span><label for="r-1" class="ashby-application-form-input-radio-group-option-label">No, I do not consent to be recorded</label></div></fieldset>
 </form>`;
 
 async function main() {
@@ -82,6 +98,16 @@ async function main() {
     check("with permission both acknowledgement boxes are ticked", ticked.includes("x_a90e16d2-labeled-checkbox-0") && ticked.includes("y_2ded3ef9-labeled-checkbox-0"), ticked.join(" "));
     const after = await emptyRequired(page);
     check('a Yes/No answered "No" is not reported empty (its hidden checkbox stays unticked)', after.length === 0, after.join(" / "));
+
+    // UiPath's live form (1 Nov): a required "Interview Recording Consent" radio question, and SMS/WhatsApp opt-ins
+    // inside the phone question. The recording consent used to be hidden, so the run stopped before filling anything.
+    await page.setContent(UIPATH);
+    const uip = await ashbyAdapter.inspect(page);
+    const rec = uip.find((f) => f.label === "Interview Recording Consent");
+    check("Ashby reads the recording consent as a radio question", rec?.type === "radio" && rec.required && rec.options?.join("|") === "Yes, I consent to be recorded|No, I do not consent to be recorded", JSON.stringify(rec));
+    check("the SMS and WhatsApp opt-ins in the phone question are still left out", !uip.some((f) => f.type === "radio" && f.options?.some((o) => /^(yes|no)$/i.test(o))) && uip.some((f) => f.label === "Phone number"), uip.map((f) => `${f.label}:${f.type}`).join(" / "));
+    const uipResolved = resolveValues(uip.map((f) => ({ field: f, key: f.hintKey ?? matchKeyBySynonym(f.label) })), PROFILE, [{ key: ACKNOWLEDGEMENT_KEY, answer: "Yes", source: "user" }]);
+    check("with permission the recording consent is answered yes, nothing about it asked", uipResolved.values.some((v) => v.label === "Interview Recording Consent" && v.value === "Yes, I consent to be recorded") && !uipResolved.pending.some((q) => /recording/i.test(q.label)), JSON.stringify(uipResolved.pending.map((q) => q.label)));
   } finally {
     await browser.close();
   }

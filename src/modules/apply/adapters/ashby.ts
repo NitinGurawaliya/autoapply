@@ -51,7 +51,10 @@ const READ_FORM = `(() => {
     if (combo) return void rows.push({ path, label, kind: 'combobox', required });
     const select = entry.querySelector('select');
     if (select) return void rows.push({ path, label, kind: 'select', required, options: Array.from(select.options).filter((o) => o.value).map((o) => clean(o.textContent)) });
-    const radios = Array.from(entry.querySelectorAll('input[type=radio]')).filter((r) => !/consent/i.test(r.name));
+    // Leaves out the SMS and WhatsApp updates inside the phone question (a marketing opt-in, never chosen for the
+    // user). Only those: a question of its own about consent, such as "Interview Recording Consent", is a real radio
+    // question (1 Nov, UiPath: it was hidden and the run stopped as if it could not be answered).
+    const radios = Array.from(entry.querySelectorAll('input[type=radio]')).filter((r) => !/^(sms|whatsapp|text|phone)consent$/i.test(r.name) && !r.closest('[class*=consentRadioGroup]'));
     const text = entry.querySelector('input:not([type=radio]):not([type=checkbox]):not([type=file]):not([type=hidden]), textarea');
     // A number box takes digits only (18 Oct: "46lpa" into a EUR salary box failed the run): read it as one.
     if (text) return void rows.push({ path, label, kind: text.tagName === 'TEXTAREA' ? 'textarea' : text.getAttribute('type') === 'number' ? 'number' : 'text', required });
