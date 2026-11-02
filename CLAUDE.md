@@ -2,27 +2,55 @@
 
 SwipeApply is a governed AI agent that applies to jobs for a candidate after they swipe right. The goal: a right-swipe ends in a submitted application, end to end, with no human step. Built for the AgentForge hackathon (3 Oct 2026) with the production architecture from day 1: Next.js web + a separate Playwright worker, Postgres (Neon), pg-boss queue, files in Postgres behind a storage interface, Google auth.
 
-Always read before a task: `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/TASKS.md`. ARCHITECTURE.md is the source of truth. If you must deviate, update it in the same change and say why.
+ARCHITECTURE.md is the source of truth. If you must deviate, update it in the same change and say why. What to read for a task is fixed in "Docs and the token budget" below: a section, never a whole doc.
 
 ## How to work
 
-1. One task from `docs/TASKS.md` per session. Mark `[~]` on start, `[x]` when the "Done when" check passes.
+1. One task per session, picked from the index `docs/TASKS.md`; its full entry is the file the index line links. Mark `[~]` on start and `[x]` when the "Done when" check passes, in the entry first, then on the index line.
 2. Tasks touching more than 2 files: explore, write a short plan (files, order), then implement. One-line changes: skip the plan.
 3. Run the "Done when" check yourself and paste real output. Never claim a pass without running it.
 4. Before finishing: `npm run typecheck && npm run lint`. Fix only what you broke.
 5. Small diffs. No refactors outside the task. No libraries beyond the stack unless the task says so.
 6. Blocked twice on the same error: write the error, what you tried, and your best guess to `docs/BLOCKERS.md`, then ask.
 
+## Docs and the token budget
+
+The docs are read by section, never whole. Measured 3 Nov: ARCHITECTURE.md is ~24k tokens, a TDD ~12k, the old single task list was ~22k; a task needs ~10k of all that. Budget: **under 15k tokens of docs before the first edit**, and no doc read twice in a session.
+
+Map (what each file is for, and when it is opened):
+
+| File | Holds | Open when |
+|---|---|---|
+| `CLAUDE.md` | rules, process | always (loaded for you) |
+| `docs/TASKS.md` | the index: every task, one linked line | picking the task; never for context |
+| `docs/<feature>/TASKS.md`, `docs/tasks/<phase>.md` | full task entries: Do, Design links, Done when, Done line | the one entry you work on |
+| `docs/<feature>/TDD.md` | the feature's design | only the sections the entry's Design line links |
+| `docs/ARCHITECTURE.md` | source of truth | only the sections the entry or the TDD names |
+| `docs/PRD.md` | why the product exists, scope | writing a TDD, or a scope question |
+| `docs/DESIGN.md`, `design/` | the UI spec | UI tasks only |
+| `docs/INGEST_CONTRACT.md`, `docs/DEPLOY.md` | ingest rules, deploy | a task that touches them |
+
+Read order for a task, and stop as soon as you have what the task needs:
+
+1. The task's entry (follow the link on its index line). Its Do line names the files; its Design line names the sections.
+2. The sections it links, by heading: find the heading (`grep -n '^### 4.5'`), read that line range, nothing past the next heading.
+3. The ARCHITECTURE sections those name, the same way.
+4. The files the Do line names. If it names none, send an Explore subagent with the entry as its whole brief and take back paths and line numbers, not file contents.
+
+Never: read a whole TDD, ARCHITECTURE.md or a task history "for context"; re-read a file you already have; paste a file into the conversation to summarize it.
+
 ## Design to tasks (the dev process)
 
-Design docs and the task list are one process, not two. No OpenSpec or other change-folder system: at this size (one owner, one agent session at a time) ARCHITECTURE.md is the spec, the TDD is the design, TASKS.md is the task list.
+Design docs and the task list are one process. No OpenSpec or other change-folder system: at this size (one owner, one agent session at a time) ARCHITECTURE.md is the spec, the TDD is the design, the task entry is the unit of work.
 
-1. **A TDD before the work** for any phase or feature that needs research or touches more than two modules. It lives in `docs/<feature>/TDD.md` with the sections `docs/naukri/TDD.md` has: goals and non-goals, facts the design rests on, options and decision, architecture (components, queues, data model, state, sequences, checks, security, failures, observability, code map, env), UI, API, testing, rollout, risks, a pointer to the tasks, decisions closed with the owner, sources. Tasks under two files need no TDD.
-2. **Tasks live beside the TDD, in `docs/<feature>/TASKS.md`**, one full entry per task: ID, title, a "Do" line, a "Design:" line linking the TDD sections it builds, a testable "Done when", and the `Done <date>:` line once it lands. Root `docs/TASKS.md` lists the phase's tasks one linked line each (`- [ ] [K1 — title](naukri/TASKS.md#k1)`) and nothing more. Status is marked in the feature file first, then on the root line. Neither file copies the design.
+1. **A TDD before the work** for any phase or feature that needs research or touches more than two modules, in `docs/<feature>/TDD.md`, with the sections `docs/naukri/TDD.md` has: goals and non-goals, facts the design rests on, options and decision, architecture (components, queues, data model, state, sequences, checks, security, failures, observability, code map, env), UI, API, testing, rollout, risks, a pointer to the tasks, decisions closed with the owner, sources. Numbered headings, because tasks link to them. Tasks under two files need no TDD.
+2. **Tasks beside the TDD, in `docs/<feature>/TASKS.md`**, one full entry per task under an anchor (`<a id="k1"></a>`): ID, title, a "Do" line that names the files, a "Design:" line linking the TDD sections it builds, a testable "Done when", and the `Done <date>:` line once it lands. The index `docs/TASKS.md` gets one linked line (`- [ ] [K1 — title](naukri/TASKS.md#k1)`), nothing more. Phases without a TDD keep their entries in `docs/tasks/<phase>.md` the same way. Neither file copies the design.
 3. **The task that makes a decision updates ARCHITECTURE.md in the same change.** The TDD never becomes a second source of truth; once a decision is in ARCHITECTURE.md the TDD is history.
-4. **A landed task gets a `Done <date>:` line** in its task file with what was measured and what changed, as T91–T93 have in the root file. That line is the record.
+4. **A landed task gets a `Done <date>:` line** in its entry: date, what was measured (numbers), what changed (paths), three lines at most. The Done-when output is pasted in the session, not in the doc. That line is the record; nothing else about the session is written anywhere.
 
-Growth path: older phases in the root TASKS.md move into `docs/<feature>/TASKS.md` files the same way once the root passes about a thousand lines. Reconsider change folders only if a second developer or parallel agent sessions work the same phase at once.
+Writing back is as cheap as reading: a Done line, a status tick in two places, an ARCHITECTURE section when a decision changed, a `docs/BLOCKERS.md` entry of ten lines (error, tried, best guess) when blocked twice. No session notes, no summaries, no restating the task.
+
+Agents: one session per task, fresh context each time (the entry carries everything). Subagents only for reading (Explore, a narrow brief, paths back) or for an independent check the task names; never to re-derive what the entry already says. Reconsider change folders only if a second developer or parallel agent sessions work the same phase at once.
 
 ## Stack (do not swap)
 
