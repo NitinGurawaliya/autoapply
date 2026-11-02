@@ -404,6 +404,7 @@ Rule change: until 29 Oct jobs came only from public, no-login APIs and Naukri a
 - **Apply.** Same rules as every board: right-swipe, `isTest === false`, `governance.check('submit')`, the daily cap, source on every value. Jobs that apply on the site itself (Naukri apply, LinkedIn Easy Apply) get an adapter under `modules/apply/adapters`; jobs that send the user to a company ATS go through that ATS's adapter when we have one, otherwise they are not offered for apply.
 - **Challenges.** A CAPTCHA, a security check or a "verify it's you" screen hands off to the user (6.17) and the run waits.
 - **Tooling.** K1 decides whether the adapters are our own Playwright code or built with webcmd (`webcmd.dev`, Apache-2.0, a CLI that keeps per-profile cookie jars); either way they run only in the worker and the stack table changes in the same commit if webcmd is adopted.
+- **Design.** `docs/NAUKRI_TDD.md` (3 Nov) weighs webcmd against our own Playwright code and proposes the latter: webcmd's local runtime is a stealth Chromium (circumvention Naukri's terms forbid), its cookie jars live on the machine, and no Naukri adapter exists. K1 confirms and records the choice here.
 
 ## 7. Governance (`config/rules.json` + `modules/governance/rules.ts`)
 

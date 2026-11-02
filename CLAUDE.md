@@ -13,6 +13,17 @@ Always read before a task: `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/TASKS.md
 5. Small diffs. No refactors outside the task. No libraries beyond the stack unless the task says so.
 6. Blocked twice on the same error: write the error, what you tried, and your best guess to `docs/BLOCKERS.md`, then ask.
 
+## Design to tasks (the dev process)
+
+Design docs and the task list are one process, not two. No OpenSpec or other change-folder system: at this size (one owner, one agent session at a time) ARCHITECTURE.md is the spec, the TDD is the design, TASKS.md is the task list.
+
+1. **A TDD before the work** for any phase or feature that needs research or touches more than two modules. It lives in `docs/<FEATURE>_TDD.md` with the sections `docs/NAUKRI_TDD.md` has: what the user gets, research, options and decision, design with a code map, governance, risks, tasks, open questions, sources. Tasks under two files need no TDD.
+2. **The TDD's tasks section holds the design per task.** `docs/TASKS.md` keeps one entry per task: ID, title, one "Do" line, a testable "Done when", and a pointer to the TDD section. TASKS.md is the index, never a copy of the TDD.
+3. **The task that makes a decision updates ARCHITECTURE.md in the same change.** The TDD never becomes a second source of truth; once a decision is in ARCHITECTURE.md the TDD is history.
+4. **A landed task gets a "Done <date>:" line** in TASKS.md with what was measured and what changed, as T91–T93 have. That line is the record.
+
+Growth path: split TASKS.md by phase (`docs/tasks/<phase>.md`) once it passes about a thousand lines. Reconsider change folders only if a second developer or parallel agent sessions work the same phase at once.
+
 ## Stack (do not swap)
 
 Next.js 16 App Router (`src/proxy.ts`, not middleware) · TypeScript strict · Tailwind + shadcn/ui · Framer Motion · Prisma + Postgres (Neon) · pg-boss · Playwright (Chromium) · Auth.js v5 + Google · `lib/storage.ts` (Postgres FileBlob driver; S3 later) · OpenAI Chat Completions (`gpt-4o-mini`, `OPENAI_MODEL` to override) · Zod · pdf-parse · tsx.
