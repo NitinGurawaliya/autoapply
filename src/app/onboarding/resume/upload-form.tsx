@@ -54,6 +54,16 @@ function findsOf(profile: Profile): Find[] {
 
 const LABELS = ["Name", "Experience", "Skills", "Education", "Phone"];
 
+/** What the upload's refusal (api/profile/resume, modules/profile/parseResume.ts) means to the user. */
+const UPLOAD_ERRORS: Record<string, string> = {
+  no_text: "This PDF has no text we can read (it may be a scan). Export your resume as a text PDF and try again.",
+  nothing_found: "We couldn't find your work, skills or education in this PDF. Check it's your resume and try again.",
+  no_name: "We couldn't find your name on this resume. Add it to the PDF and try again.",
+  parse_failed: "We could not read your resume just now. Try again in a minute.",
+  read_failed: "We could not read your resume just now. Try again in a minute.",
+  rate_limited: "Too many uploads in the last hour. Try again later.",
+};
+
 /**
  * Step 1 of onboarding (design/onboarding.html): choose a PDF, then watch it being read. The upload is the same
  * POST /api/profile/resume as before; once it is read, the findings come from GET /api/profile.
@@ -97,15 +107,7 @@ export function ResumeUploadForm({ signOut }: { signOut: React.ReactNode }) {
     if (!response?.ok) {
       setView("upload");
       const code = response ? ((await response.json().catch(() => null)) as { error?: string } | null)?.error : null;
-      setError(
-        code === "no_text"
-          ? "This PDF has no text we can read (it may be a scan). Export your resume as a text PDF and try again."
-          : code === "parse_failed" || code === "read_failed"
-            ? "We could not read your resume just now. Try again in a minute."
-            : code === "rate_limited"
-              ? "Too many uploads in the last hour. Try again later."
-              : "Could not read that PDF. Try another file.",
-      );
+      setError((code && UPLOAD_ERRORS[code]) || "Could not read that PDF. Try another file.");
       return;
     }
     // A replaced resume's changes, for the review screen (sessionStorage: it may be unavailable, then nothing shows).

@@ -1,10 +1,16 @@
 import { z } from "zod";
 
+/**
+ * A placeholder the model wrote for a missing value ("null", "N/A", "Not found"), which is no value: gpt-4o-mini
+ * returned the string "null" for a resume's missing name and email in 1 of 4 reads (2 Nov QA), and it was stored.
+ */
+export const placeholder = (text: string) => /^(null|undefined|none|nil|n\/?a|-+|not (found|provided|available|listed|mentioned))$/i.test(text.trim());
+
 // Text from a parsed resume or an edit form is cut to a sane length, never rejected: a long summary must not lose
 // the whole profile, and nothing unbounded is stored.
 function nullableText(max = 500) {
   return z.preprocess((value) => {
-    if (typeof value !== "string") return null;
+    if (typeof value !== "string" || placeholder(value)) return null;
     const trimmed = value.trim().slice(0, max);
     return trimmed.length > 0 ? trimmed : null;
   }, z.string().nullable());
@@ -14,7 +20,7 @@ function nullableText(max = 500) {
 // it rejects (30 Oct: Ashby refused Dhanush's LinkedIn twice and the run failed). A bare "linkedin.com/in/x" gets https://.
 function nullableLink(max = 300) {
   return z.preprocess((value) => {
-    if (typeof value !== "string") return null;
+    if (typeof value !== "string" || placeholder(value)) return null;
     const trimmed = value.trim().slice(0, max);
     if (!trimmed || /\s/.test(trimmed)) return null;
     try {

@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { forgetFeed } from "@/lib/feed-cache";
 import { enqueuePrescan } from "@/lib/queue";
 import { TRACKS } from "@/modules/jobs";
-import { upsert } from "@/modules/answers";
+import { remove, upsert } from "@/modules/answers";
 import { profileSchema, resumeAnswers } from "@/modules/profile";
 
 /** The details resumeAnswers reads, from a stored profile. */
@@ -91,9 +91,16 @@ export async function PUT(req: Request) {
   });
   // A detail the user changed on the review screen is their answer now (forms read answers, not the profile). Only
   // the changed ones: the others keep their source, and the user's saved answers are never sent back (2 Nov).
-  const before = new Map(resumeAnswers({ ...profile, ...pick(existing) }).map((row) => [row.key, row.answer]));
-  for (const row of resumeAnswers(profile)) {
+  // The stored row read as the form's values are (a link gets https://), so an older profile is not "changed" by a save.
+  const stored = profileSchema.safeParse({ ...pick(existing), skills: [], experience: [], education: [] });
+  const before = new Map(resumeAnswers({ ...profile, ...(stored.success ? stored.data : pick(existing)) }).map((row) => [row.key, row.answer]));
+  const now = resumeAnswers(profile);
+  for (const row of now) {
     if (before.get(row.key) !== row.answer) await upsert(user.id, { ...row, source: "user" });
+  }
+  // A detail cleared here is no answer either: the next form asks for it instead of sending the old one.
+  for (const key of before.keys()) {
+    if (!now.some((row) => row.key === key)) await remove(user.id, key);
   }
   forgetFeed(user.id); // title, skills and years decide the feed's scores
   // Confirmed details change the verdicts' input: build the feed again in the worker before the user gets there.

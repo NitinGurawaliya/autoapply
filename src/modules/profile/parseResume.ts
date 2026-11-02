@@ -6,7 +6,7 @@ import { callJson } from "@/lib/llm";
 import { db } from "@/lib/db";
 import { forgetFeed } from "@/lib/feed-cache";
 import { storage } from "@/lib/storage";
-import { profileSchema, type ParsedProfile } from "./profileSchema";
+import { placeholder, profileSchema, type ParsedProfile } from "./profileSchema";
 import { sampleProfile } from "./sampleProfile";
 
 const SYSTEM = `Extract only facts written in the resume. If a field is missing, use null or an empty array. Do not guess, infer, or fill placeholders.
@@ -28,7 +28,7 @@ type PdfWorkerModule = { getData: () => string; CanvasFactory: unknown };
 // Name and email may be missing from the text (in a header image, or an email only behind a link): the read still
 // counts, and saveParsedResume takes them from the profile or the Google account. Before 2 Nov such a resume was
 // refused as "could not read your resume", replacing one included.
-const blankable = (max: number) => z.unknown().transform((value) => (typeof value === "string" ? value.trim().slice(0, max) : ""));
+const blankable = (max: number) => z.unknown().transform((value) => (typeof value === "string" && !placeholder(value) ? value.trim().slice(0, max) : ""));
 const readSchema = profileSchema.extend({ fullName: blankable(200), email: blankable(254) });
 
 let workerReady = false;
@@ -47,13 +47,15 @@ async function extractText(bytes: Uint8Array) {
   const parser = new PDFParse({ data: bytes.slice(), CanvasFactory: worker.CanvasFactory });
   try {
     const result = await parser.getText();
-    return result.text.slice(0, 20000);
+    // pdf-parse marks each page ("-- 1 of 2 --"), so a PDF with no text still returned text and passed the "no text"
+    // check: the model read nothing and the profile was replaced by an empty one (2 Nov QA).
+    return result.text.replace(/^\s*-- \d+ of \d+ --\s*$/gm, "").slice(0, 20000);
   } finally {
     await parser.destroy();
   }
 }
 
-export type ResumeFailure = "no_text" | "read_failed" | "parse_failed";
+export type ResumeFailure = "no_text" | "read_failed" | "parse_failed" | "nothing_found" | "no_name";
 
 // Why a resume could not be read, for the logs: the error's kind and message only, never the resume's text.
 const reason = (error: unknown) => (error instanceof Error ? `${error.name}: ${error.message.slice(0, 160)}` : String(error).slice(0, 160));
@@ -84,6 +86,11 @@ export async function parseResumePdf(bytes: Uint8Array): Promise<
   try {
     const cacheKey = createHash("sha256").update(resumeText).digest("hex");
     const profile = await callJson(readSchema, SYSTEM, resumeText, { cacheKey });
+    // Nothing about the work read from the text (not a resume, or unreadable): it never replaces a profile.
+    if (!profile.currentTitle && !profile.skills.length && !profile.experience.length && !profile.education.length) {
+      console.error("resume: no title, skills, roles or education in the text");
+      return { ok: false, failure: "nothing_found" };
+    }
     return { ok: true, profile, resumeText, usedFallback: false };
   } catch (error) {
     console.error(`resume: could not read the facts from the text (${reason(error)})`);
@@ -195,7 +202,7 @@ export async function saveParsedResume(userId: string, bytes: Uint8Array, parsed
   // Not on the resume and no profile yet: the Google account's name and email, which the review screen shows to check.
   core.fullName = core.fullName.trim() || account?.name?.trim() || "";
   core.email = core.email.trim() || account?.email?.trim() || "";
-  if (!core.fullName || !core.email) return { ok: false as const, failure: "parse_failed" as const };
+  if (!core.fullName || !core.email) return { ok: false as const, failure: "no_name" as const };
   await storage.put(key, bytes, "application/pdf", userId);
   const data = {
     resumeKey: key,
