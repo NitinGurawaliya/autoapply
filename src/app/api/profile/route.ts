@@ -5,7 +5,14 @@ import { db } from "@/lib/db";
 import { forgetFeed } from "@/lib/feed-cache";
 import { enqueuePrescan } from "@/lib/queue";
 import { TRACKS } from "@/modules/jobs";
-import { profileSchema } from "@/modules/profile";
+import { upsert } from "@/modules/answers";
+import { profileSchema, resumeAnswers } from "@/modules/profile";
+
+/** The details resumeAnswers reads, from a stored profile. */
+function pick(row: { fullName: string; email: string; phone: string | null; city: string | null; country: string | null; linkedin: string | null; github: string | null; portfolio: string | null; yearsExperience: number | null; currentTitle: string | null; currentCompany: string | null }) {
+  const { fullName, email, phone, city, country, linkedin, github, portfolio, yearsExperience, currentTitle, currentCompany } = row;
+  return { fullName, email, phone, city, country, linkedin, github, portfolio, yearsExperience, currentTitle, currentCompany };
+}
 
 function toJson(profile: {
   fullName: string;
@@ -82,6 +89,12 @@ export async function PUT(req: Request) {
       ...(tracks ? { tracks } : {}),
     },
   });
+  // A detail the user changed on the review screen is their answer now (forms read answers, not the profile). Only
+  // the changed ones: the others keep their source, and the user's saved answers are never sent back (2 Nov).
+  const before = new Map(resumeAnswers({ ...profile, ...pick(existing) }).map((row) => [row.key, row.answer]));
+  for (const row of resumeAnswers(profile)) {
+    if (before.get(row.key) !== row.answer) await upsert(user.id, { ...row, source: "user" });
+  }
   forgetFeed(user.id); // title, skills and years decide the feed's scores
   // Confirmed details change the verdicts' input: build the feed again in the worker before the user gets there.
   after(() => enqueuePrescan(user.id, "profile").catch(() => undefined));

@@ -13,7 +13,6 @@ import { PageIntro, ScreenBody, StepHeader, StickyFooter } from "@/components/pa
 
 type Experience = { title: string; company: string; start: string | null; end: string | null; summary: string | null };
 type Education = { school: string; degree: string | null; year: string | null };
-type Answer = { key: string; question: string; answer: string; source: string };
 
 export type ConfirmValues = {
   fullName: string;
@@ -32,7 +31,6 @@ export type ConfirmValues = {
   education: Education[];
   /** Tech tracks suggested from the resume (modules/jobs/functions.ts), confirmed here. */
   tracks: string[];
-  answers: Answer[];
 };
 
 type TextKey = "fullName" | "email" | "phone" | "city" | "country" | "linkedin" | "github" | "portfolio" | "yearsExperience" | "currentTitle" | "currentCompany";
@@ -135,7 +133,7 @@ function EditableRow({
   );
 }
 
-/** Step 2 of onboarding (design/onboarding.html "Here's what we found"). Saves with the same two calls as before. */
+/** Step 2 of onboarding (design/onboarding.html "Here's what we found"). */
 type ResumeChanges = {
   replaced: boolean;
   skillsAdded: string[];
@@ -173,7 +171,7 @@ function ResumeChangesPanel() {
     <SectionCard title="What changed with your new resume">
       <div className="flex flex-col gap-2.5 pb-2 text-sm leading-normal">
         <p className="m-0 text-muted-foreground">
-          Your details stay as they were{kept.length ? `: your resume shows a different ${kept.join(", ")}, and we kept yours` : ""}. Saved answers are kept; answers worked out from your resume follow the new one.
+          Your details stay as they were{kept.length ? `: your resume shows a different ${kept.join(", ")}, and we kept yours` : ""}. Your saved answers stay as they are.
         </p>
         {nothing ? <p className="m-0">The skills, roles and education read the same as before.</p> : null}
         {changes.title ? (
@@ -198,7 +196,11 @@ function ResumeChangesPanel() {
   );
 }
 
-export function ConfirmForm({ initial, trackOptions }: { initial: ConfirmValues; trackOptions: Array<{ id: string; label: string }> }) {
+/**
+ * Only what was read from the resume, to check: saved answers are not here (the Answers page has them), and saving
+ * sends the profile alone; a detail changed here updates its answer on the server (api/profile PUT).
+ */
+export function ConfirmForm({ initial, next, trackOptions }: { initial: ConfirmValues; next: string; trackOptions: Array<{ id: string; label: string }> }) {
   const router = useRouter();
   const [values, setValues] = useState(initial);
   const [editing, setEditing] = useState<string | null>(null);
@@ -234,30 +236,17 @@ export function ConfirmForm({ initial, trackOptions }: { initial: ConfirmValues;
       education: values.education,
       tracks: values.tracks,
     };
-    const answers = values.answers.map((row) => ({
-      key: row.key,
-      question: row.question,
-      answer: row.answer,
-      source: "user" as const,
-    }));
-    const [profileRes, answersRes] = await Promise.all([
-      fetch("/api/profile", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(profile),
-      }),
-      fetch("/api/answers", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers }),
-      }),
-    ]);
-    if (!profileRes.ok || !answersRes.ok) {
+    const response = await fetch("/api/profile", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(profile),
+    }).catch(() => null);
+    if (!response?.ok) {
       setStatus("error");
       return;
     }
     await forgetVisitedPages();
-    router.push("/onboarding/questions");
+    router.push(next);
   }
 
   const skills = values.skills.split(",").map((item) => item.trim()).filter(Boolean);
@@ -405,28 +394,6 @@ export function ConfirmForm({ initial, trackOptions }: { initial: ConfirmValues;
             ))
           )}
         </SectionCard>
-
-        {values.answers.length > 0 ? (
-          <SectionCard title="Saved answers">
-            {values.answers.map((row, index) => (
-              <EditableRow
-                key={row.key}
-                label={row.question}
-                value={row.answer}
-                editing={editing === `answer-${row.key}`}
-                onEdit={() => setEditing(`answer-${row.key}`)}
-                onDone={() => setEditing(null)}
-                onChange={(answer) => {
-                  setValues((current) => ({
-                    ...current,
-                    answers: current.answers.map((item, itemIndex) => (itemIndex === index ? { ...item, answer } : item)),
-                  }));
-                  setStatus("idle");
-                }}
-              />
-            ))}
-          </SectionCard>
-        ) : null}
 
         {status === "error" ? <FieldError>Could not save. Try again.</FieldError> : null}
         {status === "missing" ? <FieldError>Add your full name and email to continue.</FieldError> : null}

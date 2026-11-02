@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
+import { z } from "zod";
 import { upsert } from "@/modules/answers";
 import { callJson } from "@/lib/llm";
 import { db } from "@/lib/db";
@@ -23,6 +24,12 @@ type PdfParseModule = {
   PDFParse: (new (options: { data: Uint8Array; CanvasFactory?: unknown }) => PdfParser) & { setWorker: (worker: string) => void };
 };
 type PdfWorkerModule = { getData: () => string; CanvasFactory: unknown };
+
+// Name and email may be missing from the text (in a header image, or an email only behind a link): the read still
+// counts, and saveParsedResume takes them from the profile or the Google account. Before 2 Nov such a resume was
+// refused as "could not read your resume", replacing one included.
+const blankable = (max: number) => z.unknown().transform((value) => (typeof value === "string" ? value.trim().slice(0, max) : ""));
+const readSchema = profileSchema.extend({ fullName: blankable(200), email: blankable(254) });
 
 let workerReady = false;
 
@@ -76,7 +83,7 @@ export async function parseResumePdf(bytes: Uint8Array): Promise<
 
   try {
     const cacheKey = createHash("sha256").update(resumeText).digest("hex");
-    const profile = await callJson(profileSchema, SYSTEM, resumeText, { cacheKey });
+    const profile = await callJson(readSchema, SYSTEM, resumeText, { cacheKey });
     return { ok: true, profile, resumeText, usedFallback: false };
   } catch (error) {
     console.error(`resume: could not read the facts from the text (${reason(error)})`);
@@ -183,9 +190,13 @@ export async function saveParsedResume(userId: string, bytes: Uint8Array, parsed
   const key = `resumes/${userId}/resume.pdf`;
   // Never store an empty file: job forms cannot upload it (Greenhouse waits forever) and the run fails late.
   if (bytes.length === 0) return { ok: false as const, failure: "read_failed" as const };
-  await storage.put(key, bytes, "application/pdf", userId);
-  const existing = await db.profile.findUnique({ where: { userId } });
+  const [existing, account] = await Promise.all([db.profile.findUnique({ where: { userId } }), db.user.findUnique({ where: { id: userId }, select: { name: true, email: true } })]);
   const { core, changes } = mergeResumeProfile(existing, parsed.profile);
+  // Not on the resume and no profile yet: the Google account's name and email, which the review screen shows to check.
+  core.fullName = core.fullName.trim() || account?.name?.trim() || "";
+  core.email = core.email.trim() || account?.email?.trim() || "";
+  if (!core.fullName || !core.email) return { ok: false as const, failure: "parse_failed" as const };
+  await storage.put(key, bytes, "application/pdf", userId);
   const data = {
     resumeKey: key,
     resumeText: parsed.resumeText,
