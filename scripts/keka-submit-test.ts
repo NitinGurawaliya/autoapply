@@ -1,6 +1,6 @@
 // Keka's Apply Now step (2 Nov) on a copy of its form served at a made-up keka.com address, so nothing is ever sent:
-// 1) the red box at the top (its duplicate check) and a field's "Email already exists" are read, told to the person, and
-// end the run with them as its reason; 2) "Invalid captcha" is read again from the new image and sent again, and the
+// 1) the red box at the top (its duplicate check) ends the run at once with Keka's words and a screenshot; a field's
+// message alone ("Email already exists") is told to the person, who gets 2 minutes to fix it, then ends the run; 2) "Invalid captcha" is read again from the new image and sent again, and the
 // success page is the confirmation; 3) on a real Keka form, its own validation messages are read (no Apply pressed).
 // Uses the real CAPTCHA reader (OpenAI) on a drawn image. Takes about 3 minutes (the person gets 2 to fix the form).
 // npx tsx scripts/keka-submit-test.ts
@@ -36,9 +36,11 @@ const form = (mode: string) => `<!doctype html><html><body>
   }
   draw();
   document.getElementById("jobApplicationSubmitButton").addEventListener("click", async () => {
-    if (${JSON.stringify(mode)} === "duplicate") {
-      document.getElementById("validation-error").style.display = "block";
-      const text = document.getElementById("validation-text"); text.style.display = "block"; text.textContent = "A candidate with this email has already applied for this job.";
+    if (${JSON.stringify(mode)} === "duplicate" || ${JSON.stringify(mode)} === "field") {
+      if (${JSON.stringify(mode)} === "duplicate") {
+        document.getElementById("validation-error").style.display = "block";
+        const text = document.getElementById("validation-text"); text.style.display = "block"; text.textContent = "A candidate with this email has already applied for this job.";
+      }
       const label = document.createElement("label"); label.id = "email-error"; label.className = "error"; label.setAttribute("for", "email"); label.textContent = "Email already exists";
       document.getElementById("email").after(label);
       return;
@@ -77,20 +79,24 @@ async function run(page: Page, mode: string) {
 async function main() {
   const browser = await chromium.launch();
   try {
-    // 1. Keka's duplicate check.
+    // 1. Keka's duplicate check, the red box at the top: nothing in the window changes it, so the run stops at once.
     const dup = await run(await (await browser.newContext()).newPage(), "duplicate");
     const reason = dup.error instanceof Error ? dup.error.message : String(dup.error);
     check("the duplicate check ends the run as refused, nothing sent", dup.error instanceof RefusedError && dup.posts === 0, `${reason} posts=${dup.posts}`);
-    check("its reason is Keka's red box and the field's message", /already applied/i.test(reason) && /Email: Email already exists|Email already exists/.test(reason), reason);
-    check("the person was told what Keka said, with time to fix it", dup.told.some((line) => /already applied/i.test(line) && /2 minutes/.test(line)), dup.told.join(" // "));
-    check("the run gave the person about 2 minutes", dup.seconds >= 115 && dup.seconds < 200, `${dup.seconds}s`);
+    check("its reason is Keka's red box and the field's message, once punctuated", /already applied for this job \| Email: Email already exists\.$|already applied for this job \| Email already exists\.$/.test(reason), reason);
+    check("it stops at once, without the 2 minutes", dup.seconds < 30, `${dup.seconds}s`);
     check("the failure carries a screenshot of the form as Keka showed it", dup.error instanceof RefusedError && (dup.error.screenshot?.length ?? 0) > 1000, String(dup.error instanceof RefusedError && dup.error.screenshot?.length));
 
-    // 1b. The window closed while Keka showed it: the run stops at once with Keka's words and the screenshot, no reopening.
+    // 1b. A field's message alone: the person is told and gets 2 minutes to fix it.
+    const field = await run(await (await browser.newContext()).newPage(), "field");
+    check("a field's message is told to the person, with time to fix it", field.told.some((line) => /Email already exists/.test(line) && /2 minutes/.test(line)), field.told.join(" // "));
+    check("then the run stops with it, after about 2 minutes", field.error instanceof RefusedError && /Email already exists/.test(field.error.message) && field.seconds >= 115 && field.seconds < 200, `${field.error instanceof Error ? field.error.message : field.error} ${field.seconds}s`);
+
+    // 1c. The window closed while a field's message showed: the run stops at once with it and the screenshot, no reopening.
     const closing = await (await browser.newContext()).newPage();
     setTimeout(() => void closing.close(), 8000);
-    const closed = await run(closing, "duplicate");
-    check("closing the window there ends the run with Keka's reason, not 'closed before Apply'", closed.error instanceof RefusedError && /already applied/i.test(closed.error.message) && closed.seconds < 30, `${closed.error instanceof Error ? closed.error.message : closed.error} ${closed.seconds}s`);
+    const closed = await run(closing, "field");
+    check("closing the window there ends the run with Keka's reason, not 'closed before Apply'", closed.error instanceof RefusedError && /Email already exists/.test(closed.error.message) && closed.seconds < 30, `${closed.error instanceof Error ? closed.error.message : closed.error} ${closed.seconds}s`);
     check("and keeps the screenshot", closed.error instanceof RefusedError && (closed.error.screenshot?.length ?? 0) > 1000);
 
     // 2. "Invalid captcha", then read again and sent again.

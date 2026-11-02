@@ -593,6 +593,7 @@ export const kekaAdapter: AtsAdapter = {
         // Keka's own messages: recorded when they change, the person gets a short while to fix them in the window, then
         // the run stops with them as its reason.
         const errors = await formErrors(live);
+        const said = errors.map((line) => line.replace(/[.\s]+$/, "")).join(" | ");
         if (!errors.length) {
           shown = [];
           shownSince = 0;
@@ -601,9 +602,12 @@ export const kekaAdapter: AtsAdapter = {
           // The form as it showed them, for the application page if the window is closed before the run stops.
           shot = await live.screenshot({ type: "jpeg", quality: 72, fullPage: true, timeout: 10000 }).catch(() => shot);
           shownSince ||= Date.now();
-          await ctx.announceHandoff?.(`Keka did not send the application. It said: ${errors.join(" | ")}. Fix it in the Chrome window and press Apply Now, or it stops in 2 minutes.`.slice(0, 500));
+          // The red box at the top is Keka's decision about the candidate (already applied, one job at a time): nothing in
+          // the window changes it, so the run stops at once (2 Nov: toddle and deccanaiauto waited 2 minutes for nothing).
+          if (await live.locator("#validation-text").isVisible().catch(() => false)) throw new RefusedError(`Keka did not send the application. It said: ${said}.`, shot);
+          await ctx.announceHandoff?.(`Keka did not send the application. It said: ${said}. Fix it in the Chrome window and press Apply Now, or it stops in 2 minutes.`.slice(0, 500));
         }
-        if (shown.length && Date.now() - shownSince > FIX_WAIT_MS) throw new RefusedError(`Keka did not send the application. It said: ${shown.join(" | ")}`, shot);
+        if (shown.length && Date.now() - shownSince > FIX_WAIT_MS) throw new RefusedError(`Keka did not send the application. It said: ${said}.`, shot);
 
         await live.waitForTimeout(1500).catch(() => undefined);
       }
