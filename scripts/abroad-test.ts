@@ -93,6 +93,23 @@ async function main() {
   check("time zone → India Standard Time", /India Standard Time/.test(found.get(zone)?.answer ?? ""), found.get(zone)?.answer);
   check("a city in the home country is not settled by the country: asked", !found.has(bengaluru));
 
+  // Sponsorship for a job in the candidate's own country (2 Nov: Nitin, Indian citizen, Hyderabad job, Keka radio).
+  const nitinAsked = yesNo("Do you or will you require sponsorship for an employment visa or for authorization to work in the country of this job?");
+  const homeJob = run(nitinAsked, india, [indian]);
+  check("an Indian citizen needs no sponsorship for a job in India", homeJob.values[0]?.value === "No" && homeJob.values[0]?.source === "derived" && homeJob.pending.length === 0 && /citizen of India, so you need no visa sponsorship/.test(homeJob.values[0]?.basis ?? ""), JSON.stringify(homeJob));
+  const noCitizenship = run(nitinAsked, india, []);
+  check("without the citizenship answer it is asked once, as the standing question", noCitizenship.pending.length === 1 && noCitizenship.pending[0].key === CITIZENSHIP_KEY, JSON.stringify(noCitizenship.pending));
+  const otherCitizen = run(nitinAsked, india, [{ key: CITIZENSHIP_KEY, answer: "Canada", source: "user" }]);
+  check("a citizen of another country living in India is still asked", otherCitizen.values.length === 0, JSON.stringify(otherCitizen.values));
+  const usJob = run(nitinAsked, us, [indian, sponsorYes]);
+  check("for a US job the standing abroad answer still decides", usJob.values[0]?.value === "Yes", JSON.stringify(usJob.values));
+  const standingWording = run(yesNo("Do you need visa sponsorship to work in any country other than India?"), india, [indian]);
+  check("'any country other than India' is never answered from citizenship", !standingWording.values.some((v) => v.source === "derived"), JSON.stringify(standingWording.values));
+  const h1b = run(yesNo("Will you now or in the future require sponsorship for employment visa status (e.g., H-1B, TN, E-3, O-1)?"), india, [indian]);
+  check("a US visa-type question is never answered from citizenship", !h1b.values.some((v) => v.source === "derived"), JSON.stringify(h1b.values));
+  const remote = run(nitinAsked, { company: "Remote Co", country: "REMOTE" }, [indian]);
+  check("a remote job is still asked (no country to compare)", !remote.values.some((v) => v.source === "derived"), JSON.stringify(remote.values));
+
   console.log(failed === 0 ? "PASS abroad" : `FAIL abroad (${failed})`);
   process.exit(failed === 0 ? 0 : 1);
 }

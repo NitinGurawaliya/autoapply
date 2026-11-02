@@ -31,6 +31,9 @@ type Found = { answer: string; basis: string; source: string } | { ask: PendingQ
 // about relocation assistance, packages or stipends (a different fact).
 const REGULAR_PRESENCE = /relocat|on-?site|in[- ]office|in[- ]person|hybrid|commut|travel (in)?to (our|the)|come (in)?to (our|the)|work (from|out of|at) (our|the)|based (in|at|out of)|(\d|one|two|three|four|five)\s*(x|times|days?)\s*(a|per|each)\s*week|days (a|per) week|full[- ]time (in|at|from)|every day/i;
 const NOT_PRESENCE = /assistance|package|stipend|support|reimburs|times (a|per) year|per year|annual|offsite|off-site|events?\b|conference/i;
+// A sponsorship question about somewhere other than home, whatever country it names: our own standing question ("any
+// country other than India") names home, and US visa types (H-1B, TN, E-3, O-1) are about the US.
+const ELSEWHERE = /other than|outside (of )?|abroad|another country|any (other )?country|overseas|international|\bh-?1b\b|\btn\b|\be-?3\b|\bo-?1\b|green card/i;
 const DEMONYMS: Record<string, string> = { indian: "IN", american: "US", british: "UK", canadian: "CA", german: "DE", french: "FR", irish: "IE", australian: "AU", singaporean: "SG", chinese: "CN", japanese: "JP", brazilian: "BR", mexican: "MX", "sri lankan": "LK", pakistani: "PK", bangladeshi: "BD", nepali: "NP", russian: "RU", ukrainian: "UA" };
 
 /** The citizenship answer as country codes ("Indian", "India, Canada"); null when any part is not a country we know. */
@@ -81,6 +84,18 @@ export function abroadAnswer(input: {
     if (!standing) return ask({ key: SPONSORSHIP_ABROAD_KEY, label: sponsorshipAbroadQuestion(home), type: "select", options: SPONSORSHIP_ABROAD_OPTIONS, required: true });
     if (standingSponsorship(standing.answer) !== "Yes") return null;
     return { answer: "No", basis: `your answer: you need visa sponsorship to work outside ${home}, so you are not yet authorized to work there`, source: "derived" };
+  }
+
+  // "Do you or will you require sponsorship for a visa to work in the country of the job?" for a job in the candidate's
+  // own country: a citizen of it never does (2 Nov: Nitin, an Indian citizen, was asked it for a Hyderabad job). Only a
+  // question about home (named, or the job's own place), never "any country other than India" or a US visa type.
+  if (kind === "needs_sponsorship") {
+    if (!yesNo(input.options) || (!input.options?.length && !asksYesNo(label)) || ELSEWHERE.test(label)) return null;
+    if (outsideHomeCountry(label, home, input.jobCountry) !== false) return null;
+    const standing = bank(CITIZENSHIP_KEY);
+    if (!standing) return ask({ key: CITIZENSHIP_KEY, label: CITIZENSHIP_QUESTION, type: "text", required: true });
+    if (!citizenshipCodes(standing.answer)?.has(countryCode(home)!)) return null;
+    return { answer: "No", basis: `your answer: you are a citizen of ${home}, so you need no visa sponsorship to work there`, source: "derived" };
   }
 
   if (kind === "citizenship") {
