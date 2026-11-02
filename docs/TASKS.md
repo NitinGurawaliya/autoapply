@@ -581,7 +581,7 @@ Done 1 Nov: all of the above PASS on a production build as a throwaway user (6 m
 
 ### [x] T106 — The "Sent!" moment (1 Nov, owner)
 Why: an application going out is the big moment in the app, and the user should feel it; until now it was a 1.6 s line in the after-swipe toast, or nothing when they were elsewhere.
-Do: `/api/applications/summary?since=` adds the applications sent after `since` (one indexed read when none); the shell's poller keeps `since` per device in `localStorage` (a first visit starts from now) and `components/sent-celebration.tsx` shows the moment on any signed-in page, waiting for the needs-you sheet; the runner sends a "Sent to X" push after a confirmed submit. See DESIGN.md.
+Do (revised the same day: the first version, a centred card over a scrim, stopped the user mid-swipe; now a toast that blocks nothing): `/api/applications/summary?since=` adds the applications sent after `since` (one indexed read when none); the shell's poller keeps `since` per device in `localStorage` (a first visit starts from now) and `components/sent-celebration.tsx` shows the moment on any signed-in page, waiting for the needs-you sheet; the runner sends a "Sent to X" push after a confirmed submit. See DESIGN.md.
 **Done when:** on a production build an application marked submitted shows the moment within one poll; it does not come back after "Keep going" or a reload; two sent while away show as one card; a new device does not replay history.
 Done 1 Nov: all of the above on a production build as a throwaway user (shown 5.7 s after the status changed; "2 sent!" on return; nothing on a new device). Light, dark and reduced motion checked in `/dev/ui`.
 

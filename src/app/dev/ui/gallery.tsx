@@ -25,7 +25,8 @@ import { JobCard } from "@/components/patterns/job-card";
 import { StackCount, SwipeStage } from "@/components/patterns/swipe-stage";
 import { AgentToast } from "@/components/patterns/agent-toast";
 import { AgentStatus } from "@/components/patterns/agent-status";
-import { SentMoment } from "@/components/sent-celebration";
+import { AnimatePresence } from "framer-motion";
+import { SentToast } from "@/components/sent-celebration";
 import type { SentNews } from "@/components/applications-summary";
 
 /** The "Sent!" moment on demand: one application (a first, a tenth) or several sent while away. */
@@ -47,7 +48,9 @@ function SentDemo() {
       <Button variant="line" size="row" onClick={() => setShown(one(10))}>Tenth</Button>
       <Button variant="line" size="row" onClick={() => setShown(one(3))}>This week</Button>
       <Button variant="line" size="row" onClick={() => setShown(several)}>While away</Button>
-      {shown ? <SentMoment news={shown} onDone={() => setShown(null)} onSee={() => setShown(null)} /> : null}
+      <div className="pointer-events-none fixed inset-x-0 top-[64px] z-50 mx-auto box-border w-full max-w-[480px] px-4">
+        <AnimatePresence>{shown ? <SentToast key={JSON.stringify(shown)} news={shown} onDone={() => setShown(null)} onOpen={() => setShown(null)} /> : null}</AnimatePresence>
+      </div>
     </div>
   );
 }

@@ -11,6 +11,7 @@ import { DeckDoneArt } from "@/components/patterns/drawings";
 import type { JobCardData } from "@/components/patterns/job-card";
 import { StackCount, SwipeStage, type Direction, type SwipeStageHandle } from "@/components/patterns/swipe-stage";
 import { AgentToast } from "@/components/patterns/agent-toast";
+import { useApplicationsSummary } from "@/components/applications-summary";
 import { boardLabel } from "@/lib/board-label";
 import { statusMeta } from "@/lib/status-meta";
 import type { FeedJob, FeedView } from "@/modules/jobs";
@@ -73,11 +74,14 @@ function withStatus(current: Toast, status: string, error: string | null, detail
   const stage = meta.stage === null ? current.stage : Math.max(current.stage, meta.stage);
   if (status === current.status) return { ...current, stage, error, detail };
   const now = Date.now();
+  // Sent: the shell's "Sent to X" toast takes over at once (components/sent-celebration.tsx), so this one leaves now.
   const hideAt = meta.live
     ? current.started + TOAST_LIVE_MAX_MS
-    : meta.group === "sent" || meta.group === "needs"
-      ? now + TOAST_AFTER_SENT_MS
-      : now + TOAST_AFTER_STOP_MS;
+    : meta.group === "sent"
+      ? now
+      : meta.group === "needs"
+        ? now + TOAST_AFTER_SENT_MS
+        : now + TOAST_AFTER_STOP_MS;
   return { ...current, stage, status, error, detail, hideAt };
 }
 
@@ -131,6 +135,7 @@ export function SwipeDeck({
   // Keys and buttons throw the card through the stage, which commits the swipe when the card is off screen.
   const stage = useRef<SwipeStageHandle>(null);
   const router = useRouter();
+  const { refresh: refreshSummary } = useApplicationsSummary();
 
   const [agent, setAgent] = useState<Toast | null>(null);
 
@@ -264,6 +269,8 @@ export function SwipeDeck({
         if (stopped || !response.ok) return;
         const body = (await response.json()) as { status: string; error?: string | null };
         setAgent((current) => (current && current.id === pollId ? withStatus(current, body.status, body.error ?? null) : current));
+        // Sent: ask the shell now, so its "Sent to X" toast follows this one without waiting for its next poll.
+        if (body.status === "submitted") refreshSummary();
       } catch {
         // Keep showing the last stage; the Applications tab has the full story.
       }
@@ -274,7 +281,7 @@ export function SwipeDeck({
       stopped = true;
       clearInterval(poll);
     };
-  }, [pollId]);
+  }, [pollId, refreshSummary]);
 
   // Hides the card at its hide time; a new status sets a new time and re-arms this.
   const hideAt = agent?.visible ? agent.hideAt : null;
