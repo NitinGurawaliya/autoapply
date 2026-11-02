@@ -227,8 +227,12 @@ export function resolveValues(
     };
 
     // Work history and education sections (company, title, dates, school, degree, discipline): from the resume,
-    // by the field's id, before any saved answer or key (history.ts). What the resume does not state goes on.
+    // by the field's id, before any saved answer or key (history.ts). What the resume does not state goes on. The
+    // user's own answer to this very question comes first: a resume subject the board's list lacks ("Computer Science
+    // and Engineering" for Greenhouse's Discipline) was asked, answered and then used again, 7 times (2 Nov, Nexla).
     const history = historyValue(field.selector, profile);
+    const ownHistory = history ? bank.get(questionKey) : undefined;
+    if (ownHistory?.source === "user" && push(questionKey, ownHistory.answer, "user")) continue;
     if (history && push(key ?? questionKey, history.value, "resume")) {
       values[values.length - 1].basis = history.basis;
       continue;

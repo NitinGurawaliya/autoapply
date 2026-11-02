@@ -137,6 +137,45 @@ const READ_ELEMENTS = `((ids) => ids.map((id) => {
 
 export type PageElement = { id: string; present: boolean; visible?: boolean; tag?: string; type?: string; radio?: boolean; checkboxes?: boolean; options?: string[] };
 
+// Runs inside the page: the job's own screening questions (inputs named `screeningQuestions.{id}.…`), which Keka's form
+// JSON does not list. Before 2 Nov they were never read: weaddo's required "Do you have CCNA or equivalent
+// certification?" was neither filled nor asked, and Keka refused the application. A plain string, as READ_ELEMENTS.
+const READ_SCREENING = `(() => {
+  const rows = new Map();
+  const words = (node) => ((node && node.textContent) || '').replace(/\\s+/g, ' ').trim();
+  for (const el of Array.from(document.querySelectorAll('[name^="screeningQuestions."]'))) {
+    const name = el.getAttribute('name') || '';
+    const id = name.split('.')[1];
+    const type = (el.getAttribute('type') || '').toLowerCase();
+    if (!id || type === 'hidden') continue;
+    let row = rows.get(id);
+    if (!row) {
+      const label = document.querySelector('label[for="' + CSS.escape(id) + '"]') || (el.closest('.form-group') && el.closest('.form-group').querySelector('label'));
+      const kind = el.tagName === 'SELECT' ? 'select' : el.tagName === 'TEXTAREA' ? 'textarea' : ['radio', 'checkbox', 'number', 'date'].includes(type) ? type : 'text';
+      row = { id, name, kind, label: ((label && (label.getAttribute('data-content') || words(label))) || '').replace(/\\*\\s*$/, '').trim(), required: !!(label && label.querySelector('.text-danger')), options: [] };
+      rows.set(id, row);
+    }
+    if (el.required) row.required = true;
+    if (el.tagName === 'SELECT') row.options = Array.from(el.options).map((o) => words(o)).filter((t) => t && !/^select an option$/i.test(t));
+    if (type === 'radio' || type === 'checkbox') row.options.push(words(el.closest('label') || el.parentElement));
+  }
+  return Array.from(rows.values());
+})()`;
+
+export type ScreeningRow = { id: string; name: string; kind: string; label: string; required: boolean; options: string[] };
+
+/** A screening question as a form field, by its input's name (its id is a GUID, often starting with a digit). */
+export function screeningField(row: ScreeningRow): FormField | null {
+  if (!row.label) return null;
+  const base = { label: row.label, required: row.required };
+  if (row.kind === "radio") return { ...base, selector: `input[type=radio][name="${row.name}"]`, type: "radio", options: row.options };
+  if (row.kind === "checkbox") return { ...base, selector: `input[type=checkbox][name^="screeningQuestions.${row.id}."]`, type: "checkbox-group", options: row.options };
+  const selector = `[name="${row.name}"]`;
+  if (row.kind === "select") return { ...base, selector, type: "select", options: row.options };
+  if (row.kind === "textarea" || row.kind === "number" || row.kind === "date") return { ...base, selector, type: row.kind };
+  return { ...base, selector, type: "text" };
+}
+
 /**
  * The form's fields from Keka's own description of it, Keka's field type deciding the kind (1 Nov: the types of 406
  * forms, one per company: 1 text, 2 long text, 3 list, 4 tick boxes, 5 one choice, 6 date, 7 resume, 8 documents,
@@ -212,19 +251,12 @@ async function readFields(page: Page): Promise<FormField[]> {
     if (!(await sectionRow(page, section))) throw new NoRetryError(`The Keka form asks "${field.fieldName.slice(0, 80)}" but its first row did not open`);
   }
   fields.push(...fieldsFromSchema(schema, elements, new URL(page.url()).hostname.split(".")[0]));
-  const captcha = page.locator("#captcha");
-
-  
-
-
-if (await captcha.count()) {
-  const visible = await captcha.isVisible();
-
-  console.log("[Keka] CAPTCHA input:", {
-    detected: true,
-    visible,
-  });
-}
+  const screening = (await page.evaluate(READ_SCREENING)) as ScreeningRow[];
+  for (const row of screening) {
+    const field = screeningField(row);
+    if (field) fields.push(field);
+    else if (row.required) throw new NoRetryError("This Keka form has a required screening question without a label");
+  }
   // The privacy consent: Apply stays disabled until it is ticked. A privacy-notice acknowledgement (acknowledgement.ts):
   // ticked only under the user's standing permission, asked otherwise.
   const consent = page.locator("#candidateConsent");

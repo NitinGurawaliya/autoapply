@@ -1,8 +1,9 @@
 // Offline checks for the Keka board (T96): the phone split, pay as Keka wants it, and which addresses are Keka portals.
 // npx tsx scripts/keka-test.ts
 import { salaryAmount, splitPhone } from "../src/modules/apply/adapters/keka";
-import { fieldsFromSchema, kekaAdapter } from "../src/modules/apply/adapters/keka";
-import { looksLikeLink } from "../src/modules/apply/valueResolver";
+import { fieldsFromSchema, kekaAdapter, screeningField } from "../src/modules/apply/adapters/keka";
+import { customQuestionKey } from "../src/modules/answers";
+import { looksLikeLink, resolveValues } from "../src/modules/apply/valueResolver";
 import { kekaSlugOf } from "../src/modules/jobs/fetchers/keka";
 import { historyValue } from "../src/modules/apply/history";
 
@@ -82,6 +83,22 @@ check("a required question missing from the page stops it", (() => {
 // A link field takes a link only (valueResolver.ts).
 check("links: with and without a scheme", looksLikeLink("https://github.com/x") && looksLikeLink("linkedin.com/in/x") && looksLikeLink("www.x.dev"));
 check("not links: a word, a sentence", !looksLikeLink("Yes") && !looksLikeLink("Careers Website") && !looksLikeLink("see my site"));
+
+// Greenhouse's education Discipline (2 Nov, Nexla): the resume's subject is not in the board's list, so the user picked
+// one; that pick is used from then on, not the resume's subject again (it was asked 7 times).
+const person = { fullName: "A", email: "a@example.test", phone: null, city: null, country: "India", linkedin: null, github: null, portfolio: null, yearsExperience: 1, currentTitle: null, currentCompany: null, resumeKey: "r", education: [{ school: "X University", degree: "B.Tech in Computer Science and Engineering", year: "2024" }] };
+const discipline = { selector: '[id="discipline--0"]', label: "Discipline", type: "combobox", required: true };
+const fromResume = resolveValues([{ field: discipline, key: null }], person, []);
+check("without an answer, Discipline comes from the resume's degree", fromResume.values[0]?.value === "Computer Science and Engineering" && fromResume.values[0]?.source === "resume", JSON.stringify(fromResume.values));
+const picked = resolveValues([{ field: discipline, key: null }], person, [{ key: customQuestionKey("Discipline"), answer: "Computer Science", source: "user" }]);
+check("the user's own pick for Discipline wins over the resume", picked.values[0]?.value === "Computer Science" && picked.values[0]?.source === "user", JSON.stringify(picked.values));
+
+// Keka's screening questions (2 Nov, weaddo): read from the page, as form fields.
+const ccna = screeningField({ id: "3e6353a9", name: "screeningQuestions.3e6353a9.answer", kind: "text", label: "Do you have CCNA or equivalent certification? mention certification name.", required: true, options: [] });
+check("a screening text question is a required text field by its input name", ccna?.type === "text" && ccna.required && ccna.selector === '[name="screeningQuestions.3e6353a9.answer"]', JSON.stringify(ccna));
+const relocate = screeningField({ id: "9b", name: "screeningQuestions.9b.answer", kind: "radio", label: "Can you relocate?", required: true, options: ["Yes", "No"] });
+check("a screening one-choice question is a radio with its options", relocate?.type === "radio" && relocate.options?.join("|") === "Yes|No" && relocate.selector === 'input[type=radio][name="screeningQuestions.9b.answer"]', JSON.stringify(relocate));
+check("a screening question without a label is not a field", screeningField({ id: "x", name: "screeningQuestions.x.answer", kind: "text", label: "", required: false, options: [] }) === null);
 
 console.log(failed === 0 ? "PASS keka" : `FAIL keka (${failed})`);
 process.exit(failed === 0 ? 0 : 1);
