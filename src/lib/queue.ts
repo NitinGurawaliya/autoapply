@@ -125,6 +125,16 @@ export async function enqueueIngest(days: number) {
 }
 
 /**
+ * Discovery on one board (modules/jobs/discovery.ts), its own job: the daily run gives each board one, so a slow board
+ * (Greenhouse took 52 minutes on 2 Nov) cannot run the whole job past its time and leave the next boards out (Ashby
+ * had not run since 1 Nov, Keka never). Four hours each; at most one per board queued or running.
+ */
+export async function enqueueDiscover(board: string) {
+  const boss = await getBoss();
+  return boss.send(DISCOVER_QUEUE, { board }, { singletonKey: `discover:${board}`, expireInSeconds: 4 * 3600, retryLimit: 0 });
+}
+
+/**
  * Pre-scan a user's feed for missing facts (modules/apply/prescan.ts); at most one per user and reason every 10
  * minutes. Building the feed also caches the model's verdicts on its jobs, so a scan queued when a resume is read
  * ("resume") or confirmed ("profile") makes the first feed a read instead of a wait (16 Oct QA: 10-15 s for a new user).

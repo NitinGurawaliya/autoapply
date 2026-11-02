@@ -2,8 +2,8 @@ import { hostname } from "node:os";
 import { db } from "@/lib/db";
 import { getBoss, HANDOFF_QUEUE, PERSON_QUEUE, UNPROTECTED_QUEUE } from "@/lib/queue";
 import { autoSubmitAshby, canShowWindow } from "@/modules/apply/browser";
-import { runDiscovery } from "@/modules/jobs/discovery";
 import { handleApply } from "./handlers/apply";
+import { handleDiscover } from "./handlers/discover";
 import { handleIngest } from "./handlers/ingest";
 import { handlePrescan } from "./handlers/prescan";
 import { expirePersonHandoffs, housekeeping, reapStaleRuns } from "./reaper";
@@ -29,9 +29,8 @@ async function main() {
   if (canShowWindow()) await boss.work(PERSON_QUEUE, { localConcurrency: concurrency }, handleApply);
   await boss.work("ingest", handleIngest);
   await boss.work("prescan", handlePrescan);
-  await boss.work("discover", async () => {
-    await runDiscovery();
-  });
+  // The daily run hands each board its own job; this takes them one at a time (handlers/discover.ts).
+  await boss.work("discover", handleDiscover);
   const auto = autoSubmitAshby() ? ", auto submit" : "";
   console.log(`worker listening for apply (x${concurrency})${unprotected ? `, ${UNPROTECTED_QUEUE} (x${concurrency}${auto})` : ""}${handoff ? `, ${HANDOFF_QUEUE} (x${concurrency}${auto}), ${PERSON_QUEUE}` : ", no screen: no protected Ashby"} and ingest`);
 

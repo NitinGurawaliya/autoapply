@@ -59,6 +59,8 @@ export const BOARDS: Board[] = ALL_BOARDS.flatMap((board) => (board.discovery ? 
  * and asked for less obvious ones, sector by sector, until `count` new names come up or MAX_CALLS calls are made.
  */
 const MAX_CALLS = 3;
+// How many already-checked names the model is shown to steer away from; every known name is still filtered out after.
+const AVOID_SHOWN = 400;
 // 50 a call ran past the model's output limit and came back cut off (15 Oct, Ashby): no names at all.
 const NAMES_PER_CALL = 25;
 /** Which companies the model is asked for: the daily run looks past household names; a "large" run asks for them. */
@@ -214,13 +216,20 @@ async function discoverOn(board: Board, options: { count?: number; crawlLimit?: 
   const log = options.log ?? ((line: string) => console.log(line));
   const source = board.source;
   const [checked, companies, everywhere] = await Promise.all([
-    db.discoveryCandidate.findMany({ where: { source }, select: { name: true, slug: true } }),
+    db.discoveryCandidate.findMany({ where: { source }, select: { name: true, slug: true, from: true, checkedAt: true } }),
     db.company.findMany({ where: { source }, select: { name: true, slug: true } }),
     // A company we already take from another board is not proposed again: its jobs would come in twice.
     db.company.findMany({ select: { name: true } }),
   ]);
   const names = [...new Set([...checked.map((row) => row.name), ...everywhere.map((row) => row.name)])];
-  const known = { keys: new Set(names.map(normalName)), names };
+  // Every known name still filters what the model proposes (keys), but the model is shown at most AVOID_SHOWN of them:
+  // the names it proposed most recently, then this board's companies. The whole list (thousands of names, ~20,500
+  // tokens for Ashby on 2 Nov) made it run past its output limit and return cut-off JSON, so no names came back.
+  const avoid = [
+    ...checked.filter((row) => row.from === "model").sort((a, b) => b.checkedAt.getTime() - a.checkedAt.getTime()).map((row) => row.name),
+    ...companies.map((row) => row.name),
+  ];
+  const known = { keys: new Set(names.map(normalName)), names: [...new Set(avoid)].slice(0, AVOID_SHOWN) };
   const knownSlugs = new Set([...checked.map((row) => row.slug), ...companies.map((row) => row.slug)].filter((slug): slug is string => !!slug));
   const proposals = await (board.fromModel === false ? Promise.resolve([]) : proposeCandidates(known, options.count ?? PER_RUN, new Date(), board, options.focus)).catch((error) => {
     log(`discovery ${source}: the model gave no names (${error instanceof Error ? error.message.slice(0, 80) : "failed"})`);
