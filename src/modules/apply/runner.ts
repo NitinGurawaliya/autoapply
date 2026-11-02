@@ -6,7 +6,7 @@ import { storage } from "@/lib/storage";
 import { notifyNeedsInput } from "@/lib/notify";
 import { ONE_TIME_CODE_KEY } from "@/modules/answers";
 import { check, loadRules, writeEvent } from "@/modules/governance";
-import { BotCheckError, MaybeSentError, NeedsAnswerError, NoRetryError, type FilledField, type PendingQuestion } from "./adapter";
+import { BotCheckError, MaybeSentError, NeedsAnswerError, NoRetryError, RefusedError, type FilledField, type PendingQuestion } from "./adapter";
 import { decideAfterError, SUBMIT_ATTEMPT } from "./outcome";
 import { uploadResume } from "./adapters/mock";
 import { livePage, openBrowser } from "./browser";
@@ -109,9 +109,17 @@ const HANDOFF_SUCCESS_SHOWN_MS = 3000;
 const WINDOW_REOPENED = "The window was closed before Submit, so it opened again";
 
 /** What the page looked like when a run failed, so "why" is an answer and not a guess. Never blocks the failure path. */
-async function captureFailure(session: Awaited<ReturnType<typeof openBrowser>> | null, applicationId: string, attempt: number, userId: string) {
+async function captureFailure(session: Awaited<ReturnType<typeof openBrowser>> | null, applicationId: string, attempt: number, userId: string, error?: unknown) {
   const page = session?.page;
-  if (!page || page.isClosed()) return;
+  if (!page || page.isClosed()) {
+    // The window was closed first: the page as the board's refusal showed it, when the adapter kept one (Keka).
+    const kept = error instanceof RefusedError ? error.screenshot : undefined;
+    if (!kept) return;
+    const key = `screenshots/${applicationId}/fail-${attempt}.jpg`;
+    await storage.put(key, new Uint8Array(kept), "image/jpeg", userId).catch(() => undefined);
+    await writeEvent(applicationId, "screenshot", key).catch(() => undefined);
+    return;
+  }
   try {
     const shot = await page.screenshot({ ...SHOT, fullPage: true, timeout: 10000 });
     const key = `screenshots/${applicationId}/fail-${attempt}.jpg`;
@@ -432,7 +440,7 @@ async function execute(applicationId: string, options: { person?: boolean }) {
     // past it. A person takes it over: the run goes on the queue only a worker with a screen takes, where the form is filled
     // again in a window they can see and they press Submit (adapters/ashby.ts). The attempt is not counted.
     if (error instanceof BotCheckError && !attempted) {
-      await captureFailure(session, applicationId, attempt, application.userId);
+      await captureFailure(session, applicationId, attempt, application.userId, error);
       if (!options.person) {
         // This window is closed before the person's run can open another, so only one is ever open for the form.
         await session?.close();
@@ -473,7 +481,7 @@ async function execute(applicationId: string, options: { person?: boolean }) {
       await setApp(applicationId, { status: "failed", error: skipped, attempt: application.attempt });
       return;
     }
-    await captureFailure(session, applicationId, attempt, application.userId);
+    await captureFailure(session, applicationId, attempt, application.userId, error);
     if (next === "pending_verification") {
       // Submit may have gone out and nothing confirms it either way: never retried automatically (a retry could send a
       // second application). The user checks their email and says which it was (lifecycle.ts resolveVerification).

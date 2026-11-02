@@ -84,6 +84,14 @@ async function main() {
     check("its reason is Keka's red box and the field's message", /already applied/i.test(reason) && /Email: Email already exists|Email already exists/.test(reason), reason);
     check("the person was told what Keka said, with time to fix it", dup.told.some((line) => /already applied/i.test(line) && /2 minutes/.test(line)), dup.told.join(" // "));
     check("the run gave the person about 2 minutes", dup.seconds >= 115 && dup.seconds < 200, `${dup.seconds}s`);
+    check("the failure carries a screenshot of the form as Keka showed it", dup.error instanceof RefusedError && (dup.error.screenshot?.length ?? 0) > 1000, String(dup.error instanceof RefusedError && dup.error.screenshot?.length));
+
+    // 1b. The window closed while Keka showed it: the run stops at once with Keka's words and the screenshot, no reopening.
+    const closing = await (await browser.newContext()).newPage();
+    setTimeout(() => void closing.close(), 8000);
+    const closed = await run(closing, "duplicate");
+    check("closing the window there ends the run with Keka's reason, not 'closed before Apply'", closed.error instanceof RefusedError && /already applied/i.test(closed.error.message) && closed.seconds < 30, `${closed.error instanceof Error ? closed.error.message : closed.error} ${closed.seconds}s`);
+    check("and keeps the screenshot", closed.error instanceof RefusedError && (closed.error.screenshot?.length ?? 0) > 1000);
 
     // 2. "Invalid captcha", then read again and sent again.
     const retry = await run(await (await browser.newContext()).newPage(), "captcha");

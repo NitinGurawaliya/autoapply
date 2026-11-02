@@ -557,6 +557,7 @@ export const kekaAdapter: AtsAdapter = {
     });
     let shown: string[] = [];
     let shownSince = 0;
+    let shot: Buffer | undefined;
     let askedForCaptcha = false;
     try {
       await page.bringToFront();
@@ -569,7 +570,7 @@ export const kekaAdapter: AtsAdapter = {
         const live = livePage(page);
         if (!live) {
           // Closed while Keka showed why it sent nothing: that is the outcome, and opening the form again would show it again.
-          if (shown.length) throw new RefusedError(`Keka did not send the application. It said: ${shown.join(" | ")}`);
+          if (shown.length) throw new RefusedError(`Keka did not send the application. It said: ${shown.join(" | ")}`, shot);
           throw new WindowClosedError("The Keka window was closed before Apply was pressed.");
         }
         const evidence = await successShown(live).catch(() => null);
@@ -597,10 +598,12 @@ export const kekaAdapter: AtsAdapter = {
           shownSince = 0;
         } else if (errors.join("|") !== shown.join("|")) {
           shown = errors;
+          // The form as it showed them, for the application page if the window is closed before the run stops.
+          shot = await live.screenshot({ type: "jpeg", quality: 72, fullPage: true, timeout: 10000 }).catch(() => shot);
           shownSince ||= Date.now();
           await ctx.announceHandoff?.(`Keka did not send the application. It said: ${errors.join(" | ")}. Fix it in the Chrome window and press Apply Now, or it stops in 2 minutes.`.slice(0, 500));
         }
-        if (shown.length && Date.now() - shownSince > FIX_WAIT_MS) throw new RefusedError(`Keka did not send the application. It said: ${shown.join(" | ")}`);
+        if (shown.length && Date.now() - shownSince > FIX_WAIT_MS) throw new RefusedError(`Keka did not send the application. It said: ${shown.join(" | ")}`, shot);
 
         await live.waitForTimeout(1500).catch(() => undefined);
       }

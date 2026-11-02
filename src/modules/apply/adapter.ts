@@ -115,8 +115,15 @@ export class MaybeSentError extends NoRetryError {}
 /** Handoff: the window was closed and no submission ever left it, so nothing was sent and the form can open again. */
 export class WindowClosedError extends NotSentError {}
 
-/** The board said on the page that it refused the submission (a spam refusal): nothing was sent, even after a Submit. */
-export class RefusedError extends NotSentError {}
+/**
+ * The board said on the page that it refused the submission (a spam refusal, Keka's own messages): nothing was sent,
+ * even after a Submit. `screenshot`: the page when it said so, for when the window is closed before the run stops.
+ */
+export class RefusedError extends NotSentError {
+  constructor(message: string, public screenshot?: Buffer) {
+    super(message);
+  }
+}
 
 /**
  * The worker's own Submit was stopped by the board's bot check (a CAPTCHA challenge shown, or a code emailed) before
