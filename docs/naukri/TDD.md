@@ -466,17 +466,9 @@ Notice copy (agent voice):
 
 ---
 
-## 10. Tasks (TASKS.md Phase K keeps the numbers)
+## 10. Tasks
 
-Order K1 → K2 → K4, one session each, plan first, check pasted, typecheck and lint.
-
-- **K1 — Connect flow and tooling decision.** Schema and migration; rules; `browser.ts` site-scoped encrypted state; `modules/sources`; the four routes; `source-connect` queue, handler and the screen-only registration; `hasScreen` beat; Account card and sheet; §6.20 and §11 updated.
-  **Done when:** the owner connects Naukri in the handoff window without typing anything into our app; `naukri-connect-smoke` PASS (restart keeps the session, Disconnect deletes the blob, test profile refused); typecheck and lint pass.
-- **K2 — Naukri ingest.** `sites/naukri.ts`, `fetchers/naukri.ts`, board entry, `ingestForUser`, `SourceRun`, cron tick and the on-demand route, `applyBoardsFor`, feed chip and filter, the 14-day close.
-  **Done when:** `naukri-listing-test` PASS; `naukri-ingest-smoke` for the owner stores Naukri jobs that show in their feed with tiers and "via Naukri", stops at the budget with a `budget` event; a second, unconnected user sees none; a Workday-redirect job is not stored and a Greenhouse-redirect job carries `applyVia = greenhouse`.
-- **K4 — Naukri apply adapter.** Recon in the owner's signed-in session (webcmd-browser or a Playwright script) to capture the drawer markup and the apply request into fixtures; `stepwise`/`advance` in the runner; the adapter; routing, pace and connection checks; `explain.ts`/`steps.ts` copy.
-  **Done when:** `naukri-adapter-test` PASS; `naukri-dry-run` on 3 real jobs reaches Apply signed in and presses nothing; one real right-swipe by the owner ends `submitted` with Naukri's confirmation and screenshot, questions with sources on the application page; a question it could not answer went through "Needs you" once; `ENABLE_NAUKRI=1` and Naukri in `applyBoardsFor`.
-- **K3 / K5 — LinkedIn:** same `SiteConnection`, `openBrowser({site})`, `ingestForUser`, step loop; designed after K4's real runs.
+In [TASKS.md](TASKS.md) beside this file: K1, K2, K4 and K4b with their Do, Done-when and the sections of this design each one builds; K3 and K5 (LinkedIn) until their own design exists. Root `docs/TASKS.md` Phase K lists them one line each. Order K1 → K2 → K4, one session each, plan first, check pasted, typecheck and lint.
 
 ---
 

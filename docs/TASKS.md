@@ -589,28 +589,11 @@ Done 1 Nov: all of the above on a production build as a throwaway user (shown 5.
 
 Starts only when Phase J is done: T94 (Lever handoff), T95 (SmartRecruiters), T96 (Keka) in `APPLY_BOARDS`, T97 (board report). Rules in CLAUDE.md and ARCHITECTURE §6.20.
 
-Design: `docs/NAUKRI_TDD.md` (final, 3 Nov) — research on Naukri and webcmd, the options weighed, the decision (our Playwright worker, the user's own session in the visible Chrome window on a worker with a screen, no webcmd in production), architecture (§4), UI (§5), API (§6), testing (§7), rollout (§8), risks (§9) and the decisions closed with the owner (§11). The per-task design lives there; the entries below are the index. Order K1 → K2 → K4, one session each; LinkedIn (K3, K5) is designed after K4's real runs.
+Design: [docs/naukri/TDD.md](naukri/TDD.md) (final, 3 Nov). Tasks with their Do, the design sections each builds, Done-when and the Done lines: [docs/naukri/TASKS.md](naukri/TASKS.md). Status is marked there first, then on the line here. Order K1 → K2 → K4; K3 and K5 (LinkedIn) are designed after K4's real runs.
 
-### [ ] K1 — Connect flow and tooling decision
-Do: `SiteConnection` schema and migration, the per-site rules, site-scoped encrypted browser state in `lib/storage.ts`, `modules/sources`, the four routes, the `source-connect` queue with its screen-only handler and `hasScreen` beat, the Account card and sheet; ARCHITECTURE §6.20 and §11 record the choice. Design: TDD §4.1–4.5, §4.9, §4.12–4.13, §5, §6.
-**Done when:** the owner connects Naukri in the handoff window without typing anything into our app; `naukri-connect-smoke` PASS (a worker restart keeps the session, Disconnect deletes the blob, a test profile is refused); typecheck and lint pass.
-
-### [ ] K2 — Naukri job ingest
-Do: `sites/naukri.ts`, `fetchers/naukri.ts`, the board entry, `ingestForUser` with `SourceRun`, the cron tick and the on-demand route, `applyBoardsFor`, the "via Naukri" feed chip and filter, the 14-day close. Design: TDD §4.6, §4.8, §4.10–4.11.
-**Done when:** `naukri-listing-test` PASS; `naukri-ingest-smoke` for the owner stores Naukri jobs that show in their feed with tiers and "via Naukri" and stops at the budget with a `budget` event; a second, unconnected user sees none; a Workday-redirect job is not stored and a Greenhouse-redirect job carries `applyVia = greenhouse`.
-
-### [ ] K3 — LinkedIn job ingest
-Do: as K2 for LinkedIn (`source = linkedin`) on the same `SiteConnection`, `openBrowser({site})` and `ingestForUser`; jobs whose Apply leaves for a company ATS keep that URL. Designed in its own short TDD after K4's real runs.
-**Done when:** as K2 for LinkedIn.
-
-### [ ] K4 — Naukri apply adapter
-Do: recon in the owner's signed-in session (the `webcmd-browser` skill or a Playwright script) captures the chat drawer markup and the apply request into fixtures; `stepwise`/`advance` in the runner; the adapter with questions through the answer bank and `needs_input` for the rest; routing, pace and connection checks; `explain.ts`/`steps.ts` copy. Design: TDD §4.7–4.8, §7, §8.
-**Done when:** `naukri-adapter-test` PASS; `naukri-dry-run` on 3 real jobs reaches Apply signed in and presses nothing; one real right-swipe by the owner ends `submitted` with Naukri's confirmation and screenshot and the questions with sources on the application page; a question it could not answer went through "Needs you" once; `ENABLE_NAUKRI=1` and Naukri in `applyBoardsFor`.
-
-### [ ] K4b — Mock Naukri drawer
-Do: `/mock/naukri` for the smoke test, after K4's real submit; the hard rule moves from `/mock/greenhouse` to `/mock/*` in CLAUDE.md and PRD §9 in the same change. Design: TDD §11 item 4.
-**Done when:** `tests/smoke.spec.ts` runs the Naukri adapter against the mock drawer on a test profile and passes; typecheck and lint pass.
-
-### [ ] K5 — LinkedIn Easy Apply adapter
-Do: adapter for Easy Apply's multi-step dialog on K4's step loop; external-apply jobs go to the ATS adapter we have, else are not offered. Designed with K3 after K4's real runs.
-**Done when:** dry runs on 3 Easy Apply jobs fill everything they can; one real submit before LinkedIn goes into `APPLY_BOARDS`.
+- [ ] [K1 — Connect flow and tooling decision](naukri/TASKS.md#k1)
+- [ ] [K2 — Naukri job ingest](naukri/TASKS.md#k2)
+- [ ] [K3 — LinkedIn job ingest](naukri/TASKS.md#k3)
+- [ ] [K4 — Naukri apply adapter](naukri/TASKS.md#k4)
+- [ ] [K4b — Mock Naukri drawer](naukri/TASKS.md#k4b)
+- [ ] [K5 — LinkedIn Easy Apply adapter](naukri/TASKS.md#k5)

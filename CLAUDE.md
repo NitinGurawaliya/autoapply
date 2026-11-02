@@ -17,12 +17,12 @@ Always read before a task: `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/TASKS.md
 
 Design docs and the task list are one process, not two. No OpenSpec or other change-folder system: at this size (one owner, one agent session at a time) ARCHITECTURE.md is the spec, the TDD is the design, TASKS.md is the task list.
 
-1. **A TDD before the work** for any phase or feature that needs research or touches more than two modules. It lives in `docs/<FEATURE>_TDD.md` with the sections `docs/NAUKRI_TDD.md` has: what the user gets, research, options and decision, design with a code map, governance, risks, tasks, open questions, sources. Tasks under two files need no TDD.
-2. **The TDD's tasks section holds the design per task.** `docs/TASKS.md` keeps one entry per task: ID, title, one "Do" line, a testable "Done when", and a pointer to the TDD section. TASKS.md is the index, never a copy of the TDD.
+1. **A TDD before the work** for any phase or feature that needs research or touches more than two modules. It lives in `docs/<feature>/TDD.md` with the sections `docs/naukri/TDD.md` has: goals and non-goals, facts the design rests on, options and decision, architecture (components, queues, data model, state, sequences, checks, security, failures, observability, code map, env), UI, API, testing, rollout, risks, a pointer to the tasks, decisions closed with the owner, sources. Tasks under two files need no TDD.
+2. **Tasks live beside the TDD, in `docs/<feature>/TASKS.md`**, one full entry per task: ID, title, a "Do" line, a "Design:" line linking the TDD sections it builds, a testable "Done when", and the `Done <date>:` line once it lands. Root `docs/TASKS.md` lists the phase's tasks one linked line each (`- [ ] [K1 — title](naukri/TASKS.md#k1)`) and nothing more. Status is marked in the feature file first, then on the root line. Neither file copies the design.
 3. **The task that makes a decision updates ARCHITECTURE.md in the same change.** The TDD never becomes a second source of truth; once a decision is in ARCHITECTURE.md the TDD is history.
-4. **A landed task gets a "Done <date>:" line** in TASKS.md with what was measured and what changed, as T91–T93 have. That line is the record.
+4. **A landed task gets a `Done <date>:` line** in its task file with what was measured and what changed, as T91–T93 have in the root file. That line is the record.
 
-Growth path: split TASKS.md by phase (`docs/tasks/<phase>.md`) once it passes about a thousand lines. Reconsider change folders only if a second developer or parallel agent sessions work the same phase at once.
+Growth path: older phases in the root TASKS.md move into `docs/<feature>/TASKS.md` files the same way once the root passes about a thousand lines. Reconsider change folders only if a second developer or parallel agent sessions work the same phase at once.
 
 ## Stack (do not swap)
 
