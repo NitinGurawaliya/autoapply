@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Locator, Page, Request } from "playwright";
 import { joinChoices, splitChoices } from "@/lib/choices";
 import type { AtsAdapter, FilledField, FormField, ResolvedValue, SubmitResult } from "../adapter";
-import { BotCheckError, MaybeSentError, NoRetryError, RefusedError, WindowClosedError } from "../adapter";
+import { BotCheckError, CaptchaRejectedError, MaybeSentError, NoRetryError, NotSentError, RefusedError, WindowClosedError } from "../adapter";
 import { livePage } from "../browser";
 import { assertJobOpen, dismissOverlays, inField } from "./common";
 import { analyzeTestImage } from "../captcha/ai";
@@ -16,8 +16,8 @@ import { analyzeTestImage } from "../captcha/ai";
  *
  * Every Keka form has an image CAPTCHA tied to the browser session (`/careers/Captcha`, checked on submit). Keka is a
  * handoff board (lib/queue.ts): the form is filled in a visible Chrome window on a worker with a screen, the CAPTCHA is
- * read and typed in the captcha step (../captcha), then the worker presses "Apply Now"; a person steps in only when
- * that check fails.
+ * read and typed in the captcha step (../captcha), then the worker presses "Apply Now". Keka answers in seconds: a wrong
+ * CAPTCHA starts the run again from the form, and anything else Keka says ends the run at once with its words.
  */
 
 // Keka's field types in the form JSON (read 31 Oct on Jupiter and Keka's own portal).
@@ -482,11 +482,11 @@ async function refusal(page: Page) {
 }
 
 const APPLY_BUTTON = "#jobApplicationSubmitButton, button:has-text('Apply Now')";
-const CAPTCHA_TRIES = 3;
-/** How long a person has to fix what Keka showed before the run stops with it. */
-const FIX_WAIT_MS = 2 * 60 * 1000;
-
-export const HANDOFF_WAIT_MS = 15 * 60 * 1000;
+/**
+ * How long Keka has to answer Apply Now: its answer (success page, error page, "Invalid captcha", its messages) comes in
+ * seconds. The run never waits on a person after that (3 Nov, owner: fail at once, never hold a worker slot).
+ */
+const OUTCOME_WAIT_MS = 60 * 1000;
 
 export const kekaAdapter: AtsAdapter = {
   source: "keka",
@@ -534,87 +534,51 @@ export const kekaAdapter: AtsAdapter = {
     } catch {
       throw new BotCheckError("Keka CAPTCHA input was not visible. Manual submission cannot continue.");
     }
-    await page.locator(APPLY_BUTTON).first().waitFor({ state: "visible", timeout: 10000 });
-
-    // The CAPTCHA read from its image (../captcha) and Apply Now pressed; after "Invalid captcha" Keka shows a new image,
-    // which is read again, up to CAPTCHA_TRIES times, then the person types it.
-    let tries = 0;
-    const tryCaptcha = async (live: Page) => {
-      tries += 1;
-      const text = (await analyzeTestImage(await captureKekaCaptcha(live))).trim();
-      // Hidden first, so a later "Invalid captcha" is this answer's.
-      await live.locator("#invalidCaptcha, #noCaptcha").evaluateAll((nodes) => nodes.forEach((node) => ((node as HTMLElement).style.display = "none")));
-      await live.locator("#captcha").fill(text);
-      const button = live.locator(APPLY_BUTTON).first();
-      await button.scrollIntoViewIfNeeded().catch(() => undefined);
-      await button.click({ timeout: 10000 });
-    };
+    const button = page.locator(APPLY_BUTTON).first();
+    await button.waitFor({ state: "visible", timeout: 10000 });
 
     let applied = false;
     // Registered before Apply is pressed, so a quick submission is not missed.
     const stop = kekaAdapter.watchSubmit!(page, () => {
       applied = true;
     });
-    let shown: string[] = [];
-    let shownSince = 0;
-    let shot: Buffer | undefined;
-    let askedForCaptcha = false;
     try {
+      // The CAPTCHA read from its image (../captcha), then Apply Now. One answer per run: a wrong one starts the run
+      // again from the form with a new CAPTCHA (CaptchaRejectedError, runner.ts).
       await page.bringToFront();
-      await tryCaptcha(page);
-      await ctx.announceHandoff?.("The form is filled and Apply Now was pressed. If Keka asks for the CAPTCHA again, type it in the Chrome window and press Apply Now.");
+      const text = (await analyzeTestImage(await captureKekaCaptcha(page))).trim();
+      await captcha.fill(text);
+      await button.scrollIntoViewIfNeeded().catch(() => undefined);
+      await button.click({ timeout: 10000 });
 
-      const deadline = Date.now() + HANDOFF_WAIT_MS;
+      const deadline = Date.now() + OUTCOME_WAIT_MS;
       while (Date.now() < deadline) {
-        if (await ctx.cancelled?.()) throw new WindowClosedError("Cancelled before Apply was pressed. Nothing was sent.");
+        if (await ctx.cancelled?.()) throw new WindowClosedError("Cancelled before Keka answered. Nothing was sent.");
         const live = livePage(page);
-        if (!live) {
-          // Closed while Keka showed why it sent nothing: that is the outcome, and opening the form again would show it again.
-          if (shown.length) throw new RefusedError(`Keka did not send the application. It said: ${shown.join(" | ")}`, shot);
-          throw new WindowClosedError("The Keka window was closed before Apply was pressed.");
-        }
+        if (!live) throw new WindowClosedError("The Keka window was closed before Keka answered.");
         const evidence = await successShown(live).catch(() => null);
         if (evidence) return { confirmed: true, evidence };
         if (ERROR_URL.test(live.url())) {
           const said = await refusal(live);
           throw new RefusedError(`Keka refused the application${said ? `: "${said}"` : ""}.`);
         }
-
-        const captchaWrong = await live.locator("#invalidCaptcha, #noCaptcha").first().isVisible().catch(() => false);
-        if (captchaWrong) {
-          if (tries < CAPTCHA_TRIES) {
-            await tryCaptcha(live).catch(() => undefined);
-          } else if (!askedForCaptcha) {
-            askedForCaptcha = true;
-            await ctx.announceHandoff?.("Keka did not accept the CAPTCHA. Type the new one in the Chrome window and press Apply Now.");
-          }
+        // The form as Keka showed it, kept with the refusal for the application page.
+        const shot = () => live.screenshot({ type: "jpeg", quality: 72, fullPage: true, timeout: 10000 }).catch(() => undefined);
+        if (await live.locator("#invalidCaptcha, #noCaptcha").first().isVisible().catch(() => false)) {
+          throw new CaptchaRejectedError("Keka did not accept the CAPTCHA the agent read, so nothing was sent.", await shot());
         }
-
-        // Keka's own messages: recorded when they change, the person gets a short while to fix them in the window, then
-        // the run stops with them as its reason.
+        // Keka's own messages (the red box at the top, a field's): nothing was sent, and the run stops with them at once.
         const errors = await formErrors(live);
-        const said = errors.map((line) => line.replace(/[.\s]+$/, "")).join(" | ");
-        if (!errors.length) {
-          shown = [];
-          shownSince = 0;
-        } else if (errors.join("|") !== shown.join("|")) {
-          shown = errors;
-          // The form as it showed them, for the application page if the window is closed before the run stops.
-          shot = await live.screenshot({ type: "jpeg", quality: 72, fullPage: true, timeout: 10000 }).catch(() => shot);
-          shownSince ||= Date.now();
-          // The red box at the top is Keka's decision about the candidate (already applied, one job at a time): nothing in
-          // the window changes it, so the run stops at once (2 Nov: toddle and deccanaiauto waited 2 minutes for nothing).
-          if (await live.locator("#validation-text").isVisible().catch(() => false)) throw new RefusedError(`Keka did not send the application. It said: ${said}.`, shot);
-          await ctx.announceHandoff?.(`Keka did not send the application. It said: ${said}. Fix it in the Chrome window and press Apply Now, or it stops in 2 minutes.`.slice(0, 500));
+        if (errors.length) {
+          const said = errors.map((line) => line.replace(/[.\s]+$/, "")).join(" | ");
+          throw new RefusedError(`Keka did not send the application. It said: ${said}.`, await shot());
         }
-        if (shown.length && Date.now() - shownSince > FIX_WAIT_MS) throw new RefusedError(`Keka did not send the application. It said: ${said}.`, shot);
-
-        await live.waitForTimeout(1500).catch(() => undefined);
+        await live.waitForTimeout(1000).catch(() => undefined);
       }
     } finally {
       stop();
     }
-    if (!applied) throw new WindowClosedError("Apply Now was not pressed within 15 minutes. Nothing was sent.");
+    if (!applied) throw new NotSentError("Apply Now was pressed, but Keka neither sent the application nor said why within a minute.");
     throw new MaybeSentError("Apply Now was pressed, but Keka's success page was not detected. Check your email before retrying.");
   },
 };

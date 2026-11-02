@@ -6,8 +6,8 @@ import { storage } from "@/lib/storage";
 import { notifyNeedsInput } from "@/lib/notify";
 import { ONE_TIME_CODE_KEY } from "@/modules/answers";
 import { check, loadRules, writeEvent } from "@/modules/governance";
-import { BotCheckError, MaybeSentError, NeedsAnswerError, NoRetryError, RefusedError, type FilledField, type PendingQuestion } from "./adapter";
-import { decideAfterError, SUBMIT_ATTEMPT } from "./outcome";
+import { BotCheckError, CaptchaRejectedError, MaybeSentError, NeedsAnswerError, NoRetryError, RefusedError, type FilledField, type PendingQuestion } from "./adapter";
+import { decideAfterError, rerunsInRow, SUBMIT_ATTEMPT } from "./outcome";
 import { uploadResume } from "./adapters/mock";
 import { livePage, openBrowser } from "./browser";
 import { boardSupported } from "./lifecycle";
@@ -107,6 +107,10 @@ async function captureConfirmation(page: Awaited<ReturnType<typeof openBrowser>>
 // window opened again after the user closed it before Submit.
 const HANDOFF_SUCCESS_SHOWN_MS = 3000;
 const WINDOW_REOPENED = "The window was closed before Submit, so it opened again";
+// A CAPTCHA the board refused (CaptchaRejectedError): the run starts again from the form with a new one, this many times
+// in a row before it fails. Not counted as failed attempts: nothing was sent.
+const CAPTCHA_RERUN = "The CAPTCHA was not accepted, so the form is being filled again from the start";
+const CAPTCHA_RERUNS = 3;
 
 /** What the page looked like when a run failed, so "why" is an answer and not a guess. Never blocks the failure path. */
 async function captureFailure(session: Awaited<ReturnType<typeof openBrowser>> | null, applicationId: string, attempt: number, userId: string, error?: unknown) {
@@ -407,6 +411,19 @@ async function execute(applicationId: string, options: { person?: boolean }) {
       if (evidence) {
         await recordAfterSubmit(applicationId, { status: "submitted", submittedAt: new Date(), pendingQuestions: [], error: null });
         await writeEvent(applicationId, "submit", `Application submitted. Confirmation: ${evidence} after you pressed Submit`.slice(0, 300));
+        return;
+      }
+    }
+    if (error instanceof CaptchaRejectedError) {
+      const retries = await db.applicationEvent.findMany({ where: { applicationId, type: "retry" }, orderBy: { createdAt: "desc" }, select: { message: true } });
+      const reruns = rerunsInRow(retries.map((event) => event.message), CAPTCHA_RERUN);
+      if (reruns < CAPTCHA_RERUNS) {
+        await captureFailure(session, applicationId, attempt, application.userId, error);
+        // Closed first, so the next run's window is the only one open for this form.
+        await session?.close();
+        await writeEvent(applicationId, "retry", `${CAPTCHA_RERUN} (${reruns + 1} of ${CAPTCHA_RERUNS}).`);
+        await setApp(applicationId, { status: "queued", attempt: application.attempt, error: null });
+        await enqueueApply(applicationId, 3);
         return;
       }
     }

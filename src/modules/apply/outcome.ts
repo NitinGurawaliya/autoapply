@@ -10,6 +10,15 @@ import { NotSentError, RefusedError, WindowClosedError } from "./adapter";
 
 export type AfterError = "retry" | "failed" | "pending_verification" | "reopen" | "skip";
 
+/**
+ * How many of an application's newest retry events, newest first, are reruns of one kind (`prefix`, e.g. a CAPTCHA the
+ * board refused): the reruns in a row. Any other retry (one by the user) ends the row, so it starts the count again.
+ */
+export function rerunsInRow(newestFirst: string[], prefix: string) {
+  const other = newestFirst.findIndex((message) => !message.startsWith(prefix));
+  return other === -1 ? newestFirst.length : other;
+}
+
 /** The event a run writes right before Submit is pressed (runner.ts markAttempted). */
 export const SUBMIT_ATTEMPT = "submit_attempt";
 

@@ -4,9 +4,9 @@
 // npx tsx scripts/submit-guard-test.ts
 import { db } from "../src/lib/db";
 import { APPLY_QUEUES, HANDOFF_BOARDS, HANDOFF_QUEUE, PERSON_QUEUE, queueFor, UNPROTECTED_QUEUE } from "../src/lib/queue";
-import { MaybeSentError, NoRetryError, NotSentError, RefusedError, WindowClosedError } from "../src/modules/apply/adapter";
+import { CaptchaRejectedError, MaybeSentError, NoRetryError, NotSentError, RefusedError, WindowClosedError } from "../src/modules/apply/adapter";
 import { retryApplication, resolveVerification } from "../src/modules/apply/lifecycle";
-import { decideAfterError, lastRunMaySendTwice, SUBMIT_ATTEMPT } from "../src/modules/apply/outcome";
+import { decideAfterError, lastRunMaySendTwice, rerunsInRow, SUBMIT_ATTEMPT } from "../src/modules/apply/outcome";
 import { recordAfterSubmit } from "../src/modules/apply/runner";
 import { historyFor } from "../src/modules/governance";
 
@@ -35,6 +35,13 @@ check("after Submit, a generic no-retry error is still pending_verification", de
 // After Submit, the board showed nothing was sent.
 check("after Submit, a CAPTCHA (NotSentError) fails so the user may retry", decide({ error: new NotSentError("Ashby showed a CAPTCHA."), attempted: true }) === "failed");
 check("after Submit, a spam refusal (NotSentError) fails", decide({ error: new NotSentError("Ashby refused the application as possible spam."), attempted: true, retryable: false }) === "failed");
+
+// A CAPTCHA the board refused (Keka): once the reruns are used up it fails, never pending_verification, even after Submit.
+check("a refused CAPTCHA after Submit fails, never pending_verification", decide({ error: new CaptchaRejectedError("Keka did not accept the CAPTCHA."), attempted: true, handoff: true, submitStage: true, retryable: false }) === "failed");
+const RERUN = "The CAPTCHA was not accepted";
+check("no reruns yet counts 0", rerunsInRow([], RERUN) === 0);
+check("two CAPTCHA reruns in a row count 2", rerunsInRow([`${RERUN} (2 of 3).`, `${RERUN} (1 of 3).`], RERUN) === 2);
+check("a Retry by the user starts the count again", rerunsInRow([`${RERUN} (1 of 3).`, "Retried by you", `${RERUN} (3 of 3).`, `${RERUN} (2 of 3).`], RERUN) === 1);
 
 // Handoff windows.
 check("handoff: window closed with nothing sent opens again", decide({ error: new WindowClosedError("closed"), handoff: true, submitStage: true, windowGone: true }) === "reopen");
