@@ -113,6 +113,8 @@ const NOT_A_PLACE = /^(on-?site|office|the office|our office|in[- ]person|remote
 
 // Candidates per question: the closest saved wordings by meaning, looser than the memory step (recall.ts, 0.54), since
 // the model, the confirming call and the checks below decide.
+// Drafts and best guesses (guess.ts) are the agent's, not the candidate's: never evidence for another answer.
+const NOT_THEIRS = new Set(["ai_draft", "guessed"]);
 const CANDIDATES = 8;
 const MIN_SCORE = 0.45;
 
@@ -179,10 +181,10 @@ export async function inferAnswers(input: {
   let next = 0;
   const skip = new Set(input.excludeKeys ?? []);
   const standing = input.answers
-    .filter((row) => !isCustomQuestionKey(row.key) && !skip.has(row.key) && !/^accept_|^essay_/.test(row.key) && row.source !== "ai_draft" && row.answer.trim() && row.question?.trim())
+    .filter((row) => !isCustomQuestionKey(row.key) && !skip.has(row.key) && !/^accept_|^essay_/.test(row.key) && !NOT_THEIRS.has(row.source) && row.answer.trim() && row.question?.trim())
     .map((row) => ({ id: row.key, key: row.key, question: row.question ?? row.key, answer: row.answer, source: row.source, context: (row.context ?? null) as Recalled["context"], updatedAt: row.updatedAt ?? new Date(0), score: 1, n: ++next }));
   const found = await recall(input.userId, fields.map((field) => field.label), { limit: CANDIDATES, minScore: MIN_SCORE, excludeKeys: input.excludeKeys });
-  const offered = fields.map((field) => (found.get(field.label) ?? []).filter((row) => row.source !== "ai_draft" && row.answer.trim() && isCustomQuestionKey(row.key)).map((row) => ({ ...row, n: ++next })));
+  const offered = fields.map((field) => (found.get(field.label) ?? []).filter((row) => !NOT_THEIRS.has(row.source) && row.answer.trim() && isCustomQuestionKey(row.key)).map((row) => ({ ...row, n: ++next })));
   const saved = (row: { n: number; question: string; answer: string; context: unknown; updatedAt: Date }) => ({ n: row.n, question: row.question.slice(0, 300), answer: row.answer.slice(0, 300), answeredFor: row.context ?? null, savedOn: new Date(row.updatedAt).toISOString().slice(0, 16) });
   const toConfirm: Array<{ label: string; source: string; value: string; answer: string }> = [];
   if (standing.length > 0 || offered.some((rows) => rows.length > 0)) {

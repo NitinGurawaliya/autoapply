@@ -89,7 +89,7 @@ export async function recall(userId: string, labels: string[], options: { limit?
       const rows = await db.$queryRaw<Array<Omit<Recalled, "score"> & { score: number }>>`
         SELECT "id", "key", "question", "answer", "source", "context", "updatedAt", 1 - ("embedding" <=> ${vector}::vector) AS "score"
         FROM "Answer"
-        WHERE "userId" = ${userId} AND "embedding" IS NOT NULL AND "key" NOT LIKE 'accept\\_%' AND NOT ("key" = ANY(${exclude}))
+        WHERE "userId" = ${userId} AND "embedding" IS NOT NULL AND "source" <> 'guessed' AND "key" NOT LIKE 'accept\\_%' AND NOT ("key" = ANY(${exclude}))
         ORDER BY "embedding" <=> ${vector}::vector
         LIMIT ${limit}`;
       out.set(

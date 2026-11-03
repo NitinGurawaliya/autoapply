@@ -107,7 +107,11 @@ async function main() {
       await page.getByRole("button", { name: "India", exact: true }).nth(1).click();
       await page.getByRole("button", { name: "No, only jobs where I live" }).click();
       await page.getByRole("button", { name: "No", exact: true }).click();
-      await page.screenshot({ path: `${OUT}/${scheme}-6-where.png` });
+      // Routine consents (asked here once, 3 Nov): Yes is preselected; the dark run says No.
+      const consentYes = page.getByRole("button", { name: "Yes, accept them for me" });
+      check(`${scheme}: routine consents are asked once, Yes preselected`, (await consentYes.isVisible()) && (await consentYes.getAttribute("aria-pressed")) === "true", String(await consentYes.getAttribute("aria-pressed")));
+      if (scheme === "dark") await page.getByRole("button", { name: "No, ask me each time" }).click();
+      await page.screenshot({ path: `${OUT}/${scheme}-6-where.png`, fullPage: true });
       await page.getByRole("button", { name: /Start swiping/ }).click();
       await page.waitForURL(/\/feed/, { timeout: 60000 });
       const rows = await db.answer.findMany({ where: { userId: user.id } });
@@ -121,6 +125,7 @@ async function main() {
         citizenship: "India|user",
         relocate_outside_home: "No, only jobs where I live|user",
         sponsorship_outside_home: "No|user",
+        accept_acknowledgements: `${scheme === "dark" ? "No" : "Yes"}|user`,
       };
       check(`${scheme}: the saved answers use today's keys and values`, Object.entries(expected).every(([key, value]) => answers[key] === value), JSON.stringify(answers));
       await context.close();

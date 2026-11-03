@@ -18,10 +18,14 @@ export function ChipGroup({
   className?: string;
   legendClassName?: string;
 }) {
+  // Blocks: two short answers side by side (Yes / No); longer ones, or three, one per row at full width. In two columns
+  // they wrapped onto two lines inside the fixed-height block and left a third alone on half a row (3 Nov, owner).
+  const pair = options.length === 2 && options.every((option) => option.label.length <= 16);
+  const layout = shape === "block" ? (pair ? "grid grid-cols-2 gap-2" : "grid grid-cols-1 gap-2") : "flex flex-wrap gap-2";
   return (
     <fieldset className={cn("m-0 border-0 p-0", className)}>
       <legend className={cn("mb-2.5 p-0 text-sm font-semibold", legendClassName)}>{legend}</legend>
-      <div className={shape === "block" ? "grid grid-cols-2 gap-2" : "flex flex-wrap gap-2"}>
+      <div className={layout}>
         {options.map((option) =>
           option.href !== undefined ? (
             <Chip key={option.key ?? option.label} shape={shape} selected={option.selected} href={option.href}>

@@ -1,6 +1,7 @@
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getAll } from "@/modules/answers";
+import { ACKNOWLEDGEMENT_KEY, ACKNOWLEDGEMENT_QUESTION } from "@/modules/apply/acknowledgement";
 import { CITIZENSHIP_KEY, CITIZENSHIP_QUESTION, RELOCATE_ABROAD_KEY, RELOCATE_ABROAD_OPTIONS, relocateAbroadQuestion } from "@/modules/apply/abroad";
 import { SPONSORSHIP_ABROAD_KEY, SPONSORSHIP_ABROAD_OPTIONS, sponsorshipAbroadQuestion } from "@/modules/apply/sponsorship";
 import { redirect } from "next/navigation";
@@ -35,6 +36,8 @@ export default async function QuestionsPage() {
     citizenship: valueOf(map, CITIZENSHIP_KEY),
     relocate_outside_home: valueOf(map, RELOCATE_ABROAD_KEY),
     sponsorship_outside_home: valueOf(map, SPONSORSHIP_ABROAD_KEY),
+    // Preselected Yes for someone who has not answered it; their own earlier answer otherwise.
+    accept_acknowledgements: valueOf(map, ACKNOWLEDGEMENT_KEY) || "Yes",
   };
   // The standing answers the agent uses on every form (modules/apply/abroad.ts, sponsorship.ts), asked here once so
   // no application stops for them; the wording is the agent's own.
@@ -44,6 +47,7 @@ export default async function QuestionsPage() {
     citizenship: CITIZENSHIP_QUESTION,
     relocate: { question: relocateAbroadQuestion(home), options: RELOCATE_ABROAD_OPTIONS },
     sponsorship: { question: sponsorshipAbroadQuestion(home), options: SPONSORSHIP_ABROAD_OPTIONS },
+    acknowledgement: { key: ACKNOWLEDGEMENT_KEY, question: ACKNOWLEDGEMENT_QUESTION },
   };
   return (
     <Screen>

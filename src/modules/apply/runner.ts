@@ -4,9 +4,10 @@ import { db } from "@/lib/db";
 import { enqueueApply, HANDOFF_BOARDS, PERSON_HANDOFF } from "@/lib/queue";
 import { storage } from "@/lib/storage";
 import { notifyNeedsInput } from "@/lib/notify";
-import { ONE_TIME_CODE_KEY } from "@/modules/answers";
+import { ONE_TIME_CODE_KEY, upsert } from "@/modules/answers";
 import { check, loadRules, writeEvent } from "@/modules/governance";
 import { BotCheckError, CaptchaRejectedError, MaybeSentError, NeedsAnswerError, NoRetryError, RefusedError, type FilledField, type PendingQuestion } from "./adapter";
+import { guessable, guessAnswers } from "./guess";
 import { decideAfterError, rerunsInRow, SUBMIT_ATTEMPT } from "./outcome";
 import { uploadResume } from "./adapters/mock";
 import { livePage, openBrowser } from "./browser";
@@ -111,6 +112,8 @@ const WINDOW_REOPENED = "The window was closed before Submit, so it opened again
 // in a row before it fails. Not counted as failed attempts: nothing was sent.
 const CAPTCHA_RERUN = "The CAPTCHA was not accepted, so the form is being filled again from the start";
 const CAPTCHA_RERUNS = 3;
+// A value the live form's options did not take, guessed from those options (guess.ts) and the form filled again.
+const GUESS_RETRY = "Filled again with a best guess from the form's own options for";
 
 /** What the page looked like when a run failed, so "why" is an answer and not a guess. Never blocks the failure path. */
 async function captureFailure(session: Awaited<ReturnType<typeof openBrowser>> | null, applicationId: string, attempt: number, userId: string, error?: unknown) {
@@ -422,6 +425,23 @@ async function execute(applicationId: string, options: { person?: boolean }) {
         // Closed first, so the next run's window is the only one open for this form.
         await session?.close();
         await writeEvent(applicationId, "retry", `${CAPTCHA_RERUN} (${reruns + 1} of ${CAPTCHA_RERUNS}).`);
+        await setApp(applicationId, { status: "queued", attempt: application.attempt, error: null });
+        await enqueueApply(applicationId, 3);
+        return;
+      }
+    }
+    // Guess and send (guess.ts, 4 Nov, owner): the value did not fit the live form's options (Greenhouse's Discipline
+    // list, a location search), so the closest of those options is guessed, saved as a guess and the form filled again
+    // from the start; once per question, then it is asked as before.
+    if (error instanceof NeedsAnswerError && !attempted && error.question.options?.length) {
+      const question = error.question;
+      const tried = await db.applicationEvent.count({ where: { applicationId, type: "retry", message: { startsWith: `${GUESS_RETRY} "${question.label.slice(0, 80)}"` } } });
+      const field = { selector: "", label: question.label, type: question.type, required: true, options: question.options };
+      const guess = tried === 0 && guessable(field) ? (await guessAnswers({ fields: [field], profile, answers, job: jobInfo }).catch(() => null))?.get(question.label) : undefined;
+      if (guess) {
+        await upsert(application.userId, { key: question.key, question: question.label, answer: guess.answer, source: "guessed" });
+        await writeEvent(applicationId, "retry", `${GUESS_RETRY} "${question.label.slice(0, 80)}": ${guess.answer.slice(0, 80)} (${guess.basis.slice(0, 120)})`);
+        await session?.close();
         await setApp(applicationId, { status: "queued", attempt: application.attempt, error: null });
         await enqueueApply(applicationId, 3);
         return;

@@ -5,7 +5,7 @@ import type { AnswerContext } from "./memory";
 import { getAnswerKey } from "./keys";
 import { isCustomQuestionKey } from "./questionKey";
 
-const SOURCES = ["resume", "user", "ai_draft", "default"] as const;
+const SOURCES = ["resume", "user", "ai_draft", "default", "guessed"] as const;
 
 export type AnswerSource = (typeof SOURCES)[number];
 

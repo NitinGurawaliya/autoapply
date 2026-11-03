@@ -5,6 +5,7 @@ import { abroadAnswer } from "./abroad";
 import { deriveAnswers, type ProfileForDerive, yesNoOf } from "./derive";
 import { BEST_PROJECT_KEY, draftEssays, essayKind, ESSAY_PERMISSION_KEY, type EssayKind, type EssayProfile } from "./essay";
 import { mapFields } from "./fieldMapper";
+import { guessAnswers } from "./guess";
 import { inferAnswers } from "./infer";
 import { mapToOptions } from "./optionMap";
 import { answerFromMemory, type MemoryAnswer } from "./recall";
@@ -144,15 +145,35 @@ export async function resolveForm(input: {
   // Answers we have but worded differently from the form's options (optionMap.ts).
   const pendingNow = new Set(resolved.pending.map((question) => question.label));
   const unfit = resolved.unfit.filter((item) => pendingNow.has(item.label));
+  let optionMatches: Map<string, string> | undefined;
   if (unfit.length > 0) {
     try {
       const matches = await mapToOptions(unfit);
       if (matches.size > 0) {
+        optionMatches = matches;
         resolved = resolveValues(mapped, profile, answers, memoryAnswers, matches, jobRef);
         await log(`Matched ${matches.size} saved answers to this form's options`);
       }
     } catch (error) {
       await log(`Could not match answers to the form's options (${why(error)}); asking instead`);
+    }
+  }
+
+  // Guess and send (guess.ts, 4 Nov, owner): every required question still open gets the answer most likely true for
+  // this candidate instead of stopping the application. Essays the live run drafts are left to it.
+  const drafting = new Set(willDraft);
+  const stillOpen = new Set(resolved.pending.filter((question) => question.required && !drafting.has(question.label)).map((question) => question.label));
+  const toGuess = mapped.filter((item) => stillOpen.has(item.field.label)).map((item) => item.field);
+  if (toGuess.length > 0) {
+    try {
+      const guesses = await guessAnswers({ fields: toGuess, profile, answers, job });
+      if (guesses.size > 0) {
+        resolved = resolveValues(mapped, profile, answers, memoryAnswers, optionMatches, jobRef, guesses);
+        const used = resolved.values.filter((value) => value.source === "guessed");
+        await log(`Filled ${used.length} with best guesses instead of asking`, { guessed: used.map((value) => `${value.label.slice(0, 80)}: ${value.value.slice(0, 60)} (${(value.basis ?? "").slice(0, 100)})`) });
+      }
+    } catch (error) {
+      await log(`Could not guess the open answers (${why(error)}); asking instead`);
     }
   }
 

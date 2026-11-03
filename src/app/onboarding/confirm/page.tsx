@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getAll } from "@/modules/answers";
 import { CITIZENSHIP_KEY, RELOCATE_ABROAD_KEY } from "@/modules/apply/abroad";
 import { SPONSORSHIP_ABROAD_KEY } from "@/modules/apply/sponsorship";
+import { ACKNOWLEDGEMENT_KEY } from "@/modules/apply/acknowledgement";
 import { TRACK_LABELS, TRACKS, tracksOf } from "@/modules/jobs";
 import { profileSchema } from "@/modules/profile";
 import { redirect } from "next/navigation";
@@ -10,7 +11,7 @@ import { Screen } from "@/components/patterns/layout";
 import { ConfirmForm } from "./confirm-form";
 
 /** What the questions step (onboarding/questions) saves. */
-const ONBOARDING_KEYS = ["current_ctc", "expected_ctc", "notice_period", "employment_type", "preferred_location", CITIZENSHIP_KEY, RELOCATE_ABROAD_KEY, SPONSORSHIP_ABROAD_KEY];
+const ONBOARDING_KEYS = ["current_ctc", "expected_ctc", "notice_period", "employment_type", "preferred_location", CITIZENSHIP_KEY, RELOCATE_ABROAD_KEY, SPONSORSHIP_ABROAD_KEY, ACKNOWLEDGEMENT_KEY];
 
 export default async function ConfirmPage() {
   const user = await getCurrentUser();

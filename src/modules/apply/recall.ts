@@ -14,7 +14,7 @@ import type { FormField } from "./adapter";
 
 export type JobContext = { company: string; title: string; location: string; country: string };
 /** An answer from memory ("matched", the default) or worked out from the profile and resume ("derived", derive.ts). */
-export type MemoryAnswer = { key: string; answer: string; basis: string; score: number; source?: "matched" | "derived" | "ai_draft" };
+export type MemoryAnswer = { key: string; answer: string; basis: string; score: number; source?: "matched" | "derived" | "ai_draft" | "guessed" };
 
 const verifySchema = z.object({
   results: z.array(

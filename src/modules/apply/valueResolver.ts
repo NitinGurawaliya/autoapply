@@ -164,6 +164,8 @@ export function resolveValues(
   /** The job being applied to: a "why this company" answer is only reused for the same company; its country decides
    * whether the standing sponsorship answer applies (sponsorship.ts). */
   job?: { company: string; country?: string },
+  /** Best guesses for questions nothing else answers (guess.ts), by field label: used instead of asking. */
+  guesses?: Map<string, MemoryAnswer>,
 ) {
   const rules = loadRules();
   const bank = new Map(answers.map((row) => [row.key, row]));
@@ -182,6 +184,12 @@ export function resolveValues(
     const questionKey = customQuestionKey(field.label);
     const ask = (askKey: string) => {
       if (!field.required) return;
+      // Guess and send (4 Nov, owner): the best guess goes in instead of stopping the application to ask.
+      const guess = guesses?.get(field.label);
+      if (guess && push(askKey, guess.answer, "guessed")) {
+        values[values.length - 1].basis = guess.basis;
+        return;
+      }
       const options = field.type === "checkbox" ? ["Yes", "No"] : field.options;
       pending.push({ key: askKey, label: field.label, type: field.type, options, required: true });
     };
@@ -232,7 +240,7 @@ export function resolveValues(
     // and Engineering" for Greenhouse's Discipline) was asked, answered and then used again, 7 times (2 Nov, Nexla).
     const history = historyValue(field.selector, profile);
     const ownHistory = history ? bank.get(questionKey) : undefined;
-    if (ownHistory?.source === "user" && push(questionKey, ownHistory.answer, "user")) continue;
+    if ((ownHistory?.source === "user" || ownHistory?.source === "guessed") && push(questionKey, ownHistory.answer, ownHistory.source)) continue;
     if (history && push(key ?? questionKey, history.value, "resume")) {
       values[values.length - 1].basis = history.basis;
       continue;

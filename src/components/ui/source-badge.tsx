@@ -1,7 +1,7 @@
 import { cn } from "cn";
 import { Icon, type IconName } from "@/components/ui/icons";
 
-// Where a filled value came from, drawn as in design/detail.html: icon plus outline, AI draft dashed.
+// Where a filled value came from, drawn as in design/detail.html: icon plus outline, AI draft and best guess dashed.
 export const SOURCES: Record<string, { label: string; icon: IconName; dashed?: boolean }> = {
   resume: { label: "Resume", icon: "file" },
   user: { label: "You", icon: "person" },
@@ -9,6 +9,8 @@ export const SOURCES: Record<string, { label: string; icon: IconName; dashed?: b
   derived: { label: "Worked out", icon: "file" },
   default: { label: "Default", icon: "target" },
   ai_draft: { label: "AI draft", icon: "pen", dashed: true },
+  // Guess and send (modules/apply/guess.ts): the agent's best guess where nothing settled the answer, with its reason.
+  guessed: { label: "Best guess", icon: "agent", dashed: true },
 };
 
 export function sourceLabel(source: string) {

@@ -194,7 +194,7 @@ function Primitives() {
 
       <Section title="Source badges">
         <div className="flex flex-wrap gap-2">
-          {["resume", "user", "matched", "derived", "default", "ai_draft"].map((source) => (
+          {["resume", "user", "matched", "derived", "default", "ai_draft", "guessed"].map((source) => (
             <SourceBadge key={source} source={source} />
           ))}
         </div>

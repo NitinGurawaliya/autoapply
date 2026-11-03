@@ -30,6 +30,8 @@ export type QuestionValues = {
   citizenship: string;
   relocate_outside_home: string;
   sponsorship_outside_home: string;
+  /** The one-time permission to accept routine consents on forms (modules/apply/acknowledgement.ts). */
+  accept_acknowledgements: string;
 };
 
 export type StandingQuestions = {
@@ -37,7 +39,14 @@ export type StandingQuestions = {
   citizenship: string;
   relocate: { question: string; options: string[] };
   sponsorship: { question: string; options: string[] };
+  acknowledgement: { key: string; question: string };
 };
+
+// Asked here once (3 Nov) so a new user's first application does not stop for it; Yes is preselected and shown.
+const CONSENT = [
+  { label: "Yes, accept them for me", value: "Yes" },
+  { label: "No, ask me each time", value: "No" },
+];
 
 /**
  * Step 3 of onboarding (design/onboarding.html): pay and notice, then what and where. The same answers as before,
@@ -83,7 +92,8 @@ export function QuestionsForm({ initial, standing }: { initial: QuestionValues; 
       preferred.length === 0 ||
       !values.citizenship.trim() ||
       !values.relocate_outside_home ||
-      !values.sponsorship_outside_home
+      !values.sponsorship_outside_home ||
+      !values.accept_acknowledgements
     ) {
       setStatus("error");
       return;
@@ -98,6 +108,7 @@ export function QuestionsForm({ initial, standing }: { initial: QuestionValues; 
       { key: "citizenship", question: standing.citizenship, answer: values.citizenship.trim().slice(0, 200) },
       { key: "relocate_outside_home", question: standing.relocate.question, answer: values.relocate_outside_home },
       { key: "sponsorship_outside_home", question: standing.sponsorship.question, answer: values.sponsorship_outside_home },
+      { key: standing.acknowledgement.key, question: standing.acknowledgement.question, answer: values.accept_acknowledgements },
     ];
 
     setStatus("saving");
@@ -125,7 +136,7 @@ export function QuestionsForm({ initial, standing }: { initial: QuestionValues; 
         <StepHeader step={3} backHref="/onboarding/confirm" />
         <ScreenBody className="gap-5 overflow-y-auto pb-5">
           <PageIntro eyebrow="Questions 1 of 2" title="A few answers every form asks" />
-          <Callout>We never guess these. They only go to jobs you swipe right on, and if a form asks something new, we&apos;ll pause and ask you.</Callout>
+          <Callout>We never guess these. They only go to jobs you swipe right on. Anything else a form asks, your agent answers from your resume and answers, and shows you why.</Callout>
           <div className="flex flex-col gap-2">
             <FieldLabel htmlFor="current_ctc">Current CTC</FieldLabel>
             <InputBox id="current_ctc" inputMode="decimal" prefix="₹" suffix="lakh a year" value={values.current_ctc} onChange={(event) => set("current_ctc", event.target.value)} />
@@ -192,8 +203,18 @@ export function QuestionsForm({ initial, standing }: { initial: QuestionValues; 
             options={standing.sponsorship.options.map((option) => ({ label: option, selected: values.sponsorship_outside_home === option, onSelect: () => set("sponsorship_outside_home", option) }))}
           />
           <p className="m-0 text-[13px] leading-[1.45] text-muted-foreground">
-            Forms ask these in many wordings (based in the US? authorized to work in Canada? citizen of one of these countries?). We answer each from these, and never guess.
+            Forms ask these in many wordings (based in the US? authorized to work in Canada? citizen of one of these countries?). We answer each from these.
           </p>
+        </div>
+        <div className="box-border flex flex-col gap-3.5 rounded-panel border-2 border-edge bg-surface p-4 shadow-hard">
+          <span className="text-base font-semibold">Routine consents</span>
+          <ChipGroup
+            shape="block"
+            legend="Forms often require you to accept a privacy notice, a &quot;my answers are true&quot; declaration or an arbitration agreement. May your agent accept these for you?"
+            legendClassName="mb-2 font-normal text-muted-foreground"
+            options={CONSENT.map((option) => ({ label: option.label, selected: values.accept_acknowledgements === option.value, onSelect: () => set("accept_acknowledgements", option.value) }))}
+          />
+          <p className="m-0 text-[13px] leading-[1.45] text-muted-foreground">Marketing opt-ins and statements about you, such as work authorization, are never accepted for you.</p>
         </div>
         {status === "error" ? <FieldError>Answer every question before saving.</FieldError> : null}
         {status === "failed" ? <FieldError>Could not save your answers. Try again.</FieldError> : null}

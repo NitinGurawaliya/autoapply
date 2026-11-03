@@ -150,7 +150,10 @@ const READ_SCREENING = `(() => {
     if (!id || type === 'hidden') continue;
     let row = rows.get(id);
     if (!row) {
-      const label = document.querySelector('label[for="' + CSS.escape(id) + '"]') || (el.closest('.form-group') && el.closest('.form-group').querySelector('label'));
+      // Its own label: by its id (text questions), else the question's box (radio and tick-box questions, 3 Nov: Rapid
+      // Acceleration's "Pass out year" has its label beside the options, not for one of them).
+      const box = el.closest('.validation, .form-group');
+      const label = document.querySelector('label[for="' + CSS.escape(id) + '"]:not(.error)') || (box && box.querySelector(':scope > label:not(.error):not(.form-check-label)'));
       const kind = el.tagName === 'SELECT' ? 'select' : el.tagName === 'TEXTAREA' ? 'textarea' : ['radio', 'checkbox', 'number', 'date'].includes(type) ? type : 'text';
       row = { id, name, kind, label: ((label && (label.getAttribute('data-content') || words(label))) || '').replace(/\\*\\s*$/, '').trim(), required: !!(label && label.querySelector('.text-danger')), options: [] };
       rows.set(id, row);

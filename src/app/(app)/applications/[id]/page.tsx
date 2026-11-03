@@ -57,9 +57,11 @@ const STEP_EVENT: Record<string, (event: { type: string; message: string }) => b
 /** One line on where the answers came from: "Every answer came from your resume or from you. 1 note was written by your agent, marked below." */
 function trustText(sources: string[]) {
   const drafts = sources.filter((source) => source === "ai_draft").length;
-  const base = sources.some((source) => source !== "ai_draft") ? "Every answer came from your resume or from you." : "";
+  const guesses = sources.filter((source) => source === "guessed").length;
+  const base = sources.some((source) => source !== "ai_draft" && source !== "guessed") ? "Every answer came from your resume or from you." : "";
   const draftText = drafts === 0 ? "" : ` ${drafts} ${drafts === 1 ? "note was" : "notes were"} written by your agent, marked below.`;
-  return `${base}${draftText}`.trim();
+  const guessText = guesses === 0 ? "" : ` ${guesses} ${guesses === 1 ? "answer is your agent's best guess" : "answers are your agent's best guesses"}, marked below with why.`;
+  return `${guesses ? base.replace("Every answer", "The other answers") : base}${draftText}${guessText}`.trim();
 }
 
 export default async function ApplicationPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ debug?: string }> }) {
@@ -109,7 +111,7 @@ export default async function ApplicationPage({ params, searchParams }: { params
 
   // The story: the swipe, then each step that has happened (or is happening) with the time of its event.
   // Like the design, steps still to come are not listed.
-  const answers = { yours: fields.filter((field) => field.source !== "ai_draft").length, drafted: fields.filter((field) => field.source === "ai_draft").length };
+  const answers = { yours: fields.filter((field) => field.source !== "ai_draft" && field.source !== "guessed").length, drafted: fields.filter((field) => field.source === "ai_draft" || field.source === "guessed").length };
   const story: StoryStep[] = [
     { key: "swiped", time: clock(application.createdAt), title: "You picked this job", state: "done" as const },
     ...buildSteps(application.events, application.status, answers).map((step): StoryStep => {
@@ -120,7 +122,7 @@ export default async function ApplicationPage({ params, searchParams }: { params
     }),
   ].filter((step) => step.state !== "todo");
 
-  const counts = ["resume", "user", "matched", "derived", "default", "ai_draft"]
+  const counts = ["resume", "user", "matched", "derived", "default", "ai_draft", "guessed"]
     .map((source) => ({ source, count: fields.filter((field) => field.source === source).length }))
     .filter((item) => item.count > 0);
   const shot = application.events.find((event) => event.type === "screenshot");
