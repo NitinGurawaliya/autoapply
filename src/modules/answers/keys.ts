@@ -48,7 +48,8 @@ export const ANSWER_KEYS: AnswerKeyDef[] = [
   { key: "race", type: "select", policy: "default_only", default: EEO_DEFAULT, synonyms: [/\brace\b/i] },
   { key: "ethnicity", type: "select", policy: "default_only", default: EEO_DEFAULT, synonyms: [/ethnicit/i] },
   { key: "veteran_status", type: "select", policy: "default_only", default: EEO_DEFAULT, synonyms: [/veteran/i] },
-  { key: "disability", type: "select", policy: "default_only", default: EEO_DEFAULT, synonyms: [/disabilit/i] },
+  // Indian forms ask it as "Specially abled", "Differently abled", "PwD" (4 Nov, 3SC on Keka).
+  { key: "disability", type: "select", policy: "default_only", default: EEO_DEFAULT, synonyms: [/disabilit/i, /(specially|differently)[- ]abled/i, /\bpwd\b/i, /physically (challenged|handicapped)/i] },
   { key: "pronouns", type: "select", policy: "default_only", default: EEO_DEFAULT, synonyms: [/pronouns/i] },
 
   { key: "how_heard", type: "text", policy: "default_only", default: "Job board", synonyms: [/how\s*did\s*you\s*hear/i, /how\s*did\s*you\s*find/i, /how\s*did\s*you\s*(get\s*to\s*)?(know|learn)\s*about\s*(us|this)/i, /^(recruitment\s*|application\s*)?source$/i] },

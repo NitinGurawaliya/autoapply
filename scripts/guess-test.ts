@@ -1,7 +1,7 @@
 // Guess and send (4 Nov), offline: what may be guessed, that a guess fits its field, and that the resolver uses a guess
 // only where it would otherwise ask (every earlier source wins). No model call.
 // npx tsx scripts/guess-test.ts
-import { customQuestionKey } from "../src/modules/answers";
+import { customQuestionKey, matchKeyBySynonym } from "../src/modules/answers";
 import type { FormField } from "../src/modules/apply/adapter";
 import { fitGuess, guessable } from "../src/modules/apply/guess";
 import type { MemoryAnswer } from "../src/modules/apply/recall";
@@ -16,12 +16,13 @@ function check(name: string, ok: boolean, detail = "") {
 const field = (label: string, type = "text", options?: string[]): FormField => ({ selector: `[name="${label.slice(0, 12)}"]`, label, type, required: true, ...(options ? { options } : {}) });
 
 // Never guessed.
-for (const label of ["Date of Birth", "E-sign below", "Aadhaar number", "PAN Card", "Passport number", "Have you ever been convicted of a criminal offence?", "Signature", "Gender", "Are you a protected veteran?", "Disability status"]) {
+for (const label of ["Date of Birth", "Specially abled", "Differently-abled?", "Are you a PwD candidate?", "Physically challenged", "Medical Background", "E-sign below", "Aadhaar number", "PAN Card", "Passport number", "Have you ever been convicted of a criminal offence?", "Signature", "Gender", "Are you a protected veteran?", "Disability status"]) {
   check(`never guessed: "${label}"`, !guessable(field(label)));
 }
 for (const label of ["How many years of experience do you have with Kafka?", "Discipline", "Preferred Location (smartcoin)", "Will you relocate to Chennai?", "How did you hear about us?", "Reason for change", "Have you independently owned features from design through deployment?", "If Resigned/ Serving Notice - What is LWD ?", "Have you worked at a broadcaster?"]) {
   check(`may be guessed: "${label}"`, guessable(field(label)));
 }
+check("Indian disability wordings are the disability question (Decline to answer, never guessed)", ["Specially abled", "Differently-abled?", "Are you a PwD candidate?", "Physically challenged"].every((label) => matchKeyBySynonym(label) === "disability"));
 check("a file is never guessed", !guessable(field("Cover letter upload", "file")));
 
 // A guess fits its field.

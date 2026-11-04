@@ -18,9 +18,10 @@ import type { MemoryAnswer } from "./recall";
  * fits the field: one of its options, a number for a number box, plain text of sane length.
  */
 
-// Whole words where a word could hide inside another: "e-sign" matched "design" and "Resigned", which dropped two
+// Disability in Indian forms' words too ("Specially abled" was guessed No on 3SC, 4 Nov), and health. Whole words where a
+// word could hide inside another: "e-sign" matched "design" and "Resigned", which dropped two
 // questions without a word (4 Nov fresh-user run).
-const NEVER = /date of birth|\bd\.?o\.?b\b|birth ?date|aadha?a?r|\bpan\b|passport|social security|\bssn\b|national (id|insurance)|tax (id|number)|\bgst\b|criminal|convict|felony|arrest|offen[cs]e|signature|sign (here|below)|\be-?sign\b|\bgender\b|\brace\b|ethnic|veteran|disabilit|pronoun|sexual orientation|religio|\bcaste\b/i;
+const NEVER = /date of birth|\bd\.?o\.?b\b|birth ?date|aadha?a?r|\bpan\b|passport|social security|\bssn\b|national (id|insurance)|tax (id|number)|\bgst\b|criminal|convict|felony|arrest|offen[cs]e|signature|sign (here|below)|\be-?sign\b|\bgender\b|\brace\b|ethnic|veteran|disabilit|(specially|differently)[- ]abled|\bpwd\b|physically (challenged|handicapped)|handicap|medical (condition|history|background)|health condition|pronoun|sexual orientation|religio|\bcaste\b/i;
 
 const SYSTEM = `You fill in the last open questions of a job application for a candidate, so it can be sent without asking them. Give your best answer to EVERY question: the one most likely true for this candidate, from everything given (their resume, profile, own saved answers to other questions, the job). A close, sensible answer is better than none.
 - Options listed (numbered from 1): answer with exactly one option's full text, copied as written (several, comma-separated, only for a multi-select). Pick the closest: for a list of offices or cities the one nearest the candidate's city, else one in their country; for a subject or degree list the nearest to theirs; for "how did you hear" a job-board or careers-site option ("LinkedIn", "Job board", "Company website", "Other").
