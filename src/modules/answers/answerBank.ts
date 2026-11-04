@@ -3,7 +3,8 @@ import { db } from "@/lib/db";
 import { forgetFeed } from "@/lib/feed-cache";
 import type { AnswerContext } from "./memory";
 import { getAnswerKey } from "./keys";
-import { isCustomQuestionKey } from "./questionKey";
+import { customQuestionKey, isCustomQuestionKey } from "./questionKey";
+import { fitsKey } from "./shape";
 
 const SOURCES = ["resume", "user", "ai_draft", "default", "guessed"] as const;
 
@@ -27,6 +28,12 @@ export async function upsert(
   userId: string,
   input: { key: string; question: string; answer: string; source: AnswerSource; context?: AnswerContext | null },
 ) {
+  // An answer that does not have the shape of the standard key it was filed under (a work-status sentence under
+  // `country`) is the answer to its own question only: kept under that question's key, so it never fills every later
+  // field of that standard key (shape.ts).
+  if (getAnswerKey(input.key) && !fitsKey(input.key, input.answer) && input.question.trim()) {
+    input = { ...input, key: customQuestionKey(input.question) };
+  }
   const def = getAnswerKey(input.key);
   const custom = isCustomQuestionKey(input.key);
   if (!def && !custom) throw new Error(`Unknown answer key: ${input.key}`);

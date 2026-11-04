@@ -1,5 +1,5 @@
 import { joinChoices, splitChoices } from "@/lib/choices";
-import { customQuestionKey, detectConcept, getAnswerKey, matchKeyBySynonym, RISKY } from "@/modules/answers";
+import { customQuestionKey, detectConcept, fitsKey, getAnswerKey, matchKeyBySynonym, RISKY } from "@/modules/answers";
 import { loadRules } from "@/modules/governance";
 import { ACKNOWLEDGEMENT_KEY, ACKNOWLEDGEMENT_QUESTION, acknowledgementValue } from "./acknowledgement";
 import { abroadAnswer } from "./abroad";
@@ -366,7 +366,9 @@ export function resolveValues(
     // the form (16 Oct, ElevenLabs "Location" wants a country; "India" was answered and then ignored for the city).
     // A link field takes a link only: a "Yes" saved under `portfolio` from another board's question filled two Keka
     // "Portfolio Link" boxes with "Yes" (1 Nov). An answer that is not one is passed over, as if it were not there.
-    const fits = (value: string | null | undefined) => !!value && (!LINK_KEYS.has(key) || looksLikeLink(value));
+    // Any standard key takes only a value of its shape (answers/shape.ts): a work-status sentence saved under `country`
+    // on 30 Oct was typed into every "Country" box and stopped the application (4 Nov); now it is passed over too.
+    const fits = (value: string | null | undefined) => !!value && (!LINK_KEYS.has(key) || looksLikeLink(value)) && fitsKey(key, value);
     const answeredHere = questionKey !== key ? bank.get(questionKey) : undefined;
     if (answeredHere?.source === "user" && fits(answeredHere.answer) && push(key, answeredHere.answer, "user")) continue;
     let fromProfileFirst = def?.policy === "deterministic" ? profileValue(profile, key) : null;

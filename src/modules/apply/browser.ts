@@ -81,6 +81,8 @@ async function launch(kind: "main" | "handoff"): Promise<Browser> {
     }
     return chromium.launch({ headless, args });
   }
+  // A visible main browser (DEMO_HEADED=1: every board in a window) is Google Chrome too where the machine has it.
+  if (!headless) return chromium.launch({ headless, channel: "chrome" }).catch(() => chromium.launch({ headless }));
   return chromium.launch({ headless });
 }
 

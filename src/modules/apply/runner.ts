@@ -433,11 +433,15 @@ async function execute(applicationId: string, options: { person?: boolean }) {
     // Guess and send (guess.ts, 4 Nov, owner): the value did not fit the live form's options (Greenhouse's Discipline
     // list, a location search), so the closest of those options is guessed, saved as a guess and the form filled again
     // from the start; once per question, then it is asked as before.
-    if (error instanceof NeedsAnswerError && !attempted && error.question.options?.length) {
+    // A search box that found nothing for the value ("Country (nothing matched ...)", no options to pick from) is guessed
+    // too, as the word to search for (4 Nov: four Greenhouse forms stopped on a Country search).
+    const searchedNothing = error instanceof NeedsAnswerError && / \(nothing matched .*\)$/.test(error.question.label);
+    if (error instanceof NeedsAnswerError && !attempted && (error.question.options?.length || searchedNothing)) {
       const question = error.question;
       const tried = await db.applicationEvent.count({ where: { applicationId, type: "retry", message: { startsWith: `${GUESS_RETRY} "${question.label.slice(0, 80)}"` } } });
-      const field = { selector: "", label: question.label, type: question.type, required: true, options: question.options };
-      const guess = tried === 0 && guessable(field) ? (await guessAnswers({ fields: [field], profile, answers, job: jobInfo }).catch(() => null))?.get(question.label) : undefined;
+      const asked = question.label.replace(/ \(nothing matched .*\)$/, "");
+      const field = { selector: "", label: searchedNothing ? `${asked} (a search box: give the one word or place name to search for)` : asked, type: question.type, required: true, options: question.options };
+      const guess = tried === 0 && guessable(field) ? (await guessAnswers({ fields: [field], profile, answers, job: jobInfo }).catch(() => null))?.get(field.label) : undefined;
       if (guess) {
         await upsert(application.userId, { key: question.key, question: question.label, answer: guess.answer, source: "guessed" });
         await writeEvent(applicationId, "retry", `${GUESS_RETRY} "${question.label.slice(0, 80)}": ${guess.answer.slice(0, 80)} (${guess.basis.slice(0, 120)})`);
