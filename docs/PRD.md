@@ -68,7 +68,7 @@ Payments, mobile app, push notifications, WhatsApp / extension / MCP, Workday ap
 
 ## 9. Hard rules (also in CLAUDE.md)
 
-- Submit only after a right-swipe, only for a profile marked `isTest = false`. Test profiles are routed to the mock form; the runner refuses real URLs for them.
+- Submit only after a right-swipe, only for a profile marked `isTest = false`. Test profiles are routed to the mock forms (`/mock/greenhouse`, `/mock/naukri`); the runner refuses real URLs for them.
 - Never invent a fact. Values come from the resume, the user, a default, or an AI draft that is labelled and limited to free-text fields.
 - Sensitive keys (CTC, notice period, work authorization, sponsorship, relocation, salary) are never AI-drafted. EEO defaults to "Decline to answer".
 - Daily cap per user (default 20). Minimum match score (default 40).

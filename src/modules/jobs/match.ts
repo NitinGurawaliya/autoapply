@@ -17,7 +17,16 @@ export { daysAgoLabel };
 // Lever (T94) only where ENABLE_LEVER=1: on for the worker and test runs that try its first real handoff submits, off in
 // the feed until they pass (INGEST_CONTRACT: a board goes in after one real submit). Keka (T96) the same, ENABLE_KEKA=1:
 // a person types its image CAPTCHA and presses Apply Now in the handoff window.
-export const APPLY_BOARDS: readonly string[] = ["greenhouse", ...(process.env.ENABLE_ASHBY === "0" ? [] : ["ashby"]), ...(process.env.ENABLE_LEVER === "1" ? ["lever"] : []), ...(process.env.ENABLE_KEKA === "1" ? ["keka"] : [])];
+// Naukri (K4): its own Apply through the user's signed-in account, only where both ENABLE_NAUKRI=1 and
+// ENABLE_NAUKRI_APPLY=1 (on after the owner's first real submit); still only for users connected to it (feedBoardsFor,
+// modules/apply/sites/gate.ts).
+export const APPLY_BOARDS: readonly string[] = [
+  "greenhouse",
+  ...(process.env.ENABLE_ASHBY === "0" ? [] : ["ashby"]),
+  ...(process.env.ENABLE_LEVER === "1" ? ["lever"] : []),
+  ...(process.env.ENABLE_KEKA === "1" ? ["keka"] : []),
+  ...(process.env.ENABLE_NAUKRI === "1" && process.env.ENABLE_NAUKRI_APPLY === "1" ? ["naukri"] : []),
+];
 /**
  * Sites read through the user's own signed-in account (Phase K, docs/naukri/TDD.md 4.6): in the feed only with
  * ENABLE_NAUKRI=1, and then only for a user whose account is connected (feedBoardsFor). Applying on them is a separate

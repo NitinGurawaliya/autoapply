@@ -22,10 +22,21 @@ const BLOCKS: Record<string, Omit<Outcome, "tone">> = {
   board_not_supported: { headline: "Apply on the posting", next: "Your agent can't apply on this job board yet. Open the posting and apply yourself." },
   profile_required: { headline: "Finish your profile first", next: "Your agent needs your profile to apply. Complete it, then try again." },
   allow_submit_on_real_sites: { headline: "Sending is paused", next: "Your agent isn't sending applications right now. Try again later." },
+  source_not_connected: { headline: "Connect your account first", next: "Your agent applies through your own account on this site. Connect it from Account, then retry." },
+  source_needs_signin: { headline: "Sign in again", next: "The job site signed you out. Sign in again from Account, then retry." },
+  source_paused: { headline: "Paused on this site for now", next: "The job site asked for a check, so your agent paused there for a day. Retry tomorrow, or apply on the site yourself." },
+  max_applies_per_day_naukri: { headline: "That's all on Naukri for today", next: "Your agent has applied as often as it may on Naukri today. Swipe again tomorrow." },
+  already_applied_on_site: { headline: "You already applied", next: "Naukri shows you applied to this job yourself, so your agent left it." },
 };
 
 const FAILURES: Array<[RegExp, (m: RegExpMatchArray) => Omit<Outcome, "tone">]> = [
   [/no longer open/i, () => ({ headline: "This job is closed", next: "The company has taken the posting down. Skip it." })],
+  [/signed you out\. Sign in to (\w+) again/i, (m) => ({ headline: `${m[1]} signed you out`, next: `Nothing was sent. Sign in to ${m[1]} again from Account, then retry.` })],
+  [/(\w+) asked for a check \(a CAPTCHA\)/i, (m) => ({ headline: `${m[1]} wanted a person`, next: `Nothing was sent. Your agent paused ${m[1]} for a day; retry tomorrow or apply there yourself.` })],
+  [/(\w+) turned automated use away/i, (m) => ({ headline: `${m[1]} turned your agent away`, next: `Nothing was sent. Your agent paused ${m[1]} for a day; retry tomorrow or apply there yourself.` })],
+  [/sends this job's applications to the company's own site/i, () => ({ headline: "Apply on the company site", next: "This job takes applications on the company's own site. Open the posting and apply there." })],
+  [/takes walk-ins/i, () => ({ headline: "A walk-in, not an application", next: "This job asks you to show interest or walk in. Open the posting on Naukri." })],
+  [/calendar your agent cannot fill/i, () => ({ headline: "A question your agent can't answer yet", next: "Nothing was sent. Open the posting and apply yourself." })],
   [/security code was not entered/i, () => ({ headline: "The security code didn't arrive in time", next: "Retry, and enter the code the job board emails you within 10 minutes." })],
   [/did not accept the security code/i, () => ({ headline: "The security code didn't work", next: "Retry and use the newest code from your email." })],
   [/captcha|human check|bot check/i, () => ({ headline: "The job board wanted a person", next: "Open the posting and submit it yourself." })],

@@ -13,6 +13,18 @@ function appHosts() {
   return hosts;
 }
 
+// This app's own mock forms: Greenhouse's, and Naukri's job page with its chat drawer (K4b, app/mock/naukri).
+const MOCK_PATHS = ["/mock/greenhouse", "/mock/naukri"];
+
+/** The signed-in site a mock job stands in for (its address is the mock Naukri page), or null. */
+export function mockSiteOf(rawUrl: string): "naukri" | null {
+  try {
+    return new URL(rawUrl).pathname.replace(/\/$/, "") === "/mock/naukri" ? "naukri" : null;
+  } catch {
+    return null;
+  }
+}
+
 export function formUrlAllowed(rawUrl: string, source: string) {
   let url: URL;
   try {
@@ -22,7 +34,7 @@ export function formUrlAllowed(rawUrl: string, source: string) {
   }
   if (url.username || url.password) return false;
   if (source === "mock") {
-    return (url.protocol === "http:" || url.protocol === "https:") && appHosts().has(url.hostname.toLowerCase()) && url.pathname.replace(/\/$/, "") === "/mock/greenhouse";
+    return (url.protocol === "http:" || url.protocol === "https:") && appHosts().has(url.hostname.toLowerCase()) && MOCK_PATHS.includes(url.pathname.replace(/\/$/, ""));
   }
   const pattern = boardOf(source)?.formHost;
   return !!pattern && url.protocol === "https:" && pattern.test(url.hostname) && (url.port === "" || url.port === "443");

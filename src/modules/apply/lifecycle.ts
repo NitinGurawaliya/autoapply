@@ -5,6 +5,7 @@ import { APPLY_QUEUES, enqueueApply } from "@/lib/queue";
 import { check, historyFor, loadRules, writeEvent } from "@/modules/governance";
 import { APPLY_BOARDS, jobSimilarity, judgeJobs, profileVector, scoreJob, tracksOf } from "@/modules/jobs";
 import { lastRunMaySendTwice } from "./outcome";
+import { swipeRefusal } from "./sites/gate";
 
 export const CANCELLABLE = ["queued", "inspecting", "filling", "needs_input"];
 export const RETRYABLE = ["failed", "cancelled"];
@@ -85,6 +86,8 @@ export async function retryApplication(applicationId: string, userId: string): P
   if (!job || !profile) return { ok: false, reason: "blocked", rule: "profile_required" };
   if (job.closedAt) return { ok: false, reason: "blocked", rule: "job_closed" };
   if (!boardSupported(job.source)) return { ok: false, reason: "blocked", rule: "board_not_supported" };
+  const siteRefused = await swipeRefusal(userId, job);
+  if (siteRefused) return { ok: false, reason: "blocked", rule: siteRefused.rule };
 
   // This application is failed or cancelled, so it does not count against itself in the history. Both reads at once.
   const [history, score] = await Promise.all([historyFor(userId, { title: job.title, companyId: job.companyId }), swipeScore(userId, profile, job)]);
@@ -164,6 +167,10 @@ export async function swipeRight(
   if (!profile) return { ok: false, reason: "profile_required" };
   if (job.closedAt) return { ok: false, reason: "blocked", rule: "job_closed" };
   if (!boardSupported(job.source)) return { ok: false, reason: "blocked", rule: "board_not_supported" };
+  // A job on a site the user signs in to (Naukri): their account usable and today's applies there under the cap. Refused
+  // before anything is recorded, so the job stays in the feed (sites/gate.ts).
+  const siteRefused = await swipeRefusal(userId, job);
+  if (siteRefused) return { ok: false, reason: "blocked", rule: siteRefused.rule };
 
   // Started now and awaited after the transaction, so its reads (and the model, for a job the feed never judged) run
   // while the swipe is saved. Wasted only when the swipe ends as already swiped or a full queue; a failure here is

@@ -14,6 +14,11 @@ const APPLY_QUEUE = "apply";
 // Lever (T94): hCaptcha on Submit; the worker presses it in a visible window and a challenge goes to the person (adapters/lever.ts).
 export const HANDOFF_BOARDS: readonly string[] = ["ashby", "keka", "lever"];
 /**
+ * Sites the user signs in to (Naukri, K4): the worker presses Apply itself, but in the user's own visible window, so only
+ * a worker with a screen takes them (the handoff queue; docs/naukri/TDD.md 4.7).
+ */
+export const SCREEN_BOARDS: readonly string[] = ["naukri"];
+/**
  * Handoff applications of a company that set Ashby's spam protection (low, medium, high, or unreadable): only a worker with
  * a screen takes them (worker/index.ts). It fills the form in a visible Chrome window and, with ASHBY_AUTO_SUBMIT=1,
  * presses Submit itself; a challenge hands the window to the person. Headless, every such Submit was challenged (21-27
@@ -83,6 +88,7 @@ export function getBoss() {
  * protection level is "none" (`level`, from lib/ashby-protection.ts). Anything else, an unread level included, needs a screen.
  */
 export function queueFor(source: string | undefined, level?: string | null) {
+  if (source && SCREEN_BOARDS.includes(source)) return HANDOFF_QUEUE;
   if (!source || !HANDOFF_BOARDS.includes(source)) return APPLY_QUEUE;
   return level === UNPROTECTED ? UNPROTECTED_QUEUE : HANDOFF_QUEUE;
 }

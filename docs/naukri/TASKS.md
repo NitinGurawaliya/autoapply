@@ -25,16 +25,24 @@ Design: its own short TDD in `docs/linkedin/`, written after K4's real runs; reu
 **Done when:** as K2 for LinkedIn.
 
 <a id="k4"></a>
-### [ ] K4 — Naukri apply adapter
-Do: recon in the owner's signed-in session (the `webcmd-browser` skill or a Playwright script) captures the chat drawer markup and the apply request into fixtures; `stepwise`/`advance` in the runner; the adapter with questions through the answer bank and `needs_input` for the rest; routing, pace and connection checks; `explain.ts`/`steps.ts` copy.
+### [~] K4 — Naukri apply adapter
+Do: recon (5 Nov: Naukri's own job-page and drawer scripts, read signed out, nothing pressed) gives the drawer markup and the apply and bot calls, copied into the mock Naukri page (`app/mock/naukri/mock.ts`, K4b); the owner's first real submit confirms them; `stepwise`/`advance` in the runner; the adapter with questions through the answer bank and `needs_input` for the rest; routing, pace and connection checks; `explain.ts`/`steps.ts` copy.
 Design: [4.7 Sequence: apply](TDD.md#47-sequence-apply-k4) · [4.8 Checks, refusals and pace](TDD.md#48-checks-refusals-and-pace) · [7 Testing](TDD.md#7-testing) · [8 Rollout](TDD.md#8-rollout) · [11 Decisions](TDD.md#11-decisions-closed-with-the-owner-3-nov) items 1 and 2.
 **Done when:** `naukri-adapter-test` PASS; `naukri-dry-run` on 3 real jobs reaches Apply signed in and presses nothing; one real right-swipe by the owner ends `submitted` with Naukri's confirmation and screenshot and the questions with sources on the application page; a question it could not answer went through "Needs you" once; `ENABLE_NAUKRI=1` and Naukri in `applyBoardsFor`.
 
+<a id="k4c"></a>
+### [ ] K4c — Naukri jobs that apply on another board
+Do: a Naukri job with `applyVia` (Greenhouse, Lever, Ashby, Keka) applies through that board's adapter: its form URL and ids from the redirect URL (`adapters/*.ts formUrl` reads Naukri's ids today), the board's own queue and switch (`APPLY_BOARDS`), Naukri's caps not counted; until then `swipeRefusal` refuses them (`board_not_supported`) and nothing is recorded.
+Design: [4.7 Sequence: apply](TDD.md#47-sequence-apply-k4) ("redirect to company site"), ARCHITECTURE §6.20 Apply (K4).
+**Done when:** a Naukri job that redirects to Greenhouse goes through the Greenhouse adapter on the mock form for a test profile and on one real job for the owner; typecheck and lint pass.
+
 <a id="k4b"></a>
-### [ ] K4b — Mock Naukri drawer
-Do: `/mock/naukri` for the smoke test, after K4's real submit; the hard rule moves from `/mock/greenhouse` to `/mock/*` in CLAUDE.md and PRD §9 in the same change.
+### [x] K4b — Mock Naukri drawer
+Do: `/mock/naukri` (`app/mock/naukri/`: the page and Naukri's two services) for the smoke test, built before K4's real submit at the owner's request (5 Nov); the hard rule widens from `/mock/greenhouse` to both mock forms in CLAUDE.md and PRD §9 in the same change.
 Design: [11 Decisions](TDD.md#11-decisions-closed-with-the-owner-3-nov) item 4 · [7 Testing](TDD.md#7-testing).
-**Done when:** `tests/smoke.spec.ts` runs the Naukri adapter against the mock drawer on a test profile and passes; typecheck and lint pass.
+**Done when:** `scripts/naukri-mock-smoke.ts` (owner, 5 Nov: in place of `tests/smoke.spec.ts`, which is T22 and not built) runs the Naukri step loop against the mock drawer on a test profile and passes; typecheck and lint pass.
+Done 2026-11-05: naukri-mock-smoke 13/13 (asked once with nothing sent, then sent with 4 answers and sources; test profile on real Naukri blocked; a mock on another host refused), naukri-adapter-test 51/51 on the same page; `/mock/naukri` driven by hand in the app through to `/mock/submissions`.
+Changed: `app/mock/naukri/` (mock.ts, route.ts, the two service routes), `app/mock/submissions/page.tsx`, `runner.ts` (mock path), `urls.ts` (`mockSiteOf`), CLAUDE.md and PRD §9, ARCHITECTURE §10.1.
 
 <a id="k5"></a>
 ### [ ] K5 — LinkedIn Easy Apply adapter
