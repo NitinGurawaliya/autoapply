@@ -5,6 +5,8 @@ export const DEFAULT_INGEST_CRON = "0 */3 * * *";
 export const DEFAULT_INGEST_DAYS = 60;
 // Discovery once a day, before the 03:00 ingest, so companies it adds are fetched the same morning (UTC).
 export const DEFAULT_DISCOVER_CRON = "30 1 * * *";
+// Each connected user's signed-in sites (Naukri), every 8 hours; the per-day budget in config/rules.json still decides.
+export const DEFAULT_SOURCE_INGEST_CRON = "0 */8 * * *";
 
 /**
  * Registers the recurring jobs. pg-boss stores the schedule in the database, so several workers registering the same
@@ -17,5 +19,7 @@ export async function registerSchedules(boss: PgBoss) {
   const schedule = await boss.getSchedule("ingest");
   const discoverCron = process.env.DISCOVER_CRON?.trim() || DEFAULT_DISCOVER_CRON;
   await boss.schedule("discover", discoverCron, {}, { tz: "UTC", missed: "once", expireInSeconds: 3600, retryLimit: 0 });
-  return { cron: schedule?.cron ?? cron, timezone: schedule?.timezone ?? "UTC", days, discoverCron };
+  const sourceCron = process.env.SOURCE_INGEST_CRON?.trim() || DEFAULT_SOURCE_INGEST_CRON;
+  await boss.schedule("source-ingest-tick", sourceCron, {}, { tz: "UTC", missed: "once", expireInSeconds: 600, retryLimit: 0 });
+  return { cron: schedule?.cron ?? cron, timezone: schedule?.timezone ?? "UTC", days, discoverCron, sourceCron };
 }

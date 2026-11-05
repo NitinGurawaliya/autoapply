@@ -11,6 +11,8 @@ export interface Storage {
   put(key: string, bytes: Uint8Array, contentType: string, userId?: string): Promise<void>;
   get(key: string): Promise<StoredFile | null>;
   url(key: string): string;
+  /** Removes one file; true when it was there. */
+  delete(key: string): Promise<boolean>;
   /** Erases every file stored for a user (account deletion). Returns how many. */
   deleteForUser(userId: string): Promise<number>;
 }
@@ -39,6 +41,11 @@ class PostgresStorage implements Storage {
       size: row.size,
       userId: row.userId,
     };
+  }
+
+  async delete(key: string) {
+    const result = await db.fileBlob.deleteMany({ where: { key } });
+    return result.count > 0;
   }
 
   async deleteForUser(userId: string) {

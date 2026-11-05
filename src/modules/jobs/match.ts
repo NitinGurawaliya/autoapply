@@ -18,7 +18,26 @@ export { daysAgoLabel };
 // the feed until they pass (INGEST_CONTRACT: a board goes in after one real submit). Keka (T96) the same, ENABLE_KEKA=1:
 // a person types its image CAPTCHA and presses Apply Now in the handoff window.
 export const APPLY_BOARDS: readonly string[] = ["greenhouse", ...(process.env.ENABLE_ASHBY === "0" ? [] : ["ashby"]), ...(process.env.ENABLE_LEVER === "1" ? ["lever"] : []), ...(process.env.ENABLE_KEKA === "1" ? ["keka"] : [])];
-const BOARDS = APPLY_BOARDS;
+/**
+ * Sites read through the user's own signed-in account (Phase K, docs/naukri/TDD.md 4.6): in the feed only with
+ * ENABLE_NAUKRI=1, and then only for a user whose account is connected (feedBoardsFor). Applying on them is a separate
+ * switch (APPLY_BOARDS), turned on after the adapter's first real submit (K4).
+ */
+export const SIGNED_IN_FEED_BOARDS: readonly string[] = process.env.ENABLE_NAUKRI === "1" ? ["naukri"] : [];
+/** Every board the feed can show: the boards the agent applies on, then the signed-in sites. */
+export const FEED_BOARDS: readonly string[] = [...APPLY_BOARDS, ...SIGNED_IN_FEED_BOARDS.filter((board) => !APPLY_BOARDS.includes(board))];
+const BOARDS = FEED_BOARDS;
+// A signed-in site's jobs are offered while the account is connected, also while it waits for a sign-in or a pause
+// (the swipe then says why it cannot apply yet).
+const FEED_CONNECTION_STATUSES = ["connected", "needs_signin", "limited"];
+
+/** The feed boards this user can see: a signed-in site only when their account on it is connected. */
+export async function feedBoardsFor(userId: string): Promise<string[]> {
+  if (SIGNED_IN_FEED_BOARDS.length === 0) return [...FEED_BOARDS];
+  const connected = await db.siteConnection.findMany({ where: { userId, site: { in: [...SIGNED_IN_FEED_BOARDS] }, status: { in: FEED_CONNECTION_STATUSES } }, select: { site: true } });
+  const sites = new Set(connected.map((row) => row.site));
+  return FEED_BOARDS.filter((board) => !SIGNED_IN_FEED_BOARDS.includes(board) || sites.has(board));
+}
 // Where a job is, for the feed's Location filter (T80): IN = in India and REMOTE = remote and open to India (Job.eligibility,
 // tagging.ts); US and OTHER = jobs abroad, shown only when the user picks them.
 const COUNTRIES = ["IN", "REMOTE", "US", "OTHER"] as const;
@@ -502,7 +521,10 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView): 
   // Jobs below the governance minimum would be blocked on swipe anyway, so they never reach the deck.
   const minScore = loadRules().min_match_score;
   const cutoff = new Date(Date.now() - filters.days * 24 * 60 * 60 * 1000);
-  const sources = profile?.isTest ? [...new Set([...filters.boards, "mock"])] : filters.boards;
+  // A signed-in site's jobs only for a user connected to it, whatever the filter asked for.
+  const visible = SIGNED_IN_FEED_BOARDS.some((board) => filters.boards.includes(board)) ? await feedBoardsFor(userId) : null;
+  const boards = visible ? filters.boards.filter((board) => visible.includes(board)) : filters.boards;
+  const sources = profile?.isTest ? [...new Set([...boards, "mock"])] : boards;
   // The candidate's tracks and the adjacent ones are the only jobs that can score (T82), so only those are read; the
   // Track filter narrows them further.
   const tracks = profile ? tracksOf(profile) : [];

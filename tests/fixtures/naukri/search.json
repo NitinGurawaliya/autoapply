@@ -1,0 +1,93 @@
+{
+  "_source": "Naukri's own /jobapi/v3/search responses as its public search pages fetched them, 3 and 5 Nov 2026 (signed out); three listings kept, review links removed.",
+  "noOfJobs": 364,
+  "jobDetails": [
+    {
+      "title": "Women's Hiring For Full Stack Developers",
+      "logoPath": "https://img.naukimg.com/logo_images/groups/v1/191386.gif",
+      "jobId": "301026015262",
+      "currency": "INR",
+      "footerPlaceholderLabel": "5 Days Ago",
+      "companyName": "Infosys BPM",
+      "tagsAndSkills": "Hiring,Angular,Full Stack,S,Development,React.js,Stack",
+      "placeholders": [
+        { "type": "experience", "label": "2-3 Yrs" },
+        { "type": "salary", "label": "3.5-6.5 Lacs PA" },
+        { "type": "location", "label": "Bengaluru" }
+      ],
+      "companyId": 305867,
+      "jdURL": "/job-listings-women-s-hiring-for-full-stack-developers-infosys-bpm-bengaluru-2-to-3-years-301026015262",
+      "jobDescription": "Availability: Acknowledgement of work schedule preferences (Shifts,Work from Office,Rotational Weekends,24 / 7 availability,Transport Boundary) and reason for career change<br><br>Proven experience delivering enterprise-scale web applications<br><br>Proven experience delivering enterprise-scale web applications.  <br><br>The interview will be conducted as per the scheduled invite ONLY",
+      "groupId": 191386,
+      "createdDate": 1793342941298,
+      "mode": "jp",
+      "board": "1",
+      "vacancy": 5,
+      "salaryDetail": { "minimumSalary": 350000, "maximumSalary": 650000, "currency": "INR", "hideSalary": false },
+      "experienceText": "2-3 Yrs",
+      "minimumExperience": "2",
+      "maximumExperience": "3",
+      "companyApplyJob": false,
+      "walkinJob": false,
+      "questionnaireIdPresent": true
+    },
+    {
+      "title": "Java Full Stack Developer",
+      "logoPath": "https://img.naukimg.com/logo_images/groups/v1/548100.gif",
+      "jobId": "021126025089",
+      "currency": "INR",
+      "footerPlaceholderLabel": "2 Days Ago",
+      "companyName": "Broadridge",
+      "tagsAndSkills": "Full Stack,Rest,Spring Boot,Stack,Angular,Java,Development,Artificial Intelligence",
+      "placeholders": [
+        { "type": "experience", "label": "1-3 Yrs" },
+        { "type": "salary", "label": "Not disclosed" },
+        { "type": "location", "label": "Hybrid - Bengaluru" }
+      ],
+      "companyId": 204771,
+      "jdURL": "/job-listings-java-full-stack-developer-broadridge-bengaluru-1-to-3-years-021126025089",
+      "jobDescription": "Required Qualifications . 1-3 years of hands-on experience in Java application development",
+      "groupId": 548100,
+      "createdDate": 1793635353146,
+      "mode": "jp",
+      "board": "1",
+      "salaryDetail": { "minimumSalary": 0, "maximumSalary": 0, "currency": "INR", "hideSalary": true },
+      "experienceText": "1-3 Yrs",
+      "minimumExperience": "1",
+      "maximumExperience": "3",
+      "companyApplyJob": false,
+      "walkinJob": false,
+      "questionnaireIdPresent": true
+    },
+    {
+      "title": "Software Engineer",
+      "logoPath": "https://img.naukimg.com/logo_images/groups/v1/45216.gif",
+      "jobId": "311026500839",
+      "currency": "INR",
+      "footerPlaceholderLabel": "2 Days Ago",
+      "companyName": "Cisco",
+      "tagsAndSkills": "Computer,Coding,Anomaly Detection,Development,Debugging,Application,Algorithms,Vision",
+      "placeholders": [
+        { "type": "experience", "label": "1-3 Yrs" },
+        { "type": "salary", "label": "Not disclosed" },
+        { "type": "location", "label": "Bengaluru" }
+      ],
+      "companyId": 1612878,
+      "jdURL": "/job-listings-software-engineer-cisco-bengaluru-1-to-3-years-311026500839",
+      "jobDescription": "Minimum Qualifications<br><br>Preferred Qualifications<br><br>Experience using AI coding agents such as Codex,Cursor,Claude Code,or equivalent tools,with the judgment to validate generated code.",
+      "groupId": 45216,
+      "createdDate": 1793449192000,
+      "mode": "crawled",
+      "board": "1",
+      "salaryDetail": { "minimumSalary": 0, "maximumSalary": 0, "currency": "INR", "hideSalary": true },
+      "experienceText": "1-3 Yrs",
+      "minimumExperience": "1",
+      "maximumExperience": "3",
+      "companyApplyJob": true,
+      "companyApplyUrl": "https://www.naukri.com/cloudgateway-apply/apply-services/v0/apply/saveCompanyApply?id=&file=311026500839&logstr=srprestapi",
+      "applyRedirectUrl": "https://cisco.wd5.myworkdayjobs.com/en-US/Cisco_Careers/job/Bangalore-India/Software-Engineer_2030171-1",
+      "walkinJob": false,
+      "questionnaireIdPresent": false
+    }
+  ]
+}

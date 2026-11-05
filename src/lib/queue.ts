@@ -33,6 +33,15 @@ export const PERSON_QUEUE = "apply-person";
 /** Every queue an application can be on, for code that reads or cancels its queue jobs. */
 export const APPLY_QUEUES = [APPLY_QUEUE, HANDOFF_QUEUE, UNPROTECTED_QUEUE, PERSON_QUEUE];
 const INGEST_QUEUE = "ingest";
+/**
+ * Signing in to a user's own job-site account (Phase K, docs/naukri/TDD.md 4.2, 4.5): the site's login page in a visible
+ * window, where the person signs in themselves. Only a worker with a screen takes it (worker/index.ts).
+ */
+export const SOURCE_CONNECT_QUEUE = "source-connect";
+/** One user's run on a signed-in site (docs/naukri/TDD.md 4.6): their window, so only a worker with a screen takes it. */
+export const INGEST_SOURCE_QUEUE = "ingest-source";
+/** The schedule that hands each connected user a run (worker/schedule.ts SOURCE_INGEST_CRON); any worker takes it. */
+export const SOURCE_INGEST_TICK = "source-ingest-tick";
 const PRESCAN_QUEUE = "prescan";
 const DISCOVER_QUEUE = "discover";
 
@@ -60,6 +69,9 @@ export function getBoss() {
       await ensureQueue(started, INGEST_QUEUE);
       await ensureQueue(started, PRESCAN_QUEUE);
       await ensureQueue(started, DISCOVER_QUEUE);
+      await ensureQueue(started, SOURCE_CONNECT_QUEUE);
+      await ensureQueue(started, INGEST_SOURCE_QUEUE);
+      await ensureQueue(started, SOURCE_INGEST_TICK);
       return started;
     });
   }
@@ -139,6 +151,21 @@ export async function enqueueDiscover(board: string) {
  * minutes. Building the feed also caches the model's verdicts on its jobs, so a scan queued when a resume is read
  * ("resume") or confirmed ("profile") makes the first feed a read instead of a wait (16 Oct QA: 10-15 s for a new user).
  */
+/**
+ * Open the site's sign-in for one user. At most one queued or running per user and site; 15 minutes covers the 10-minute
+ * wait for the person; no retry (the user presses Connect again).
+ */
+export async function enqueueConnect(userId: string, site: string) {
+  const boss = await getBoss();
+  return boss.send(SOURCE_CONNECT_QUEUE, { userId, site }, { singletonKey: `connect:${site}:${userId}`, expireInSeconds: 900, retryLimit: 0 });
+}
+
+/** One run for one user and site; at most one queued or running each. 30 minutes covers a run's few pages. */
+export async function enqueueSourceIngest(userId: string, site: string) {
+  const boss = await getBoss();
+  return boss.send(INGEST_SOURCE_QUEUE, { userId, site }, { singletonKey: `ingest:${site}:${userId}`, expireInSeconds: 1800, retryLimit: 0 });
+}
+
 export async function enqueuePrescan(userId: string, reason = "answers") {
   const boss = await getBoss();
   return boss.send(PRESCAN_QUEUE, { userId }, { singletonKey: `${userId}:${reason}`, singletonSeconds: 600, expireInSeconds: 1800, retryLimit: 0 });

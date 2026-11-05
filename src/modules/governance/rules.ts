@@ -2,6 +2,22 @@ import { readFileSync } from "node:fs";
 import { z } from "zod";
 import { writeEvent } from "./audit";
 
+/**
+ * Pace and caps for a site the user connects with their own account (Phase K, docs/naukri/TDD.md 4.8): a person browsing,
+ * not a crawler. Read by the per-user ingest (K2) and the apply checks (K4).
+ */
+const sourceRulesSchema = z.object({
+  searches_per_run: z.number().int().min(1),
+  pages_per_search: z.number().int().min(1),
+  details_per_run: z.number().int().min(0),
+  seconds_between_pages: z.number().min(1),
+  runs_per_day: z.number().int().min(1),
+  max_applies_per_day: z.number().int().min(0),
+  min_minutes_between_applies: z.number().min(0),
+  pause_hours_after_challenge: z.number().min(1),
+});
+export type SourceRules = z.infer<typeof sourceRulesSchema>;
+
 const rulesSchema = z.object({
   require_user_approval: z.boolean(),
   allow_submit_on_real_sites: z.boolean(),
@@ -16,6 +32,7 @@ const rulesSchema = z.object({
   no_duplicate_role: z.boolean().default(true),
   max_ai_drafts_per_application: z.number(),
   max_attempts: z.number(),
+  signed_in_sources: z.record(z.string(), sourceRulesSchema).default({}),
 });
 
 export type Rules = z.infer<typeof rulesSchema>;
@@ -41,6 +58,11 @@ export function loadRules(): Rules {
   const raw = readFileSync("config/rules.json", "utf8");
   cached = rulesSchema.parse(JSON.parse(raw));
   return cached;
+}
+
+/** The pace and caps for one signed-in site, or null when the rules file has none (the site then never runs). */
+export function sourceRules(site: string): SourceRules | null {
+  return loadRules().signed_in_sources[site] ?? null;
 }
 
 export async function check(stage: GovernanceStage, ctx: GovernanceContext) {

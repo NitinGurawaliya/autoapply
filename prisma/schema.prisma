@@ -26,6 +26,7 @@ model User {
   accounts     Account[]
   sessions     Session[]
   pushSubscriptions PushSubscription[]
+  siteConnections   SiteConnection[]
 }
 
 // A browser's Web Push subscription (lib/push.ts): one per browser the user turned notifications on in.
@@ -187,6 +188,50 @@ model WorkerBeat {
   id        String   @id // host name
   beatAt    DateTime
   startedAt DateTime
+  // The worker can open a window a person sees (browser.ts canShowWindow): only such a worker connects signed-in sites.
+  hasScreen Boolean  @default(false)
+}
+
+// A user's own account on a signed-in job site (Naukri, later LinkedIn; ARCHITECTURE 6.20, docs/naukri/TDD.md 4.3-4.5).
+// The user signs in themselves in a visible window; we keep only the site's cookies, encrypted (browser.ts), under stateKey.
+model SiteConnection {
+  id           String    @id @default(cuid())
+  userId       String
+  site         String // naukri | linkedin
+  status       String // connecting | connected | needs_signin | limited | failed | disconnected
+  stateKey     String? // browser-state/<userId>/<site>.json (lib/storage.ts); null when there is no saved sign-in
+  accountLabel String? // the first name the site shows for the account, for "Connected as ..."; nothing else is kept
+  consentAt    DateTime // when the user accepted the account-risk notice
+  connectedAt  DateTime?
+  lastUsedAt   DateTime?
+  lastIngestAt DateTime?
+  pausedUntil  DateTime? // limited: nothing runs for this user and site until then
+  lastError    String? // a sentence for the UI, never page text
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, site])
+}
+
+// One per-user ingest run of a signed-in source (K2), as IngestRun is for the company boards.
+model SourceRun {
+  id         String    @id @default(cuid())
+  userId     String
+  site       String
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  searches   Int       @default(0)
+  pages      Int       @default(0)
+  listed     Int       @default(0)
+  created    Int       @default(0)
+  updated    Int       @default(0)
+  details    Int       @default(0)
+  stopReason String? // done | budget | needs_signin | challenge | refused | error
+  error      String?
+
+  @@index([userId, site, startedAt])
 }
 
 model Job {
@@ -219,6 +264,9 @@ model Job {
   // The application form's questions read from the board's public API (modules/jobs/questions.ts), so the agent can
   // ask what it is missing before opening a browser. Null until fetched.
   questions          Json?
+  // Which adapter applies when it is not the source's own: a Naukri listing that sends the user to Greenhouse, Lever,
+  // Ashby or Keka (docs/naukri/TDD.md 4.6). Null: the source's own apply.
+  applyVia           String?
   questionsFetchedAt DateTime?
   // The distinct words of the title and description, kept by a trigger (migration job_terms): the feed matches skills
   // in Postgres instead of downloading descriptions (modules/jobs/match.ts).

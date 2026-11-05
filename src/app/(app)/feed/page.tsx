@@ -7,7 +7,7 @@ import { boardLabel } from "@/lib/board-label";
 import { db } from "@/lib/db";
 import { feedHref, feedQuery } from "@/lib/feed-url";
 import { dailySent } from "@/modules/governance";
-import { APPLY_BOARDS, DEFAULT_FEED_DAYS, DEFAULT_PLACES, listFeed, parseFeedFilters, TRACK_LABELS, tracksOf } from "@/modules/jobs";
+import { DEFAULT_FEED_DAYS, DEFAULT_PLACES, FEED_BOARDS, feedBoardsFor, listFeed, parseFeedFilters, TRACK_LABELS, tracksOf } from "@/modules/jobs";
 import type { Track } from "@/modules/jobs";
 import type { FeedFilters, FeedView } from "@/modules/jobs";
 import { DailyUsage } from "@/components/daily-usage";
@@ -23,9 +23,9 @@ import { FeedTopBar } from "@/components/patterns/top-bar";
 import { FilterSheet } from "./filter-sheet";
 import { SwipeDeck } from "./swipe-deck";
 
-// Exactly the boards the feed serves (APPLY_BOARDS: Keka with ENABLE_KEKA=1, Lever with ENABLE_LEVER=1).
-const BOARDS = APPLY_BOARDS.map((id) => ({ id, label: boardLabel(id) ?? id }));
-const FEED_DEFAULTS = { boards: APPLY_BOARDS, places: DEFAULT_PLACES, days: DEFAULT_FEED_DAYS };
+// Every board the feed can serve (FEED_BOARDS: the apply boards, Keka with ENABLE_KEKA=1, Lever with ENABLE_LEVER=1,
+// Naukri with ENABLE_NAUKRI=1); each user's chips are the ones they can see (feedBoardsFor: Naukri once connected).
+const FEED_DEFAULTS = { boards: FEED_BOARDS, places: DEFAULT_PLACES, days: DEFAULT_FEED_DAYS };
 
 // In India and remote-from-India by default (T80); jobs abroad only when picked.
 const COUNTRIES = [
@@ -128,6 +128,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
   // The user's own tracks, for the Track chips (the feed also shows the adjacent ones unless one is picked).
   const profile = await db.profile.findUnique({ where: { userId: user.id }, select: { tracks: true, currentTitle: true, skills: true, experience: true } });
   const myTracks = profile ? tracksOf(profile) : [];
+  const BOARDS = (await feedBoardsFor(user.id)).map((id) => ({ id, label: boardLabel(id) ?? id }));
 
   // "Jobs you skipped": the left-swiped jobs, offered once the feed runs out (?view=skipped).
   const view: FeedView = one(params.view) === "skipped" ? "skipped" : "new";
