@@ -182,3 +182,14 @@ Design: [docs/naukri/TDD.md](naukri/TDD.md) (final, 3 Nov). Tasks with their Do,
 - [ ] [K4 — Naukri apply adapter](naukri/TASKS.md#k4)
 - [ ] [K4b — Mock Naukri drawer](naukri/TASKS.md#k4b)
 - [ ] [K5 — LinkedIn Easy Apply adapter](naukri/TASKS.md#k5)
+
+## Phase L — Resume tailored to each job (owner, 5 Nov)
+
+Design: [docs/resume-tailoring/TDD.md](resume-tailoring/TDD.md) (v1, 5 Nov; owner decisions closed in its section 11). Tasks with their Do, the design sections each builds, Done-when and the Done lines: [docs/resume-tailoring/TASKS.md](resume-tailoring/TASKS.md). Order L1 → L6.
+
+- [ ] [L1 — Structured resume (ResumeDoc)](resume-tailoring/TASKS.md#l1)
+- [ ] [L2 — Tailoring plan and the truth checks](resume-tailoring/TASKS.md#l2)
+- [ ] [L3 — The user's style, template and PDF renderer](resume-tailoring/TASKS.md#l3)
+- [ ] [L4 — Tailor on every run: doc queue, cache, wait cap, event](resume-tailoring/TASKS.md#l4)
+- [ ] [L5 — "Resume sent" on the application page, switch on Account](resume-tailoring/TASKS.md#l5)
+- [ ] [L6 — Shadow, measure, switch on](resume-tailoring/TASKS.md#l6)
