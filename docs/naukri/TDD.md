@@ -1,6 +1,6 @@
 # Naukri through the user's own account — technical design (Phase K: K1, K2, K4)
 
-Version 2, 3 Nov 2026. Owner's decision of 29 Oct: Naukri and LinkedIn come in through the user's own signed-in account, after Phase J (ARCHITECTURE §6.20, PRD FR10, CLAUDE.md hard rules). This is the full design for the Naukri half. LinkedIn (K3, K5) reuses the same connection, ingest and stepwise-apply shape. ARCHITECTURE stays the source of truth: K1 copies the decisions here into §6.20 when it lands.
+Version 3, 7 Nov 2026 (§13 adds a proposal for many users on their own devices; version 2, 3 Nov). Owner's decision of 29 Oct: Naukri and LinkedIn come in through the user's own signed-in account, after Phase J (ARCHITECTURE §6.20, PRD FR10, CLAUDE.md hard rules). This is the full design for the Naukri half. LinkedIn (K3, K5) reuses the same connection, ingest and stepwise-apply shape. ARCHITECTURE stays the source of truth: K1 copies the decisions here into §6.20 when it lands.
 
 Decisions discussed with the owner on 3 Nov and fixed here: **jobs are fetched per user through their own Naukri session (never a crawl of Naukri), stored as ordinary `Job` rows in our Postgres, shared between connected users, shown only to users with a connected account, applied in the user's own session.** Tooling: our Playwright worker; webcmd is for reconnaissance only (§3).
 
@@ -459,7 +459,7 @@ Notice copy (agent voice):
 | Naukri limits or suspends the user's account | Said plainly at Connect and accepted; visible real Chrome, own session, a minute between applies, 30 a day, pause on any check; never stealth, proxies or minted headers. The caps are the first thing lowered if a check appears |
 | Naukri records the apply on the click, before its questions | `markAttempted` before the click; "already applied" after our attempt = sent; questions cached per job so later users are asked first |
 | Drawer or JSON changes | Zod fails closed; fixtures and offline tests; screenshots on failure |
-| Only the laptop has a screen | Naukri waits, never runs headless; always-on needs a VM with a display (DEPLOY.md "Docker worker with a screen") |
+| Only the laptop has a screen | Naukri waits, never runs headless; always-on needs a VM with a display (DEPLOY.md "Docker worker with a screen"); many users, each from their own device: §13 |
 | Saved session leaks | Per-site, cookies-only, AES-GCM, never exported or logged, deleted on Disconnect |
 | Duplicates with our own ATS ingest | `applyVia` + `roleKey` fold; other company-site jobs not stored |
 | Wrong searches → empty Naukri feed | Searches come from tracks and preferred locations the user confirmed; the recommended-jobs page is a fallback search; "Fetch now" shows counts |
@@ -468,7 +468,7 @@ Notice copy (agent voice):
 
 ## 10. Tasks
 
-In [TASKS.md](TASKS.md) beside this file: K1, K2, K4 and K4b with their Do, Done-when and the sections of this design each one builds; K3 and K5 (LinkedIn) until their own design exists. Root `docs/TASKS.md` Phase K lists them one line each. Order K1 → K2 → K4, one session each, plan first, check pasted, typecheck and lint.
+In [TASKS.md](TASKS.md) beside this file: K1, K2, K4 and K4b with their Do, Done-when and the sections of this design each one builds; K3 and K5 (LinkedIn) until their own design exists; K6–K10 for many users on their own devices (§13). Root `docs/TASKS.md` Phase K lists them one line each. Order K1 → K2 → K4, one session each, plan first, check pasted, typecheck and lint.
 
 ---
 
@@ -488,3 +488,103 @@ No open questions remain for K1–K4.
 - **Seen in the browser, 3 Nov 2026:** `naukri.com/software-engineer-jobs-in-bengaluru?experience=2` rendered; the page's `GET /jobapi/v3/search?noOfResults=20&…&pageNo=1&experience=2&…` answered 200 with `{noOfJobs, clusters, jobDetails[]}`; a `fetch` of `/jobapi/v4/job/<id>` from the page without the page's own header answered 406 `{"message":"recaptcha required"}`; the job page's own `GET /jobapi/v4/job/301026011205` answered 200 with the posting (`loggedIn:false`, `hideApplyButton`, `applyCount`, `locations`, `keySkills`, `salaryDetail`, `wfhType`, `consultant`, `createdDate`); the job page shows one "Apply" button and links Naukri's "Neo AI job agent" (`/job-apply-agent`); a Cisco listing had `companyApplyJob:true`, `mode:"crawled"`, `applyRedirectUrl` on `cisco.wd5.myworkdayjobs.com`. Terms at `naukri.com/termsconditions`: "Use automated means to crawl and/or scrape content from Naukri.com" (prohibited); "The Site uses technological means to exclude Robots etc. from crawling it and scraping content. You undertake not to circumvent these methods."
 - **webcmd:** `webcmd.dev`; `github.com/agentrhq/webcmd` (Apache-2.0; "Profiles are cookie jars; Sessions are independent browser windows"; Webcmd Cloud "not yet stable"); `github.com/agentrhq/webcmd-plugins` (omnisearch, pypi, skyscanner); local `webcmd doctor` (runtime "cloak", CloakBrowser 0.4.5, "stealth Chromium for automation … newest anti-bot patches"); `webcmd plugin search naukri|linkedin` → `[]` with the catalog manifest HTTP 404; the webcmd-usage, webcmd-browser (QuickJS, not Node) and webcmd-adapter-author skills (INTERCEPT fixes "roughly 7-8x as frequent as PUBLIC_API fixes").
 - **Naukri access and bots:** `github.com/strelov1/freehire/pull/3261` and `/pull/3290` (406 "recaptcha required" with a browser UA, 403 "Access Denied" otherwise, Akamai blocks datacenter IPs, page cap 150); `github.com/Traverser25/NopeRi` (`nkparam` required, sessions IP-bound, Azure/CI blocked, home broadband works); `github.com/jiyaa8800/naukri-auto-apply-bot` (direct apply, chat apply, multi-step forms; CAPTCHA and OTP "never solved or bypassed"; "Automating Naukri may violate its Terms of Service"); `github.com/pattjoshi/playwright-python-job-search/pull/16` (automated browser → "Access Denied"); `agentco.in/blog/auto-apply-naukri-jobs` ("Twenty applications a night at human pacing is defensible", "two hundred in an hour is a bot signature"); `jobspipe.dev/blog/naukri-api` (no public Naukri API).
+- **Many users on their own devices (7 Nov 2026, §13):** Browserbase plans from third-party summaries (Developer $20/month with 100 browser hours then $0.12/h and 1 GB proxy then $12/GB; Startup $99/month, $0.10/h, about $10/GB): `scrapegraphai.com/blog/browserbase-pricing`, `tinyfish.ai/blog/browserbase-pricing`; India residential proxies about $0.3–8/GB, sticky sessions up to 24 h or 7 days, mobile $10–30/GB: `dataimpulse.com/blog/residential-proxy-pricing-comparison/`, `geonode.com/proxies-by-location/india-proxy`, `soax.com/proxies/locations/india`, `databay.com/blog/how-much-do-residential-proxies-cost`. Not checked against the vendors' own pages; K6 measures page weight.
+
+---
+
+## 13. Many users, each from their own device (proposal, 7 Nov 2026)
+
+Status: **proposal for the owner** (questions in §13.9). Nothing in K1–K4 changes until K6 reports. Tasks K6–K10 in [TASKS.md](TASKS.md#k6).
+
+### 13.1 The problem, goals and non-goals
+
+Today every Naukri window opens on the one worker with a screen (`canShowWindow()`, `WorkerBeat.hasScreen`, §4.1): the owner's laptop. For a second user that means their sign-in window opens on the owner's screen, where they are not; every account's traffic leaves from one home IP, so N accounts on one address look like an account farm to Akamai (fact 4, §2) and one "Access Denied" (§4.8) pauses everyone; and one sleeping laptop stops all of them.
+
+Goals: each user signs in on their own device, in a window they see; their Naukri traffic leaves from their own connection; we never see their password or OTP; every rule stays server-side and unchanged (`gate.ts swipeRefusal` and `runGate`, `check('submit')`, caps and pace from `config/rules.json`, a `source` on every value, an event for every check); the owner's screen worker keeps working for the owner, development and the mock.
+
+Non-goals: stealth browsers, proxies that make a datacenter look like a home, minting Naukri's signature (all ruled out in §3); phone-only users in the first version (§13.9 Q1); LinkedIn (K3 and K5 would reuse what this builds).
+
+### 13.2 One user's day, the unit every cost below is priced on
+
+| Work | Volume (`signed_in_sources.naukri`, §4.8) | Browser time |
+|---|---|---|
+| Job runs | 2 a day × (3 searches × 3 pages = 9 search pages + up to 40 job pages) | ~4 min a run |
+| Applies | up to 30 a day, a minute apart; each a job page, Apply and 0–6 drawer questions | ~45 s each |
+| Contexts | one Chromium context per run or apply, closed after | — |
+| Total | ~130 Naukri page loads | **~30 min a day** |
+
+Page weight is not measured yet; at an assumed 1.5–2 MB a load that is **~200 MB a day** per user (K6 measures it). LLM cost (`resolveForm`, drafts) is the same in every option and left out.
+
+### 13.3 Option (a): a browser extension in the user's own Chrome
+
+A Manifest V3 extension. It holds no rules and no answers: the server decides every step and the extension is the hands in the user's own browser (the device link, §13.6).
+- **Sign-in.** None of ours. Most users are already signed in to Naukri in their Chrome; if not, the extension opens naukri.com's own login page in a tab and the user signs in there as they always do. The extension reads only "signed in, first name" (the header, as `naukri.ts firstNameOf`); it never reads the login form or an OTP box (no content script on the login pages).
+- **Where the session lives.** In the user's own Chrome, nowhere else. We stop storing Naukri cookies at all (the K1 sealed blob, §4.9's largest risk, goes away for these users); Disconnect revokes the device token and forgets the connection.
+- **IP and bot checks.** Each account runs from its own home or mobile connection, in genuine Chrome: the user's own fingerprint, history and sign-in, no `navigator.webdriver`, no automation flags. This is the least bot-like of all options. Open points, all measured by K6: the page's own search and apply replies must be read without calling Naukri ourselves, so a script in the page's world wraps `fetch`/XHR read-only (Akamai's script may notice a wrapped `fetch`; `chrome.debugger` would read them cleanly but puts a "started debugging this browser" bar on every window, so no); a content-script click is an untrusted event (`isTrusted: false`) with no mouse movement before it, which Naukri's Apply handler or Akamai's scoring may refuse; tabs in a background window are throttled, and `captureVisibleTab` needs the tab visible.
+- **Cost per user per day.** Ours: polling and reports, well under ₹1. The user's: their own ~200 MB. One-time: the Chrome Web Store developer fee ($5).
+- **Reuse.** Server side, unchanged: `naukriChat.ts` (pure: `jobPageState`, `readApplyReply`, `questionOf`, `optionFor`, `dobParts`), `gate.ts`, `fetchers/naukri.ts` (`planSearches`, `fromSearch`, `withDetail`), `storeSiteListings`, `resolveForm`, `modules/sources/*` (gains a device on the connection). Ported to DOM code in the extension: the page-reading parts of `naukriApply.ts` (`READ_DRAWER` and the job-page signals are already plain DOM code passed to `page.evaluate`), the stop signals of `naukri.ts pageStop`. Rewritten: `ApplyWatch` (as the page-world tap), clicks and fills, the page loop of `sites/ingest.ts`. Not used: `sourceConnect.ts` and `sites/connect.ts` (pairing replaces them). Roughly 70% of the Naukri code reused, ~400 lines of page control rewritten.
+- **Effort.** ~15–19 days: spike 3, device link 5, extension connect and ingest 4–5, apply 5–6, store listing and pilot 2 (+ 1–3 weeks of store review, run alongside).
+- **Against.** Needs a computer with Chrome that is on: a right swipe on the phone is applied when that Chrome next runs. Chrome Web Store review and policy. Chrome only (Edge and Brave take Chrome extensions; Firefox later).
+
+### 13.4 Option (b): cloud browsers with a live view, per-user egress IPs
+
+Our worker drives a browser at a vendor (Browserbase, Steel, Hyperbrowser, Anchor) or our own VMs, over CDP (`chromium.connectOverCDP`); for sign-in the web app embeds the vendor's live view of that browser in the Connect sheet.
+- **Sign-in.** The user types their password and OTP into a streamed page: every keystroke passes through the vendor and through our page. "We never see it" becomes a policy, not a structure, and the vendor's session recording must be off for the connect session or the password is in a recording.
+- **Where the session lives.** The vendor's persistent context (their cloud) or our sealed blob as today (`storageState` over CDP). Either way a live credential for every user sits off their device.
+- **IP and bot checks.** The vendor's own addresses are datacenter ranges, which Akamai refuses (fact 1). Making it work needs a residential or "ISP" proxy per user: someone else's home line, or a datacenter address registered to look like one. That is the evasion §3 option E rules out and Naukri's terms forbid. Rotating pools also break Naukri's IP-bound sessions (§12, NopeRi): sign-in from one address, the next run from another, then OTP checks. And all users still come from one vendor's known ranges.
+- **Cost per user per day.** Browser ~0.5 h × $0.10–0.12 = $0.05–0.06; proxy ~0.2 GB × $10–12/GB at the vendor, or $1–4/GB from a proxy seller, = $0.2–2.4. **About $0.25–2.5 (₹20–210) a user a day, ₹600–6,300 a month.** Own VMs cut the browser part to cents; the proxy part stays.
+- **Reuse.** The most: `naukriApply.ts`, `naukri.ts`, `sites/ingest.ts`, `gate.ts`, `sourceIngest.ts`, the runner as they are; `browser.ts` gains a CDP connect; `sourceConnect.ts` gains the live-view URL. ~95%.
+- **Effort.** ~8–10 days (CDP connect, live view in the sheet, per-user proxy binding, vendor contexts), then the cost forever.
+- **Against.** The proxy is the whole problem and cannot be made honest. It is the only option that serves phone-only users.
+
+### 13.5 Option (c): a desktop companion app
+
+A small app the user installs (tray app: Node with `playwright-core` and the installed Google Chrome, packaged as a signed executable, or Electron). It is our screen worker, cut down to one user and talking to the device link instead of Postgres (it can never hold `DATABASE_URL`).
+- **Sign-in.** As today on the owner's laptop: a visible Chrome window on the user's own computer, they sign in themselves; `waitForSignIn` unchanged.
+- **Where the session lives.** A Chrome profile folder on the user's disk, never uploaded.
+- **IP and bot checks.** Their own connection, as (a). The browser is Playwright-launched Chrome (automation flags, `navigator.webdriver`), exactly what works on the owner's laptop today; clicks are trusted CDP input. So bot checks are as today, one account per address.
+- **Cost per user per day.** Ours as (a), under ₹1. Fixed: code signing (Windows ~$100–400 a year, Apple $99 a year); without it, SmartScreen and Gatekeeper warnings.
+- **Reuse.** `naukriApply.ts`, `naukriChat.ts`, `naukri.ts` run on the device as they are (they import only Playwright and pure modules); `gate.ts`, `fetchers/naukri.ts`, `storeSiteListings`, `sources/*` stay on the server; `sites/ingest.ts` and `executeOnSite` split at the same seam as (a). ~85%.
+- **Effort.** ~15–20 days: device link 5 (shared with (a)), the app and its loop 4, packaging, signing and auto-update for Windows and macOS 5–7, pilot 2.
+- **Against.** An exe from an unknown publisher is a hard ask; per-OS builds and updates; a Chrome window popping up on the user's desktop while they work; the computer must be on, as (a).
+
+Also rejected: **carrying the user's cookies to our cloud worker** (Naukri sessions are IP-bound, and the traffic is back on our addresses); **the screen worker on a VM with a display** (§9: one address for everyone, the problem itself).
+
+### 13.6 The shared piece: the device link (for (a) and (c))
+
+The server keeps the brain, the device is the hands. A device never gets database or queue access and never decides whether to send.
+- **Data.** `DeviceLink {id, userId, kind: extension | companion, tokenHash, label, version, lastSeenAt, revokedAt}`; `DeviceTask {id, userId, site, kind: ingest | apply, applicationId?, payload, leasedUntil, attempts, state}`; `SiteConnection` gains `deviceId` (null = the screen worker, as today).
+- **Pairing.** The extension opens `/device/pair?code=…`; the user, signed in to SwipeApply with Google, approves; the device gets a random token (only its hash stored), revocable from Account. Test profiles cannot pair (they stay on the mock through the screen worker).
+- **Loop.** The device polls `POST /api/device/poll` (every minute while Chrome runs, `chrome.alarms`); the server leases it one task. Ingest: the search URLs from `planSearches`, the page budget and pause; the device opens each page, returns the JSON the page fetched; the server runs `fromSearch`/`withDetail`/`storeSiteListings` and writes the `SourceRun`. Apply: the server runs `swipeRefusal`, `runGate` and `check('submit')`, writes `submit_attempt` and hands a one-time permit for that application; the device opens the job page, reports what it reads, presses Apply only with the permit, sends each drawer snapshot, gets back the value (from `resolveForm`, with its source) or a stop for `needs_input`, and reports Naukri's apply reply, which the server reads with `readApplyReply` to mark `submitted`. A stop page (`needs_signin`, `challenge`, `refused`) is reported and `markStopped` pauses the account as §4.8.
+- **Trust.** Everything a device sends is Zod-checked and fails closed; hosts pinned to `www.naukri.com`; a token reaches only its own user's tasks. A device's listings become shared `Job` rows (owner, 3 Nov), so a tampered device could plant jobs in other users' feeds: §13.9 Q5.
+- **States the user sees.** A Naukri application waiting for the device shows "Waiting for your computer" in the progress stage; the Account card shows the device and when it was last seen.
+
+### 13.7 Comparison
+
+| | (a) Extension | (b) Cloud browser + live view | (c) Desktop companion |
+|---|---|---|---|
+| Password and OTP | typed on naukri.com in their Chrome; we see nothing | typed through our streamed page; policy only | typed in a window on their computer; we see nothing |
+| Session lives | their Chrome | vendor or our blob | their disk |
+| Egress IP | theirs | proxy per user (evasion) | theirs |
+| Bot signals | lowest (genuine Chrome); untrusted clicks to check | highest | as today |
+| Our cost / user / day | < ₹1 | ₹20–210 | < ₹1 + signing |
+| Code reuse | ~70% | ~95% | ~85% |
+| Effort | 15–19 days | 8–10 days + running cost | 15–20 days |
+| Phone-only users | no | yes | no |
+| Install friction | store install, one click | none | signed exe, OS warnings |
+
+### 13.8 Recommendation
+
+**(a), the extension, on the device link, after a 3-day spike (K6).** It is the only option where the user's real browser, real session and real address do the work and we hold no credential at all; it costs almost nothing per user; it is the plainest reading of the owner's rule that the user signs in themselves and nothing is disguised. (b) is fastest to build but rests on residential proxies, which §3 and fact 4 already rule out, puts the password through our page and costs ₹600–6,300 a user a month: no. (c) is the fallback if K6 shows Naukri refuses content-script clicks or notices the read-only tap; because both sit on the same device link, switching from (a) to (c) is a new client, not a redesign. The owner's screen worker stays as it is (the owner, development, test profiles on the mock).
+
+Order: K6 spike → owner picks (a) or (c) → K7 device link → K8 connect and ingest → K9 apply → K10 pilot with five users for a week, then the caps are revisited with real numbers.
+
+### 13.9 Open questions for the owner
+
+1. **Phone-only users.** (a) and (c) need a computer with Chrome. Is it acceptable that Naukri is offered only to users who install it on a computer ("Naukri needs SwipeApply on a computer with Chrome"), with phone-only users kept on the boards?
+2. **Applies wait for the computer.** A Naukri right swipe goes out when that Chrome next runs. How long may it wait before it is cancelled ("Didn't go through: your computer was not on")? Proposal: 3 days.
+3. **Distribution.** Public Chrome Web Store listing, unlisted listing, or a sideloaded pilot of up to 10 users first? Whose publisher account?
+4. **The screen worker and the K1 blob.** For users on the extension we store no Naukri cookies. Delete the K1 sealed blobs for them and keep the screen worker for the owner and tests only? (Recommended.)
+5. **Shared jobs from devices.** Share a listing one user's device reported with every connected user at once (as today), or only after a second user's device lists it too?
+6. **If K6 finds untrusted clicks refused:** companion (c), or the extension fills everything and the user presses Apply in the tab we opened (a handoff, like Ashby), or `chrome.debugger` with its banner?
+7. **No proxies, confirmed.** Keep "no residential or ISP proxies" as a rule, which closes (b) for good unless Naukri offers an official route?
