@@ -1,4 +1,5 @@
 import { appUrl, sendPush } from "@/lib/push";
+import { enqueueSourceIngest } from "@/lib/queue";
 import { sealKeyReady } from "@/lib/sealed";
 import { failConnect, finishConnect, getConnection, SITE_INFO, siteStateKey, type Site } from "@/modules/sources";
 import { storage } from "@/lib/storage";
@@ -51,6 +52,8 @@ export async function runConnect(userId: string, site: Site) {
       return "cancelled" as const;
     }
     console.log(`source-connect: ${site} connected for …${userId.slice(-6)}`);
+    // The first look for jobs right away, so the feed fills without another press (the run's own budget and checks apply).
+    await enqueueSourceIngest(userId, site).catch((error) => console.error(`source-connect: first ${site} run not queued: ${error instanceof Error ? error.message : error}`));
     return "connected" as const;
   } finally {
     await session.close();

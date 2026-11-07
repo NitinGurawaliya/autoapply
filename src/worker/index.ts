@@ -12,7 +12,39 @@ import { expirePersonHandoffs, housekeeping, reapStaleRuns } from "./reaper";
 import { registerSchedules } from "./schedule";
 import { claimWorkerLock } from "./single";
 
+// `--only=sources` (or WORKER_ONLY=sources): a worker for the user's own job-site accounts only (Naukri sign-in and job
+// runs, docs/naukri/TDD.md 4.2), beside a normal worker or with none: it takes no applications, schedules or reaping,
+// so trying Naukri on a laptop never picks up real applications from the shared queues.
+const ONLY_SOURCES = process.argv.includes("--only=sources") || process.env.WORKER_ONLY === "sources";
+
+async function sourcesOnly() {
+  claimWorkerLock();
+  if (!canShowWindow()) throw new Error("--only=sources needs a screen: the sign-in and the job runs open a visible Chrome window");
+  const boss = await getBoss();
+  await boss.work(SOURCE_CONNECT_QUEUE, { localConcurrency: 2 }, handleSourceConnect);
+  await boss.work(INGEST_SOURCE_QUEUE, { localConcurrency: 1 }, handleSourceIngest);
+  console.log(`worker (sources only) listening for ${SOURCE_CONNECT_QUEUE} and ${INGEST_SOURCE_QUEUE}; no applications, schedules or reaping`);
+  let stopping = false;
+  const stop = (signal: string) => {
+    if (stopping) process.exit(1);
+    stopping = true;
+    console.log(`worker: ${signal}: finishing the run in progress (signal again to stop now)`);
+    void boss.stop({ graceful: true, timeout: 12 * 60 * 1000 }).finally(() => process.exit(0));
+  };
+  process.on("SIGINT", () => stop("SIGINT"));
+  process.on("SIGTERM", () => stop("SIGTERM"));
+  // The web app offers Connect only while a worker with a screen beats (modules/sources screenWorkerAlive).
+  const host = `${process.env.WORKER_NAME?.trim() || hostname()}:sources`;
+  const startedAt = new Date();
+  const beat = async () => {
+    await db.workerBeat.upsert({ where: { id: host }, create: { id: host, beatAt: new Date(), startedAt, hasScreen: true }, update: { beatAt: new Date(), startedAt, hasScreen: true } }).catch(() => undefined);
+  };
+  void beat();
+  setInterval(() => void beat(), 60_000);
+}
+
 async function main() {
+  if (ONLY_SOURCES) return sourcesOnly();
   claimWorkerLock();
   const boss = await getBoss();
   // Runs share one Chromium, each in its own context (modules/apply/browser.ts), so concurrency is bounded by RAM
