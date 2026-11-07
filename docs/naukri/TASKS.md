@@ -50,36 +50,42 @@ Do: adapter for Easy Apply's multi-step dialog on K4's step loop; external-apply
 Design: with K3 in `docs/linkedin/`, after K4's real runs; reuses [4.7 Sequence: apply](TDD.md#47-sequence-apply-k4).
 **Done when:** dry runs on 3 Easy Apply jobs fill everything they can; one real submit before LinkedIn goes into `APPLY_BOARDS`.
 
-## Many users on their own devices (proposal, 7 Nov)
+## A million users on their own devices (proposal, 7 Nov)
 
-Designed in [TDD §13](TDD.md#13-many-users-each-from-their-own-device-proposal-7-nov-2026); waits for the owner's answers in [§13.9](TDD.md#139-open-questions-for-the-owner). K6 first; K7 to K10 only after the owner picks (a) or (c) from K6's numbers. Each is one session, plan first.
+Designed in [TDD §13](TDD.md#13-naukri-for-a-million-users-each-from-their-own-device-proposal-7-nov-2026), sized for 1M active users (owner, 7 Nov); waits for the owner's answers in [§13.11](TDD.md#1311-open-questions-for-the-owner). K6 first; K7 to K11 only after the owner picks (a) or (c) from K6's numbers. Each is one session, plan first. Stages in [§13.10](TDD.md#1310-path-from-the-laptop-worker-to-a-million-users).
 
 <a id="k6"></a>
 ### [ ] K6 — Spike: can an extension do Naukri in the user's own Chrome?
-Do: a throwaway unpacked MV3 extension (not shipped, not in `src/`) on the owner's Chrome and network, nothing pressed on real Naukri without the owner's yes for that job. Measure: (1) a read-only page-world tap gets the `/jobapi/v3/search`, `/jobapi/v4/job/<id>`, apply and bot replies the page fetched, with no 406 and no change in the page; (2) a content-script click opens the drawer and a value set through DOM events is accepted, on `/mock/naukri` first, then one real apply; (3) a background, unfocused window loads pages and `captureVisibleTab` works; (4) the bytes of a search page, a job page and an apply.
-Design: [13.3 Option (a)](TDD.md#133-option-a-a-browser-extension-in-the-users-own-chrome) · [13.5 Option (c)](TDD.md#135-option-c-a-desktop-companion-app) · [13.8 Recommendation](TDD.md#138-recommendation).
-**Done when:** each of the four has a measured yes or no with numbers in this entry's Done line, §13.2's page weight is replaced by the measurement, and the owner has picked (a) or (c) (question 6 answered if a click was refused).
+Do: a throwaway unpacked MV3 extension (not shipped, not in `src/`) on the owner's Chrome and network, nothing pressed on real Naukri without the owner's yes for that job. Measure: (1) a read-only page-world tap gets the `/jobapi/v3/search`, `/jobapi/v4/job/<id>`, apply and bot replies the page fetched, with no 406 and no change in the page; (2) a content-script click opens the drawer and a value set through DOM events is accepted, on `/mock/naukri` first, then one real apply; (3) a background, unfocused window loads pages and `captureVisibleTab` works; (4) the bytes of a search page, a job page and an apply, and the browser time of a run and an apply.
+Design: [13.2 Load](TDD.md#132-load-one-user-one-million-users) · [13.3 Option (a)](TDD.md#133-option-a-a-browser-extension-in-the-users-own-chrome) · [13.5 Option (c)](TDD.md#135-option-c-a-desktop-companion-app) · [13.7 Recommendation](TDD.md#137-recommendation).
+**Done when:** each of the four has a measured yes or no with numbers in this entry's Done line, §13.2's assumed page weight and browser time are replaced by the measurements, and the owner has picked (a) or (c) (question 7 answered if a click was refused).
 
 <a id="k7"></a>
 ### [ ] K7 — Device link: the server is the brain, the device the hands
-Do: `DeviceLink` and `DeviceTask` models and migration, `SiteConnection.deviceId`; pairing (`/device/pair`, `/api/device/pair`), `POST /api/device/poll` and `/api/device/report` (Zod, fail closed, hosts pinned, token scoped to its user, revocable from Account); the server halves of ingest (`planSearches` out, `fromSearch`/`withDetail`/`storeSiteListings`/`SourceRun` in) and apply (`swipeRefusal`, `runGate`, `check('submit')`, the one-time permit, `questionOf` + `resolveForm` per question, `readApplyReply` to `submitted`, `markStopped` on a stop page); "Waiting for your computer" stage; ARCHITECTURE §6.20, §11 and the stack table updated in the same change.
-Design: [13.6 Device link](TDD.md#136-the-shared-piece-the-device-link-for-a-and-c) · [4.8 Checks, refusals and pace](TDD.md#48-checks-refusals-and-pace) · [4.9 Security](TDD.md#49-security-and-privacy).
-**Done when:** `scripts/device-link-test.ts` PASS: a fake device drives the protocol against the mock Naukri page offline (an ingest stores jobs and a `SourceRun`; an apply asks once, then sends with sources; no press without a permit; a revoked token and another user's task are refused; a stop page pauses the account); typecheck and lint pass.
+Do: `DeviceLink` and `DeviceTask` models and migration, `SiteConnection.deviceId`; pairing (`/device/pair`, `/api/device/pair`), `POST /api/device/poll` (the server sets the next poll time) and `/api/device/report` (Zod, fail closed, an idempotency key per step, hosts pinned, token scoped to its user, revocable from Account); the server halves of ingest (`planSearches` out with the known-job skip list, `fromSearch`/`withDetail`/`storeSiteListings`/`SourceRun` in) and apply (`swipeRefusal`, `runGate`, `check('submit')`, the single-use permit, `questionOf` + `resolveForm` per question, `readApplyReply` to `submitted`, `unpermitted_press`, `markStopped` on a stop page); drawer selectors served as data; "Waiting for your computer"; ARCHITECTURE §6.20, §11 and the stack table updated in the same change.
+Design: [13.8 The split](TDD.md#138-the-split-extension-as-hands-server-as-brain) · [13.9 What carries over](TDD.md#139-what-carries-over-from-todays-code) · [4.8 Checks, refusals and pace](TDD.md#48-checks-refusals-and-pace) · [4.9 Security](TDD.md#49-security-and-privacy).
+**Done when:** `scripts/device-link-test.ts` PASS: a fake device drives the protocol against the mock Naukri page offline (an ingest stores jobs and a `SourceRun` and skips known job pages; an apply asks once, then sends with sources; a press without a permit is never `submitted`; a repeated report is applied once; a revoked token and another user's task are refused; a stop page pauses the account); typecheck and lint pass.
 
 <a id="k8"></a>
 ### [ ] K8 — Extension: pair, connect and job runs
-Do: `extension/` (MV3: service worker with `chrome.alarms` polling, the pairing page, the signed-in check without touching login pages, the search and job-page runs with the page-world tap, pauses from the task); the Account card offers "Connect with the extension" and shows the device and last seen; no Naukri cookies stored for these users.
-Design: [13.3 Option (a)](TDD.md#133-option-a-a-browser-extension-in-the-users-own-chrome) · [13.6 Device link](TDD.md#136-the-shared-piece-the-device-link-for-a-and-c) · [4.6 Sequence: ingest](TDD.md#46-sequence-per-user-ingest-k2).
+Do: `extension/` (MV3: service worker with `chrome.alarms` polling at the server's pace, the pairing page, the signed-in check without touching login pages, the search and job-page runs with the page-world tap, pauses from the task); the Account card offers "Connect with the extension" and shows the device and last seen; no Naukri cookies stored for these users.
+Design: [13.3 Option (a)](TDD.md#133-option-a-a-browser-extension-in-the-users-own-chrome) · [13.8 The split](TDD.md#138-the-split-extension-as-hands-server-as-brain) · [4.6 Sequence: ingest](TDD.md#46-sequence-per-user-ingest-k2).
 **Done when:** with no screen worker running, the owner pairs and shows Connected; one job run stores Naukri jobs in their feed and stops at the budget; a second user on another computer and network connects and runs at the same time; no `browser-state/<userId>/naukri.json` exists for either.
 
 <a id="k9"></a>
 ### [ ] K9 — Extension: apply
 Do: the extension half of apply: open the job page, report what it reads, press Apply only with the permit, answer drawer questions from the server's values, report Naukri's reply, a screenshot on send and on failure; the K6 answer on clicks applied (or K9 becomes the companion's apply if the owner picked (c)).
-Design: [13.6 Device link](TDD.md#136-the-shared-piece-the-device-link-for-a-and-c) · [4.7 Sequence: apply](TDD.md#47-sequence-apply-k4).
+Design: [13.8 The split](TDD.md#138-the-split-extension-as-hands-server-as-brain) · [4.7 Sequence: apply](TDD.md#47-sequence-apply-k4).
 **Done when:** the mock drawer passes through the extension for a test profile (the server hands a test profile only mock URLs); one real right swipe by the owner ends `submitted` with Naukri's reply, the screenshot and sources; one real apply by a second user leaves from their own network; typecheck and lint pass.
 
 <a id="k10"></a>
-### [ ] K10 — Pilot: five users for a week
-Do: the store listing as the owner chose (question 3) with its privacy disclosures; five users on their own computers for seven days; the caps in `signed_in_sources` revisited from the numbers.
-Design: [13.8 Recommendation](TDD.md#138-recommendation) · [9 Risks](TDD.md#9-risks).
-**Done when:** the Done line records, for the week: users, job runs, applies sent, checks met (`challenge`, `refused`, `needs_signin`) per user, and the caps kept or changed.
+### [ ] K10 — Pilot: stage 2, up to a thousand users
+Do: the store listing as the owner chose (question 3) with its privacy disclosures; screenshots on the S3/R2 driver of `lib/storage.ts`; five users for the first week, then widened; the caps in `signed_in_sources` revisited from the numbers.
+Design: [13.10 Path](TDD.md#1310-path-from-the-laptop-worker-to-a-million-users) stage 2 · [9 Risks](TDD.md#9-risks).
+**Done when:** the Done line records, for the first week: users, job runs, applies sent, checks met (`challenge`, `refused`, `needs_signin`) per user, and the caps kept or changed.
+
+<a id="k11"></a>
+### [ ] K11 — Load test: stage 3, the device link at 100k users
+Do: a device simulator (`scripts/device-load.ts`) that drives the device API with recorded Naukri replies at 10k and 100k users' daily load (§13.2); measure requests a second, latency, Postgres writes and size a day (events, `DeviceTask`, sightings), LLM calls an apply and the cache rate; monthly partitions, coalesced "last seen" writes and the device API as its own service as the numbers require; stage 4's changes proposed with numbers, ARCHITECTURE updated for what the owner accepts.
+Design: [13.2 Load](TDD.md#132-load-one-user-one-million-users) · [13.6 At a million users](TDD.md#136-at-a-million-users) · [13.10 Path](TDD.md#1310-path-from-the-laptop-worker-to-a-million-users) stages 3 and 4.
+**Done when:** the Done line records the measured limits at 10k and 100k simulated users, the first thing that breaks on the way to 1M, and the owner's decision on question 9.
