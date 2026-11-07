@@ -157,10 +157,10 @@ Full entries: [tasks/09-phase-j-more-boards.md](tasks/09-phase-j-more-boards.md)
 - [x] [T92 — Greenhouse and Lever discovery from the crawl index](tasks/09-phase-j-more-boards.md#t92)
 - [x] [T93 — India company probe](tasks/09-phase-j-more-boards.md#t93)
 - [ ] [T94 — Lever apply with the handoff](tasks/09-phase-j-more-boards.md#t94)
-- [ ] [T95 — SmartRecruiters](tasks/09-phase-j-more-boards.md#t95)
+- [ ] [T95 — SmartRecruiters](tasks/09-phase-j-more-boards.md#t95) → M7 if the owner agrees (Phase M, Q8)
 - [x] [T96 — Keka](tasks/09-phase-j-more-boards.md#t96)
 - [ ] [T97 — Board report and docs](tasks/09-phase-j-more-boards.md#t97)
-- [ ] [T98 — Every company on a board: more slug sources (after T92's run)](tasks/09-phase-j-more-boards.md#t98)
+- [ ] [T98 — Every company on a board: more slug sources (after T92's run)](tasks/09-phase-j-more-boards.md#t98) → M3 and M4 if the owner agrees (Phase M, Q8)
 - [x] [T99 — Workday and Zoho Recruit job sources (discovery only)](tasks/09-phase-j-more-boards.md#t99)
 - [x] [T100 — One shared browser per worker](tasks/09-phase-j-more-boards.md#t100)
 - [x] [T101 — Ashby: one save at a time, Ashby's own read-back and submit answer (29 Oct)](tasks/09-phase-j-more-boards.md#t101)
@@ -193,3 +193,25 @@ Design: [docs/resume-tailoring/TDD.md](resume-tailoring/TDD.md) (v1, 5 Nov; owne
 - [ ] [L4 — Tailor on every run: doc queue, cache, wait cap, event](resume-tailoring/TASKS.md#l4)
 - [ ] [L5 — "Resume sent" on the application page, switch on Account](resume-tailoring/TASKS.md#l5)
 - [ ] [L6 — Shadow, measure, switch on](resume-tailoring/TASKS.md#l6)
+
+## Phase M — More boards, employer accounts and discovery at scale (owner, 7 Nov)
+
+This phase comes before the signed-in portals: Naukri, foundit, hirist, iimjobs and Instahyre follow it (owner, 7 Nov). Design: [docs/boards/TDD.md](boards/TDD.md) (v1, 7 Nov). It is a draft until the owner answers its [§11 open questions](boards/TDD.md#11-open-questions-for-the-owner). Tasks with their Do, the design sections each builds, Done-when and the Done lines: [docs/boards/TASKS.md](boards/TASKS.md).
+
+The order is ranked by India jobs added soonest: measure and scale first, then every known company on the boards we apply on, then Workday, SmartRecruiters, SuccessFactors and Darwinbox. M1's daily numbers confirm the rest.
+
+- [ ] [M1 — Board measurement, daily](boards/TASKS.md#m1)
+- [ ] [M2 — Watch every company cheaply: tiers, India-only storage, per-company ingest](boards/TASKS.md#m2)
+- [ ] [M3 — Seed every known company on the boards we apply on](boards/TASKS.md#m3)
+- [ ] [M5 — Employer accounts: vault, permission, the email step by the user](boards/TASKS.md#m5)
+- [ ] [M6 — Workday apply (K12 in the Naukri plan)](boards/TASKS.md#m6)
+- [ ] [M7 — SmartRecruiters (T95, moved here)](boards/TASKS.md#m7)
+- [ ] [M8 — SuccessFactors](boards/TASKS.md#m8)
+- [ ] [M10 — Darwinbox](boards/TASKS.md#m10)
+- [ ] [M4 — Continuous discovery and re-validation (supersedes T98)](boards/TASKS.md#m4)
+- [ ] [M9 — The email step, automatic](boards/TASKS.md#m9)
+- [ ] [M11 — Oracle Recruiting](boards/TASKS.md#m11)
+- [ ] [M12 — Workable](boards/TASKS.md#m12)
+- [ ] [M13 — Zoho Recruit apply](boards/TASKS.md#m13)
+- [ ] [M14 — The long tail of public boards, as M1 earns them](boards/TASKS.md#m14)
+- [ ] [M15 — iCIMS (later)](boards/TASKS.md#m15)
