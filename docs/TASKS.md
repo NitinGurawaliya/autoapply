@@ -183,7 +183,7 @@ Design: [docs/naukri/TDD.md](naukri/TDD.md) (final, 3 Nov). Tasks with their Do,
 - [ ] [K4c — Naukri jobs that apply on another board](naukri/TASKS.md#k4c)
 - [x] [K4b — Mock Naukri drawer](naukri/TASKS.md#k4b)
 - [ ] [K5 — LinkedIn Easy Apply adapter](naukri/TASKS.md#k5)
-- [ ] [K6 — Spike: can an extension do Naukri in the user's own Chrome?](naukri/TASKS.md#k6) (a million users on their own devices, proposal 7 Nov, TDD §13)
+- [ ] [K6 — Spike: can an extension do Naukri in the user's own Chrome, and at which level?](naukri/TASKS.md#k6) (a million users on their own devices, proposal 7 Nov, TDD §13)
 - [ ] [K7 — Device link: the server is the brain, the device the hands](naukri/TASKS.md#k7)
 - [ ] [K8 — Extension: pair, connect and job runs](naukri/TASKS.md#k8)
 - [ ] [K9 — Extension: apply](naukri/TASKS.md#k9)
@@ -191,3 +191,4 @@ Design: [docs/naukri/TDD.md](naukri/TDD.md) (final, 3 Nov). Tasks with their Do,
 - [ ] [K11 — Load test: stage 3, the device link at 100k users](naukri/TASKS.md#k11)
 - [ ] [K12 — Workday apply adapter](naukri/TASKS.md#k12)
 - [ ] [K13 — Naukri as a company directory for our ATS ingest](naukri/TASKS.md#k13)
+- [ ] [K14 — Discovery by search bucket](naukri/TASKS.md#k14)

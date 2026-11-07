@@ -468,7 +468,7 @@ Notice copy (agent voice):
 
 ## 10. Tasks
 
-In [TASKS.md](TASKS.md) beside this file: K1, K2, K4 and K4b with their Do, Done-when and the sections of this design each one builds; K3 and K5 (LinkedIn) until their own design exists; K6–K13 for a million users (§13: the extension for Naukri's own Apply, the company ATS from our cloud for redirect jobs). Root `docs/TASKS.md` Phase K lists them one line each. Order K1 → K2 → K4, one session each, plan first, check pasted, typecheck and lint.
+In [TASKS.md](TASKS.md) beside this file: K1, K2, K4 and K4b with their Do, Done-when and the sections of this design each one builds; K3 and K5 (LinkedIn) until their own design exists; K6–K14 for a million users (§13: the extension for Naukri's own Apply, the company ATS from our cloud for redirect jobs). Root `docs/TASKS.md` Phase K lists them one line each. Order K1 → K2 → K4, one session each, plan first, check pasted, typecheck and lint.
 
 ---
 
@@ -494,7 +494,7 @@ No open questions remain for K1–K4.
 
 ## 13. Naukri for a million users, each from their own device (proposal, 7 Nov 2026)
 
-Status: **proposal for the owner** (questions in §13.13). Nothing in K1–K4 changes until K6 reports. Tasks K6–K13 in [TASKS.md](TASKS.md#k6).
+Status: **proposal for the owner** (questions in §13.15). Nothing in K1–K4 changes until K6 reports. Tasks K6–K14 in [TASKS.md](TASKS.md#k6).
 
 ### 13.1 The problem and the governing constraint
 
@@ -519,12 +519,12 @@ The answering chain's LLM calls are the same in every option: at up to 30M appli
 
 ### 13.3 Option (a): a browser extension in the user's own Chrome
 
-A Manifest V3 extension. It holds no rules and no answers: the server decides every step and the extension is the hands in the user's own browser (§13.10).
+A Manifest V3 extension. It holds no rules and no answers: the server decides every step and the extension is the hands in the user's own browser (§13.12).
 - **Sign-in.** None of ours. Most users are already signed in to Naukri in their Chrome; if not, the extension opens naukri.com's own login page in a tab and the user signs in there as they always do. The extension reads only "signed in, first name" (the header, as `naukri.ts firstNameOf`); it has no content script on the login pages and never reads a password or OTP box.
 - **Where the session lives.** In the user's own Chrome, nowhere else. We store no Naukri cookies (the K1 sealed blob, §4.9's largest risk, goes away); Disconnect revokes the device token.
 - **IP and bot checks.** Each account runs from its own home or mobile connection, in genuine Chrome: the user's own fingerprint, history and sign-in, no `navigator.webdriver`. No IP concentration at any scale. Points K6 measures: the page's own search and apply replies are read through a read-only tap in the page's world (a wrapped `fetch`/XHR, which Akamai's script may notice; `chrome.debugger` would put a "started debugging this browser" bar on every window, so no); a content-script click is an untrusted event (`isTrusted: false`) which Naukri's Apply handler or Akamai's scoring may refuse; background windows are throttled; `captureVisibleTab` needs the tab visible.
 - **At 1M users.** No browser compute on our side. Our side is the device API and the database: ~5k requests a second on average, ~15k at peak (polls paced by the server, ~8 calls an apply, ~50 reports a run); about 30–100 vCPU of stateless API, **~$3–8k a month**. Postgres takes ~30M device tasks, up to 300M application events (if ~10 an apply stays) and up to 360M listing sightings a day; that needs monthly partitions, coalesced "last seen" writes and fewer events per apply: a managed cluster of **~$5–20k a month**. Screenshots, 30M × ~150 KB = 4.5 TB a day, cannot live in `FileBlob`: the S3/R2 driver `lib/storage.ts` already plans, with 30-day expiry (~135 TB kept, **~$2–3k a month**). **Total ~$10–30k a month, ₹0.03–0.08 a user a day**, plus the LLM line in §13.2.
-- **Naukri's checks when concentrated.** Not concentrated by IP, but one piece of software on a million accounts has one behaviour signature (the same clicks, timings and tap); Naukri can recognise and refuse all of it with one rule, and 30M applies a day is visible to its recruiters whatever the technique. No option survives Naukri deciding against it (§13.13 Q8).
+- **Naukri's checks when concentrated.** Not concentrated by IP, but one piece of software on a million accounts has one behaviour signature (the same clicks, timings and tap); Naukri can recognise and refuse all of it with one rule, and 30M applies a day is visible to its recruiters whatever the technique. No option survives Naukri deciding against it (§13.15 Q8).
 - **Against.** Needs a computer with Chrome that is on: a right swipe on the phone is applied when that Chrome next runs. Store review and policy (no remotely hosted code; selectors served as data are allowed). Chrome-family only.
 
 ### 13.4 Option (b): cloud browsers with a live view, per-user egress IPs
@@ -554,7 +554,7 @@ Also rejected: **the user's cookies carried to our cloud** (sessions are IP-boun
 ### 13.6 Option (d): Naukri for discovery, apply on the company's own ATS from our cloud
 
 The model Tsenta (tsenta.com) runs, from its own docs and help center (read 7 Nov): applications run in its cloud on the employer's own application system (about 60: Workday, Greenhouse, Lever, Ashby, iCIMS, SmartRecruiters, Zoho Recruit and others), roles come from 50,000+ company career pages, job boards serve only to find a role, and it never signs in to a job board as the user (no LinkedIn Easy Apply; Naukri is not mentioned anywhere in its docs, help center, supported systems or extension sites). For us: a Naukri listing with `companyApplyJob: true` whose `applyRedirectUrl` is on a board we apply to is applied there, through that board's adapter, from our cloud (K4c), and the company behind it joins our ATS ingest, so its later jobs arrive from the board's public API with no Naukri read at all.
-- **Sign-in.** None on Naukri for applying. Greenhouse, Lever, SmartRecruiters and Keka need no account. Workday, where many Indian MNC listings redirect (Cisco in our fixture), needs a candidate account per employer: Tsenta has the user set an "application password" and reads the OTP from the user's connected Gmail or Outlook. For us that is a new decision close to the hard rule that we never ask for, type or store a password (§13.13 Q10); Gmail read access is a Google restricted scope with a yearly third-party security assessment.
+- **Sign-in.** None on Naukri for applying. Greenhouse, Lever, SmartRecruiters and Keka need no account. Workday, where many Indian MNC listings redirect (Cisco in our fixture), needs a candidate account per employer: Tsenta has the user set an "application password" and reads the OTP from the user's connected Gmail or Outlook. For us that is a new decision close to the hard rule that we never ask for, type or store a password (§13.15 Q10); Gmail read access is a Google restricted scope with a yearly third-party security assessment.
 - **Where the session lives.** No Naukri session for applying. Workday accounts, if chosen: one encrypted credential per user and employer, with us.
 - **IP and bot checks.** Naukri sees none of our applies. The ATSs see our cloud addresses, which they mostly accept today (Greenhouse from the Docker worker), and the load spreads over thousands of employers. Not free of checks: Ashby's automated Submit went through 1 time in 23, so Ashby is a handoff; Workday tenants can add bot checks. Discovery still reads Naukri listings, from users' own runs (K2 today; at scale the extension in read-only mode, 2 runs a day, no Apply); once a company is known its jobs come from the ATS, so Naukri reads grow with new companies, not with users.
 - **At 1M users.** The cost is the cost of applying on ATS forms, which the product pays for every board anyway: if all 30M daily applies went to ATS forms at ~1.5 browser-minutes each, ~31k busy headless browsers, **~$0.4–0.6M a month** on our own machines (₹1.1–1.7 a user a day), with no proxies and no device. Lower in practice, since only redirect jobs come this way.
@@ -576,35 +576,81 @@ The model myjobb.ai (Infyn Technologies) describes in its privacy policy (myjobb
 - **What it does better than (a).** Applies go out while the user's computer is off. It is the only thing it buys, and it is bought with (b)'s bill and (b)'s proxies.
 - **Verdict.** Solves sign-in at scale, not the problem. At 1M users it is (b) with a cheaper sign-in: it does not survive.
 
-### 13.8 At a million users
+### 13.8 Option (f): the extension as a thin executor, at request level
 
-(a)–(c) and (e) are priced for Naukri's own Apply; a job that redirects to an ATS goes through (d)'s path in every option, so (d)'s cost is the product's base cost, not an extra.
+(a) with the page taken out. The user is already signed in to Naukri in their own Chrome, so there is no connect flow. The server decides which job and every answer and keeps governance, as in (a); the extension, from a naukri.com tab of the user's browser (or its service worker, if cookies go with it there, V4), sends the same apply and chatbot requests Naukri's own page sends (K4 recon, 5 Nov: `…/apply-workflow/v1/apply`, `…/botapi/v5/respond`), with the user's cookies, from the user's IP, and relays Naukri's JSON reply to the server as the evidence. NopeRi (github.com/Traverser25/NopeRi, no licence: read, not copied) applies the same way with no browser at all.
+- **Sign-in.** None of ours, as (a). We never see a password or OTP.
+- **Where the session lives.** The user's Chrome. We store no cookies.
+- **IP and bot checks.** Every apply leaves from the user's own address, which matters if Naukri's sessions are bound to an address, as NopeRi's README says ("Naukri fingerprints IPs. Sessions are IP-bound"; V1 checks it). That would also break (b) and (e), whose whole model is replaying the session elsewhere. No untrusted clicks, no background-tab throttling, no selectors to keep up. The new signal: applies posted with no job-page view before them and none of the page's own script running, one client's request pattern on a million accounts, a one-line rule for Naukri. Calling Naukri's private endpoints without its page is also a plainer case of the "automated means" its terms forbid than pressing its button (Q14).
+- **The condition.** If the page's apply or chatbot request carries a value the page computes per request (a signed header like the search's `nkparam`, a reCAPTCHA token), the executor would have to make that value itself: the circumvention §3 option C rules out. Then (f) is out and (a) is the route (V2).
+- **At 1M users.** No browsers anywhere: per apply 1–3 requests from the user's browser, kilobytes instead of megabytes, seconds instead of a minute. Ours: ~6 device-API calls an apply (permit, relays, result), ~3k requests a second on average, ~9k at peak (~$2–5k a month); the database as (a) (~$5–20k); no screenshots needed, since Naukri's JSON reply is the evidence (Q14). **~$7–25k a month, ₹0.02–0.07 a user a day.**
+- **What changes in K1, K2 and K4.** K1: the connect window (`sites/connect.ts`, `worker/handlers/sourceConnect.ts`, `waitForSignIn`) goes; `SiteConnection` stays, set from the extension's signed-in check; the sealed state is unused for device users. K2: becomes discovery by bucket (§13.9); `fetchers/naukri.ts` and `storeSiteListings` stay, the per-user page loop (`sites/ingest.ts`, `sourceIngest.ts`) goes. K4: `naukriApply.ts` (the page, the drawer, `ApplyWatch`) goes; `naukriChat.ts` stays server-side (`readApplyReply`, `optionFor`, `optionsFor`, `dobParts`) and gains a parser for the chatbot's JSON question beside `questionOf`, which reads the DOM; the runner's answer loop (`resolveForm` per question, guess and send), `gate.ts` and the events stay server-side; the mock's two services (`app/mock/naukri/`) already answer these requests and serve the tests.
+- **Effort.** ~13–15 days: spike 3, device link 5 (shared), executor 3–4, JSON question parser 2.
+- **Beyond Naukri.** Hirist and IIM Jobs are also Info Edge sites (their terms name Info Edge); the same executor likely extends to them, under the same terms (Q15).
+- **Verdict.** The cheapest and easiest to scale of all, if V1 and V2 pass. (a) is the same design one level up and the route if they do not.
 
-| | (a) Extension | (b) Cloud browsers | (c) Desktop app | (d) Discovery + ATS in our cloud | (e) Extension sign-in + cloud runs |
-|---|---|---|---|---|---|
-| Browser compute, ours | none | 21–28k busy browsers | none | ATS applies only, up to ~31k headless | 21–28k busy browsers |
-| Our cost a month (LLM excluded) | ~$10–30k | ~$3.5–26M | ~$10–30k + signing | up to ~$0.4–0.6M, shared with every board | ~$3.5–26M |
-| Per user a day | ₹0.03–0.08 | ₹10–75 | ₹0.03–0.08 | up to ₹1.1–1.7 | ₹10–75 |
-| Egress IPs | 1M users' own | 1M proxies (evasion) | 1M users' own | our cloud, to ATSs only | 1M proxies (evasion) |
-| Concentration Naukri sees | one extension's behaviour | proxy ranges + automation | one automation fingerprint | reads only, no applies | sessions hopping from home lines to proxies: a stolen session's signature |
-| Password and OTP | never pass through us | through our streamed page | never pass through us | none for Naukri; Workday accounts need one (Q10) | never pass through us |
-| Credentials we hold | none | 1M live sessions | none | Workday accounts, if chosen | 1M live sessions |
-| Phone-only users | no | yes | no | **yes** | no (connect needs desktop Chrome) |
-| Naukri's own Apply jobs | yes | yes | yes | **no** | yes |
-| Reuse of today's code | ~70% | ~95% | ~85% | the ATS adapters as they are | ~95% (K1, K2, K4 as they are) |
-| Effort to first users | 15–19 days | 8–10 days | 15–20 days | 5–6 days; 15–21 with Workday | 8–11 days + proxies |
-| **Survives 1M** | **yes** | **no** | yes, weaker | **yes, for redirect jobs** | **no** |
+### 13.9 Discovery at scale: who reads Naukri's listings
 
-### 13.9 Recommendation
+K2 reads per user: at 1M users ~130M page loads a day, most of them the same searches. Three ways to read less:
+
+| | (i) Per user, in users' own sessions (K2 today) | (ii) Per bucket, in users' own browsers | (iii) One shared reader on our servers, signed out |
+|---|---|---|---|
+| How | each user's device runs that user's searches | searches deduped into (keyword, city, experience) buckets; each bucket run once a window by one online device whose user's own search it is; results shared | our server calls Naukri's search API directly, as JobSpy (github.com/speedyapply/JobSpy) does, signed out |
+| Reads a day at 1M | ~18M search pages + job pages | thousands of buckets × 9 pages: ~0.1–0.4M | the same, from us |
+| Needs a device online | yes | some user in each bucket | no; phone-only users get jobs too |
+| Our cost | device API only | device API only | a few servers, plus proxies if Akamai refuses our addresses (fact 1: 403 from datacenter addresses): small at this volume |
+| Fits the owner's 3 Nov decision ("fetched per user … never a crawl") | yes | yes: each device reads only its own user's search; duplicates are skipped | **no**: it is the crawl the terms forbid, and it works only by generating the per-session signature (`nkparam`) the search requires, which §2 fact 1 and §3 option C rule out ("we never mint, copy or replay the signature") |
+
+Checked 7 Nov by the planning session: signed out, Naukri's own `/jobapi/v3/search` answered 200 (20 of 288 listings for "java developer, bangalore"); without the page's signature it answers 406. **Recommended: (ii).** It gives most of (iii)'s saving without crawling or making Naukri's signature. (iii) is the owner's call against their own earlier decision and Naukri's terms (Q13); this design does not recommend it and does not describe how the signature is made.
+
+### 13.10 At a million users
+
+(a)–(c), (e) and (f) are priced for Naukri's own Apply; a job that redirects to an ATS goes through (d)'s path in every option, so (d)'s cost is the product's base cost, not an extra.
+
+| | (a) Extension | (b) Cloud browsers | (c) Desktop app | (d) Discovery + ATS in our cloud | (e) Extension sign-in + cloud runs | (f) Thin executor |
+|---|---|---|---|---|---|---|
+| Browser compute, ours | none | 21–28k busy browsers | none | ATS applies only, up to ~31k headless | 21–28k busy browsers | none, and none on the user's side either |
+| Our cost a month (LLM excluded) | ~$10–30k | ~$3.5–26M | ~$10–30k + signing | up to ~$0.4–0.6M, shared with every board | ~$3.5–26M | ~$7–25k |
+| Per user a day | ₹0.03–0.08 | ₹10–75 | ₹0.03–0.08 | up to ₹1.1–1.7 | ₹10–75 | ₹0.02–0.07 |
+| Egress IPs | 1M users' own | 1M proxies (evasion) | 1M users' own | our cloud, to ATSs only | 1M proxies (evasion) | 1M users' own |
+| Concentration Naukri sees | one extension's behaviour | proxy ranges + automation | one automation fingerprint | reads only, no applies | sessions hopping from home lines to proxies: a stolen session's signature | applies with no page view before them |
+| Password and OTP | never pass through us | through our streamed page | never pass through us | none for Naukri; Workday accounts need one (Q10) | never pass through us | never pass through us |
+| Credentials we hold | none | 1M live sessions | none | Workday accounts, if chosen | 1M live sessions | none |
+| Phone-only users | no | yes | no | **yes** | no (connect needs desktop Chrome) | no (applies wait for desktop Chrome) |
+| Naukri's own Apply jobs | yes | yes | yes | **no** | yes | yes |
+| Reuse of today's code | ~70% | ~95% | ~85% | the ATS adapters as they are | ~95% (K1, K2, K4 as they are) | server side as (a); no page code |
+| Effort to first users | 15–19 days | 8–10 days | 15–20 days | 5–6 days; 15–21 with Workday | 8–11 days + proxies | 13–15 days |
+| **Survives 1M** | **yes** | **no** | yes, weaker | **yes, for redirect jobs** | **no** | **yes, cheapest, if V1 and V2 pass** |
+
+### 13.11 Recommendation
+
+Ranked for the owner's ask (7 Nov): the cheapest and easiest to scale, among options that keep the user's own sign-in and do not disguise anything.
+
+| Rank | Option | Our cost at 1M a month | Why |
+|---|---|---|---|
+| 1 | (f) thin executor | ~$7–25k | no browsers anywhere; kilobytes per apply; if V1 and V2 pass |
+| 2 | (a) extension, page level | ~$10–30k | the same design one level up; the route if (f) needs a signature we would have to make |
+| 3 | (c) desktop app | ~$10–30k + signing | the fallback if the extension cannot act on Naukri |
+| — | (d) company ATS from our cloud | the product's base cost | not an alternative: it serves the redirect jobs in every ranking |
+| out | (e) extension sign-in, cloud runs | ~$3.5–26M | proxies; replayed sessions; breaks outright if sessions are IP-bound |
+| out | (b) cloud browsers | ~$3.5–26M | the same, plus the password through our page |
 
 **Two tracks.**
 
 1. **Now: (d) for every Naukri job that applies on a company ATS.** K4c applies it through our adapters from our cloud; K13 adds the companies Naukri points to into our ATS ingest, so their jobs reach every user, phone-only users included, with no Naukri session; K12 adds Workday apply once the owner decides on accounts (Q10). It scales the way the rest of SwipeApply already does, Naukri sees none of our applies, and a comparable product (Tsenta) runs this model at scale.
-2. **Gated: (a), the extension, for Naukri's own Apply.** Those jobs exist only behind the user's Naukri session, and at 1M users the extension is the only route to them that survives: cheap, no proxies, no credential with us, the user's own sign-in. Build K7–K9 only if K6 shows the extension works and the measured share of Naukri-only jobs among what users would swipe on is worth it (Q11). (c) is the fallback if K6 finds content-script clicks refused; both sit on the same device link, so switching is a new client, not a redesign. (b) and (e) are closed: both run in our cloud, so both cost millions a month and only work through proxies we ruled out; (e)'s one gain, applies while the computer is off, does not pay for that.
+2. **Gated: the extension for Naukri's own Apply, at request level (f) if K6 shows V1 and V2 pass, else at page level (a).** Discovery by bucket in users' own browsers (§13.9 (ii), K14). Build K7–K9 only if K6 also shows the share of Naukri-only jobs is worth it (Q11). (c) is the fallback if the extension cannot act on Naukri at all; all three sit on the same device link, so switching is a new client, not a redesign. (b) and (e) are closed: both run in our cloud, so both cost millions a month and only work through proxies we ruled out, and both break if Naukri's sessions are bound to an address.
 
 The owner's screen worker stays for the owner, development and test profiles on the mock.
 
-### 13.10 The split: extension as hands, server as brain
+**Checks the owner runs before track 2 (in K6, nothing pressed without the owner's yes for that job):**
+- **V1, is the session bound to an address?** Signed in on home Wi-Fi, move the same laptop to a phone hotspot and open Naukri's signed-in pages: still signed in, asked for an OTP, or signed out. No cookie is copied anywhere.
+- **V2, does the apply call need a value the page makes?** In Chrome's DevTools, read the headers and body of the page's own apply and chatbot requests on one job: a per-request signature or reCAPTCHA token means (f) is out. If none, the same request sent from an unpacked extension's content script on a naukri.com tab, on `/mock/naukri` first, then on one real job the owner picks, gets the same reply.
+- **V3, the chatbot answers.** As V2 for one job with questions: each answer's reply moves the questionnaire on, and the final apply reply reads as applied (`readApplyReply`).
+- **V4, without a tab.** The same request from the extension's service worker: do the cookies go with it (SameSite) and does Naukri accept it, or is a naukri.com tab needed?
+- **V5, Naukri's own daily cap.** Whether Naukri stops applies at 50 a day (myjobb's guide says so); ours stays at 30.
+- **V6, the share.** Over the owner's real runs, the share of Naukri-only listings (`companyApplyJob: false`) against redirects, by target system (Q11).
+
+### 13.12 The split: extension as hands, server as brain
 
 The device never gets database or queue access and never decides whether to send.
 
@@ -621,15 +667,17 @@ The device never gets database or queue access and never decides whether to send
 | Stop pages | reports `needs_signin`, `challenge`, `refused`, and stops | `markStopped`, `pausedUntil`, push (§4.8) |
 | Retries | none | leases expire, `attempts`, `max_attempts`, as the runner does |
 
+At request level (f) the extension never reads the page: it posts Naukri's apply and each answer as the page would and relays Naukri's JSON; the server reads the questions from that JSON (a parser beside `questionOf`) and the outcome with `readApplyReply`. Every other row is the same.
+
 How the server stays the source of truth for governance:
 - Caps, pace and submit rules are checked only on the server, when a permit is asked for; a rules change in `config/rules.json` reaches every device at once, with no extension release.
 - Every report is an event the server writes, with an idempotency key per step; nothing the device says changes state without one.
 - An apply reply with no permit behind it is never `submitted`: it is recorded as an error event (`unpermitted_press`) and the device's token is suspended. A user who alters their own extension can only act on their own account, and our records never claim a send we did not permit.
-- Everything a device sends is Zod-checked and fails closed; hosts pinned to `www.naukri.com`; a token reaches only its own user's tasks. Device listings become shared `Job` rows (owner, 3 Nov), so a tampered device could plant jobs in other feeds: §13.13 Q5.
+- Everything a device sends is Zod-checked and fails closed; hosts pinned to `www.naukri.com`; a token reaches only its own user's tasks. Device listings become shared `Job` rows (owner, 3 Nov), so a tampered device could plant jobs in other feeds: §13.15 Q5.
 - Pairing: the extension opens `/device/pair?code=…`, the user (signed in to SwipeApply with Google) approves, the device gets a random token (only its hash stored), revocable from Account. Test profiles cannot pair; they stay on the mock through the screen worker.
 - Data: `DeviceLink {id, userId, kind, tokenHash, label, version, lastSeenAt, revokedAt}`, `DeviceTask {id, userId, site, kind, applicationId?, payload, leasedUntil, attempts, state}`. A Naukri application waiting for the device shows "Waiting for your computer".
 
-### 13.11 What carries over from today's code
+### 13.13 What carries over from today's code
 
 | Kept, server side | Replaced |
 |---|---|
@@ -640,7 +688,7 @@ How the server stays the source of truth for governance:
 | `fetchers/naukri.ts`, `storeSiteListings`/`storeJobs`, `SourceRun` | the browser half of `runner.ts executeOnSite` → the device step machine |
 | The feed (`feedBoardsFor`, `FEED_BOARDS`), governance rules, events, push | `browser.ts` sealed site state: unused for device users (kept for the screen worker) |
 
-### 13.12 Path from the laptop worker to a million users
+### 13.14 Path from the laptop worker to a million users
 
 Track 1, (d) (K4c, K13, then K12), needs none of the stages below: it runs on the existing worker and boards, alongside stage 1. The stages are track 2, the extension.
 
@@ -654,17 +702,20 @@ Track 1, (d) (K4c, K13, then K12), needs none of the stages below: it runs on th
 
 Alongside stage 3: at tens of millions of applies a day, the durable route is Naukri's agreement, not a technique (Q8).
 
-### 13.13 Open questions for the owner
+### 13.15 Open questions for the owner
 
 1. **Phone-only users.** (a) and (c) need a computer with Chrome; many Indian job seekers have only a phone. Is Naukri offered only to users with a computer ("Naukri needs SwipeApply on a computer with Chrome"), the boards for everyone else? (Firefox for Android runs extensions; a later probe, not a plan.)
 2. **Applies wait for the computer.** A Naukri right swipe goes out when that Chrome next runs. How long may it wait before it is cancelled? Proposal: 3 days.
 3. **Distribution.** Public Web Store listing, unlisted, or a sideloaded pilot of up to 10 users first? Whose publisher account?
 4. **The K1 blob.** For device users we store no Naukri cookies. Delete the sealed blobs and keep the screen worker for the owner and tests only? (Recommended.)
 5. **Shared jobs from devices.** Share a listing one device reported with every connected user at once (as today), or only after a second user's device lists it too?
-6. **Shared searches.** At scale, users with the same keyword, city and experience run the same search. Should one user's device run a search whose results other users also get (fewer page loads on Naukri, but one account working for others), or does each device run only its own user's searches (recommended; known job pages are skipped either way)?
+6. **Shared searches.** Users with the same keyword, city and experience run the same search. Run each bucket once a window, by one device whose user's own search it is, and share the results (§13.9 (ii), recommended), or let every device run its own searches even when they repeat?
 7. **If K6 finds untrusted clicks refused:** the desktop app (c), the user pressing Apply in a tab we opened (a handoff, like Ashby), or `chrome.debugger` with its warning bar?
 8. **Naukri at scale.** 30M applies a day through member accounts is visible to Naukri whatever the technique. Open a conversation with Info Edge (a partner route or API) before stage 3, and keep "no residential or ISP proxies" as a rule, which closes (b) for good?
 9. **Stage 4 stack changes.** Accept now, in principle, that a million users may need a queue outside Postgres and S3/R2 for files, decided on K11's numbers?
 10. **Workday accounts.** Applying on Workday needs a candidate account per employer. Do we create them (the user sets one application password, stored encrypted; the OTP read from their connected Gmail or Outlook, a Google restricted scope with a yearly security assessment), have the user create each account themselves in a handoff the first time and keep only the session, or leave Workday out?
 11. **Is track 2 worth it?** If K6 measures that most Naukri jobs users would swipe on take only Naukri's Apply, build the extension; if most redirect to ATSs we support, stop at track 1?
 12. **Applies while the computer is off.** Is that worth holding users' Naukri sessions in our cloud and running them through proxies, as (e) does? The design says no; if the owner says yes, (e) replaces (a) in track 2 and "no residential or ISP proxies" (Q8) is dropped.
+13. **A shared signed-out reader (§13.9 (iii)).** The cheapest discovery there is and the only one that needs no device online, but it reverses the owner's own decision of 3 Nov ("never a crawl"), is the crawling Naukri's terms forbid, and works only by generating the signature Naukri uses to keep robots out, which this design rules out (§3 C). Keep (ii), or take (iii) knowingly, after advice on the terms?
+14. **Request level (f).** If V2 shows no value we would have to make, is calling Naukri's own apply and chatbot endpoints from the user's browser, without its page, acceptable? And is Naukri's JSON reply enough evidence of sending, without a screenshot?
+15. **Hirist and IIM Jobs.** Both Info Edge; the same executor likely works there. Add them after Naukri, under the same rules and caps?
