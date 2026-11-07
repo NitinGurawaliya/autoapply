@@ -195,7 +195,25 @@ Sessions are one agent session each (CLAUDE.md "How to work"); the numbers are f
 | 11 | M13 Zoho Recruit apply | ~550 | ? | 1 | ~550 | — |
 | 12 | M14 Long tail, M15 iCIMS | under 650 each | | 2 + 3 | under 300 | M1 shows weekly flow |
 
+**Alongside, not ranked by jobs:** M16 (board health) lands before the second new board, M17 (feed at volume) before the open India rows pass 100,000, M18 (model cost) with M3, M19 (fleet and per-IP pace) before applies outgrow one machine, M20 (the user's own live view for bot checks) when the owner answers Q12.
+
 **Order:** M1 and M2 first because nothing scales without them (seeding 6,000 Greenhouse companies into today's single 3-hourly run would take most of the 3 hours); then M3, the most India jobs soonest; then Workday, SmartRecruiters, SuccessFactors, Darwinbox (the owner's order); M4 runs beside them from M3's lists onward; then Oracle, Workable, Zoho, the long tail. **M1's two weeks of daily numbers after M3 confirm or reorder 5–12** (owner, 7 Nov: a board is judged by its flow of new India jobs a day, not one snapshot).
+
+### 3.5 Bot checks: a policy per board (owner decision)
+
+Seen on 7 Nov: DataDome on SmartRecruiters; Turnstile on Workable, Rippling, Personio and Darwinbox; hCaptcha on Lever and Recruitee (always shown), invisible on iCIMS and some Oracle sites; reCAPTCHA on Ashby (score), Jobvite, Polymer, JazzHR (a visible checkbox); Workday's own invisible checks; an image CAPTCHA on Keka and Zoho Recruit. Today every check ends with a person at the worker's screen (ARCHITECTURE "Human handoff"), which serves one laptop, not a million users.
+
+| Option | How | Terms and ethics | Scales | Verdict |
+|---|---|---|---|---|
+| A. Worker-submittable only | Per board, and per company where the board says (Ashby's `recaptchaAction`), the worker's ordinary click in a real browser; a check that stops it means the job is not offered for apply (or is marked "needs you at a computer") | Clean: the check works as its owner meant | Yes | **Yes, the default** |
+| B. A person at our worker's screen (today) | The window on the machine with a screen | Clean | No: one screen | Keep for the owner and tests |
+| C. **The user's own live view** | The worker's window streamed to the user's phone or browser (a screencast through CDP, input sent back); the user solves their own check and presses Submit | Clean: the candidate is the human the check asks for | Yes: each user handles their own, minutes, on any device | **Recommended next** (M20) |
+| D. A solver service (2Captcha, CapSolver: paid people or models solve it) | An API call per check | Defeats the check by design; most boards' terms forbid getting around their bot measures; the same circumvention the Naukri plan ruled out; a solver sees the page | Yes | **No** |
+| E. Stealth browsers, residential proxies | — | Circumvention | — | No (already ruled out) |
+
+Keka today: the worker reads Keka's image CAPTCHA with AI (`ENABLE_KEKA`, the owner's call, T96). That is D done in-house; under this policy Keka would move to C once it exists. The owner decides (§11 Q12).
+
+Per board, the policy is recorded in `boards.ts` (`check: "none" | "score" | "always"`): `none` and `score` start as A (the worker's click; a challenge on a score board goes to B or C); `always` boards are C (or B until C exists). The measured challenge rate per board (§4.15) moves a board between them.
 
 ---
 
@@ -386,6 +404,7 @@ No board publishes a rate limit for these public APIs; at under one request a se
 - **In use:** the worker decrypts right before typing into the employer's password field on that employer's own host (`formHost` check), never into any other page. Never logged, never in an event, a diagnostic, an error string or a push; password fields are masked in every screenshot (screenshots are taken after sign-in only).
 - **Shown to the user:** Account → Employer accounts → "Show password" (POST, rate-limited to 10 an hour, an audit row each time), so the user can sign in to see the status on the employer's site.
 - **Delete and export:** deleting the SwipeApply account deletes every `EmployerAccount` row (cascade) and tells the user which employers still hold an account in their name; export lists them, with passwords.
+- **How this fits CLAUDE.md's credential rules.** Today's rule ("we never ask for, type, store or log their password or OTP") is about the user's own accounts on signed-in sources (Naukri, LinkedIn); it stays as it is. An employer account's password is not the user's: we make it, for one employer, and the user can see and change it. Codes the employer emails are typed by the worker today already (Greenhouse's security code, which the user gives in the app; `verificationCode` cleared once read, never logged); M9's inbound address only removes the user from that loop, keeping a code or link 15 minutes and never a mail body. Gmail or Outlook read access over OAuth (option 4) would be the first time we hold access to a user's mailbox: not in this phase, and only by a new owner decision with Google's restricted-scope review. The rule below is added, not changed.
 - **CLAUDE.md hard rule (lands with M5):** "Employer accounts: created only after a right swipe on that employer's job and under the user's standing permission; the login is the user's own email and a password we generate per account; stored only through `modules/accounts` (AES-GCM); never logged; typed only on that employer's host; shown only to the user. Never the user's own password for any service; never SSO."
 
 ### 4.10 Failure handling
@@ -442,6 +461,42 @@ No board publishes a rate limit for these public APIs; at under one request a se
 | `ACCOUNT_BOARDS_USERS` | — | Comma list of user ids allowed account boards while it rolls out (§8) |
 | `INGEST_MODE` | `run` | `tick` switches to per-company ingest (§8); `run` keeps the 3-hourly run until the switch |
 
+### 4.14 Model cost at volume
+
+Today (`modules/jobs/semantic.ts`): every open job gets one embedding (`text-embedding-3-small`, 512 dimensions, title plus 2,000 characters ≈ 500 tokens), done once per job (41,412 rows embedded, 7 Nov); each user's closest jobs are then judged by `gpt-4o-mini` in batches of 40 (the resume summary plus 600 characters per job ≈ 6,600 tokens in, ≈ 800 out per batch), cached per user and job (`JobJudgement`: 21,756 rows for 14 users, about 100 a day per active user).
+
+| | Today | After M3 (India-only) | If we embedded everything |
+|---|---|---|---|
+| New jobs a day | 88–6,242, mean ≈ 2,200 (7 days to 5 Nov), 60% India | ≈ 3,000–5,000 India | ≈ 150,000 (5M listings across the systems, ~3% new a day) |
+| Embedding tokens a day | ≈ 1.1M | ≈ 2.5M | ≈ 75M |
+| Embedding cost a month (at $0.02 per 1M tokens) | < $1 | ≈ $1.5 | ≈ $45, plus 1 KB a row of storage |
+| Judgement per active user a day | ≈ 100 jobs, ≈ 3 batches ≈ $0.0045 | the same, from a bigger pool | — |
+| Judgement at 10k / 100k / 1M daily users | $45 / $450 / $4,500 a day | | |
+
+Prices are OpenAI's list prices as we know them on 7 Nov (gpt-4o-mini $0.15 in / $0.60 out per 1M tokens): M18 checks them against the bill. **Embeddings are cheap whatever we do; the per-user judgement is the cost that grows**, and only with users. What to filter before spending:
+- **Before embedding:** only stored jobs (India-eligible, M2), open, not a duplicate of the same role on another board or location (`roleKey`), and with a description of at least 200 characters; non-tech titles embedded too (T85's users) but never judged for a tech profile (the title classifier already says `non_tech`).
+- **Before judging:** only the user's vector shortlist above the semantic floor, within their places and level (code, `levelFit`), at most `max_judged_per_user_per_day` (150).
+- **At scale (M18):** share judgements between users whose resume summaries embed within a small distance and share a track and level (a "profile cluster"), so one verdict serves many; measured against per-user verdicts on a sample before it is switched on.
+
+### 4.15 The apply fleet and board health
+
+**Fleet.** Workers are the Docker image (ARCHITECTURE §12) with one shared Chromium each (T100: 8 runs at once ≈ 1 GB, `APPLY_CONCURRENCY` 3–24). An application holds a browser ≈ 1.5 minutes (Naukri TDD §13.6; M19 measures it per board). 10,000 applications a day ≈ 250 browser-hours ≈ 10 browsers busy on average, ≈ 30 at the Indian daytime peak: 4 containers of 8. A million a day ≈ 1,000 at the peak: 125 containers. Containers scale on the depth of the apply queues (pg-boss), not on a schedule.
+
+**Per IP.** No board publishes how many applications it accepts from one address; what we know is Ashby's (headless from a data centre: challenged 31 of 31 at `low`; a visible window: 0 of 6). So each container's address is a unit with its own pace per board, in `config/rules.json` (`max_submits_per_ip_per_board_per_hour`, starting at 30), measured by M19 and raised only on clean numbers. More containers on more hosts is ordinary horizontal scaling; renting residential or mobile addresses to look like candidates is not (ruled out, §1).
+
+**Board health (M16).** Per board, a rolling 24-hour success rate from `ApplicationEvent` (sent ÷ finished, cancelled left out; `modules/jobs/results.ts` already counts per company), the challenge rate and the top error categories (`friendlyError`: field not found, Submit not found, validation, refused). An alert to the owner (push and `NOTIFY_WEBHOOK_URL`) when a board's rate falls below half its 7-day mean over at least 10 runs, or one error category passes 30% (a form that changed); after an alert the board pauses itself (`BoardSwitch` row: new swipes queue but do not run) until the owner resumes it, so a broken adapter does not burn a day of users' swipes.
+
+### 4.16 The feed at volume
+
+Open jobs: 34,128 today (all countries); after M2 and M3 ≈ 70,000–120,000 India-eligible open rows (§4.8; 200,000+ only if abroad jobs stayed). The feed reads `Job` by eligibility, places and posting date (`Job_source_eligibility_postedAt_idx`), matches skills through the `terms` GIN index, and ranks by vector distance to the resume. **There is no vector index today**: distance is computed over every candidate row, fine at 34k, not at 120k+.
+- **M17:** a partial HNSW index on `embedding` (`halfvec_cosine_ops`) for open India-eligible rows; the feed's candidate query takes the 500 nearest by index, then filters and ranks as today; `ANALYZE` after M3's imports.
+- **The check:** `scripts/feed-sql-test.ts` extended with 200,000 synthetic rows: the feed query under 300 ms at p95 for 3 profiles, and the same top 50 as the exact query for at least 95% of jobs (recall), so the index costs no matching quality.
+- India filtering stays in the query (eligibility first); storage India-only (M2) keeps the table near the 100k range.
+
+### 4.17 The rollout gate per board
+
+No board enters `APPLY_BOARDS` without, in order (INGEST_CONTRACT; §4.5 step 7): its offline test PASS; `ats-smoke` dry runs on 3 forms of companies hiring in India that fill everything and stop before Submit; **one real submit** by the owner's profile, confirmed by the board's own words and screenshot; its bot-check policy set (§3.5); board health (M16) watching it. Account boards also need `ENABLE_ACCOUNT_BOARDS` and go to `ACCOUNT_BOARDS_USERS` first. A board paused by M16 leaves the gate's last step until it passes a dry run again.
+
 ---
 
 ## 5. UI
@@ -480,6 +535,8 @@ No change for boards with public forms beyond their logos.
 | `scripts/ingest-contract-test.ts` (existing) | M2 | Close, reopen, update rules unchanged per company |
 | `scripts/board-seeds-test.ts` (existing, extended) | M3, M4 | Every board's slug parsing from list rows and crawl URLs; licence-blocked lists refused |
 | `scripts/vault-test.ts` | M5 | Encrypt and decrypt round trip, key version, a wrong key fails closed, the password never appears in events, logs or errors (searches the run's output) |
+| `scripts/board-health-test.ts` | M16 | Rates, the alert thresholds and the pause from fixture events |
+| `scripts/feed-sql-test.ts` (extended) | M17 | p95 under 300 ms at 200,000 rows; top-50 recall at least 95% against the exact query |
 | `scripts/account-flow-smoke.ts` on `/mock/workday` | M5, M6 | A test profile creates, verifies (the "Done" path), signs in, fills three pages and submits on the mock; a second run signs in; `exists_elsewhere` goes to `apply-person` |
 | `scripts/workday-test.ts` | M6 | Offline fixtures of real Workday pages: every `data-automation-id` the wizard reads |
 | `ats-smoke` dry runs | each board | 3 forms of companies hiring in India fill and stop before Submit |
@@ -520,7 +577,7 @@ Test profiles (`isTest`) never create a real employer account: the runner blocks
 
 ## 10. Tasks
 
-In [TASKS.md](TASKS.md) beside this file: M1–M15 with their Do, the design sections each builds and Done-when. Root `docs/TASKS.md` Phase M lists them one line each, in the order of §3.4.
+In [TASKS.md](TASKS.md) beside this file: M1–M20 with their Do, the design sections each builds and Done-when. Root `docs/TASKS.md` Phase M lists them one line each, in the order of §3.4.
 
 ---
 
@@ -538,7 +595,10 @@ Each has a recommendation; the task it blocks is in brackets.
 8. **Task moves.** T95 (SmartRecruiters) moves to M7 and T98 (more slug sources) is superseded by M3 and M4. Both are marked moved in Phase J. T94 (Lever) stays in Phase J and counts Lever's seeded jobs once it lands. *Recommended: yes.* [index]
 9. **Non-tech pools.** Darwinbox needs an employer account like Workday, and the dataset's Darwinbox jobs are mostly banking and insurance (882 of 6,757 India jobs are tech; its own feeds also show Airtel, MakeMyTrip and Porter). Keep it fifth, which serves the non-tech users of T85, or move it after Workable? *Recommended: keep it fifth, and let M1's numbers decide.* [M10]
 10. **Paid sources and the DPIIT list.** No paid feed (TheirStack and the like) for now. Is downloading the DPIIT startup list (236k companies with websites, on Dataful, licence not stated) fine once its terms are read? *Recommended: no paid feed; DPIIT only with clear terms.* [M4]
-11. **Signed-in Indian portals** (Naukri, foundit, hirist, iimjobs, Instahyre) come after this phase, as the owner said on 7 Nov. Nothing in this plan touches them.
+12. **Bot checks** (§3.5): the default is that the worker's ordinary click either passes or the job is not offered for apply. The next step is each user's own live view on their phone, solving their own checks (M20). Never a solver service. Should Keka's in-house AI reading of its CAPTCHA (`ENABLE_KEKA`) move to the live view once it exists? *Recommended: yes to all three.* [M7, M12, M13, M20]
+13. **Judgement cost at scale** (§4.14): cap judged jobs at 150 per user per day now, and share verdicts across similar resumes (profile clusters) before 100k daily users if M18's sample shows no loss in quality? *Recommended: yes.* [M18]
+14. **Per-IP pace** (§4.15): start every board at 30 submits per container address per hour and raise only on clean numbers. Accept that scale comes from more containers, never rented residential addresses? *Recommended: yes.* [M19]
+15. **Signed-in Indian portals** (Naukri, foundit, hirist, iimjobs, Instahyre) come after this phase, as the owner said on 7 Nov. Nothing in this plan touches them.
 
 ---
 

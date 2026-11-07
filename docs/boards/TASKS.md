@@ -220,6 +220,84 @@ Freshteam is dropped (being shut down).
 Design: [3.1 Order](TDD.md#31-which-boards-and-in-what-order) · [4.5 Recipe](TDD.md#45-sequence-adding-a-board-with-a-public-form-the-recipe).
 **Done when:** each board taken in has passed its own dry runs and one real submit; the boards left out are named in the Done line with their weekly numbers.
 
+<a id="m16"></a>
+### [ ] M16 — Board health: success rate, alert, pause
+Do:
+- Compute per board a rolling 24-hour success rate, challenge rate and top error categories from `ApplicationEvent` (extending `modules/jobs/results.ts`).
+- Add the `BoardSwitch` model and migration: a paused board's new swipes queue but do not run.
+- Alert the owner by push and `NOTIFY_WEBHOOK_URL` when a board falls below half its 7-day mean over at least 10 runs, or one error category passes 30%, then pause it.
+- Show the numbers in `feed-report` and on the governance page.
+- Update ARCHITECTURE §6.15.
+
+Design: [4.15 Fleet and board health](TDD.md#415-the-apply-fleet-and-board-health) · [4.17 Rollout gate](TDD.md#417-the-rollout-gate-per-board).
+**Done when:**
+- `board-health-test` PASS.
+- A replay of 20 fixture failures on one board alerts and pauses it while the others keep running.
+- The owner resumes it from the governance page.
+- Typecheck and lint pass.
+
+<a id="m17"></a>
+### [ ] M17 — The feed at 200,000 jobs
+Do:
+- Add a partial HNSW index on `Job.embedding` (`halfvec_cosine_ops`) for open India-eligible rows.
+- Make the feed's candidate query take the nearest 500 by index, then filter and rank as today.
+- Extend `scripts/feed-sql-test.ts` with 200,000 synthetic rows, timing and recall.
+- Run `ANALYZE` after imports.
+- Update ARCHITECTURE §6.3.
+
+Design: [4.16 The feed at volume](TDD.md#416-the-feed-at-volume).
+**Done when:**
+- `feed-sql-test` shows p95 under 300 ms at 200,000 rows for 3 profiles, and top-50 recall of at least 95% against the exact query.
+- The live feed's timing before and after is in the Done line.
+- Typecheck and lint pass.
+
+<a id="m18"></a>
+### [ ] M18 — Model cost: filter, cap, measure
+Do:
+- Embed only stored, open, non-duplicate jobs with a description of at least 200 characters.
+- Cap judged jobs per user per day (`max_judged_per_user_per_day`, 150).
+- Write a daily cost line in `BoardDay`'s report: embedding tokens, judgement tokens and dollars at list price.
+- Check the prices against the OpenAI bill.
+- If the owner agrees (Q13), run a profile-cluster experiment that compares shared verdicts with per-user verdicts on a sample of 500.
+
+Design: [4.14 Model cost at volume](TDD.md#414-model-cost-at-volume). Waits on: Q13 for the clusters.
+**Done when:**
+- A week's cost per day and per active user is in the Done line.
+- The cap holds in `judge-test`.
+- The cluster experiment, if run, reports agreement with per-user verdicts.
+- Typecheck and lint pass.
+
+<a id="m19"></a>
+### [ ] M19 — Apply fleet and per-IP pace
+Do:
+- Measure browser-minutes per application per board from events.
+- Add `max_submits_per_ip_per_board_per_hour` to `config/rules.json` (30 to start), enforced with the existing `rateLimit` keyed by the container's egress address.
+- Scale containers on apply-queue depth (DEPLOY.md).
+- Write a load run of the mock board at 200 applications an hour across 4 containers.
+- Update ARCHITECTURE §6.7 and §12.
+
+Design: [4.15 Fleet and board health](TDD.md#415-the-apply-fleet-and-board-health). Waits on: Q14.
+**Done when:**
+- Browser-minutes per board are measured.
+- The per-IP limit holds in a test.
+- The load run's throughput and memory are in the Done line.
+- Typecheck and lint pass.
+
+<a id="m20"></a>
+### [ ] M20 — The user's own live view for bot checks
+Do:
+- When a check needs a person, stream the worker's window to the user's phone or browser (a CDP screencast, input sent back), from the application's "Needs you" card.
+- The user solves their own check and presses Submit.
+- Only that user, one window, closing after 15 minutes.
+- `always`-check boards (and Keka, if the owner says so) move to it.
+- Update ARCHITECTURE "Human handoff".
+
+Design: [3.5 Bot checks](TDD.md#35-bot-checks-a-policy-per-board-owner-decision). Waits on: Q12.
+**Done when:**
+- On the mock, a test profile solves a mock challenge from a phone-sized browser and the application ends `submitted`.
+- One real Keka or Zoho handoff is done from the owner's phone.
+- Typecheck and lint pass.
+
 <a id="m15"></a>
 ### [ ] M15 — iCIMS (later)
 Do: only if M1 and M4 find Indian employers on iCIMS worth it (960 India jobs on 7 Nov):

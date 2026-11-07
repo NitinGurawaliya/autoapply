@@ -215,3 +215,8 @@ The order is ranked by India jobs added soonest: measure and scale first, then e
 - [ ] [M13 — Zoho Recruit apply](boards/TASKS.md#m13)
 - [ ] [M14 — The long tail of public boards, as M1 earns them](boards/TASKS.md#m14)
 - [ ] [M15 — iCIMS (later)](boards/TASKS.md#m15)
+- [ ] [M16 — Board health: success rate, alert, pause](boards/TASKS.md#m16)
+- [ ] [M17 — The feed at 200,000 jobs](boards/TASKS.md#m17)
+- [ ] [M18 — Model cost: filter, cap, measure](boards/TASKS.md#m18)
+- [ ] [M19 — Apply fleet and per-IP pace](boards/TASKS.md#m19)
+- [ ] [M20 — The user's own live view for bot checks](boards/TASKS.md#m20)
