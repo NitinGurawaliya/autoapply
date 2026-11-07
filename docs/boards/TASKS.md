@@ -98,7 +98,7 @@ Design: [3.2 Employer accounts](TDD.md#32-boards-that-need-an-employer-account) 
 
 <a id="m6"></a>
 ### [ ] M6 — Workday apply (K12 in the Naukri plan)
-Do: `adapters/workday.ts` on M5's flow, covering:
+Do: first, read the open-source Workday code ([TDD §12](TDD.md#12-research-notes-and-sources), open-source references: `HarshadLambate/workday-autofill`, `ishaannarula/job-application-automation`, `simonfong6/auto-apply`, and `challaharshavardhan/WorkdayJobBot` read only, no licence) and note in this entry what each does about account creation, the email step, the wizard's `data-automation-id`s and Submit; port nothing without crediting MIT code. Then `adapters/workday.ts` on M5's flow, covering:
 - "Apply Manually";
 - create or sign in per tenant;
 - the wizard pages (My Information, My Experience with Keka's `history.ts` rows, Application Questions through `resolveForm`, Voluntary Disclosures, Self Identify, Review);
@@ -116,7 +116,7 @@ Design: [4.6 Sequence: Workday](TDD.md#46-sequence-workday-apply-with-an-employe
 
 <a id="m7"></a>
 ### [ ] M7 — SmartRecruiters (T95, moved here)
-Do: as T95, plus what 7 Nov found:
+Do: as T95, plus what 7 Nov found. First read `rajakrishna/easy-apply` (MIT, SmartRecruiters form) and `devilscrapes/smartrecruiters-jobs-scraper-javascript` (MIT, the postings API) as references ([TDD §12](TDD.md#12-research-notes-and-sources)):
 - `fetchers/smartrecruiters.ts` lists with `country=in`, then each posting's detail.
 - Add the host `jobs.smartrecruiters.com` and a discovery entry, with seeds from M3's lists.
 - Write `adapters/smartrecruiters.ts` for the multi-step "Easy apply" (`oneclick-ui`).
@@ -132,6 +132,7 @@ Design: [4.5 Recipe](TDD.md#45-sequence-adding-a-board-with-a-public-form-the-re
 <a id="m8"></a>
 ### [ ] M8 — SuccessFactors
 Do:
+- First read ats-scrapers' SuccessFactors scraper (MIT, Python) for fetch logic to port, credited.
 - `fetchers/successfactors.ts` from each career site's `sitemap.xml` and RSS (`keywords=(india)`), with the company id and data centre read from the page and slugs from M3's lists.
 - Build `adapters/successfactors.ts` on M5's flow: an account per company, with the email step as code, link or none per company.
 - Follow the wizard of the RMK apply pages.
@@ -173,6 +174,7 @@ Design: [3.1 Order](TDD.md#31-which-boards-and-in-what-order) · [4.4 State mach
 <a id="m11"></a>
 ### [ ] M11 — Oracle Recruiting
 Do:
+- First read ats-scrapers' Oracle scraper (MIT, Python) for fetch logic to port, credited.
 - Write `fetchers/oracle.ts` on the CE REST requisitions with the India location facet, and its detail.
 - Seed tenants from M3's lists.
 - Write `adapters/oracle.ts`: passwordless email and 6-digit code from M9 (never more than 2 code tries, against Oracle's lock at 5), then the CE apply flow.
