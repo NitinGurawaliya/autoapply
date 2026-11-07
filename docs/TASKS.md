@@ -189,3 +189,5 @@ Design: [docs/naukri/TDD.md](naukri/TDD.md) (final, 3 Nov). Tasks with their Do,
 - [ ] [K9 — Extension: apply](naukri/TASKS.md#k9)
 - [ ] [K10 — Pilot: stage 2, up to a thousand users](naukri/TASKS.md#k10)
 - [ ] [K11 — Load test: stage 3, the device link at 100k users](naukri/TASKS.md#k11)
+- [ ] [K12 — Workday apply adapter](naukri/TASKS.md#k12)
+- [ ] [K13 — Naukri as a company directory for our ATS ingest](naukri/TASKS.md#k13)
