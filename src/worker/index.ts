@@ -1,11 +1,14 @@
 import { hostname } from "node:os";
 import { db } from "@/lib/db";
 import { getBoss, HANDOFF_QUEUE, PERSON_QUEUE, UNPROTECTED_QUEUE } from "@/lib/queue";
+import { guardUndiciParserAssertions } from "@/lib/undici-guard";
 import { autoSubmitAshby, canShowWindow } from "@/modules/apply/browser";
 import { handleApply } from "./handlers/apply";
 import { handleBoardDay } from "./handlers/board-day";
 import { handleDiscover } from "./handlers/discover";
 import { handleIngest } from "./handlers/ingest";
+import { handleIngestCompany } from "./handlers/ingest-company";
+import { handleIngestTick } from "./handlers/ingest-tick";
 import { handlePrescan } from "./handlers/prescan";
 import { expirePersonHandoffs, housekeeping, reapStaleRuns } from "./reaper";
 import { registerSchedules } from "./schedule";
@@ -13,6 +16,7 @@ import { claimWorkerLock } from "./single";
 
 async function main() {
   claimWorkerLock();
+  guardUndiciParserAssertions();
   const boss = await getBoss();
   // Runs share one Chromium, each in its own context (modules/apply/browser.ts), so concurrency is bounded by RAM
   // (a context is a fraction of a browser) and by how many simultaneous submissions from one IP the ATS tolerates.
@@ -33,6 +37,12 @@ async function main() {
   // The daily run hands each board its own job; this takes them one at a time (handlers/discover.ts).
   await boss.work("discover", handleDiscover);
   await boss.work("board-day", handleBoardDay);
+  // Tick mode (M2): reads of different boards run side by side; at most INGEST_PER_HOST of one board at once, across
+  // every worker (pg-boss group concurrency, the group being the board).
+  await boss.work("ingest-tick", handleIngestTick);
+  const ingestConcurrency = Math.min(Math.max(Number(process.env.INGEST_CONCURRENCY) || 8, 1), 32);
+  const perHost = Math.min(Math.max(Number(process.env.INGEST_PER_HOST) || 4, 1), ingestConcurrency);
+  await boss.work("ingest-company", { localConcurrency: ingestConcurrency, groupConcurrency: perHost }, handleIngestCompany);
   const auto = autoSubmitAshby() ? ", auto submit" : "";
   console.log(`worker listening for apply (x${concurrency})${unprotected ? `, ${UNPROTECTED_QUEUE} (x${concurrency}${auto})` : ""}${handoff ? `, ${HANDOFF_QUEUE} (x${concurrency}${auto}), ${PERSON_QUEUE}` : ", no screen: no protected Ashby"} and ingest`);
 
@@ -49,7 +59,7 @@ async function main() {
   process.on("SIGINT", () => stop("SIGINT"));
   process.on("SIGTERM", () => stop("SIGTERM"));
   const ingest = await registerSchedules(boss);
-  console.log(`ingest scheduled: "${ingest.cron}" ${ingest.timezone}, last ${ingest.days} days; discovery "${ingest.discoverCron}"; board day "${ingest.boardDayCron}"`);
+  console.log(`ingest scheduled (${ingest.mode}): "${ingest.cron}" ${ingest.timezone}, last ${ingest.days} days; discovery "${ingest.discoverCron}"; board day "${ingest.boardDayCron}"`);
 
   // Heartbeat for /api/health: a worker that has not beaten for a few minutes is down.
   const host = process.env.WORKER_NAME?.trim() || hostname();

@@ -37,12 +37,15 @@ const PRESCAN_QUEUE = "prescan";
 const DISCOVER_QUEUE = "discover";
 /** The daily per-board measurement (Phase M, M1; modules/jobs/boardDay.ts). */
 export const BOARD_DAY_QUEUE = "board-day";
+/** Tick mode (INGEST_MODE=tick, M2): every few minutes the tick sends each company due for a read its own job. */
+export const INGEST_TICK_QUEUE = "ingest-tick";
+export const INGEST_COMPANY_QUEUE = "ingest-company";
 
 let bossPromise: Promise<PgBoss> | null = null;
 
-async function ensureQueue(boss: PgBoss, name: string) {
+async function ensureQueue(boss: PgBoss, name: string, options?: Parameters<PgBoss["createQueue"]>[1]) {
   const existing = await boss.getQueue(name);
-  if (!existing) await boss.createQueue(name);
+  if (!existing) await boss.createQueue(name, options);
 }
 
 export function getBoss() {
@@ -63,6 +66,9 @@ export function getBoss() {
       await ensureQueue(started, PRESCAN_QUEUE);
       await ensureQueue(started, DISCOVER_QUEUE);
       await ensureQueue(started, BOARD_DAY_QUEUE);
+      await ensureQueue(started, INGEST_TICK_QUEUE);
+      // One job per company at most, queued or running: a company still waiting is not sent again by the next tick.
+      await ensureQueue(started, INGEST_COMPANY_QUEUE, { policy: "exclusive" });
       return started;
     });
   }
@@ -119,6 +125,15 @@ export async function enqueueApply(applicationId: string, delaySeconds = 0, opti
   // minutes); no automatic pg-boss retry, because the runner retries on its own and a blind re-run could apply twice.
   const data = person ? { applicationId, person: true } : { applicationId };
   return boss.send(queue, data, { expireInSeconds: 3600, retryLimit: 0, ...(delaySeconds > 0 ? { startAfter: delaySeconds } : {}) });
+}
+
+/**
+ * One company's read in tick mode (M2). Grouped by board, so the worker caps how many reads of one board run at once
+ * across every worker (`groupConcurrency`, INGEST_PER_HOST); one job per company (the queue's exclusive policy).
+ */
+export async function enqueueIngestCompany(companyId: string, board: string, runId: string) {
+  const boss = await getBoss();
+  return boss.send(INGEST_COMPANY_QUEUE, { companyId, runId }, { singletonKey: companyId, group: { id: board }, expireInSeconds: 15 * 60, retryLimit: 0 });
 }
 
 export async function enqueueIngest(days: number) {

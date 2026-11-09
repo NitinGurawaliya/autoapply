@@ -1,5 +1,5 @@
 import { fetchAshby } from "./fetchers/ashby";
-import { fetchGreenhouse } from "./fetchers/greenhouse";
+import { fetchGreenhouse, greenhouseListHash } from "./fetchers/greenhouse";
 import { fetchLever } from "./fetchers/lever";
 import { fetchWorkday, workdayName, workdaySlugOf } from "./fetchers/workday";
 import { fetchKeka, kekaName, kekaSlugOf } from "./fetchers/keka";
@@ -41,9 +41,14 @@ export type BoardDiscovery = {
 export type Board = {
   source: BoardSource;
   label: string;
-  /** Every open job on the company's board. */
-  fetch: (slug: string) => Promise<FetchedJob[]>;
-  /** Which fetched jobs ingest stores; the rest are dropped. */
+  /** Every open job on the company's board. `known`: postings ingest already holds, which a board with a list-then-detail
+   * API (Workday) returns from its list alone, marked `listOnly`, instead of reading each one again (M2). */
+  fetch: (slug: string, options?: { known?: ReadonlySet<string> }) => Promise<FetchedJob[]>;
+  /** A hash of the board's cheap list (ids and update times), for boards whose full read is heavy (Greenhouse, M2):
+   * when it equals the company's `listHash`, nothing changed and the full read is skipped. */
+  probe?: (slug: string) => Promise<string>;
+  /** Which fetched jobs ingest stores; the rest are dropped (India-eligible by default since M2; companies with
+   * `keepAbroad` store everything, ingest.ts storedFromBoard). */
   stores: (job: FetchedJob) => boolean;
   /** The hosts this board's application forms are on: the worker opens nothing else for its jobs (apply/urls.ts). */
   formHost: RegExp;
@@ -70,14 +75,14 @@ export const indiaEligible = (job: FetchedJob) => {
  */
 const indiaTech = (job: FetchedJob) => indiaEligible(job) && classifyTitle(job.title).function !== "non_tech";
 
-const storeAll = () => true;
-
 export const BOARDS: Board[] = [
   {
     source: "greenhouse",
     label: "Greenhouse",
     fetch: fetchGreenhouse,
-    stores: storeAll,
+    probe: greenhouseListHash,
+    // India-eligible only since M2 (owner, 9 Nov); the companies watched before keep abroad jobs (`keepAbroad`).
+    stores: indiaEligible,
     formHost: /^(job-boards|boards)(\.eu)?\.greenhouse\.io$/i,
     slugOf: (text) => text.toLowerCase().replace(/[^a-z0-9]/g, ""),
     discovery: {
@@ -104,7 +109,7 @@ export const BOARDS: Board[] = [
     source: "lever",
     label: "Lever",
     fetch: fetchLever,
-    stores: storeAll,
+    stores: indiaEligible,
     formHost: /^jobs(\.eu)?\.lever\.co$/i,
     slugOf: (text) => text.toLowerCase().replace(/[^a-z0-9.-]/g, ""),
     // Lever is where many Indian startups post (Paytm, Meesho, Zeta, CRED; probe of 18 Oct). Same bar as Greenhouse:
@@ -168,7 +173,7 @@ export const BOARDS: Board[] = [
     // with jobs worldwide: only India-eligible jobs are stored (the fetcher already asks for the India facet).
     source: "workday",
     label: "Workday",
-    fetch: (slug) => fetchWorkday(slug),
+    fetch: (slug, options) => fetchWorkday(slug, { known: options?.known }),
     stores: indiaEligible,
     formHost: /^[a-z0-9-]+\.wd\d{1,3}\.myworkdayjobs\.com$/i,
     // "{tenant}.{wdN}/{site}"; the site keeps its case ("NVIDIAExternalCareerSite").

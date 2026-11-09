@@ -159,9 +159,20 @@ model Company {
   // The logo on its public job board page (modules/jobs/logos.ts), shown on its cards; checked again after 30 days when missing.
   logoUrl        String?
   logoCheckedAt  DateTime?
+  // Watched at its own pace (Phase M, M2; modules/jobs/cadence.ts): active (an India job now or in the last 30 days,
+  // every 3 h) | open (other openings, daily) | empty (no openings, every 3 days) | dead (90 days empty or gone, monthly).
+  tier           String    @default("active")
+  nextFetchAt    DateTime  @default(now())
+  indiaOpen      Int       @default(0) // India-eligible jobs it listed at the last fetch
+  notFoundFetches Int      @default(0) // reads in a row that found no board (404, 410): 3 make it dead
+  lastIndiaAt    DateTime? // the last fetch that listed an India-eligible job
+  listHash       String? // the board's cheap list at the last fetch (Greenhouse, Workday): unchanged → nothing else read
+  // Abroad jobs are stored only for the companies watched before Phase M (owner, 9 Nov); everyone else: India only.
+  keepAbroad     Boolean   @default(false)
   jobs           Job[]
 
   @@unique([source, slug])
+  @@index([active, nextFetchAt])
 }
 
 // Every company discovery has checked (modules/jobs/discovery.ts), so it never checks the same name twice and always

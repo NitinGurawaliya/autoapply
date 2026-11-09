@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { asDate, plainText, type FetchedJob } from "../normalize";
 
@@ -11,6 +12,18 @@ const jobSchema = z.object({
   first_published: z.string().optional(),
   updated_at: z.string().optional(),
 });
+
+/**
+ * The board's list without descriptions (a few KB instead of ~6 KB a job), hashed over ids and update times (M2): when
+ * it is unchanged since the last read, so is everything ingest stores from it.
+ */
+export async function greenhouseListHash(slug: string): Promise<string> {
+  const response = await fetch(`https://boards-api.greenhouse.io/v1/boards/${slug}/jobs`, { signal: AbortSignal.timeout(30000) });
+  if (!response.ok) throw new Error(`greenhouse ${slug} ${response.status}`);
+  const body = (await response.json()) as { jobs?: Array<{ id?: unknown; updated_at?: unknown }> };
+  const keys = (body.jobs ?? []).map((job) => `${String(job.id)}:${String(job.updated_at)}`).sort();
+  return createHash("md5").update(keys.join("|")).digest("hex");
+}
 
 export async function fetchGreenhouse(slug: string): Promise<FetchedJob[]> {
   const response = await fetch(

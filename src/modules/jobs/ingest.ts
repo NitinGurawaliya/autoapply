@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { boardOf } from "./boards";
+import { nextFetchAt, tierOf, type Tier } from "./cadence";
 import { classifyTitle } from "./functions";
 import type { FetchedJob } from "./normalize";
 import { embedPendingJobs, forgetJobVectors } from "./semantic";
@@ -12,17 +13,26 @@ import { tagPosting } from "./tagging";
 const CONCURRENCY = 4;
 const PAUSE_MS = 300;
 const RUN_LIMIT_MS = 2 * 60 * 60 * 1000;
-// Closed jobs nobody swiped or applied to are deleted this long after they closed.
-const DELETE_CLOSED_AFTER_DAYS = 30;
-// A company is switched off after this many failed fetches in a row (8 runs = a day), or after this long with no open
-// jobs at all (a board left empty, or moved to another ATS). Its offReason says which; seeding it again turns it on.
+// Closed jobs nobody swiped or applied to are deleted this long after they closed (30 days until M2; 7 since, so the
+// table stays near the open jobs at 50,000 companies, docs/boards/TDD.md §4.8).
+const DELETE_CLOSED_AFTER_DAYS = 7;
+// Run mode (INGEST_MODE=run): a company is switched off after this many failed fetches in a row (8 runs = a day), or
+// after this long with no open jobs at all. Its offReason says which; seeding it again turns it on. Tick mode (M2)
+// switches nobody off: such a company is `dead` and read once a month (cadence.ts).
 const OFF_AFTER_FAILURES = 8;
 const OFF_AFTER_EMPTY_DAYS = 30;
+/** How far back a posting may be dated and still be stored (INGEST_DAYS, as the scheduled run). */
+export const DEFAULT_INGEST_DAYS = 60;
 
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const INDIA = new Set(["india", "remote_india"]);
 
-/** Whether ingest stores this job from this board (boards.ts `stores`: Ashby keeps only India tech jobs). */
-export function storedFromBoard(source: string, job: FetchedJob) {
+/**
+ * Whether ingest stores this job from this board: India-eligible by default (boards.ts `stores`; Ashby: India tech
+ * only). Companies watched before Phase M (`keepAbroad`, Greenhouse and Lever) also keep their jobs abroad (owner, 9 Nov).
+ */
+export function storedFromBoard(source: string, job: FetchedJob, keepAbroad = false) {
+  if (keepAbroad) return true;
   return boardOf(source)?.stores(job) ?? true;
 }
 
@@ -39,8 +49,8 @@ export async function markClosed(companyId: string, source: string, listedExtern
   return result.count;
 }
 
-async function fetchCompany(source: string, slug: string): Promise<FetchedJob[]> {
-  return boardOf(source)?.fetch(slug) ?? [];
+async function fetchCompany(source: string, slug: string, known?: ReadonlySet<string>): Promise<FetchedJob[]> {
+  return boardOf(source)?.fetch(slug, { known }) ?? [];
 }
 
 /** What ingest stores and tags from: when none of it changed, the job is not written again. */
@@ -49,22 +59,49 @@ export function contentHash(job: FetchedJob) {
   return createHash("md5").update(parts.join("\u0000")).digest("hex");
 }
 
-type CompanyResult = { fetched: number; created: number; updated: number; closed: number; createdEligible: number; error?: string };
+export type CompanyResult = {
+  fetched: number;
+  created: number;
+  updated: number;
+  closed: number;
+  createdEligible: number;
+  /** India-eligible jobs the board lists now (stored or not); unknown (null) when the read was skipped or failed. */
+  indiaListed: number | null;
+  /** The board's list hash when it has a probe (Greenhouse), so the next read can skip an unchanged board. */
+  listHash: string | null;
+  /** The probe said nothing changed since the last read: nothing else was read or written. */
+  unchanged?: boolean;
+  error?: string;
+};
+
+export type IngestCompany = { id: string; source: string; slug: string; keepAbroad?: boolean; listHash?: string | null };
 
 /** One company: fetch its board (one retry), create new jobs, update changed ones, close the ones it no longer lists. */
-export async function ingestCompany(company: { id: string; source: string; slug: string }, cutoff: number): Promise<CompanyResult> {
+export async function ingestCompany(company: IngestCompany, cutoff: number): Promise<CompanyResult> {
+  const empty = { fetched: 0, created: 0, updated: 0, closed: 0, createdEligible: 0, indiaListed: null, listHash: company.listHash ?? null };
+  const board = boardOf(company.source);
+  // Boards with a cheap list (Greenhouse): an unchanged list means an unchanged board; a failed probe reads in full.
+  let listHash: string | null = null;
+  if (board?.probe) {
+    listHash = await board.probe(company.slug).catch(() => null);
+    if (listHash && company.listHash && listHash === company.listHash) return { ...empty, unchanged: true };
+  }
+  // Postings already stored for this company: a list-then-detail board (Workday) reads only the new ones in full.
+  const knownRows = await db.job.findMany({ where: { companyId: company.id, source: company.source }, select: { externalId: true } });
+  const known = new Set(knownRows.map((row) => row.externalId));
   let jobs: FetchedJob[];
   try {
-    jobs = await fetchCompany(company.source, company.slug);
+    jobs = await fetchCompany(company.source, company.slug, known);
   } catch {
     await pause(2000);
     try {
-      jobs = await fetchCompany(company.source, company.slug);
+      jobs = await fetchCompany(company.source, company.slug, known);
     } catch (error) {
-      return { fetched: 0, created: 0, updated: 0, closed: 0, createdEligible: 0, error: error instanceof Error ? error.message : "fetch failed" };
+      return { ...empty, listHash: null, error: error instanceof Error ? error.message : "fetch failed" };
     }
   }
-  const kept = jobs.filter((job) => job.postedAt.getTime() >= cutoff && storedFromBoard(company.source, job));
+  const indiaListed = jobs.filter((job) => INDIA.has(tagPosting(job).eligibility)).length;
+  const kept = jobs.filter((job) => job.postedAt.getTime() >= cutoff && storedFromBoard(company.source, job, company.keepAbroad));
   const stored = await db.job.findMany({ where: { source: company.source, externalId: { in: kept.map((job) => job.externalId) } }, select: { id: true, externalId: true, contentHash: true, closedAt: true, companyId: true } });
   const byExternalId = new Map(stored.map((row) => [row.externalId, row]));
   const now = new Date();
@@ -90,29 +127,84 @@ export async function ingestCompany(company: { id: string; source: string; slug:
       raw: job.raw as Prisma.InputJsonValue,
     };
   };
-  const fresh = kept.filter((job) => !byExternalId.has(job.externalId)).map((job) => ({ source: company.source, externalId: job.externalId, ...fields(job) }));
+  // A list-only posting is one we hold already; one we do not (deleted meanwhile) waits for a full read.
+  const fresh = kept.filter((job) => !job.listOnly && !byExternalId.has(job.externalId)).map((job) => ({ source: company.source, externalId: job.externalId, ...fields(job) }));
   // A stored job is rewritten only when its content changed, it moved company, or it came back after being closed.
+  // A list-only one carries no content: it is only reopened or moved, its stored text kept.
   const changed = kept.filter((job) => {
     const row = byExternalId.get(job.externalId);
-    return row && (row.contentHash !== contentHash(job) || row.closedAt !== null || row.companyId !== company.id);
+    if (!row) return false;
+    if (job.listOnly) return row.closedAt !== null || row.companyId !== company.id;
+    return row.contentHash !== contentHash(job) || row.closedAt !== null || row.companyId !== company.id;
   });
   if (fresh.length > 0) await db.job.createMany({ data: fresh, skipDuplicates: true });
   for (let i = 0; i < changed.length; i += 50) {
     await db.$transaction(
-      changed.slice(i, i + 50).map((job) => db.job.update({ where: { source_externalId: { source: company.source, externalId: job.externalId } }, data: { ...fields(job), closedAt: null } })),
+      changed.slice(i, i + 50).map((job) =>
+        db.job.update({
+          where: { source_externalId: { source: company.source, externalId: job.externalId } },
+          data: job.listOnly ? { companyId: company.id, fetchedAt: now, closedAt: null } : { ...fields(job), closedAt: null },
+        }),
+      ),
     );
   }
-  // A changed posting is embedded again (semantic.ts); new ones have no vector yet.
-  await forgetJobVectors(changed.map((job) => byExternalId.get(job.externalId)!.id));
+  // A changed posting is embedded again (semantic.ts); new ones have no vector yet. List-only ones keep theirs.
+  await forgetJobVectors(changed.filter((job) => !job.listOnly).map((job) => byExternalId.get(job.externalId)!.id));
   const closed = await markClosed(company.id, company.source, jobs.map((job) => job.externalId));
   return {
     fetched: jobs.length,
     created: fresh.length,
     updated: changed.length,
     closed,
-    createdEligible: fresh.filter((job) => job.eligibility === "india" || job.eligibility === "remote_india").length,
+    createdEligible: fresh.filter((job) => INDIA.has(job.eligibility)).length,
+    indiaListed,
+    listHash,
   };
 }
+
+type CompanyState = { id: string; source: string; slug: string; listHash: string | null; failedFetches: number; notFoundFetches: number; emptySince: Date | null; lastIndiaAt: Date | null; indiaOpen: number; lastFetchCount: number | null };
+
+const NOT_FOUND = /\b(404|410)\b/;
+
+/**
+ * What one read changes on the company: errors in a row, since when it has been empty, its India counts, its tier and
+ * when to read it next (cadence.ts). Run mode also switches a company off as before M2; tick mode never does.
+ */
+export async function recordRead(company: CompanyState, result: CompanyResult, mode: "run" | "tick", now = new Date()) {
+  const failures = result.error ? company.failedFetches + 1 : 0;
+  const notFound = result.error && NOT_FOUND.test(result.error) ? company.notFoundFetches + 1 : 0;
+  const listed = result.unchanged ? (company.lastFetchCount ?? 0) : result.fetched;
+  const emptySince = result.error ? company.emptySince : listed === 0 ? (company.emptySince ?? now) : null;
+  const indiaListed = result.error ? 0 : result.unchanged ? company.indiaOpen : (result.indiaListed ?? 0);
+  const lastIndiaAt = !result.error && indiaListed > 0 ? now : company.lastIndiaAt;
+  const tier: Tier = tierOf({ listed: result.error ? 0 : listed, indiaListed, lastIndiaAt, emptySince, failures, notFound }, now);
+  const off =
+    mode === "run" && failures >= OFF_AFTER_FAILURES
+      ? `fetch failed ${failures} times in a row: ${result.error?.slice(0, 80)}`
+      : mode === "run" && emptySince && now.getTime() - emptySince.getTime() > OFF_AFTER_EMPTY_DAYS * 24 * 60 * 60 * 1000
+        ? `no open jobs for ${OFF_AFTER_EMPTY_DAYS} days`
+        : null;
+  await db.company.update({
+    where: { id: company.id },
+    data: {
+      lastFetchedAt: now,
+      lastFetchCount: result.error ? 0 : listed,
+      lastError: result.error ?? null,
+      failedFetches: failures,
+      notFoundFetches: notFound,
+      emptySince,
+      indiaOpen: result.error ? company.indiaOpen : indiaListed,
+      lastIndiaAt,
+      listHash: result.error ? company.listHash ?? null : result.listHash,
+      tier,
+      nextFetchAt: nextFetchAt(tier, failures, now),
+      ...(off ? { active: false, offReason: off } : {}),
+    },
+  });
+  return { tier, off };
+}
+
+const COMPANY_STATE = { id: true, source: true, slug: true, name: true, keepAbroad: true, listHash: true, failedFetches: true, notFoundFetches: true, emptySince: true, lastIndiaAt: true, indiaOpen: true, lastFetchCount: true } as const;
 
 /** Closed jobs nobody swiped or applied to, closed more than DELETE_CLOSED_AFTER_DAYS ago: deleted to keep the table small. */
 export async function deleteOldClosedJobs(now = new Date()) {
@@ -126,7 +218,7 @@ export async function deleteOldClosedJobs(now = new Date()) {
 
 /**
  * Pull every active company's board and keep the jobs posted within `days`. Returns the run's counts, or null when
- * another run is still going (one at a time, so a manual run cannot overlap the scheduled one).
+ * another run is still going (one at a time, so a manual run cannot overlap the scheduled one). INGEST_MODE=run.
  */
 export async function ingestJobs(days: number) {
   const staleBefore = new Date(Date.now() - RUN_LIMIT_MS);
@@ -142,26 +234,14 @@ export async function ingestJobs(days: number) {
   }
 
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-  const companies = await db.company.findMany({ where: { active: true }, orderBy: [{ source: "asc" }, { name: "asc" }], select: { id: true, source: true, slug: true, name: true, failedFetches: true, emptySince: true } });
+  const companies = await db.company.findMany({ where: { active: true }, orderBy: [{ source: "asc" }, { name: "asc" }], select: COMPANY_STATE });
   const totals = { companies: companies.length, failed: 0, fetched: 0, created: 0, updated: 0, closed: 0, deleted: 0, createdEligible: 0, switchedOff: 0 };
   let next = 0;
   const worker = async () => {
     while (next < companies.length) {
       const company = companies[next++];
       const result = await ingestCompany(company, cutoff);
-      const now = new Date();
-      const failures = result.error ? company.failedFetches + 1 : 0;
-      const emptySince = result.error ? company.emptySince : result.fetched === 0 ? company.emptySince ?? now : null;
-      const off =
-        failures >= OFF_AFTER_FAILURES
-          ? `fetch failed ${failures} times in a row: ${result.error?.slice(0, 80)}`
-          : emptySince && now.getTime() - emptySince.getTime() > OFF_AFTER_EMPTY_DAYS * 24 * 60 * 60 * 1000
-            ? `no open jobs for ${OFF_AFTER_EMPTY_DAYS} days`
-            : null;
-      await db.company.update({
-        where: { id: company.id },
-        data: { lastFetchedAt: now, lastFetchCount: result.error ? 0 : result.fetched, lastError: result.error ?? null, failedFetches: failures, emptySince, ...(off ? { active: false, offReason: off } : {}) },
-      });
+      const { off } = await recordRead(company, result, "run");
       if (off) {
         totals.switchedOff += 1;
         console.log(`ingest: switched off ${company.source} ${company.slug}: ${off}`);
@@ -175,7 +255,7 @@ export async function ingestJobs(days: number) {
       totals.updated += result.updated;
       totals.closed += result.closed;
       totals.createdEligible += result.createdEligible;
-      console.log(`${company.source} | ${company.name} | ${result.fetched} listed | ${result.created} new | ${result.updated} changed${result.closed ? ` | ${result.closed} closed` : ""}`);
+      console.log(`${company.source} | ${company.name} | ${result.unchanged ? "unchanged" : `${result.fetched} listed | ${result.created} new | ${result.updated} changed${result.closed ? ` | ${result.closed} closed` : ""}`}`);
       await pause(PAUSE_MS);
     }
   };
@@ -195,4 +275,36 @@ export async function ingestJobs(days: number) {
   }
   console.log(`ingest done: ${JSON.stringify(totals)}`);
   return totals;
+}
+
+// ---- Tick mode (INGEST_MODE=tick, M2): one queue job per company, each read when its tier says (cadence.ts).
+
+/** Active companies due for a read, most overdue first. */
+export function dueCompanies(limit: number, now = new Date()) {
+  return db.company.findMany({ where: { active: true, nextFetchAt: { lte: now } }, orderBy: { nextFetchAt: "asc" }, take: limit, select: { id: true, source: true } });
+}
+
+/** An IngestRun row for one tick: the companies it sent; each company's read adds its counts (ingestOne). */
+export async function startTickRun(companies: number) {
+  const run = await db.ingestRun.create({ data: { id: `tick_${Date.now()}`, companies } });
+  return run.id;
+}
+
+/** One company's read in tick mode: the same read as a run, recorded with its tier and next read time. */
+export async function ingestOne(companyId: string, options: { runId?: string; days?: number; now?: Date } = {}) {
+  const company = await db.company.findUnique({ where: { id: companyId }, select: { ...COMPANY_STATE, active: true } });
+  if (!company || !company.active) return null;
+  const days = options.days ?? (Number(process.env.INGEST_DAYS) || DEFAULT_INGEST_DAYS);
+  const now = options.now ?? new Date();
+  const result = await ingestCompany(company, now.getTime() - days * 24 * 60 * 60 * 1000);
+  const { tier } = await recordRead(company, result, "tick", now);
+  if (options.runId) {
+    await db.$executeRaw`
+      UPDATE "IngestRun" SET
+        failed = failed + ${result.error ? 1 : 0}, fetched = fetched + ${result.fetched}, created = created + ${result.created},
+        updated = updated + ${result.updated}, closed = closed + ${result.closed}, "createdEligible" = "createdEligible" + ${result.createdEligible},
+        "finishedAt" = ${new Date()}
+      WHERE id = ${options.runId}`;
+  }
+  return { ...result, tier, company: company.name, source: company.source };
 }

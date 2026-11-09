@@ -10,6 +10,9 @@ export type FetchedJob = {
    * can be done, used for eligibility when the location line says only "Remote" or names several places. */
   offices?: string[];
   raw: Record<string, unknown>;
+  /** Read from the board's list only, because ingest already holds this posting (Workday, M2): proves it is still listed,
+   * carries no description, and never overwrites the stored row's content. */
+  listOnly?: boolean;
 };
 
 // Greenhouse sends its descriptions HTML-escaped ("&lt;p&gt;"): unescape the markup first, or its tags stay as text.

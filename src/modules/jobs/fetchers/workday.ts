@@ -101,7 +101,7 @@ async function list(api: string, body: object) {
  * Every open job on the site (India only when the tenant has an India facet). `details: false` (discovery) reads only
  * the list: titles, places and relative dates, one request a page; ingest reads each posting for its description.
  */
-export async function fetchWorkday(slug: string, options: { details?: boolean } = {}): Promise<FetchedJob[]> {
+export async function fetchWorkday(slug: string, options: { details?: boolean; known?: ReadonlySet<string> } = {}): Promise<FetchedJob[]> {
   const site = parseWorkdaySlug(slug);
   if (!site) throw new Error(`workday ${slug}: not a {tenant}.{wdN}/{site} slug`);
   const first = await list(site.api, { limit: PAGE, offset: 0, searchText: "", appliedFacets: {} });
@@ -138,10 +138,20 @@ export async function fetchWorkday(slug: string, options: { details?: boolean } 
   if (options.details === false) return postings.map(listed).filter((job): job is FetchedJob => !!job);
 
   const jobs: FetchedJob[] = [];
+  // Postings ingest already holds are proven still listed by the list alone (M2): no detail read, no rewrite.
+  const known = options.known;
+  const toRead = known ? postings.filter((posting) => !known.has(postingId(site.tenant, posting.externalPath))) : postings;
+  if (known) {
+    for (const posting of postings) {
+      if (!known.has(postingId(site.tenant, posting.externalPath))) continue;
+      const job = listed(posting);
+      if (job) jobs.push({ ...job, listOnly: true });
+    }
+  }
   let next = 0;
   const worker = async () => {
-    while (next < postings.length) {
-      const posting = postings[next++];
+    while (next < toRead.length) {
+      const posting = toRead[next++];
       const response = await fetch(`${site.api}${posting.externalPath}`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(30000) }).catch(() => null);
       const parsed = response?.ok ? detailSchema.safeParse(await response.json().catch(() => null)) : null;
       await pause(150);
