@@ -10,7 +10,7 @@ export const CANCELLABLE = ["queued", "inspecting", "filling", "needs_input"];
 export const RETRYABLE = ["failed", "cancelled"];
 
 type ScoredProfile = { id: string; currentTitle: string | null; skills: unknown; experience: unknown; education: unknown; tracks: string[]; yearsExperience: number | null; embeddedFrom: string | null };
-type ScoredJob = { id: string; title: string; description: string; contentHash: string | null; country: string; remoteType: string; experienceMin: number | null; track: string | null };
+type ScoredJob = { id: string; title: string; description: string; contentHash: string | null; country: string; remoteType: string; experienceMin: number | null; track: string | null; seniority?: string | null };
 
 /**
  * The match score the swipe-time rules use: the score this user's feed showed on the card when the feed is still

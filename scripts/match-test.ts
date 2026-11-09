@@ -1,5 +1,7 @@
 // Offline checks for experience parsing and match scoring. npx tsx scripts/match-test.ts
 import { scoreJob, tierOf } from "../src/modules/jobs";
+import { classifyTitle } from "../src/modules/jobs/functions";
+import { bandMiss, feedTracks, levelsFor, scoreFeatures, yearsBand } from "../src/modules/jobs/match";
 import { trackFloor } from "../src/modules/jobs/semantic";
 import { requiredYears, titleYears } from "../src/modules/jobs/tagging";
 
@@ -41,7 +43,8 @@ check("senior role for 1 yr dev stays under 40", senior.score < 40, `${senior.sc
 check("4 yr role stays under 40", four.score < 40, `${four.score}%`);
 check("entry role scores well", entry.score >= 60, `${entry.score}%`);
 check("graduate role scores well", grad.score >= 60, `${grad.score}%`);
-check("2 yr ask is ok but below entry", twoYr.score >= 40 && twoYr.score <= entry.score, `${twoYr.score}%`);
+// Strict matching (9 Nov): a job asking more years than the candidate has is out, not a capped Stretch.
+check("2 yr ask is out for a 1 yr dev", twoYr.score === 0 && /2\+ years/.test(twoYr.reason), `${twoYr.score}% ${twoYr.reason}`);
 check("reason explains seniority", /years/i.test(senior.reason), senior.reason);
 
 // T82: tiers, by tracks (no vectors) and by meaning plus the model's verdict (semantic.ts).
@@ -73,5 +76,40 @@ check("track floor: a plain Software Engineer is related for a web developer, no
 check("track floor: a mobile role is at least related for a frontend developer", trackFloor("Android Developer", ["frontend"]).field === "related", trackFloor("Android Developer", ["frontend"]).field);
 check("track floor: sales and recruiting get no floor", trackFloor("Account Executive", web).field === "different" && trackFloor("Technical Recruiter", web).field === "different");
 check("track floor: a data scientist gets no floor on a frontend role", trackFloor("Frontend Engineer", ["data_science"]).field === "different", trackFloor("Frontend Engineer", ["data_science"]).field);
+// Strict matching (9 Nov, owner: "only exact matches"): the cards the feed audit found off-target, as cases.
+// Real titles from the owner's and Nitin's feeds (scripts/feed-audit.ts, before the change).
+const nitin = { ...dev, yearsExperience: 1, tracks: ["ml_ai", "fullstack", "backend", "frontend", "software"] };
+const fresher = { ...dev, yearsExperience: 0 };
+const owner = { ...dev, yearsExperience: null, tracks: ["fullstack", "backend", "frontend"] };
+const judged = (title: string, description: string, who: typeof dev | typeof owner, fit: "strong" | "good" | "stretch" = "good", similarity = 0.62) =>
+  scoreJob({ ...base, title, description, similarity, judgement: { fit, why: "test" } }, who);
+check("strict: SDE II for a 1-yr dev is out, even judged good and close", judged("SDE II - Python Engineer", stack, nitin).score === 0, judged("SDE II - Python Engineer", stack, nitin).reason);
+check("strict: Software Engineer II for a 1-yr dev is out", judged("Software Engineer II", stack, nitin, "strong", 0.7).score === 0);
+check("strict: Software Development Engineer 2 (SDE 2) for a fresher is out", judged("Software Development Engineer 2 (SDE 2)", stack, fresher).score === 0);
+check("strict: a 3-year ask for a 1-yr dev is out", judged("Software Engineer 1", `${stack} 3+ years of experience.`, nitin, "stretch").score === 0);
+check("strict: a 2-year ask for the owner (years unknown = fresher) is out", judged("Software Engineer", `${stack} 2+ years of experience.`, owner, "stretch").score === 0);
+check("strict: a 1-year ask for a fresher stays", judged("Frontend Developer", `${stack} 1+ years of experience.`, fresher).score >= 40);
+check("strict: a stated mid level with no years is out for a 1-yr dev", scoreFeatures({ title: "Engineer", seniority: "mid", requiredYears: null, country: "IN", remoteType: "unknown", skillHits: [], similarity: 0.6, judgement: { fit: "strong", why: "t" } }, nitin).score === 0);
+check("strict: Senior for 3 years is out, for 5 it stays", judged("Senior Software Engineer", stack, { ...nitin, yearsExperience: 3 }).score === 0 && judged("Senior Software Engineer", stack, { ...nitin, yearsExperience: 5 }).score >= 40);
+check("strict: SDE II for 2 years stays", judged("SDE II - Python Engineer", stack, { ...nitin, yearsExperience: 2 }).score >= 40);
+check("strict: an intern role is out from 3 years", judged("Software Engineer Intern", stack, { ...nitin, yearsExperience: 3 }).score === 0);
+check("strict: an intern role stays for a fresher", tierOf(judged("Full Stack Development Intern", stack, fresher, "strong").score, 40) === "strong");
+const unstated = judged("React Engineer", stack, nitin, "strong", 0.7);
+check("strict: a job stating neither years nor level is never Strong", unstated.score > 0 && tierOf(unstated.score, 40) === "good", String(unstated.score));
+check("strict: bandMiss says why", bandMiss({ requiredYears: 2, seniority: "mid" }, 1) === "They want about 2+ years; you have 1" && bandMiss({ requiredYears: null, seniority: "senior" }, 1) === "A senior role, above your experience");
+check("strict: years band", [yearsBand(0), yearsBand(1), yearsBand(1.9), yearsBand(3), yearsBand(null)].join() === "1,1,1,3,1");
+check("strict: levels for a 1-yr dev are intern and entry", levelsFor(1).join() === "intern,entry", levelsFor(1).join());
+check("strict: levels for 6 years", levelsFor(6).join() === "mid,senior,staff,manager", levelsFor(6).join());
+check("strict: a web developer's feed tracks are their own plus plain software", feedTracks(["fullstack", "backend", "frontend"])?.join() === "fullstack,backend,frontend,software");
+check("strict: data engineering, DevOps, mobile and solutions are not in a web developer's feed", !["data_engineering", "devops", "mobile", "solutions"].some((t) => feedTracks(["fullstack", "backend", "frontend"])!.includes(t)));
+check("strict: a data scientist's feed has no plain software roles", feedTracks(["data_science"])?.join() === "data_science");
+check("strict: a profile without tracks has no track gate", feedTracks([]) === null);
+check("titles: SDE1-Java is software", classifyTitle("SDE1-Java").track === "software");
+check("titles: a mechanical engineering internship is not software", classifyTitle("Mechanical Engineer - Internship").track === null);
+check("titles: trainers and tool admins are not tech", classifyTitle("Intern - Tech Trainer (Jan 2027 Batch)").track === null && classifyTitle("AI Tool Admin").track === null);
+const notSoftware = ["Junior Metallurgist / Engineer", "Manufacturing Engineer", "Structural Design and Analysis Engineer", "Junior Sourcing Engineer", "Junior/Trainee Engineer- Electrical", "AI Filmmaker", "Management Trainee - AI Operations", "Associate Engineer, Manufacturing"];
+check("titles: other engineering disciplines are not software", notSoftware.every((t) => classifyTitle(t).track === null), notSoftware.filter((t) => classifyTitle(t).track !== null).join(" | "));
+const stillSoftware = ["Software Engineer, Manufacturing Infrastructure", "Sr. Software Engineer - Manufacturing Data & Test Infrastructure", "Senior Solutions Engineer (Manufacturing, Automotive, Defence)", "Product Engineer (Mobile)"];
+check("titles: software roles in manufacturing stay tech", stillSoftware.every((t) => classifyTitle(t).track !== null), stillSoftware.filter((t) => classifyTitle(t).track === null).join(" | "));
 console.log(failed === 0 ? "PASS match logic" : `FAIL match logic (${failed})`);
 process.exit(failed === 0 ? 0 : 1);
