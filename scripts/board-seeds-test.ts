@@ -1,5 +1,15 @@
 // Board identifiers from addresses and hand-made lists (modules/jobs/boardSeeds.ts). No network, no database.
 import { boardFromUrl, seedsFromText } from "../src/modules/jobs/boardSeeds";
+import { allowedList } from "../src/modules/jobs/slugSources/lists";
+
+const refused = (name: string) => {
+  try {
+    allowedList(name);
+    return false;
+  } catch {
+    return true;
+  }
+};
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const checks: Array<[string, boolean]> = [
@@ -22,6 +32,16 @@ const checks: Array<[string, boolean]> = [
   ["bare identifiers count for the one ATS given", same(seedsFromText("acme\nbeta-co\n", "greenhouse").seeds.map((seed) => seed.slug), ["acme", "betaco"])],
   ["bare identifiers are ignored without an ATS", seedsFromText("acme\nbeta\n").seeds.length === 0],
   ["URLs are counted", seedsFromText("https://jobs.lever.co/a https://jobs.lever.co/b").urls === 2],
+  // M3: boards known by their host.
+  ["a Workday career site is tenant.wdN/site", JSON.stringify(boardFromUrl("https://23andme.wd5.myworkdayjobs.com/23")) === JSON.stringify({ source: "workday", slug: "23andme.wd5/23" })],
+  ["a Workday address with a language keeps the site", boardFromUrl("https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/x")?.slug === "nvidia.wd5/NVIDIAExternalCareerSite"],
+  ["a Keka careers page is its subdomain", JSON.stringify(boardFromUrl("https://abcoffee.keka.com/careers")) === JSON.stringify({ source: "keka", slug: "abcoffee" })],
+  ["a Zoho Recruit portal is its host", boardFromUrl("https://artingdigital.zohorecruit.in/jobs/Careers")?.source === "zohorecruit"],
+  ["a CSV row with a Workday URL", same(seedsFromText("23Andme,23andme/23,https://23andme.wd5.myworkdayjobs.com/23").seeds.map((seed) => `${seed.source}:${seed.slug}`), ["workday:23andme.wd5/23"])],
+  ["the MIT and CC BY lists are allowed", allowedList("ats-scrapers").licence === "MIT" && allowedList("upstreamit").licence === "MIT" && allowedList("latmay").licence === "CC-BY-4.0"],
+  ["a non-commercial (CC BY-NC) list is refused", refused("feashliaa")],
+  ["an unregistered list is refused", refused("some-new-list")],
+  ["upstreamit's tenant|wdN|site lines are Workday slugs", same(seedsFromText("2020companies|wd1|external_careers\n23andme|wd5|23").seeds.map((seed) => seed.slug), ["2020companies.wd1/external_careers", "23andme.wd5/23"])],
 ];
 
 let failed = 0;

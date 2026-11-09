@@ -39,10 +39,19 @@ const facetValue: z.ZodType<{ descriptor?: string; id?: string; facetParameter?:
   facetParameter: z.string().optional(),
   values: z.array(z.unknown()).optional(),
 });
+const postingSchema = z.object({ title: z.string(), externalPath: z.string(), locationsText: z.string().optional(), postedOn: z.string().optional(), bulletFields: z.array(z.string()).optional() });
+// Since about 9 Nov 2026 some tenants' pages carry an empty posting ({}) among the real ones (16 of 132 tenants, e.g.
+// fiserv.wd5/ext): a posting that does not parse is left out instead of failing the whole page.
 const listSchema = z.object({
   total: z.number().optional(),
   facets: z.array(facetValue).optional(),
-  jobPostings: z.array(z.object({ title: z.string(), externalPath: z.string(), locationsText: z.string().optional(), postedOn: z.string().optional(), bulletFields: z.array(z.string()).optional() })).optional(),
+  jobPostings: z
+    .array(z.unknown())
+    .optional()
+    .transform((items) => items?.flatMap((item) => {
+      const parsed = postingSchema.safeParse(item);
+      return parsed.success ? [parsed.data] : [];
+    })),
 });
 const detailSchema = z.object({
   jobPostingInfo: z.object({

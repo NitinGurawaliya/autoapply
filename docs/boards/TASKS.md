@@ -28,7 +28,7 @@ Design: [3.4 Ranking](TDD.md#34-the-ranking-open-india-jobs-per-task-session) ·
 In progress 9 Nov: `BoardDay` migration applied (`migrate deploy`), `modules/jobs/boardDay.ts`, the `board-day` queue and 23:30 UTC cron, `scripts/board-day.ts`, `feed-report --from/--to`, ARCHITECTURE 6.2 step 6. `board-day-test` PASS (14 checks); typecheck and lint pass; rows for 8 and 9 Nov written by hand (open India: Workday 3,714, Keka 3,489, Greenhouse 2,727, Lever 808, Ashby 446, Zoho 157; new India jobs 0, as no ingest has run since 5 Nov). Left: the running worker picks up this code and its cron writes two days on its own.
 
 <a id="m2"></a>
-### [ ] M2 — Watch every company cheaply: tiers, India-only storage, per-company ingest
+### [~] M2 — Watch every company cheaply: tiers, India-only storage, per-company ingest
 Do:
 - Add the `Company` tier fields (`tier`, `nextFetchAt`, `indiaOpen`, `lastIndiaAt`, `listHash`) and their migration.
 - Write `cadence.ts` with the tiers `active` / `open` / `empty` / `dead`, back-off and jitter.
@@ -45,6 +45,12 @@ Design: [4.2 Queues](TDD.md#42-queues-pg-boss) · [4.3 Data model](TDD.md#43-dat
 - One day on `INGEST_MODE=tick` matches the old run's open India job counts per board within 2%.
 - `Job` size is recorded before and after.
 - Typecheck and lint pass.
+
+In progress 9 Nov: built and measured, not yet on the worker.
+- Code: `cadence.ts`; `ingest.ts` `ingestOne`, `recordRead`, `dueCompanies`; the `ingest-tick` and `ingest-company` queues (exclusive per company, pg-boss `groupConcurrency` per board) behind `INGEST_MODE` (default `run`). Greenhouse list probe (`listHash`). Workday reads details only for postings not held (`listOnly`). India-only `stores`, with `keepAbroad` for the 460 Greenhouse and Lever companies. Closed rows deleted after 7 days. `lib/undici-guard.ts`: Node's fetch threw an uncatchable parser assertion 9 times in one full read and had killed the process. Workday list pages with an empty posting no longer fail (16 tenants did on 9 Nov). ARCHITECTURE 6.2 step 5b and §11.
+- Checks: `cadence-test` (19), `ingest-tick-test` (13), `ingest-contract` and `board-seeds` PASS. `ingest-scale-smoke` is a scheduler simulation, not a fake HTTP server: at 20,000 companies, ~29,000 reads a day (0.34/s); 5 min most overdue in steady state; 54 min to read a cold start of all 20,000; the per-board cap held. Typecheck and lint pass.
+- One full tick-mode read of all 1,308 companies (`scripts/ingest-tick-now.ts`), against BoardDay 9 Nov written before it (4 days without ingest in between): open India jobs Greenhouse 2,727 → 2,749 (+0.8%), Lever 808 → 806, Ashby 446 → 448, Keka 3,489 → 3,524 (+1%), Workday 3,714 → 3,631 (−2.2%, 16 tenants then failing), Zoho 157 → 166. Tiers after: 1,260 active, 43 open, 5 empty. `Job` 468 MB / 41,730 rows → 492 MB / 38,912 rows (7-day deletion).
+- Left: a worker running this branch with `INGEST_MODE=tick` for a day, matching within 2%.
 
 <a id="m3"></a>
 ### [ ] M3 — Seed every known company on the boards we apply on

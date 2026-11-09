@@ -7,10 +7,13 @@
 //   npx tsx scripts/discover-boards.ts --import urls.csv                # any CSV or text file with board URLs
 //   npx tsx scripts/discover-boards.ts --import slugs.txt --boards lever # bare identifiers, one per line, for one ATS
 //   npx tsx scripts/discover-boards.ts --recheck --boards ashby        # boards that had too few India jobs, again
+//   npx tsx scripts/discover-boards.ts --import list.csv --boards greenhouse,ashby --from list:ats-scrapers --watch-all --limit 20000
+//                                                                       # M3: watch every board that answers, India jobs or not
 //   ... --write                                                         # record and add (production data)
 import { readFileSync } from "node:fs";
 import { db } from "../src/lib/db";
 import { SEED_SOURCES, seedsFromCrawl, seedsFromText, verifySeeds, type SeedSource, type SeedYield } from "../src/modules/jobs/boardSeeds";
+import { allowedList } from "../src/modules/jobs/slugSources/lists";
 
 function arg(name: string) {
   const at = process.argv.indexOf(name);
@@ -23,10 +26,14 @@ async function main() {
   const crawls = Number(arg("--crawls")) || 6;
   const file = arg("--import");
   const recheck = process.argv.includes("--recheck");
+  const watchAll = process.argv.includes("--watch-all");
+  const from = arg("--from");
+  // An open list is imported only when it is registered with a licence we may use (slugSources/lists.ts).
+  if (from?.startsWith("list:")) console.log(`list ${allowedList(from.slice(5)).name}: ${allowedList(from.slice(5)).licence}`);
   // Greenhouse and Lever first: the crawl has barely been worked through for them (Ashby: ~4,000 checked by 24 Oct).
   const boards = (arg("--boards")?.split(",") ?? ["greenhouse", "lever"]).filter((item): item is SeedSource => SEED_SOURCES.includes(item as SeedSource));
   if (boards.length === 0) throw new Error(`--boards takes ${SEED_SOURCES.join(", ")}`);
-  console.log(`${write ? "WRITE" : "DRY RUN (nothing is written)"}: ${recheck ? "recheck of boards with too few India jobs" : file ? `import ${file}` : `crawl index, ${crawls} crawls`}; ${boards.join(", ")}; up to ${limit} new boards each`);
+  console.log(`${write ? "WRITE" : "DRY RUN (nothing is written)"}: ${recheck ? "recheck of boards with too few India jobs" : file ? `import ${file}` : `crawl index, ${crawls} crawls`}; ${boards.join(", ")}; up to ${limit} new boards each${watchAll ? "; every board that answers is watched" : ""}`);
 
   const imported = file ? seedsFromText(readFileSync(file, "utf8"), boards.length === 1 ? boards[0] : undefined) : null;
   if (imported) console.log(`import: ${imported.urls} board URLs read, ${imported.seeds.length} board identifiers`);
@@ -40,7 +47,7 @@ async function main() {
         ? imported.seeds.filter((seed) => seed.source === source).map((seed) => seed.slug)
         : await seedsFromCrawl(source, crawls, (line) => console.log(line));
     // A recheck keeps each board's original "from" when it is written (recordChecked updates the row in place).
-    const result = await verifySeeds(source, slugs, { limit, write, recheck, from: imported ? "import" : recheck ? "list" : "crawl", log: (line) => console.log(line) });
+    const result = await verifySeeds(source, slugs, { limit, write, recheck, watchAll, from: from ?? (imported ? "import" : recheck ? "list" : "crawl"), log: (line) => console.log(line) });
     results.push(result);
     const { examples, ...counts } = result;
     console.log(`YIELD ${JSON.stringify(counts)} ${Math.round((Date.now() - t) / 1000)} s`);

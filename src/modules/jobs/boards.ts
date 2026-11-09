@@ -1,5 +1,5 @@
 import { fetchAshby } from "./fetchers/ashby";
-import { fetchGreenhouse, greenhouseListHash } from "./fetchers/greenhouse";
+import { fetchGreenhouse, fetchGreenhouseList, greenhouseListHash } from "./fetchers/greenhouse";
 import { fetchLever } from "./fetchers/lever";
 import { fetchWorkday, workdayName, workdaySlugOf } from "./fetchers/workday";
 import { fetchKeka, kekaName, kekaSlugOf } from "./fetchers/keka";
@@ -88,9 +88,10 @@ export const BOARDS: Board[] = [
     discovery: {
       boardUrl: "boards.greenhouse.io/<slug>",
       async open(slug) {
-        const response = await fetch(`https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(slug)}`, { signal: AbortSignal.timeout(15000) }).catch(() => null);
+        // The list without descriptions (M3): enough to count India jobs; a board that is not there answers 404.
+        const jobs = await fetchGreenhouseList(slug).catch(() => null);
         await pause(PAUSE_MS);
-        return response?.ok ? fetchGreenhouse(slug) : null;
+        return jobs;
       },
       counts: indiaEligible,
       minIndiaJobs: MIN_INDIA_JOBS,

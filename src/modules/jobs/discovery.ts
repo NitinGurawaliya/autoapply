@@ -186,15 +186,21 @@ export async function recordChecked(
   candidate: { name: string; stage: string | null; from: string },
   result: Awaited<ReturnType<typeof checkCandidate>>,
   log: (line: string) => void = () => undefined,
+  options: { watchAll?: boolean } = {},
 ) {
   const source = board.source;
   let status = "not_on_board";
   if (result.slug) {
-    status = result.indiaJobs >= board.minIndiaJobs && (!board.needsFresh || result.freshIndiaJobs >= 1) ? "added" : "few_india_jobs";
+    // Phase M (M3, owner 7 Nov): with `watchAll` every board that answers is watched, India jobs or not; its first tier
+    // comes from what it lists and tick mode reads it at that tier's pace (cadence.ts). Otherwise the board's own rule.
+    const passes = result.indiaJobs >= board.minIndiaJobs && (!board.needsFresh || result.freshIndiaJobs >= 1);
+    status = passes || options.watchAll ? "added" : "few_india_jobs";
     if (status === "added") {
+      const tier = result.indiaJobs > 0 ? "active" : result.openJobs > 0 ? "open" : "empty";
+      const named = candidate.from === "crawl" || candidate.from === "import" || candidate.from.startsWith("list:");
       await db.company.upsert({
         where: { source_slug: { source, slug: result.slug } },
-        create: { source, slug: result.slug, name: ((candidate.from === "crawl" || candidate.from === "import") && (await board.nameOf?.(result.slug))) || candidate.name, stage: candidate.stage, addedBy: "discovery" },
+        create: { source, slug: result.slug, name: (named && (await board.nameOf?.(result.slug))) || candidate.name, stage: candidate.stage, addedBy: "discovery", tier, indiaOpen: result.indiaJobs, ...(result.indiaJobs > 0 ? { lastIndiaAt: new Date() } : {}), ...(result.openJobs === 0 ? { emptySince: new Date() } : {}) },
         update: {},
       });
       // Its logo for the cards, from the same public board page (logos.ts); a miss is looked at again later.

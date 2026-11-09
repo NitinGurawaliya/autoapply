@@ -1,12 +1,14 @@
 import { db } from "@/lib/db";
+import type { BoardSource } from "./boards";
 import { BOARDS, checkCandidate, CONCURRENCY, normalName, recordChecked, slugsFromCrawl, type Board } from "./discovery";
 
 // Board seeds from free sources only (24 Oct): the Common Crawl index and URL lists collected by hand. Each seed is a
 // board identifier on one ATS; it is deduplicated, its public job feed is checked, and (only with `write`) the result is
 // recorded through the same path as the daily discovery, so a board is never checked as new twice.
 
-export type SeedSource = "greenhouse" | "lever" | "ashby";
-export const SEED_SOURCES: SeedSource[] = ["greenhouse", "lever", "ashby"];
+// Every board with discovery (M3: Workday, Keka and Zoho Recruit too, by their hosts).
+export type SeedSource = BoardSource;
+export const SEED_SOURCES: SeedSource[] = BOARDS.map((board) => board.source);
 
 const NOT_A_BOARD = new Set(["api", "embed", "static", "assets", "favicon.ico", "robots.txt", "v1", "jobs", "careers"]);
 const SLUG = /^[a-z0-9][a-z0-9.-]*$/;
@@ -33,6 +35,12 @@ export function boardFromUrl(text: string): { source: SeedSource; slug: string }
   } else if (host === "jobs.ashbyhq.com") {
     source = "ashby";
     slug = parts[0] ?? "";
+  } else {
+    // Boards known by their host (Workday, Keka, Zoho Recruit): each board's own reading of an address (boards.ts).
+    for (const board of BOARDS) {
+      const found = board.slugFromUrl?.(url);
+      if (found) return { source: board.source, slug: found };
+    }
   }
   if (!source || !slug || NOT_A_BOARD.has(slug) || !SLUG.test(slug)) return null;
   const board = BOARDS.find((item) => item.source === source);
@@ -48,11 +56,17 @@ export function seedsFromText(text: string, bareFor?: SeedSource) {
   const seeds: Array<{ source: SeedSource; slug: string }> = [];
   let urls = 0;
   for (const line of text.split(/\r?\n/)) {
-    const found = line.match(/(?:https?:\/\/)?(?:www\.)?(?:job-boards(?:\.eu)?|boards(?:\.eu)?)\.greenhouse\.io\/[^\s,;"'<>)]+|(?:https?:\/\/)?jobs(?:\.eu)?\.lever\.co\/[^\s,;"'<>)]+|(?:https?:\/\/)?jobs\.ashbyhq\.com\/[^\s,;"'<>)]+/gi) ?? [];
+    const found = line.match(/(?:https?:\/\/)?(?:www\.)?(?:job-boards(?:\.eu)?|boards(?:\.eu)?)\.greenhouse\.io\/[^\s,;"'<>)]+|(?:https?:\/\/)?jobs(?:\.eu)?\.lever\.co\/[^\s,;"'<>)]+|(?:https?:\/\/)?jobs\.ashbyhq\.com\/[^\s,;"'<>)]+|https?:\/\/[a-z0-9-]+\.(?:wd\d{1,3}\.myworkdayjobs\.com|keka\.com|zohorecruit\.(?:in|com|eu|com\.au|jp))[^\s,;"'<>)]*/gi) ?? [];
     urls += found.length;
     for (const address of found) {
       const seed = boardFromUrl(address);
       if (seed) seeds.push(seed);
+    }
+    // upstreamit's Workday lists: "tenant|wdN|site".
+    const piped = line.trim().match(/^([a-z0-9-]+)\|(wd\d{1,3})\|([A-Za-z0-9_-]+)$/i);
+    if (found.length === 0 && piped && (!bareFor || bareFor === "workday")) {
+      seeds.push({ source: "workday", slug: `${piped[1].toLowerCase()}.${piped[2].toLowerCase()}/${piped[3]}` });
+      continue;
     }
     const bare = line.trim().toLowerCase();
     if (found.length === 0 && bareFor && SLUG.test(bare)) {
@@ -107,7 +121,7 @@ export type SeedYield = {
 export async function verifySeeds(
   source: SeedSource,
   slugs: string[],
-  options: { limit: number; write: boolean; from: "crawl" | "import" | "list"; recheck?: boolean; log?: (line: string) => void },
+  options: { limit: number; write: boolean; from: string; recheck?: boolean; watchAll?: boolean; log?: (line: string) => void },
 ): Promise<SeedYield> {
   const log = options.log ?? (() => undefined);
   const board = boardOf(source);
@@ -150,14 +164,14 @@ export async function verifySeeds(
           result.valid += 1;
           result.openJobs += found.openJobs;
           result.indiaJobs += found.indiaJobs;
-          const passes = found.indiaJobs >= board.minIndiaJobs && (!board.needsFresh || found.freshIndiaJobs >= 1);
+          const passes = options.watchAll || (found.indiaJobs >= board.minIndiaJobs && (!board.needsFresh || found.freshIndiaJobs >= 1));
           if (passes) {
             result.passing += 1;
             if (result.examples.length < 15) result.examples.push(`${found.slug} (${found.indiaJobs} India jobs)`);
           }
         }
         if (options.write) {
-          const status = await recordChecked(board, { name: slug, stage: null, from: options.from }, found, log);
+          const status = await recordChecked(board, { name: slug, stage: null, from: options.from }, found, log, { watchAll: options.watchAll });
           if (status === "added") result.added += 1;
         }
       } catch (error) {

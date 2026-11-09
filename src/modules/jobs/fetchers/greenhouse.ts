@@ -25,6 +25,26 @@ export async function greenhouseListHash(slug: string): Promise<string> {
   return createHash("md5").update(keys.join("|")).digest("hex");
 }
 
+/**
+ * The board's open jobs from its list without descriptions: title, place and dates, enough for discovery to count India
+ * jobs without downloading every description (M3: thousands of boards checked once). Null when the board is not there.
+ */
+export async function fetchGreenhouseList(slug: string): Promise<FetchedJob[] | null> {
+  const response = await fetch(`https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(slug)}/jobs`, { signal: AbortSignal.timeout(30000) });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`greenhouse ${slug} ${response.status}`);
+  const body = (await response.json()) as { jobs?: unknown[] };
+  const jobs: FetchedJob[] = [];
+  for (const item of body.jobs ?? []) {
+    const parsed = jobSchema.safeParse(item);
+    if (!parsed.success) continue;
+    const postedAt = asDate(parsed.data.first_published) ?? asDate(parsed.data.updated_at);
+    if (!postedAt || !parsed.data.absolute_url) continue;
+    jobs.push({ externalId: String(parsed.data.id), title: parsed.data.title, location: parsed.data.location?.name ?? "", description: "", applyUrl: parsed.data.absolute_url, postedAt, raw: {} });
+  }
+  return jobs;
+}
+
 export async function fetchGreenhouse(slug: string): Promise<FetchedJob[]> {
   const response = await fetch(
     `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs?content=true`,
