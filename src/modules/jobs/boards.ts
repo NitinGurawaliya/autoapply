@@ -1,6 +1,7 @@
 import { fetchAshby } from "./fetchers/ashby";
 import { fetchGreenhouse, fetchGreenhouseList, greenhouseListHash } from "./fetchers/greenhouse";
 import { fetchLever } from "./fetchers/lever";
+import { fetchSmartRecruiters, smartRecruitersName, smartRecruitersSlugOf } from "./fetchers/smartrecruiters";
 import { fetchWorkday, workdayName, workdaySlugOf } from "./fetchers/workday";
 import { fetchKeka, kekaName, kekaSlugOf } from "./fetchers/keka";
 import { fetchZohoRecruit, zohoName, zohoSlugOf } from "./fetchers/zohorecruit";
@@ -14,7 +15,7 @@ import { tagPosting } from "./tagging";
  * here plus a fetcher and an adapter (docs/INGEST_CONTRACT.md).
  */
 
-export type BoardSource = "greenhouse" | "lever" | "ashby" | "workday" | "zohorecruit" | "keka";
+export type BoardSource = "greenhouse" | "lever" | "ashby" | "workday" | "zohorecruit" | "keka" | "smartrecruiters";
 
 /** How discovery (discovery.ts) checks names against a board. */
 export type BoardDiscovery = {
@@ -267,6 +268,46 @@ export const BOARDS: Board[] = [
       slugFromUrl: kekaSlugOf,
       async nameOf(slug) {
         const name = await kekaName(slug);
+        await pause(PAUSE_MS);
+        return name;
+      },
+    },
+  },
+  {
+    // SmartRecruiters (Phase M, M7; T95): the public Posting API, India postings only (`country=in`), each posting's
+    // description read once (fetchers/smartrecruiters.ts). Strong in India: Swiggy, Freshworks, Bosch. Its application
+    // form is a multi-step page behind DataDome, so it is applied to in a visible window with a person to take over.
+    source: "smartrecruiters",
+    label: "SmartRecruiters",
+    fetch: (slug, options) => fetchSmartRecruiters(slug, { known: options?.known }),
+    stores: indiaEligible,
+    formHost: /^jobs.smartrecruiters.com$/i,
+    // The identifier as its addresses write it ("Freshworks"); a bare name has its spaces and punctuation taken out.
+    slugOf: (text) => {
+      try {
+        const fromUrl = smartRecruitersSlugOf(new URL(text));
+        if (fromUrl) return fromUrl;
+      } catch {
+        // Not an address.
+      }
+      return text.trim().replace(/[^A-Za-z0-9_-]/g, "");
+    },
+    discovery: {
+      boardUrl: "jobs.smartrecruiters.com/<Company>",
+      async open(slug) {
+        // The India list alone; an identifier that is not a company lists nothing, which is not a board.
+        const jobs = await fetchSmartRecruiters(slug, { details: false }).catch(() => null);
+        await pause(PAUSE_MS);
+        if (jobs && jobs.length === 0) return (await smartRecruitersName(slug)) ? jobs : null;
+        return jobs;
+      },
+      counts: indiaEligible,
+      minIndiaJobs: 1,
+      needsFresh: true,
+      crawlHosts: ["jobs.smartrecruiters.com", "careers.smartrecruiters.com"],
+      slugFromUrl: smartRecruitersSlugOf,
+      async nameOf(slug) {
+        const name = await smartRecruitersName(slug);
         await pause(PAUSE_MS);
         return name;
       },

@@ -56,7 +56,7 @@ export function seedsFromText(text: string, bareFor?: SeedSource) {
   const seeds: Array<{ source: SeedSource; slug: string }> = [];
   let urls = 0;
   for (const line of text.split(/\r?\n/)) {
-    const found = line.match(/(?:https?:\/\/)?(?:www\.)?(?:job-boards(?:\.eu)?|boards(?:\.eu)?)\.greenhouse\.io\/[^\s,;"'<>)]+|(?:https?:\/\/)?jobs(?:\.eu)?\.lever\.co\/[^\s,;"'<>)]+|(?:https?:\/\/)?jobs\.ashbyhq\.com\/[^\s,;"'<>)]+|https?:\/\/[a-z0-9-]+\.(?:wd\d{1,3}\.myworkdayjobs\.com|keka\.com|zohorecruit\.(?:in|com|eu|com\.au|jp))[^\s,;"'<>)]*/gi) ?? [];
+    const found = line.match(/(?:https?:\/\/)?(?:www\.)?(?:job-boards(?:\.eu)?|boards(?:\.eu)?)\.greenhouse\.io\/[^\s,;"'<>)]+|(?:https?:\/\/)?jobs(?:\.eu)?\.lever\.co\/[^\s,;"'<>)]+|(?:https?:\/\/)?jobs\.ashbyhq\.com\/[^\s,;"'<>)]+|https?:\/\/[a-z0-9-]+\.(?:wd\d{1,3}\.myworkdayjobs\.com|keka\.com|zohorecruit\.(?:in|com|eu|com\.au|jp))[^\s,;"'<>)]*|(?:https?:\/\/)?(?:jobs|careers)\.smartrecruiters\.com\/[^\s,;"'<>)]+/gi) ?? [];
     urls += found.length;
     for (const address of found) {
       const seed = boardFromUrl(address);

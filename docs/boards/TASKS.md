@@ -124,7 +124,7 @@ Design: [4.6 Sequence: Workday](TDD.md#46-sequence-workday-apply-with-an-employe
 - Typecheck and lint pass.
 
 <a id="m7"></a>
-### [ ] M7 — SmartRecruiters (T95, moved here)
+### [~] M7 — SmartRecruiters (T95, moved here)
 Do: as T95, plus what 7 Nov found. First read `rajakrishna/easy-apply` (MIT, SmartRecruiters form) and `devilscrapes/smartrecruiters-jobs-scraper-javascript` (MIT, the postings API) as references ([TDD §12](TDD.md#12-research-notes-and-sources)):
 - `fetchers/smartrecruiters.ts` lists with `country=in`, then each posting's detail.
 - Add the host `jobs.smartrecruiters.com` and a discovery entry, with seeds from M3's lists.
@@ -137,6 +137,11 @@ Design: [4.5 Recipe](TDD.md#45-sequence-adding-a-board-with-a-public-form-the-re
 - `ats-smoke` dry runs on 3 forms pass.
 - One real submit, then SmartRecruiters goes into `APPLY_BOARDS`.
 - The challenge rate on the first 10 submits is recorded.
+
+In progress 9 Nov:
+- Done: `fetchers/smartrecruiters.ts` (India list, `country=in`; details only for postings not held; name from the first posting) and the `smartrecruiters` board entry (India-only, form host `jobs.smartrecruiters.com`, discovery by host and address). Swiggy and Freshworks added and ingested: 165 and 20 open India jobs, eligibility `india`.
+- The form, read 9 Nov without typing anything: page 1 (resume dropzone, first/last name, email twice, city autocomplete, phone with country code, structured Experience and Education lists, LinkedIn, Facebook, X, website, message), then Next to the screening questions and Submit. `GET /oneclick-ui/api/company/{companyId}/publication/{uuid}/config` says which standard fields are required (Freshworks: experience and education required). DataDome and Cloudflare scripts are on the page.
+- Left: the adapter. It needs dry runs on live forms with a real profile (the owner's OK first), then one real submit and `APPLY_BOARDS`.
 
 <a id="m8"></a>
 ### [ ] M8 — SuccessFactors
