@@ -35,6 +35,8 @@ export const APPLY_QUEUES = [APPLY_QUEUE, HANDOFF_QUEUE, UNPROTECTED_QUEUE, PERS
 const INGEST_QUEUE = "ingest";
 const PRESCAN_QUEUE = "prescan";
 const DISCOVER_QUEUE = "discover";
+/** The daily per-board measurement (Phase M, M1; modules/jobs/boardDay.ts). */
+export const BOARD_DAY_QUEUE = "board-day";
 
 let bossPromise: Promise<PgBoss> | null = null;
 
@@ -60,6 +62,7 @@ export function getBoss() {
       await ensureQueue(started, INGEST_QUEUE);
       await ensureQueue(started, PRESCAN_QUEUE);
       await ensureQueue(started, DISCOVER_QUEUE);
+      await ensureQueue(started, BOARD_DAY_QUEUE);
       return started;
     });
   }

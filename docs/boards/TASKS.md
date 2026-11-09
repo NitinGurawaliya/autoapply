@@ -15,7 +15,7 @@ After M3, two weeks of M1's daily numbers confirm or reorder 3 and 5. Each task 
 The owner's decisions are in [TDD §11](TDD.md#11-decisions-closed-with-the-owner-9-nov); nothing below waits on a question. Naukri and the other signed-in Indian portals (foundit, hirist, iimjobs, Instahyre) come after this phase (owner, 7 Nov).
 
 <a id="m1"></a>
-### [ ] M1 — Board measurement, daily
+### [~] M1 — Board measurement, daily
 Do:
 - Add the `BoardDay` model and its migration (`migrate deploy`).
 - Write `scripts/board-day.ts`. It writes one row per board for the day: companies by tier, open India jobs, India tech, India entry-level, new India jobs first seen that day, right swipes and submitted. Before M2 lands, every company counts as `active`.
@@ -25,6 +25,7 @@ Do:
 
 Design: [3.4 Ranking](TDD.md#34-the-ranking-open-india-jobs-per-task-session) · [4.3 Data model](TDD.md#43-data-model-prisma-additions) (`BoardDay`) · [4.11 Observability](TDD.md#411-observability).
 **Done when:** `board-day-test` PASS; the cron wrote rows on two consecutive days for every board; `feed-report --from <day1> --to <day2>` prints them; typecheck and lint pass.
+In progress 9 Nov: `BoardDay` migration applied (`migrate deploy`), `modules/jobs/boardDay.ts`, the `board-day` queue and 23:30 UTC cron, `scripts/board-day.ts`, `feed-report --from/--to`, ARCHITECTURE 6.2 step 6. `board-day-test` PASS (14 checks); typecheck and lint pass; rows for 8 and 9 Nov written by hand (open India: Workday 3,714, Keka 3,489, Greenhouse 2,727, Lever 808, Ashby 446, Zoho 157; new India jobs 0, as no ingest has run since 5 Nov). Left: the running worker picks up this code and its cron writes two days on its own.
 
 <a id="m2"></a>
 ### [ ] M2 — Watch every company cheaply: tiers, India-only storage, per-company ingest

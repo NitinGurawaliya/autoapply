@@ -200,7 +200,7 @@ This phase comes before the signed-in portals (Naukri, foundit, hirist, iimjobs,
 
 Order (owner, 9 Nov): measure and scale, seed every known company, then the boards with public forms; boards that need an employer account later, as one block. M1's daily numbers confirm the rest.
 
-- [ ] [M1 — Board measurement, daily](boards/TASKS.md#m1)
+- [~] [M1 — Board measurement, daily](boards/TASKS.md#m1)
 - [ ] [M2 — Watch every company cheaply: tiers, India-only storage, per-company ingest](boards/TASKS.md#m2)
 - [ ] [M3 — Seed every known company on the boards we apply on](boards/TASKS.md#m3)
 - [ ] [M7 — SmartRecruiters (T95, moved here)](boards/TASKS.md#m7)

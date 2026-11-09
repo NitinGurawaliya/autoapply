@@ -5,6 +5,8 @@ export const DEFAULT_INGEST_CRON = "0 */3 * * *";
 export const DEFAULT_INGEST_DAYS = 60;
 // Discovery once a day, before the 03:00 ingest, so companies it adds are fetched the same morning (UTC).
 export const DEFAULT_DISCOVER_CRON = "30 1 * * *";
+// The per-board measurement of the UTC day, written near its end (Phase M, M1).
+export const DEFAULT_BOARD_DAY_CRON = "30 23 * * *";
 
 /**
  * Registers the recurring jobs. pg-boss stores the schedule in the database, so several workers registering the same
@@ -17,5 +19,7 @@ export async function registerSchedules(boss: PgBoss) {
   const schedule = await boss.getSchedule("ingest");
   const discoverCron = process.env.DISCOVER_CRON?.trim() || DEFAULT_DISCOVER_CRON;
   await boss.schedule("discover", discoverCron, {}, { tz: "UTC", missed: "once", expireInSeconds: 3600, retryLimit: 0 });
-  return { cron: schedule?.cron ?? cron, timezone: schedule?.timezone ?? "UTC", days, discoverCron };
+  const boardDayCron = process.env.BOARD_DAY_CRON?.trim() || DEFAULT_BOARD_DAY_CRON;
+  await boss.schedule("board-day", boardDayCron, {}, { tz: "UTC", missed: "once", expireInSeconds: 900, retryLimit: 1 });
+  return { cron: schedule?.cron ?? cron, timezone: schedule?.timezone ?? "UTC", days, discoverCron, boardDayCron };
 }

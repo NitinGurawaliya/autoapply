@@ -1,4 +1,6 @@
 export { boardOf, BOARDS } from "./boards";
+export { boardDays, computeBoardDay, utcDay, writeBoardDay } from "./boardDay";
+export type { BoardDayRow } from "./boardDay";
 export type { Board, BoardSource } from "./boards";
 export { ingestJobs } from "./ingest";
 export { listingState } from "./listing";

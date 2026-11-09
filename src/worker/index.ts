@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getBoss, HANDOFF_QUEUE, PERSON_QUEUE, UNPROTECTED_QUEUE } from "@/lib/queue";
 import { autoSubmitAshby, canShowWindow } from "@/modules/apply/browser";
 import { handleApply } from "./handlers/apply";
+import { handleBoardDay } from "./handlers/board-day";
 import { handleDiscover } from "./handlers/discover";
 import { handleIngest } from "./handlers/ingest";
 import { handlePrescan } from "./handlers/prescan";
@@ -31,6 +32,7 @@ async function main() {
   await boss.work("prescan", handlePrescan);
   // The daily run hands each board its own job; this takes them one at a time (handlers/discover.ts).
   await boss.work("discover", handleDiscover);
+  await boss.work("board-day", handleBoardDay);
   const auto = autoSubmitAshby() ? ", auto submit" : "";
   console.log(`worker listening for apply (x${concurrency})${unprotected ? `, ${UNPROTECTED_QUEUE} (x${concurrency}${auto})` : ""}${handoff ? `, ${HANDOFF_QUEUE} (x${concurrency}${auto}), ${PERSON_QUEUE}` : ", no screen: no protected Ashby"} and ingest`);
 
@@ -47,7 +49,7 @@ async function main() {
   process.on("SIGINT", () => stop("SIGINT"));
   process.on("SIGTERM", () => stop("SIGTERM"));
   const ingest = await registerSchedules(boss);
-  console.log(`ingest scheduled: "${ingest.cron}" ${ingest.timezone}, last ${ingest.days} days; discovery "${ingest.discoverCron}"`);
+  console.log(`ingest scheduled: "${ingest.cron}" ${ingest.timezone}, last ${ingest.days} days; discovery "${ingest.discoverCron}"; board day "${ingest.boardDayCron}"`);
 
   // Heartbeat for /api/health: a worker that has not beaten for a few minutes is down.
   const host = process.env.WORKER_NAME?.trim() || hostname();

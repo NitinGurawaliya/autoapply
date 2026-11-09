@@ -375,6 +375,28 @@ model IngestRun {
   @@index([startedAt])
 }
 
+// One row per board per UTC day (Phase M, M1; modules/jobs/boardDay.ts): the yardstick that orders the boards.
+// Written at 23:30 UTC by the worker; a re-run of the same day overwrites it.
+model BoardDay {
+  day            DateTime @db.Date
+  source         String
+  companies      Int // active companies on the board
+  // Watch tiers (M2). Until M2 lands every active company counts as active.
+  active         Int
+  open           Int
+  empty          Int
+  dead           Int
+  openIndia      Int // open India-eligible jobs (india, remote_india) when the row was written
+  openIndiaTech  Int // of which function engineering or data_ai
+  openIndiaEntry Int // of which intern or entry level, or asking 2 years or less
+  newIndia       Int // India-eligible jobs first seen that day: the flow that feeds swipes
+  swipesRight    Int
+  submitted      Int
+  writtenAt      DateTime @default(now()) @updatedAt
+
+  @@id([day, source])
+}
+
 // The model's verdict on one job for one resume (modules/jobs/semantic.ts judgeJobs): strong | good | stretch | no, and
 // why. Valid while the resume text (fromHash) and the posting (jobHash = Job.contentHash) are unchanged.
 model JobJudgement {
