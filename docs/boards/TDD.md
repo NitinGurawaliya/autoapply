@@ -1,6 +1,6 @@
 # More boards, employer accounts and discovery at scale — technical design (Phase M)
 
-Version 1, 7 Nov 2026. Draft for the owner: nothing here is decided until §11 is answered. ARCHITECTURE stays the source of truth: each task copies the decisions it lands into ARCHITECTURE (§5, §6.2, a new §6.21 "Employer accounts") and, for the credential rule, into CLAUDE.md's hard rules, in the same change.
+Version 2, 9 Nov 2026: the owner answered every open question on 9 Nov (§11); the decisions below are final for this phase. ARCHITECTURE stays the source of truth: each task copies the decisions it lands into ARCHITECTURE (§5, §6.2, a new §6.21 "Employer accounts") and, for the credential rule, into CLAUDE.md's hard rules, in the same change.
 
 Three questions, one ranking. (1) Which boards with public, no-sign-in application forms to add next. (2) How to apply on boards that need an employer account during the application, Workday first. (3) How to grow from about 1,300 watched companies to 50,000 career pages without the ingest or Postgres falling over, for an app meant to reach millions of users. Everything is ranked by **open India-eligible jobs unlocked per task session**, because the audience is Indian tech job seekers.
 
@@ -137,12 +137,12 @@ The test for a board: open India jobs (and India tech jobs) it adds, against the
 | Option | How | For | Against | Verdict |
 |---|---|---|---|---|
 | A. Person only | The user creates the account and signs in in the visible window each time; the agent fills after | No credential stored | Needs a screen and a person for every application; does not scale past one laptop | Fallback only (an account that exists already, §4.4) |
-| B. One application password the user sets (Tsenta) | The user types a new password once in our app; we store it encrypted and use it for every employer | The user can sign in to any employer with one password | Users reuse real passwords; one leak opens every employer account; our app asks for a password, which our hard rules avoid | No |
-| **C. A password we generate per employer account** | 20 random characters per (user, system, tenant), AES-256-GCM in Postgres, the user's own email as the login, "Show password" for the user | No password the user uses anywhere else; one leak opens one employer; the user can still sign in to check status | We hold secrets: a vault, a key, rules | **Chosen** |
+| B. One application password the user sets (Tsenta) | The user types a new password once in our app; we store it encrypted and use it for every employer | The user can sign in to any employer with one password | Users reuse real passwords; one leak opens every employer account; our app asks for a password, which our hard rules avoid | **Chosen** (owner, 9 Nov) |
+| C. A password we generate per employer account | 20 random characters per (user, system, tenant), AES-256-GCM in Postgres, the user's own email as the login, "Show password" for the user | No password the user uses anywhere else; one leak opens one employer; the user can still sign in to check status | We hold secrets: a vault, a key, rules | Proposed; the owner chose B |
 | D. A relay email we own as the login (`u123@apply.…`) plus C | We receive every verification mail ourselves | Fully automatic | Recruiters write to our relay; deliverability; the user's identity on the form is not their own email | No |
 | E. Leave account boards out | — | No work | Workday is 3,714 India jobs and 155 entry-level ones today, 28 per company, and the MNCs Indian graduates aim for | No |
 
-**Decision (proposed): C.** The agent creates the account with the user's own email and a generated password, only after a right swipe on that employer's job and only under a standing permission asked once ("Create employer accounts for me", §5). The password never leaves the vault except to the worker filling that employer's sign-in form and to the user who asks to see it.
+**Decision (owner, 9 Nov): B, one application password the user sets.** The user types a new password once in Account ("Application password: used only to create and sign in to employer accounts for you; use one you use nowhere else"), at least 12 characters with a letter, a digit and a symbol so it passes most employers' rules; it is stored AES-256-GCM through `modules/accounts` and typed only on an employer's own sign-in page. The agent then creates each employer account with the user's own email and that password, only after a right swipe on that employer's job. A tenant whose rules refuse it stops with "Acme's Workday needs a different password" in Needs you. The user can change it in Account; accounts made before keep the old one, so the vault keeps the password per account (`EmployerAccount.secret`, copied from the user's at creation) and the user can see each. Account boards come **after** the public-form boards (owner, 9 Nov; §3.4).
 
 The password is the smaller half. Oracle has none, Workday's coming Candidate Profile has none (fact 11), and `EmployerAccount.secret` is nullable for exactly that: when a system goes passwordless, its rows stop carrying one and nothing else changes.
 
@@ -151,11 +151,11 @@ The password is the smaller half. Oracle has none, Workday's coming Candidate Pr
 | Option | How | For | Against | Verdict |
 |---|---|---|---|---|
 | **1. The user does it** | A link: the run ends `needs_input` with "Verify your email for Acme", the user clicks the link in their inbox and presses "Done", the next run signs in. A code: the app's existing code sheet (`codeRequester`, the browser held 10 minutes, one per user at a time) | Ships with M5; no new access; the user's own email on every application | A person per new Workday employer and per Oracle apply | **First, for every account system** |
-| 2. A private relay address per user (Tsenta, Kombo) | The account's email is `u<id>@mail.<our domain>`; our inbound mail service keeps the link or code for minutes and forwards every other mail to the user at once | Fully automatic; the user's inbox is never read | The employer sees our relay as the candidate's email and writes to it; deliverability and forwarding become our job; the user's real email is not on the application | Owner's call (§11 Q3) |
-| 3. A forwarding filter to our inbound address | The user adds one Gmail filter (`from:(myworkday.com OR oraclecloud.com OR successfactors …)` → `u<id>@codes.<domain>`); we keep only the link or code | The user's own email stays on the application; we see only ATS mails | Setup on a computer; Gmail asks to confirm the forwarding address; a new inbound mail service | Owner's call (§11 Q3); **recommended** if the owner wants it automatic |
+| 2. A private relay address per user (Tsenta, Kombo) | The account's email is `u<id>@mail.<our domain>`; our inbound mail service keeps the link or code for minutes and forwards every other mail to the user at once | Fully automatic; the user's inbox is never read | The employer sees our relay as the candidate's email and writes to it; deliverability and forwarding become our job; the user's real email is not on the application | Owner's call (owner, 9 Nov: manual) |
+| 3. A forwarding filter to our inbound address | The user adds one Gmail filter (`from:(myworkday.com OR oraclecloud.com OR successfactors …)` → `u<id>@codes.<domain>`); we keep only the link or code | The user's own email stays on the application; we see only ATS mails | Setup on a computer; Gmail asks to confirm the forwarding address; a new inbound mail service | Owner's call (owner, 9 Nov: manual); **recommended** if the owner wants it automatic |
 | 4. Gmail / Outlook read access | The user's Google sign-in with `gmail.readonly` | Automatic for Gmail users | A restricted scope: Google's verification and a yearly third-party security assessment; read access to the whole inbox | Not now |
 
-**Decision (proposed):** option 1 ships with the account boards; Oracle waits for 2 or 3 (§3.1). The inbound service for 2 or 3 is one more task (M9) once the owner picks.
+**Decision (owner, 9 Nov): option 1, the user clicks the link or types the code, and it stays manual.** No relay address, no forwarding filter, no mailbox access. Consequence: Oracle (a code on every apply) and M9 are parked; Workday, SuccessFactors and Darwinbox ask the user once per new employer (a link or a sign-up code).
 
 ### 3.3 Discovery at scale
 
@@ -190,14 +190,22 @@ Sessions are one agent session each (CLAUDE.md "How to work"); the numbers are f
 | 6 | M8 SuccessFactors | 9,511 | 3,063 | 3 | ~3,200 | M5 |
 | 7 | M10 Darwinbox | 6,757 | 882 | 2 | ~3,400 (~440 tech) | M5 |
 | 8 | M4 Continuous discovery | +30–60% on every board above, every week (estimate) | | 2 | — | M2 |
-| 9 | M9 Automatic email step, M11 Oracle | 41,152 | 5,570 | 1 + 2 | high, but concentrated in a few tenants | M5, owner Q3 |
+| 9 | M9 Automatic email step, M11 Oracle | 41,152 | 5,570 | 1 + 2 | high, but concentrated in a few tenants | parked: the email step stays manual |
 | 10 | M12 Workable | 3,841 | ? | 2 | ~1,900 | M2 |
 | 11 | M13 Zoho Recruit apply | ~550 | ? | 1 | ~550 | — |
 | 12 | M14 Long tail, M15 iCIMS | under 650 each | | 2 + 3 | under 300 | M1 shows weekly flow |
 
-**Alongside, not ranked by jobs:** M16 (board health) lands before the second new board, M17 (feed at volume) before the open India rows pass 100,000, M18 (model cost) with M3, M19 (fleet and per-IP pace) before applies outgrow one machine, M20 (the user's own live view for bot checks) when the owner answers Q12.
+**Order (owner, 9 Nov): boards with public forms first; boards that need an employer account later, as one block.**
 
-**Order:** M1 and M2 first because nothing scales without them (seeding 6,000 Greenhouse companies into today's single 3-hourly run would take most of the 3 hours); then M3, the most India jobs soonest; then Workday, SmartRecruiters, SuccessFactors, Darwinbox (the owner's order); M4 runs beside them from M3's lists onward; then Oracle, Workable, Zoho, the long tail. **M1's two weeks of daily numbers after M3 confirm or reorder 5–12** (owner, 7 Nov: a board is judged by its flow of new India jobs a day, not one snapshot).
+1. **M1** board measurement and **M2** watch every company cheaply: nothing scales without them.
+2. **M3** seed every known company on the boards we apply on (Greenhouse, Ashby, Keka; Lever once T94 turns it on).
+3. **M7** SmartRecruiters, **M12** Workable, **M13** Zoho Recruit, then **M14** the long tail as M1 earns each board.
+4. **M4** continuous discovery, beside 3 from M3's lists onward.
+5. Alongside, not ranked by jobs: **M16** board health before the second new board, **M17** the feed index before open India rows pass 100,000, **M18** model cost with M3, **M19** fleet and per-IP pace before applies outgrow one machine.
+6. **Later, the account block:** **M5** application password and vault, **M6** Workday, **M8** SuccessFactors, **M10** Darwinbox. The table above still ranks them by jobs per session (Workday is the largest pool); the owner chose to finish the public boards first.
+7. **Parked:** **M9** automatic email step and **M11** Oracle (the email step stays manual), **M15** iCIMS, **M20** live view (bot checks stay as Ashby and Keka do them, §3.5).
+
+M1's two weeks of daily numbers after M3 confirm or reorder 3 and 6.
 
 ### 3.5 Bot checks: a policy per board (owner decision)
 
@@ -211,9 +219,12 @@ Seen on 7 Nov: DataDome on SmartRecruiters; Turnstile on Workable, Rippling, Per
 | D. A solver service (2Captcha, CapSolver: paid people or models solve it) | An API call per check | Defeats the check by design; most boards' terms forbid getting around their bot measures; the same circumvention the Naukri plan ruled out; a solver sees the page | Yes | **No** |
 | E. Stealth browsers, residential proxies | — | Circumvention | — | No (already ruled out) |
 
-Keka today: the worker reads Keka's image CAPTCHA with AI (`ENABLE_KEKA`, the owner's call, T96). That is D done in-house; under this policy Keka would move to C once it exists. The owner decides (§11 Q12).
+**Decision (owner, 9 Nov): new boards work the way Ashby and Keka work today.** No live view, no paid solver.
 
-Per board, the policy is recorded in `boards.ts` (`check: "none" | "score" | "always"`): `none` and `score` start as A (the worker's click; a challenge on a score board goes to B or C); `always` boards are C (or B until C exists). The measured challenge rate per board (§4.15) moves a board between them.
+- **Score checks** (DataDome on SmartRecruiters, Turnstile on Workable, Rippling, Personio and Darwinbox, reCAPTCHA scores, Workday's own checks) work as Ashby: the worker fills and clicks in a visible Chrome window on the worker with a screen, and a challenge hands that window to the person (ARCHITECTURE "Human handoff"). Headless Docker workers take a board only when its measured challenge rate says they can, as Ashby's `job_apply_none`.
+- **Image CAPTCHAs** (Zoho Recruit) work as Keka: the worker reads the image with AI under the board's own switch (`ENABLE_ZOHO`, off by default, as `ENABLE_KEKA`), and a wrong read or a refusal ends the run with the board's words, nothing sent.
+- **Always-shown checkbox challenges** (hCaptcha on Lever and Recruitee, JazzHR's reCAPTCHA checkbox) are handoff boards, as Lever is (T94): the worker fills, a person presses Submit.
+- The policy is recorded per board in `boards.ts` (`check: "none" | "score" | "image" | "always"`). Option C (M20) stays parked.
 
 ---
 
@@ -288,7 +299,7 @@ model EmployerAccount {
   system       String    // workday | successfactors | darwinbox | oracle | icims
   tenant       String    // workday "{tenant}.{wdN}"; SF company id; darwinbox subdomain; oracle "{host}/{siteNumber}"; icims portal host
   email        String    // the user's own email when it was created
-  secret       Bytes?    // AES-256-GCM (iv | tag | ciphertext) of the generated password; null for code-only systems (Oracle)
+  secret       Bytes?    // AES-256-GCM (iv | tag | ciphertext) of the application password used for this account; null for code-only systems (Oracle)
   keyVersion   Int       @default(1)
   state        String    // creating | needs_verification | active | exists_elsewhere | locked | failed
   createdBy    String    // agent | user (exists_elsewhere: the user signs in themselves)
@@ -336,7 +347,7 @@ Before anything: the swipe gate as for every board (right swipe, `isTest === fal
 1. **Queue.** `enqueueApply` routes Workday to `apply` (headless allowed) while M6's measurements show Workday's checks pass headless; otherwise `apply-handoff` (a worker with a screen, the worker's own click, a check hands the window over), as Ashby's routing does.
 2. **Open** `{tenant}.wdN.myworkdayjobs.com/{site}/job/…/apply` from `Job.applyUrl`; dismiss cookies (`common.ts`); choose "Apply Manually" (the resume is uploaded on "My Experience", where Workday's own parse fills work history; the agent then corrects it from the resume).
 3. **Account.** `vault.accountFor(userId, "workday", tenant)`:
-   - none → "Create Account": the user's email, a generated password twice, the tenant's own terms box only under `accept_acknowledgements` (CLAUDE.md, `acknowledgement.ts`); real clicks, a person's pace (Workday's 500 ms minimum is met by filling, never by waiting artificially); the row is written `creating` before the click, `active` or `needs_verification` after. Event `account_created`.
+   - none → "Create Account": the user's email, the application password twice, the tenant's own terms box only under `accept_acknowledgements` (CLAUDE.md, `acknowledgement.ts`); real clicks, a person's pace (Workday's 500 ms minimum is met by filling, never by waiting artificially); the row is written `creating` before the click, `active` or `needs_verification` after. Event `account_created`.
    - `needs_verification` → the run ends `needs_input` ("Verify your email for Acme"), the browser closed (§4.4); the user's "Done" re-enqueues it.
    - `active` → "Sign In" with the stored password. Event `account_signin`.
    - "account already exists" on create → `exists_elsewhere`, the run goes to `apply-person`: the window opens on Sign In and the person signs in; nothing is stored.
@@ -365,7 +376,7 @@ Before anything: the swipe gate as for every board (right swipe, `isTest === fal
 
 **Five changes:**
 
-1. **India-only storage on every board (M2).** `stores` defaults to India-eligible (`india`, `remote_india`); abroad jobs only from the companies the owner keeps for abroad seekers (§11 Q1). Greenhouse's open rows fall from 20,042 to about 2,700 on the first run.
+1. **India-only storage on every board (M2).** `stores` defaults to India-eligible (`india`, `remote_india`); abroad jobs only from the companies the owner keeps for abroad seekers (owner, 9 Nov: kept for today's companies). Greenhouse's open rows fall from 20,042 to about 2,700 on the first run.
 2. **Every known company watched, each at its own pace** (`cadence.ts`; owner, 7 Nov):
 
    | Tier | Rule | Read every | Share at 50k (est.) |
@@ -394,18 +405,18 @@ Before anything: the swipe gate as for every board (right swipe, `isTest === fal
 
 No board publishes a rate limit for these public APIs; at under one request a second per board we stay below anything a person browsing a few boards would send, and a 429 halves that host's cap (§4.10).
 
-**Postgres:** India-eligible open jobs on the boards of this phase ≈ 70,000 (Workday 26k, SmartRecruiters 11k, SuccessFactors 9.5k, Darwinbox 6.8k, Greenhouse 4.6k, Workable 3.8k, Keka 3.6k, Lever 2.7k, Ashby 1.1k; fact 10), ≈ 110,000 with Oracle; plus closed rows kept 7 days (+10%) → 77,000–121,000 rows × 11.2 KB ≈ **0.9–1.4 GB for `Job`**, against 468 MB today. `Company` 50,000 × ~0.5 KB ≈ 25 MB; `DiscoveryCandidate` up to 150,000 × ~250 B ≈ 40 MB. Abroad jobs kept only for the companies watched today (§11 Q1) add ≈ 25,000 rows ≈ 0.3 GB; abroad jobs from all 50,000 companies would add millions of rows (tens of GB), which is why storage is India-only. **The Job table and the ingest load grow with companies, never with users**; a million users change nothing in this section.
+**Postgres:** India-eligible open jobs on the boards of this phase ≈ 70,000 (Workday 26k, SmartRecruiters 11k, SuccessFactors 9.5k, Darwinbox 6.8k, Greenhouse 4.6k, Workable 3.8k, Keka 3.6k, Lever 2.7k, Ashby 1.1k; fact 10), ≈ 110,000 with Oracle; plus closed rows kept 7 days (+10%) → 77,000–121,000 rows × 11.2 KB ≈ **0.9–1.4 GB for `Job`**, against 468 MB today. `Company` 50,000 × ~0.5 KB ≈ 25 MB; `DiscoveryCandidate` up to 150,000 × ~250 B ≈ 40 MB. Abroad jobs kept only for the companies watched today (owner, 9 Nov: kept for today's companies) add ≈ 25,000 rows ≈ 0.3 GB; abroad jobs from all 50,000 companies would add millions of rows (tens of GB), which is why storage is India-only. **The Job table and the ingest load grow with companies, never with users**; a million users change nothing in this section.
 
 ### 4.9 Security and privacy
 
 - **What we never do:** use or ask for the password of the user's email, Google, LinkedIn or any account they made themselves; sign in with Google/LinkedIn on an employer site; create an account for a job the user did not right-swipe; create an account for a test profile (`isTest` runs only on the mock, §7).
-- **The generated password:** 20 characters from `crypto.randomBytes`, one upper, lower, digit and symbol from a set every system accepts (`!@#$%`), regenerated if a tenant's rules refuse it. One per `EmployerAccount`.
+- **The application password (owner, 9 Nov):** set by the user in Account, at least 12 characters with a letter, a digit and a symbol; the app says to use it nowhere else; changing it applies to accounts made afterwards. Each `EmployerAccount` keeps its own encrypted copy.
 - **At rest:** AES-256-GCM (`lib/secrets.ts`), key `ACCOUNT_SECRET_KEY` (32 random bytes, base64) in the worker's and web's env, `keyVersion` on each row for rotation. Only `modules/accounts/vault.ts` calls `lib/secrets.ts`.
 - **In use:** the worker decrypts right before typing into the employer's password field on that employer's own host (`formHost` check), never into any other page. Never logged, never in an event, a diagnostic, an error string or a push; password fields are masked in every screenshot (screenshots are taken after sign-in only).
 - **Shown to the user:** Account → Employer accounts → "Show password" (POST, rate-limited to 10 an hour, an audit row each time), so the user can sign in to see the status on the employer's site.
 - **Delete and export:** deleting the SwipeApply account deletes every `EmployerAccount` row (cascade) and tells the user which employers still hold an account in their name; export lists them, with passwords.
 - **How this fits CLAUDE.md's credential rules.** Today's rule ("we never ask for, type, store or log their password or OTP") is about the user's own accounts on signed-in sources (Naukri, LinkedIn); it stays as it is. An employer account's password is not the user's: we make it, for one employer, and the user can see and change it. Codes the employer emails are typed by the worker today already (Greenhouse's security code, which the user gives in the app; `verificationCode` cleared once read, never logged); M9's inbound address only removes the user from that loop, keeping a code or link 15 minutes and never a mail body. Gmail or Outlook read access over OAuth (option 4) would be the first time we hold access to a user's mailbox: not in this phase, and only by a new owner decision with Google's restricted-scope review. The rule below is added, not changed.
-- **CLAUDE.md hard rule (lands with M5):** "Employer accounts: created only after a right swipe on that employer's job and under the user's standing permission; the login is the user's own email and a password we generate per account; stored only through `modules/accounts` (AES-GCM); never logged; typed only on that employer's host; shown only to the user. Never the user's own password for any service; never SSO."
+- **CLAUDE.md hard rule (lands with M5):** "Employer accounts: created only after a right swipe on that employer's job and under the user's standing permission; the login is the user's own email and the application password the user set for this purpose in Account; stored only through `modules/accounts` (AES-GCM); never logged; typed only on that employer's own sign-in page; shown only to the user. Never SSO. The signed-in sources rule (never a Naukri or LinkedIn password or OTP) is unchanged."
 
 ### 4.10 Failure handling
 
@@ -542,7 +553,7 @@ No change for boards with public forms beyond their logos.
 | `ats-smoke` dry runs | each board | 3 forms of companies hiring in India fill and stop before Submit |
 | One real submit by the owner's profile | each board | Before `APPLY_BOARDS` |
 
-Test profiles (`isTest`) never create a real employer account: the runner blocks every account board's host for them, as it blocks real forms today (§11 Q6 for the mock rule).
+Test profiles (`isTest`) never create a real employer account: the runner blocks every account board's host for them, as it blocks real forms today (§11 for the mock rule).
 
 ---
 
@@ -565,7 +576,7 @@ Test profiles (`isTest`) never create a real employer account: the runner blocks
 | Employer accounts look like an account farm to an employer | One account per user per tenant, only after a right swipe, the user's own email, a person's pace, `max_accounts_created_per_tenant_per_hour`; the worker never creates an account it will not use at once |
 | Workday's invisible checks refuse the worker | Start in a visible window with real clicks (as Ashby); a refusal hands the window over; measure before headless |
 | A stored password leaks | One per employer, AES-GCM, key outside the database, never logged; a leak opens one employer account of one user, which the user can reset |
-| An employer's terms forbid accounts "by automated means" | The user's standing permission names it; each account is the user's own, created at their request for one job; the owner's call (§11 Q2) |
+| An employer's terms forbid accounts "by automated means" | The user's standing permission names it; each account is the user's own, created at their request for one job; the owner's call (§11) |
 | Workday's Candidate Profile changes the flow in 2027 | `secret` nullable; the code path exists (option 1); the wizard stays per tenant |
 | Seed lists carry dead or wrong slugs (Hugging Face's Ashby rows ~48% dead) | Every slug verified on the board's own API before it is watched; dead ones cost one call every 90 days |
 | A list's licence forbids commercial use | Only MIT and CC BY sources; the licence recorded per list in code; Feashliaa's CC BY-NC data never read |
@@ -581,24 +592,22 @@ In [TASKS.md](TASKS.md) beside this file: M1–M20 with their Do, the design sec
 
 ---
 
-## 11. Open questions for the owner
+## 11. Decisions closed with the owner (9 Nov)
 
-Each has a recommendation; the task it blocks is in brackets.
-
-1. **Abroad jobs.** Storage becomes India-eligible only on every board. Keep abroad jobs for the ~460 Greenhouse and Lever companies watched today, so users who pick places abroad still see them (+0.3 GB), or drop abroad jobs everywhere? *Recommended: keep them for today's companies only.* [M2]
-2. **Employer accounts.** May the agent create an employer account in the user's name, with their own email and a password we generate per employer, stored encrypted and shown only to them, after a right swipe and under a once-asked permission (option C, §3.2)? This adds a CLAUDE.md hard rule (§4.9). Alternatives: one password the user sets (Tsenta), or no account boards. Same question as the Naukri plan's Q10. *Recommended: C.* [M5, M6, M8, M10, M11]
-3. **The email step at scale.** Ship with the user clicking links and typing codes (option 1). For later, pick between a private relay address per user (option 2, Tsenta's and Kombo's way: fully automatic, but employers see our address) and a Gmail forwarding filter to our inbound address (option 3: the user's own email stays on the application, one-time setup). Or stay manual, and Oracle stays out. *Recommended: option 1 now, option 3 next.* [M9, M11]
-4. **Workday on the screen worker first.** Workday has its own invisible human checks. Start Workday like Ashby, in a visible window on the worker with a screen, with headless only after measuring? *Recommended: yes.* [M6]
-5. **Seed lists.** Use ats-scrapers (MIT), upstreamit (MIT), openroles, jobseek (MIT) and Hugging Face `latmay` (CC BY 4.0, credited in the docs) for company slugs, verifying each on the board's own API? Use the stapply hosted dataset only for counting and slugs, never its job texts? *Recommended: yes to both.* [M3, M4]
-6. **The mock rule.** Test profiles may only run against `/mock/greenhouse` today. Widen the CLAUDE.md hard rule to `/mock/*` so `/mock/workday` can test the account flow (the Naukri plan's K4b asks the same)? *Recommended: yes.* [M5]
-7. **Neon storage.** The `Job` table grows from 0.47 GB to about 0.9–1.4 GB (1.7 GB with abroad jobs kept). Is the current Neon plan's limit enough, or do we approve the next plan now? [M3]
-8. **Task moves.** T95 (SmartRecruiters) moves to M7 and T98 (more slug sources) is superseded by M3 and M4. Both are marked moved in Phase J. T94 (Lever) stays in Phase J and counts Lever's seeded jobs once it lands. *Recommended: yes.* [index]
-9. **Non-tech pools.** Darwinbox needs an employer account like Workday, and the dataset's Darwinbox jobs are mostly banking and insurance (882 of 6,757 India jobs are tech; its own feeds also show Airtel, MakeMyTrip and Porter). Keep it fifth, which serves the non-tech users of T85, or move it after Workable? *Recommended: keep it fifth, and let M1's numbers decide.* [M10]
-10. **Paid sources and the DPIIT list.** No paid feed (TheirStack and the like) for now. Is downloading the DPIIT startup list (236k companies with websites, on Dataful, licence not stated) fine once its terms are read? *Recommended: no paid feed; DPIIT only with clear terms.* [M4]
-12. **Bot checks** (§3.5): the default is that the worker's ordinary click either passes or the job is not offered for apply. The next step is each user's own live view on their phone, solving their own checks (M20). Never a solver service. Should Keka's in-house AI reading of its CAPTCHA (`ENABLE_KEKA`) move to the live view once it exists? *Recommended: yes to all three.* [M7, M12, M13, M20]
-13. **Judgement cost at scale** (§4.14): cap judged jobs at 150 per user per day now, and share verdicts across similar resumes (profile clusters) before 100k daily users if M18's sample shows no loss in quality? *Recommended: yes.* [M18]
-14. **Per-IP pace** (§4.15): start every board at 30 submits per container address per hour and raise only on clean numbers. Accept that scale comes from more containers, never rented residential addresses? *Recommended: yes.* [M19]
-15. **Signed-in Indian portals** (Naukri, foundit, hirist, iimjobs, Instahyre) come after this phase, as the owner said on 7 Nov. Nothing in this plan touches them.
+1. **Abroad jobs:** kept only for the companies watched today (~460 Greenhouse and Lever); every new company stores India-eligible jobs only. [M2]
+2. **Employer accounts:** yes, with **one application password the user sets** (option B, §3.2), not a generated one; the agent creates each account with the user's own email after a right swipe. [M5]
+3. **The email step:** stays manual (the user clicks the link or types the code). Oracle and M9 parked. [M9, M11]
+4. **Workday:** a visible window on the screen worker first; headless only on measured numbers. [M6]
+5. **Seed lists:** all of them (ats-scrapers, upstreamit, openroles, jobseek; Hugging Face `latmay` credited); the hosted dataset for slugs and counts only. [M3, M4]
+6. **The mock rule:** widened to `/mock/*` in CLAUDE.md. [M5]
+7. **Neon storage:** the current plan is fine; the daily report flags at 2 GB. [M3]
+8. **Task moves:** T95 → M7, T98 → M3 and M4. [index]
+9. **Order:** boards that need an account (Darwinbox, Workday, SuccessFactors, Oracle) come after the public-form boards (§3.4). [all]
+10. **Discovery sources:** no paid feed; the DPIIT list only if its terms allow. [M4]
+11. **Bot checks:** as Ashby and Keka today (§3.5): score checks in a visible window with handoff, image CAPTCHAs read by the worker under a per-board switch, always-shown checkboxes as handoff boards. No live view now, no solver service. [M7, M12, M13]
+12. **Judgement cost:** cap at 150 judged jobs per user per day now; shared verdicts between similar resumes only after a sample test. [M18]
+13. **Per-IP pace:** 30 submits per container address per hour per board to start, raised on clean numbers; scale by more containers, never rented residential addresses. [M19]
+14. **Signed-in Indian portals:** after this phase (owner, 7 Nov).
 
 ---
 

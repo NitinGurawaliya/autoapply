@@ -2,16 +2,17 @@
 
 This is the task file for [TDD.md](TDD.md). The root [docs/TASKS.md](../TASKS.md) Phase M section lists these tasks one line each and links here. This file holds the full entry for each task: Do, the design sections it builds, Done when, and the `Done <date>:` line once it lands. Mark `[~]` / `[x]` here first, then on the root line.
 
-The order is the TDD's ranking ([3.4](TDD.md#34-the-ranking-open-india-jobs-per-task-session)), set so the most India jobs arrive soonest:
+The order is the owner's (9 Nov, [TDD 3.4](TDD.md#34-the-ranking-open-india-jobs-per-task-session)): boards with public forms first, boards that need an employer account later.
 1. M1 and M2, the measure and the scale.
-2. M3, every known company on boards we already apply on.
-3. M5 and M6 (Workday), M7 (SmartRecruiters), M8 (SuccessFactors), M10 (Darwinbox).
-4. M4, beside them from M3 on.
-5. M9 and M11 (Oracle), M12 (Workable), M13 (Zoho Recruit), M14 and M15 (the long tail).
+2. M3, every known company on the boards we already apply on (the GitHub and Hugging Face company lists).
+3. M7 (SmartRecruiters), M12 (Workable), M13 (Zoho Recruit), then M14 (the long tail).
+4. M4, beside them from M3 on; M16–M19 alongside, when their triggers come (TDD 3.4).
+5. Later, the account block: M5 (application password), M6 (Workday), M8 (SuccessFactors), M10 (Darwinbox).
+6. Parked: M9, M11 (Oracle), M15 (iCIMS), M20.
 
-After M3, two weeks of M1's daily numbers confirm or reorder 5 onward. Each task is one session, plan first, with the Done-when check run and its output pasted, then typecheck and lint. Tasks that make a decision update ARCHITECTURE in the same change.
+After M3, two weeks of M1's daily numbers confirm or reorder 3 and 5. Each task is one session, plan first, with the Done-when check run and its output pasted, then typecheck and lint. Tasks that make a decision update ARCHITECTURE in the same change.
 
-The owner's open questions are in [TDD §11](TDD.md#11-open-questions-for-the-owner); each entry below names the question it waits on. Naukri and the other signed-in Indian portals (foundit, hirist, iimjobs, Instahyre) come after this phase (owner, 7 Nov).
+The owner's decisions are in [TDD §11](TDD.md#11-decisions-closed-with-the-owner-9-nov); nothing below waits on a question. Naukri and the other signed-in Indian portals (foundit, hirist, iimjobs, Instahyre) come after this phase (owner, 7 Nov).
 
 <a id="m1"></a>
 ### [ ] M1 — Board measurement, daily
@@ -32,11 +33,11 @@ Do:
 - Write `cadence.ts` with the tiers `active` / `open` / `empty` / `dead`, back-off and jitter.
 - Write `ingestCompany(id)` in `ingest.ts`, with the list → detail split and the `listHash` short-circuit, starting with Greenhouse, Lever, Ashby, Keka and Workday.
 - Add the `ingest-tick` and `ingest-company` queues with the per-host cap, behind `INGEST_MODE`.
-- Make `stores` India-eligible by default. Keep abroad jobs only as the owner answers Q1.
+- Make `stores` India-eligible by default. Keep abroad jobs only for the companies watched before M3 (owner, 9 Nov: Greenhouse and Lever's ~460).
 - Delete closed rows after 7 days.
 - Update ARCHITECTURE §6.2 and §11.
 
-Design: [4.2 Queues](TDD.md#42-queues-pg-boss) · [4.3 Data model](TDD.md#43-data-model-prisma-additions) · [4.8 Ingest at 50,000 companies](TDD.md#48-ingest-at-50000-companies-load-and-postgres-size) · [4.10 Failure handling](TDD.md#410-failure-handling) · [8 Rollout](TDD.md#8-rollout) step 2. Waits on: Q1.
+Design: [4.2 Queues](TDD.md#42-queues-pg-boss) · [4.3 Data model](TDD.md#43-data-model-prisma-additions) · [4.8 Ingest at 50,000 companies](TDD.md#48-ingest-at-50000-companies-load-and-postgres-size) · [4.10 Failure handling](TDD.md#410-failure-handling) · [8 Rollout](TDD.md#8-rollout) step 2.
 **Done when:**
 - `cadence-test` and `ingest-contract-test` PASS.
 - `ingest-scale-smoke` passes on 20,000 synthetic companies: the oldest overdue company is under 1 hour, the per-host cap is never exceeded, and the run prints requests a day.
@@ -48,12 +49,12 @@ Design: [4.2 Queues](TDD.md#42-queues-pg-boss) · [4.3 Data model](TDD.md#43-dat
 ### [ ] M3 — Seed every known company on the boards we apply on
 Do:
 - Extend `boardSeeds.ts` / `scripts/discover-boards.ts --import` from Greenhouse, Lever and Ashby to every board in `boards.ts`, keeping Keka, Workday and Zoho slugs as hosts.
-- Import the open lists the owner allows (Q5): ats-scrapers `ats-companies/`, upstreamit's live slugs, openroles and jobseek, and Hugging Face `latmay`, credited. Record each list's commit or checksum and its licence in `slugSources/lists.ts`.
+- Import the open lists (owner, 9 Nov: all of them): ats-scrapers `ats-companies/`, upstreamit's live slugs, openroles and jobseek, and Hugging Face `latmay`, credited. Record each list's commit or checksum and its licence in `slugSources/lists.ts`.
 - Verify each slug on the board's own API and watch every one that is a board, whether or not it lists an India job today. Its tier comes from what it lists.
 - Board order: Greenhouse, Ashby, Keka, Lever (watched now, applied to once T94 lands), then Workday for ingest (applied to after M6).
 - Each import is a dry run first, with counts only.
 
-Design: [3.3 Discovery at scale](TDD.md#33-discovery-at-scale) · [4.7 Sequence: discovery](TDD.md#47-sequence-discovery-at-scale) steps 2–3 · [2 Facts](TDD.md#2-facts-the-design-rests-on-research-and-measurements-7-nov-2026) 8, 10, 16. Waits on: Q5, Q7.
+Design: [3.3 Discovery at scale](TDD.md#33-discovery-at-scale) · [4.7 Sequence: discovery](TDD.md#47-sequence-discovery-at-scale) steps 2–3 · [2 Facts](TDD.md#2-facts-the-design-rests-on-research-and-measurements-7-nov-2026) 8, 10, 16.
 **Done when:**
 - Per board, the report shows slugs listed per source, checked, on the board, watched by tier, and open India jobs before and after.
 - Open India-eligible jobs on Greenhouse, Ashby, Keka and Lever rise by at least 3,000 over the 7 Nov count (11,341 across all boards).
@@ -67,10 +68,10 @@ Do: build the `slugSources/` layer and the `discover-source` and `discover-verif
 - a one-off Wayback backfill for Lever and Ashby;
 - a monthly re-read of the lists;
 - links harvested from ingested `applyUrl`s and descriptions (ATS hosts, and Phenom apply links to their Workday or SuccessFactors tenant);
-- the India probe (T93) over DPIIT and YC company websites if Q10 allows.
+- the India probe (T93) over DPIIT and YC company websites if its terms allow (owner, 9 Nov; no paid sources).
 
 Re-validation runs on `nextCheckAt`. Remove model-proposed names and the CDX loop from `discovery.ts`. Update ARCHITECTURE §6.2.
-Design: [3.3 Discovery at scale](TDD.md#33-discovery-at-scale) · [4.7 Sequence: discovery](TDD.md#47-sequence-discovery-at-scale) · [4.12 Code map](TDD.md#412-code-map). Waits on: Q10 for DPIIT only.
+Design: [3.3 Discovery at scale](TDD.md#33-discovery-at-scale) · [4.7 Sequence: discovery](TDD.md#47-sequence-discovery-at-scale) · [4.12 Code map](TDD.md#412-code-map).
 **Done when:**
 - `board-seeds-test` PASS for every board's crawl and list parsing.
 - One crawl's pass lists slugs for every board in under 10 minutes.
@@ -78,18 +79,19 @@ Design: [3.3 Discovery at scale](TDD.md#33-discovery-at-scale) · [4.7 Sequence:
 - Typecheck and lint pass.
 
 <a id="m5"></a>
-### [ ] M5 — Employer accounts: vault, permission, the email step by the user
+### [ ] M5 — Employer accounts: application password, vault, permission, the email step by the user
 Do:
 - Add the `EmployerAccount` model and its migration.
 - Write `lib/secrets.ts` (AES-256-GCM, `ACCOUNT_SECRET_KEY`, key versions) and `modules/accounts` (the only code that reads `secret`).
+- The application password (owner, 9 Nov): the user sets it once in Account (at least 12 characters, a letter, a digit and a symbol; "use it nowhere else"); each new employer account stores its own encrypted copy.
 - Add the `create_employer_accounts` standing permission and its sheet.
 - Build the account flow's shared steps in `modules/apply/account/flow.ts`: create, sign in, `needs_verification` (the run ends, "Done" re-enqueues it), `exists_elsewhere` (to `apply-person`), and codes through `codeRequester`.
 - Add Account → Employer accounts (list, reveal with audit and rate limit, forget), the `/api/accounts/employers` routes and `/api/applications/[id]/verified`.
 - Build `/mock/workday`.
 - Add `max_accounts_created_*` to `config/rules.json`.
-- Write ARCHITECTURE §6.21 and §11. Add the CLAUDE.md hard rule in §4.9 and widen the mock rule as Q6 says.
+- Write ARCHITECTURE §6.21 and §11. Add the CLAUDE.md hard rule in §4.9 and widen the mock rule to `/mock/*` (owner, 9 Nov).
 
-Design: [3.2 Employer accounts](TDD.md#32-boards-that-need-an-employer-account) · [4.3 Data model](TDD.md#43-data-model-prisma-additions) · [4.4 State machine](TDD.md#44-employer-account-state-machine) · [4.9 Security](TDD.md#49-security-and-privacy) · [5 UI](TDD.md#5-ui) · [6 API](TDD.md#6-api). Waits on: Q2, Q6.
+Design: [3.2 Employer accounts](TDD.md#32-boards-that-need-an-employer-account) · [4.3 Data model](TDD.md#43-data-model-prisma-additions) · [4.4 State machine](TDD.md#44-employer-account-state-machine) · [4.9 Security](TDD.md#49-security-and-privacy) · [5 UI](TDD.md#5-ui) · [6 API](TDD.md#6-api).
 **Done when:**
 - `vault-test` PASS, including that the password appears in no event, log line or error.
 - `account-flow-smoke` on `/mock/workday` passes for a test profile: create, verify by "Done", sign in on a second run, and `exists_elsewhere` handed over.
@@ -106,7 +108,7 @@ Do: first, read the open-source Workday code ([TDD §12](TDD.md#12-research-note
 - routing to `apply-handoff` (a visible window, the worker's click) until measured.
 
 Write `scripts/workday-test.ts` on saved pages. Put Workday in `APPLY_BOARDS` behind `ENABLE_ACCOUNT_BOARDS` and `ACCOUNT_BOARDS_USERS`. The K12 entry in `docs/naukri/TASKS.md` then points here.
-Design: [4.6 Sequence: Workday](TDD.md#46-sequence-workday-apply-with-an-employer-account) · [3.1 Bot checks](TDD.md#31-which-boards-and-in-what-order) · [4.10 Failure handling](TDD.md#410-failure-handling). Waits on: Q2, Q4.
+Design: [4.6 Sequence: Workday](TDD.md#46-sequence-workday-apply-with-an-employer-account) · [3.1 Bot checks](TDD.md#31-which-boards-and-in-what-order) · [4.10 Failure handling](TDD.md#410-failure-handling). Workday runs in a visible window first (owner, 9 Nov).
 **Done when:**
 - `workday-test` PASS.
 - Dry runs on 3 tenants with India jobs (e.g. Genpact, Citi, Hitachi) fill every page and stop before Submit.
@@ -137,7 +139,7 @@ Do:
 - Build `adapters/successfactors.ts` on M5's flow: an account per company, with the email step as code, link or none per company.
 - Follow the wizard of the RMK apply pages.
 
-Design: [2 Facts](TDD.md#2-facts-the-design-rests-on-research-and-measurements-7-nov-2026) (account systems) · [4.4 State machine](TDD.md#44-employer-account-state-machine) · [4.5 Recipe](TDD.md#45-sequence-adding-a-board-with-a-public-form-the-recipe). Waits on: Q2.
+Design: [2 Facts](TDD.md#2-facts-the-design-rests-on-research-and-measurements-7-nov-2026) (account systems) · [4.4 State machine](TDD.md#44-employer-account-state-machine) · [4.5 Recipe](TDD.md#45-sequence-adding-a-board-with-a-public-form-the-recipe).
 **Done when:**
 - Ingest stores India jobs from EY GDS, Wipro and Mahindra.
 - Dry runs on 3 companies stop before Submit.
@@ -145,13 +147,13 @@ Design: [2 Facts](TDD.md#2-facts-the-design-rests-on-research-and-measurements-7
 - `APPLY_BOARDS` behind `ENABLE_ACCOUNT_BOARDS`.
 
 <a id="m9"></a>
-### [ ] M9 — The email step, automatic
-Do: the option the owner picks in Q3.
+### [-] M9 — The email step, automatic (parked: the owner keeps it manual, 9 Nov)
+Parked 9 Nov: the owner keeps the email step manual. If that changes, do: the option the owner picks.
 - Option 2 (a private relay address per user): the account email becomes the relay.
 - Option 3 (a Gmail forwarding filter to our inbound address): the user's own email stays on the application.
 
 Either way, add an inbound mail service (provider chosen with the owner) whose webhook keeps only the code or link for 15 minutes, keyed to the waiting application, and forwards or drops everything else. Then `codeRequester` and `needs_verification` read from it before asking the user. ARCHITECTURE §6.21 is updated.
-Design: [3.2 Email step](TDD.md#32-boards-that-need-an-employer-account) · [4.9 Security](TDD.md#49-security-and-privacy). Waits on: Q3.
+Design: [3.2 Email step](TDD.md#32-boards-that-need-an-employer-account) · [4.9 Security](TDD.md#49-security-and-privacy).
 **Done when:**
 - On `/mock/workday`, a verification link and a code mailed to the inbound address are used with no person in the loop.
 - No mail body is stored past 15 minutes (checked in the test).
@@ -164,7 +166,7 @@ Do:
 - Write `adapters/darwinbox.ts` on M5's flow: create an account per employer with email and password, its sign-up code through the code sheet (or M9), then the apply form.
 - The form has Turnstile, so the adapter starts in a visible window and a challenge hands it over.
 
-Design: [3.1 Order](TDD.md#31-which-boards-and-in-what-order) · [4.4 State machine](TDD.md#44-employer-account-state-machine) · [4.5 Recipe](TDD.md#45-sequence-adding-a-board-with-a-public-form-the-recipe). Waits on: Q2, Q9.
+Design: [3.1 Order](TDD.md#31-which-boards-and-in-what-order) · [4.4 State machine](TDD.md#44-employer-account-state-machine) · [4.5 Recipe](TDD.md#45-sequence-adding-a-board-with-a-public-form-the-recipe).
 **Done when:**
 - Ingest stores Porter's, MakeMyTrip's and Airtel's India jobs.
 - Dry runs on 3 employers stop before Submit.
@@ -172,7 +174,7 @@ Design: [3.1 Order](TDD.md#31-which-boards-and-in-what-order) · [4.4 State mach
 - `APPLY_BOARDS` behind `ENABLE_ACCOUNT_BOARDS`.
 
 <a id="m11"></a>
-### [ ] M11 — Oracle Recruiting
+### [-] M11 — Oracle Recruiting (parked with M9)
 Do:
 - First read ats-scrapers' Oracle scraper (MIT, Python) for fetch logic to port, credited.
 - Write `fetchers/oracle.ts` on the CE REST requisitions with the India location facet, and its detail.
@@ -258,9 +260,9 @@ Do:
 - Cap judged jobs per user per day (`max_judged_per_user_per_day`, 150).
 - Write a daily cost line in `BoardDay`'s report: embedding tokens, judgement tokens and dollars at list price.
 - Check the prices against the OpenAI bill.
-- If the owner agrees (Q13), run a profile-cluster experiment that compares shared verdicts with per-user verdicts on a sample of 500.
+- Then (owner, 9 Nov), run a profile-cluster experiment that compares shared verdicts with per-user verdicts on a sample of 500.
 
-Design: [4.14 Model cost at volume](TDD.md#414-model-cost-at-volume). Waits on: Q13 for the clusters.
+Design: [4.14 Model cost at volume](TDD.md#414-model-cost-at-volume).
 **Done when:**
 - A week's cost per day and per active user is in the Done line.
 - The cap holds in `judge-test`.
@@ -271,12 +273,12 @@ Design: [4.14 Model cost at volume](TDD.md#414-model-cost-at-volume). Waits on: 
 ### [ ] M19 — Apply fleet and per-IP pace
 Do:
 - Measure browser-minutes per application per board from events.
-- Add `max_submits_per_ip_per_board_per_hour` to `config/rules.json` (30 to start), enforced with the existing `rateLimit` keyed by the container's egress address.
+- Add `max_submits_per_ip_per_board_per_hour` to `config/rules.json` (30 to start, owner, 9 Nov), enforced with the existing `rateLimit` keyed by the container's egress address.
 - Scale containers on apply-queue depth (DEPLOY.md).
 - Write a load run of the mock board at 200 applications an hour across 4 containers.
 - Update ARCHITECTURE §6.7 and §12.
 
-Design: [4.15 Fleet and board health](TDD.md#415-the-apply-fleet-and-board-health). Waits on: Q14.
+Design: [4.15 Fleet and board health](TDD.md#415-the-apply-fleet-and-board-health).
 **Done when:**
 - Browser-minutes per board are measured.
 - The per-IP limit holds in a test.
@@ -284,7 +286,7 @@ Design: [4.15 Fleet and board health](TDD.md#415-the-apply-fleet-and-board-healt
 - Typecheck and lint pass.
 
 <a id="m20"></a>
-### [ ] M20 — The user's own live view for bot checks
+### [-] M20 — The user's own live view for bot checks (parked: bot checks stay as Ashby and Keka do them, 9 Nov)
 Do:
 - When a check needs a person, stream the worker's window to the user's phone or browser (a CDP screencast, input sent back), from the application's "Needs you" card.
 - The user solves their own check and presses Submit.
@@ -292,7 +294,7 @@ Do:
 - `always`-check boards (and Keka, if the owner says so) move to it.
 - Update ARCHITECTURE "Human handoff".
 
-Design: [3.5 Bot checks](TDD.md#35-bot-checks-a-policy-per-board-owner-decision). Waits on: Q12.
+Design: [3.5 Bot checks](TDD.md#35-bot-checks-a-policy-per-board-owner-decision).
 **Done when:**
 - On the mock, a test profile solves a mock challenge from a phone-sized browser and the application ends `submitted`.
 - One real Keka or Zoho handoff is done from the owner's phone.
