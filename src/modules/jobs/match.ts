@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { daysAgoLabel } from "@/lib/days";
 import { cachedFeed, rememberFeed } from "@/lib/feed-cache";
 import { companyKey, feedHistory, loadRules, roleKey } from "@/modules/governance";
-import { ADJACENT, classifyTitle, TRACK_LABELS, TRACKS, trackFit, type Track, tracksOf } from "./functions";
+import { classifyTitle, SENIORITIES, TRACK_LABELS, TRACKS, trackFit, type Track, tracksOf } from "./functions";
 import { companyResultsById, judge } from "./results";
 import { judgeJobs, type Judgement, profileVector } from "./semantic";
 import { requiredYears } from "./tagging";
@@ -169,6 +169,58 @@ const FIT_POINTS = { strong: 30, good: 20, stretch: 8 } as const;
 // The lowest score of each tier (tierOf): a verdict the level and place agree with shows at least that tier.
 const VERDICT_FLOOR = { strong: 75, good: 60, stretch: 0 } as const;
 
+// Strict matching (owner, 9 Nov: "only exact matches"). Hard filters decide which jobs a user may see; closeness by
+// meaning and the model's verdict only rank the jobs that pass. Before this, a seniority gap only capped the score
+// (2 years over → 50, above min_match_score 40) and the tracks were no gate once the resume had a vector, so SDE II
+// roles showed to 0-1 year users and data, DevOps and non-tech roles filled their decks (scripts/feed-audit.ts).
+
+/** The most years a job may ask of a candidate: their whole years, and 1 for a fresher (a "0-1 years" role). Unknown
+ * years count as a fresher: the feed never guesses a candidate more senior than they said. */
+export function yearsBand(years: number | null | undefined) {
+  return Math.max(1, Math.floor(years ?? 0));
+}
+
+// The years a stated level needs (functions.ts seniorityOf; tagging.ts titleYears reads the same titles as II ≈ 2,
+// Senior ≈ 5, lead or manager ≈ 6). Interns are not shown from 3 years, entry roles not from 5.
+const LEVEL_MIN_YEARS: Record<string, number> = { intern: 0, entry: 0, mid: 2, senior: 5, staff: 6, manager: 6 };
+
+/** Whether a job's stated level suits the candidate's years. A job that states no level passes on this count. */
+export function levelAllowed(level: string | null | undefined, years: number | null | undefined) {
+  if (!level) return true;
+  const have = years ?? 0;
+  if (level === "intern" && have >= 3) return false;
+  if (level === "entry" && have >= 5) return false;
+  return (LEVEL_MIN_YEARS[level] ?? 0) <= yearsBand(years);
+}
+
+/** The levels a candidate may see, for the SQL gate (feedRows). */
+export function levelsFor(years: number | null | undefined) {
+  return SENIORITIES.filter((level) => levelAllowed(level, years));
+}
+
+// Any developer track can take a plain "Software Engineer" / "SDE" role (track `software`); a data scientist, QA,
+// security or DevOps candidate cannot.
+const GENERIC_SOFTWARE_OK: readonly string[] = ["frontend", "backend", "fullstack", "mobile", "ml_ai", "software"];
+
+/** The tracks a candidate's feed shows by default: their own, plus plain software roles for developers. Adjacent
+ * tracks show only when the user picks them in the Track filter. Null = no gate (a profile without tracks). */
+export function feedTracks(tracks: string[]): string[] | null {
+  if (tracks.length === 0) return null;
+  return [...new Set([...tracks, ...(tracks.some((track) => GENERIC_SOFTWARE_OK.includes(track)) ? ["software"] : [])])];
+}
+
+/** Why a job fails the years or level gate for this candidate, or null when it passes. */
+export function bandMiss(job: { requiredYears: number | null; seniority: string | null }, years: number | null | undefined) {
+  const band = yearsBand(years);
+  if (job.requiredYears != null && job.requiredYears > band) return `They want about ${job.requiredYears}+ years; you have ${years ?? 0}`;
+  if (!levelAllowed(job.seniority, years)) return job.seniority === "intern" || job.seniority === "entry" ? "An entry-level role, below your experience" : `A ${job.seniority} role, above your experience`;
+  return null;
+}
+
+// A job that states neither its years nor its level can't be proven off-band, so it stays, but never as Strong: the
+// most it can score is the top of Good.
+const UNSTATED_CAP = 74;
+
 /** Strong, good or stretch from the score; null below the minimum. */
 export function tierOf(score: number, minScore: number): Tier | null {
   if (score >= 75) return "strong";
@@ -185,6 +237,8 @@ export function scoreJob(
     experienceMin: number | null;
     /** The stored track (Job.track, written at ingest from classifyTitle); null or missing = classified from the title. */
     track?: string | null;
+    /** The stored level (Job.seniority); missing = read from the title. */
+    seniority?: string | null;
     /** Closeness to the resume by meaning (semantic.ts jobSimilarity); null or missing = match by tracks. */
     similarity?: number | null;
     /** The model's verdict on this job for this resume (semantic.ts judgeJobs). */
@@ -198,7 +252,8 @@ export function scoreJob(
   // The same features the feed scores with (listFeed's scoreAll): the stored track and years, each read from the title
   // and text only when not stored. Two scorers fed differently showed a card the swipe then refused, and the reverse
   // (1 Nov verification, finding 3).
-  return scoreFeatures({ title: job.title, track: job.track ?? classifyTitle(job.title).track, similarity: job.similarity, judgement: job.judgement, country: job.country, remoteType: job.remoteType, requiredYears: job.experienceMin ?? requiredYears(job.title, job.description), skillHits }, candidate);
+  const kind = classifyTitle(job.title);
+  return scoreFeatures({ title: job.title, track: job.track ?? kind.track, seniority: job.seniority === undefined ? kind.seniority : job.seniority, similarity: job.similarity, judgement: job.judgement, country: job.country, remoteType: job.remoteType, requiredYears: job.experienceMin ?? requiredYears(job.title, job.description), skillHits }, candidate);
 }
 
 /**
@@ -206,6 +261,18 @@ export function scoreJob(
  * finds them in the description; the feed finds them in Postgres (feedRows) so descriptions never leave the database.
  */
 export function scoreFeatures(
+  job: { title: string; track?: string | null; seniority?: string | null; similarity?: number | null; judgement?: Judgement | null; country: string; remoteType: string; requiredYears: number | null; skillHits: string[] },
+  candidate: Candidate,
+) {
+  // The hard gate before any score: years and level (bandMiss). The feed reads only jobs that pass it (feedRows); the
+  // swipe check (lifecycle.ts) gets the same 0 for one that doesn't.
+  const miss = bandMiss({ requiredYears: job.requiredYears, seniority: job.seniority ?? null }, candidate.yearsExperience);
+  if (miss) return { score: 0, reason: miss, requiredYears: job.requiredYears, skillHits: job.skillHits };
+  const scored = scoreInBand(job, candidate);
+  return job.requiredYears == null && !job.seniority ? { ...scored, score: Math.min(UNSTATED_CAP, scored.score) } : scored;
+}
+
+function scoreInBand(
   job: { title: string; track?: string | null; similarity?: number | null; judgement?: Judgement | null; country: string; remoteType: string; requiredYears: number | null; skillHits: string[] },
   candidate: Candidate,
 ) {
@@ -369,6 +436,7 @@ type FeedRow = {
   stage: string | null;
   logoUrl: string | null;
   track: string | null;
+  seniority: string | null;
   similarity: number | null;
   firstSeenAt: Date;
   hits: number[];
@@ -393,6 +461,9 @@ export async function feedRows(input: {
   countries: string[];
   /** The most years a job may ask for the Fresher (1) or Early career (2) level; null = any level. */
   levelYears: number | null;
+  /** The candidate's hard band (yearsBand, levelsFor): the most years a job may ask, and the levels it may state.
+   * Null = no band (the reference feed in feed-sql-test leaves it to scoreJob). */
+  band?: { maxYears: number; levels: string[] } | null;
   stages: string[] | null;
   tracks: string[] | null;
   /** The resume's vector (semantic.ts): each job's closeness to it is read, and jobs below the floor are left out. */
@@ -430,7 +501,7 @@ export async function feedRows(input: {
     ),
     candidates AS (
       SELECT j.id, j.title, j."contentHash", j.location, j.source, j.country, j."remoteType", j."experienceMin", j."applyUrl", j."postedAt",
-             j."companyId", c.name AS company, c.stage, c."logoUrl", j.track, j."firstSeenAt", coalesce(h.hits, '{}') AS hits,
+             j."companyId", c.name AS company, c.stage, c."logoUrl", j.track, j.seniority, j."firstSeenAt", coalesce(h.hits, '{}') AS hits,
              CASE WHEN ${input.vector}::text IS NULL OR j.embedding IS NULL THEN NULL
                   ELSE (1 - (j.embedding <=> ${input.vector}::halfvec))::float8 END AS similarity
       FROM "Job" j
@@ -448,6 +519,9 @@ export async function feedRows(input: {
         AND (${input.levelYears}::int IS NULL OR j.source = 'mock' OR
              ((j.seniority IN ('intern', 'entry') OR j.seniority IS NULL) AND j."experienceMin" IS NOT NULL AND j."experienceMin" <= ${input.levelYears}::int) OR
              ((j.seniority IN ('intern', 'entry') OR j.seniority IS NULL) AND j."experienceMin" IS NULL))
+        -- The candidate's band (strict matching, 9 Nov): no more years than they have, no level above them.
+        AND (${input.band?.maxYears ?? null}::int IS NULL OR j.source = 'mock' OR j."experienceMin" IS NULL OR j."experienceMin" <= ${input.band?.maxYears ?? null}::int)
+        AND (${input.band?.levels ?? null}::text[] IS NULL OR j.source = 'mock' OR j.seniority IS NULL OR j.seniority = ANY(${input.band?.levels ?? null}::text[]))
         AND (${input.stages}::text[] IS NULL OR c.stage = ANY(${input.stages}::text[]))
         AND (${input.tracks}::text[] IS NULL OR j.source = 'mock' OR j.track = ANY(${input.tracks}::text[]))
         AND (${input.vector}::text IS NULL OR j.embedding IS NULL OR 1 - (j.embedding <=> ${input.vector}::halfvec) >= ${SIMILARITY_FLOOR})
@@ -503,14 +577,13 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView): 
   const minScore = loadRules().min_match_score;
   const cutoff = new Date(Date.now() - filters.days * 24 * 60 * 60 * 1000);
   const sources = profile?.isTest ? [...new Set([...filters.boards, "mock"])] : filters.boards;
-  // The candidate's tracks and the adjacent ones are the only jobs that can score (T82), so only those are read; the
-  // Track filter narrows them further.
+  // The tracks are a hard gate, with or without the resume's vector (strict matching, 9 Nov): the user's own tracks and
+  // plain software roles for developers (feedTracks), or exactly the tracks they pick in the Track filter. Closeness
+  // by meaning and the model's verdict only rank what passes.
   const tracks = profile ? tracksOf(profile) : [];
-  const reachable = [...new Set([...tracks, ...tracks.flatMap((track) => ADJACENT[track as Track] ?? [])])];
-  // With the resume's vector, closeness by meaning decides the field (semantic.ts); the tracks are then only the
-  // optional Track filter. Without it (no API key, the API down), the tracks are the gate.
   const vector = profile ? await profileVector(profile) : null;
-  const shown = filters.tracks.length > 0 ? (vector ? filters.tracks : reachable.filter((track) => filters.tracks.includes(track))) : vector ? null : reachable;
+  const shown = filters.tracks.length > 0 ? filters.tracks : feedTracks(tracks);
+  const years = profile?.yearsExperience ?? null;
   const [jobs, history, results] = await Promise.all([
     feedRows({
       userId,
@@ -518,7 +591,8 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView): 
       countries: filters.countries,
       levelYears: filters.level === "fresher" ? 1 : filters.level === "early" ? 2 : null,
       stages: filters.stages.length > 0 ? filters.stages : null,
-      tracks: tracks.length > 0 || filters.tracks.length > 0 ? shown : null,
+      tracks: shown,
+      band: { maxYears: yearsBand(years), levels: levelsFor(years) },
       vector,
       cutoff,
       expMax: filters.expMax,
@@ -546,13 +620,14 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView): 
       const hits = new Set(job.hits);
       const match = scoreFeatures(
         // A job stored without a track (a fixture, a row from before tracks) is classified from its title, as scoreJob does.
-        { title: job.title, track: job.track ?? classifyTitle(job.title).track, similarity: job.similarity, judgement: judgements.get(job.id) ?? null, country: job.country, remoteType: job.remoteType, requiredYears: job.experienceMin, skillHits: skills.filter((_, index) => hits.has(index)) },
+        { title: job.title, track: job.track ?? classifyTitle(job.title).track, seniority: job.seniority, similarity: job.similarity, judgement: judgements.get(job.id) ?? null, country: job.country, remoteType: job.remoteType, requiredYears: job.experienceMin, skillHits: skills.filter((_, index) => hits.has(index)) },
         {
           currentTitle: profile?.currentTitle ?? null,
           skills,
-          yearsExperience: profile?.yearsExperience ?? null,
+          yearsExperience: years,
           preferredLocations: preferred,
-          tracks,
+          // A track the user picked in the filter counts as theirs for the score (the no-vector path's track gate).
+          tracks: [...new Set([...tracks, ...filters.tracks])],
         },
       );
       return {

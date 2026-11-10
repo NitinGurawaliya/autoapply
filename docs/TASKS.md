@@ -169,6 +169,7 @@ Full entries: [tasks/09-phase-j-more-boards.md](tasks/09-phase-j-more-boards.md)
 - [x] [T104 — Job page: readable, and Apply or Skip goes to the next job (1 Nov, owner)](tasks/09-phase-j-more-boards.md#t104)
 - [x] [T105 — Board logos, one job count, swiping by drag, jobs you skipped (1 Nov, owner)](tasks/09-phase-j-more-boards.md#t105)
 - [x] [T106 — The "Sent!" moment (1 Nov, owner)](tasks/09-phase-j-more-boards.md#t106)
+- [x] [T107 — Strict feed matching: only jobs in the user's band, level and field (9 Nov, owner)](tasks/09-phase-j-more-boards.md#t107)
 
 ## Phase K — Naukri and LinkedIn through the user's own account (owner, 29 Oct)
 

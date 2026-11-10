@@ -5,8 +5,8 @@
 // npx tsx scripts/feed-sql-test.ts
 import { db } from "../src/lib/db";
 import { companyKey, feedHistory, loadRules, roleKey } from "../src/modules/governance";
-import { ADJACENT_TRACKS, companyResultsById, judge, judgeJobs, listFeed, parseFeedFilters, profileVector, scoreJob, tracksOf } from "../src/modules/jobs";
-import { dedupeListings, feedRows } from "../src/modules/jobs/match";
+import { companyResultsById, judge, judgeJobs, listFeed, parseFeedFilters, profileVector, scoreJob, tracksOf } from "../src/modules/jobs";
+import { dedupeListings, feedRows, feedTracks, levelsFor, yearsBand } from "../src/modules/jobs/match";
 
 let failed = 0;
 function check(name: string, ok: boolean, detail = "") {
@@ -73,13 +73,17 @@ async function referenceFeed(userId: string) {
   const preferred = (answers[0]?.answer ?? "").split(",").map((item) => item.trim()).filter((item) => item === "India" || item === "US" || item === "Other");
   const sources = profile?.isTest ? [...new Set([...filters.boards, "mock"])] : filters.boards;
   const tracks = profile ? tracksOf(profile) : [];
-  const reachable = [...new Set([...tracks, ...tracks.flatMap((track) => ADJACENT_TRACKS[track as keyof typeof ADJACENT_TRACKS] ?? [])])];
-  // With the resume's vector, closeness by meaning and the model's verdict decide the field; without, the tracks.
+  // Strict matching (9 Nov): the user's own tracks (plus plain software roles for developers) and their years band are
+  // hard filters; closeness by meaning and the model's verdict rank what passes.
+  const shown = feedTracks(tracks);
+  const years = profile?.yearsExperience ?? null;
   const vector = profile ? await profileVector(profile) : null;
   const [jobs, history, results] = await Promise.all([
     db.job.findMany({
       // India and remote-from-India by default (T80).
-      where: { source: { in: sources }, eligibility: { in: ["india", "remote_india"] }, ...(tracks.length > 0 && !vector ? { track: { in: reachable } } : {}), postedAt: { gte: new Date(Date.now() - filters.days * 864e5) }, closedAt: null, id: { notIn: swipes.map((s) => s.jobId) } },
+      where: { source: { in: sources }, eligibility: { in: ["india", "remote_india"] }, ...(shown ? { track: { in: shown } } : {}),
+        AND: [{ OR: [{ experienceMin: null }, { experienceMin: { lte: yearsBand(years) } }] }, { OR: [{ seniority: null }, { seniority: { in: levelsFor(years) } }] }],
+        postedAt: { gte: new Date(Date.now() - filters.days * 864e5) }, closedAt: null, id: { notIn: swipes.map((s) => s.jobId) } },
       include: { company: { select: { name: true } } },
       orderBy: { id: "asc" }, // the same order feedRows reads, so ties break the same way
     }),
