@@ -51,7 +51,7 @@ const throws = (body: unknown) => {
 const checks: Array<[string, boolean]> = [
   ["the fixed fields carry their answer keys", by("First name")?.hintKey === "first_name" && by("Email")?.hintKey === "email" && by("Address")?.hintKey === "city"],
   ["the phone box is the one beside the country picker", by("Phone")?.selector === "#input_phone" && by("Phone")?.hintKey === "phone"],
-  ["the resume is the resume field's file input", by("Resume")?.type === "file" && by("Resume")?.selector === '[data-ui="resume"] input[type=file]'],
+  ["the resume is the resume field's file input", by("Resume")?.type === "file" && by("Resume")?.selector === 'input[type=file][data-ui="resume"], [data-ui="resume"] input[type=file]'],
   ["optional headline, summary and lists are left out", !by("Headline") && !by("Summary") && !by("Education")],
   ["the cover letter stays, as the cover_letter key", by("Cover letter")?.hintKey === "cover_letter" && by("Cover letter")?.type === "textarea"],
   ["a paragraph question is a textarea", by("What is your notice period?")?.type === "textarea" && by("What is your notice period?")?.selector === '[name="QA_1"]'],

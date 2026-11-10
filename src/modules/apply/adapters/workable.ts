@@ -44,6 +44,9 @@ const HINTS: Record<string, string> = {
 const SKIP = new Set(["headline", "summary", "education", "experience"]);
 
 const shortcodeOf = (url: string) => url.match(/\/j\/([A-Z0-9]{6,})/i)?.[1]?.toUpperCase() ?? null;
+// A file field's `data-ui` is on the file input itself (`<input type=file data-ui="resume">`, 10 Nov: the first real run
+// sent no resume because a selector looked for an input inside it); inside a wrapper too, should a form nest it.
+const fileInput = (id: string) => `input[type=file][data-ui="${id}"], [data-ui="${id}"] input[type=file]`;
 
 /** Workable's form JSON → the FormField shape the runner resolves (selectors on the rendered form). */
 export function fromWorkable(body: unknown): FormField[] {
@@ -63,9 +66,9 @@ export function fromWorkable(body: unknown): FormField[] {
       const label = (field.label ?? field.id).replace(/\s+/g, " ").trim();
       const hintKey = HINTS[field.id];
       if (field.type === "file") {
-        if (field.id === "resume") fields.push({ selector: '[data-ui="resume"] input[type=file]', label, type: "file", required, hintKey });
+        if (field.id === "resume") fields.push({ selector: fileInput("resume"), label, type: "file", required, hintKey });
         // Any other file a question asks for: asked, never guessed (the runner has no file but the resume).
-        else if (required) fields.push({ selector: `[data-ui="${field.id}"] input[type=file]`, label, type: "file", required });
+        else if (required) fields.push({ selector: fileInput(field.id), label, type: "file", required });
         continue;
       }
       if (field.type === "boolean") {
@@ -117,9 +120,15 @@ async function readFields(page: Page): Promise<FormField[]> {
   if (!shortcode) throw new Error("Not a Workable application form (no job code in its address)");
   const fields = await workableForm(shortcode);
   if (!fields) throw new Error("Workable did not return this job's form");
-  // Only what the page really shows: an employer may have changed the form since the JSON was cached nowhere.
+  // Only what the page really shows. A required field the page does not show is a selector the form outgrew: the run
+  // stops here rather than leaving it empty for Workable to refuse (the resume, 10 Nov).
   const shown: FormField[] = [];
-  for (const field of fields) if ((await page.locator(field.selector).count()) > 0) shown.push(field);
+  const missing: string[] = [];
+  for (const field of fields) {
+    if ((await page.locator(field.selector).count()) > 0) shown.push(field);
+    else if (field.required) missing.push(field.label);
+  }
+  if (missing.length > 0) throw new Error(`The Workable form's required fields were not found on the page: ${missing.slice(0, 5).join(", ")}`);
   return shown;
 }
 
@@ -133,8 +142,9 @@ async function attachFile(page: Page, value: ResolvedValue, bytes: Uint8Array) {
   try {
     const file = join(dir, name);
     await writeFile(file, bytes);
-    await page.locator('[data-ui="resume"] input[type=file]').setInputFiles(file);
-    await page.waitForFunction((fileName) => ((document.querySelector('[data-ui="resume"]') as HTMLElement | null)?.innerText ?? "").toLowerCase().includes(fileName.toLowerCase()), name, { timeout: 30000 });
+    await page.locator(fileInput("resume")).first().setInputFiles(file);
+    // The drop zone shows the file's name once Workable has taken it (the input itself has no text).
+    await page.waitForFunction((fileName) => document.body.innerText.toLowerCase().includes(fileName.toLowerCase()), name, { timeout: 30000 });
     return cleanup;
   } catch (error) {
     await cleanup();
