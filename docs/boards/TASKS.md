@@ -239,7 +239,10 @@ In progress 10 Nov:
   - A survey of 60 India forms: text 162, paragraph 73, boolean 19, number 4, multiple 3; Education and Experience never required; the address arrives prefilled from the IP.
   - The form opens in headless Chromium.
 - Done: `workable-test` PASS (14 checks). `ats-smoke` dry runs on 3 live forms with the owner's profile PASS: Zifo Senior Clinical Data Engineer 7/7, Apna Admission Counselor 7/7, Apna Hardware Procurement Lead 15/15, no field empty, resume attached, nothing submitted.
-- Left: one real submit (the owner's yes), then `APPLY_BOARDS` and the Workable search API as a slug source.
+- First real submit tried 10 Nov for Nitin (the owner relayed Nitin's OK and answer), on Apna Full Stack Software Developer, behind `ENABLE_WORKABLE=1` on the worker and the swipe.
+  - `swipeRight` blocked it with `min_match_score`: the T107 band gate ("They want about 2+ years; you have 1"; the model's verdict was a good fit).
+  - All 50 Workable jobs score 0 for Nitin, so nothing was sent.
+- Left: a Workable job inside a real user's band (more companies: the Workable search API as a slug source, or M3's list), one real submit, then `APPLY_BOARDS`.
 
 <a id="m13"></a>
 ### [ ] M13 — Zoho Recruit apply
