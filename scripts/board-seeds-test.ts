@@ -39,6 +39,7 @@ const checks: Array<[string, boolean]> = [
   ["a Zoho Recruit portal is its host", boardFromUrl("https://artingdigital.zohorecruit.in/jobs/Careers")?.source === "zohorecruit"],
   ["a CSV row with a Workday URL", same(seedsFromText("23Andme,23andme/23,https://23andme.wd5.myworkdayjobs.com/23").seeds.map((seed) => `${seed.source}:${seed.slug}`), ["workday:23andme.wd5/23"])],
   ["a SmartRecruiters job page is its company identifier", same(seedsFromText("https://jobs.smartrecruiters.com/Freshworks/744000159090559-senior").seeds, [{ source: "smartrecruiters", slug: "Freshworks" }])],
+  ["a Workable job page is its account", same(seedsFromText("https://apply.workable.com/zifo/j/6A9E892A52/").seeds, [{ source: "workable", slug: "zifo" }])],
   ["the MIT and CC BY lists are allowed", allowedList("ats-scrapers").licence === "MIT" && allowedList("upstreamit").licence === "MIT" && allowedList("latmay").licence === "CC-BY-4.0"],
   ["a non-commercial (CC BY-NC) list is refused", refused("feashliaa")],
   ["an unregistered list is refused", refused("some-new-list")],

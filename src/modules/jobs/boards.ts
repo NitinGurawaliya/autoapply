@@ -2,6 +2,7 @@ import { fetchAshby } from "./fetchers/ashby";
 import { fetchGreenhouse, fetchGreenhouseList, greenhouseListHash } from "./fetchers/greenhouse";
 import { fetchLever } from "./fetchers/lever";
 import { fetchSmartRecruiters, smartRecruitersName, smartRecruitersSlugOf } from "./fetchers/smartrecruiters";
+import { fetchWorkable, workableName, workableSlugOf } from "./fetchers/workable";
 import { fetchWorkday, workdayName, workdaySlugOf } from "./fetchers/workday";
 import { fetchKeka, kekaName, kekaSlugOf } from "./fetchers/keka";
 import { fetchZohoRecruit, zohoName, zohoSlugOf } from "./fetchers/zohorecruit";
@@ -15,7 +16,7 @@ import { tagPosting } from "./tagging";
  * here plus a fetcher and an adapter (docs/INGEST_CONTRACT.md).
  */
 
-export type BoardSource = "greenhouse" | "lever" | "ashby" | "workday" | "zohorecruit" | "keka" | "smartrecruiters";
+export type BoardSource = "greenhouse" | "lever" | "ashby" | "workday" | "zohorecruit" | "keka" | "smartrecruiters" | "workable";
 
 /** How discovery (discovery.ts) checks names against a board. */
 export type BoardDiscovery = {
@@ -308,6 +309,44 @@ export const BOARDS: Board[] = [
       slugFromUrl: smartRecruitersSlugOf,
       async nameOf(slug) {
         const name = await smartRecruitersName(slug);
+        await pause(PAUSE_MS);
+        return name;
+      },
+    },
+  },
+  {
+    // Workable (Phase M, M12): the public widget API, every job with its description in one request a company
+    // (fetchers/workable.ts). Indian employers: Apna, Zifo. Its one-page form opens in the worker's browser (10 Nov);
+    // Turnstile on Submit decides as Ashby's check does (adapters/workable.ts). Only India-eligible jobs are stored.
+    source: "workable",
+    label: "Workable",
+    fetch: (slug) => fetchWorkable(slug),
+    stores: indiaEligible,
+    formHost: /^apply\.workable\.com$/i,
+    slugOf: (text) => {
+      try {
+        const fromUrl = workableSlugOf(new URL(text));
+        if (fromUrl) return fromUrl;
+      } catch {
+        // Not an address.
+      }
+      return text.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
+    },
+    discovery: {
+      boardUrl: "apply.workable.com/<slug>",
+      async open(slug) {
+        // An unknown account answers 404 (null here); one with no openings an empty list.
+        const jobs = await fetchWorkable(slug).catch(() => null);
+        await pause(PAUSE_MS);
+        return jobs;
+      },
+      counts: indiaEligible,
+      minIndiaJobs: 1,
+      needsFresh: true,
+      crawlHosts: ["apply.workable.com", "*.workable.com"],
+      slugFromUrl: workableSlugOf,
+      async nameOf(slug) {
+        const name = await workableName(slug);
         await pause(PAUSE_MS);
         return name;
       },

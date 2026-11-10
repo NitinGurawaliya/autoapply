@@ -80,8 +80,8 @@ async function main() {
       const target = session.page.locator(f.selector);
       const kind = field?.type ?? "text";
       let has = false;
-      if (f.selector.startsWith("[data-field-path")) {
-        // Ashby: one block per question; look inside it.
+      if (f.selector.startsWith("[data-field-path") || f.selector.startsWith('[data-ui="QA_')) {
+        // Ashby and Workable: one block per question; look inside it.
         if (kind === "yesno") has = (await target.locator('[aria-pressed="true"]').count()) > 0;
         else if (kind === "radio" || kind === "checkbox-group" || kind === "checkbox") has = (await target.locator("input:checked").count()) > 0;
         else if (kind === "select") has = ((await target.locator("select").first().inputValue().catch(() => "")) ?? "").length > 0;

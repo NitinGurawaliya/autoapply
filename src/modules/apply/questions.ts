@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import type { FormField } from "./adapter";
+import { workableForm } from "./adapters/workable";
 
 /**
  * A job's application questions read WITHOUT a browser (T56), so the agent can ask what it is missing before it opens
@@ -80,18 +81,24 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** The job's questions are on its row and fresh, so reading them costs no request. */
 export function questionsCached(job: { source: string; questions: unknown; questionsFetchedAt: Date | null }) {
   if (job.source === "mock") return true;
-  return job.source === "greenhouse" && Boolean(job.questions) && job.questionsFetchedAt !== null && Date.now() - job.questionsFetchedAt.getTime() < DAY_MS;
+  return (job.source === "greenhouse" || job.source === "workable") && Boolean(job.questions) && job.questionsFetchedAt !== null && Date.now() - job.questionsFetchedAt.getTime() < DAY_MS;
+}
+
+/** Workable publishes the whole form as JSON (adapters/workable.ts, M12): the same fields the adapter fills. */
+async function readQuestions(job: { source: string; externalId: string; company: { slug: string } }): Promise<FormField[] | null> {
+  if (job.source === "workable") return workableForm(job.externalId);
+  const response = await fetch(`https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(job.company.slug)}/jobs/${encodeURIComponent(job.externalId)}?questions=true`, { signal: AbortSignal.timeout(15_000) });
+  return response.ok ? fromGreenhouse(await response.json()) : null;
 }
 
 /** The job's questions (cached on the row for a day), or null when they cannot be read without a browser. */
 export async function jobQuestions(job: { id: string; source: string; externalId: string; questions: unknown; questionsFetchedAt: Date | null; company: { slug: string } }): Promise<FormField[] | null> {
   if (job.source === "mock") return MOCK_QUESTIONS;
-  if (job.source !== "greenhouse") return null;
+  if (job.source !== "greenhouse" && job.source !== "workable") return null;
   if (questionsCached(job)) return job.questions as FormField[];
   try {
-    const response = await fetch(`https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(job.company.slug)}/jobs/${encodeURIComponent(job.externalId)}?questions=true`, { signal: AbortSignal.timeout(15_000) });
-    if (!response.ok) return null;
-    const fields = fromGreenhouse(await response.json());
+    const fields = await readQuestions(job);
+    if (!fields) return null;
     await db.job.update({ where: { id: job.id }, data: { questions: fields as unknown as Prisma.InputJsonValue, questionsFetchedAt: new Date() } });
     return fields;
   } catch {

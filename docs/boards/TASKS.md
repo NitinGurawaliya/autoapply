@@ -141,7 +141,7 @@ Design: [4.6 Sequence: Workday](TDD.md#46-sequence-workday-apply-with-an-employe
 - Typecheck and lint pass.
 
 <a id="m7"></a>
-### [~] M7 — SmartRecruiters (T95, moved here)
+### [-] M7 — SmartRecruiters (T95, moved here)
 Do: as T95, plus what 7 Nov found. First read `rajakrishna/easy-apply` (MIT, SmartRecruiters form) and `devilscrapes/smartrecruiters-jobs-scraper-javascript` (MIT, the postings API) as references ([TDD §12](TDD.md#12-research-notes-and-sources)):
 - `fetchers/smartrecruiters.ts` lists with `country=in`, then each posting's detail.
 - Add the host `jobs.smartrecruiters.com` and a discovery entry, with seeds from M3's lists.
@@ -162,7 +162,7 @@ In progress 9 Nov:
   - Every field sits in an open shadow DOM (`spl-input`, `spl-autocomplete`, `spl-phone-field`, `spl-dropzone`).
   - The form link is the job page's `a#st-apply`.
   - **Blocked:** DataDome shows "Access is temporarily restricted" to the worker's browser, headless and in the visible Chrome window. See [BLOCKERS.md](../BLOCKERS.md). No adapter yet.
-- Left: the owner's choice in BLOCKERS.md; then the adapter, dry runs, one real submit and `APPLY_BOARDS`.
+- Parked (owner, 10 Nov): M12 goes first. The reader and the 186 jobs stay; the jobs do not reach the feed. Back when the block lapses or a SmartRecruiters partner key is in hand; then the adapter, dry runs, one real submit and `APPLY_BOARDS`.
 
 <a id="m8"></a>
 ### [ ] M8 — SuccessFactors
@@ -221,7 +221,7 @@ Design: [2 Facts](TDD.md#2-facts-the-design-rests-on-research-and-measurements-7
 - One real submit for the owner.
 
 <a id="m12"></a>
-### [ ] M12 — Workable
+### [~] M12 — Workable
 Do:
 - Write `fetchers/workable.ts` on `apply.workable.com/api/v1/widget/accounts/{slug}?details=true`.
 - Add a slug source from Workable's search API (`jobs.workable.com/api/v1/jobs?location=India`): company website → careers link → slug.
@@ -232,6 +232,14 @@ Design: [4.5 Recipe](TDD.md#45-sequence-adding-a-board-with-a-public-form-the-re
 - Ingest stores India jobs of Apna, Lokal and Zifo.
 - Dry runs on 3 forms pass.
 - One real submit, then `APPLY_BOARDS`.
+
+In progress 10 Nov:
+- Done: `fetchers/workable.ts` (widget API, one request a company) and the `workable` board entry (India-only, form host `apply.workable.com`, discovery by host and address). Apna (156 India jobs listed, 48 stored in the 60-day window) and Zifo (3 of 42 in India, 2 stored) are active; Lokal is watched as empty (no openings). 50 India jobs stored.
+- Done: `adapters/workable.ts` reads the form from its public JSON (`/api/v1/jobs/<shortcode>/form`). `questions.ts` asks before the browser opens, and Workable is in `HANDOFF_BOARDS` (Turnstile on Submit, as Lever).
+  - A survey of 60 India forms: text 162, paragraph 73, boolean 19, number 4, multiple 3; Education and Experience never required; the address arrives prefilled from the IP.
+  - The form opens in headless Chromium.
+- Done: `workable-test` PASS (14 checks). `ats-smoke` dry runs on 3 live forms with the owner's profile PASS: Zifo Senior Clinical Data Engineer 7/7, Apna Admission Counselor 7/7, Apna Hardware Procurement Lead 15/15, no field empty, resume attached, nothing submitted.
+- Left: one real submit (the owner's yes), then `APPLY_BOARDS` and the Workable search API as a slug source.
 
 <a id="m13"></a>
 ### [ ] M13 — Zoho Recruit apply
