@@ -202,7 +202,7 @@ Order (owner, 9 Nov): measure and scale, seed every known company, then the boar
 
 - [~] [M1 — Board measurement, daily](boards/TASKS.md#m1)
 - [~] [M2 — Watch every company cheaply: tiers, India-only storage, per-company ingest](boards/TASKS.md#m2)
-- [ ] [M3 — Seed every known company on the boards we apply on](boards/TASKS.md#m3)
+- [~] [M3 — Seed every known company on the boards we apply on](boards/TASKS.md#m3)
 - [~] [M7 — SmartRecruiters (T95, moved here)](boards/TASKS.md#m7)
 - [ ] [M12 — Workable](boards/TASKS.md#m12)
 - [ ] [M13 — Zoho Recruit apply](boards/TASKS.md#m13)

@@ -53,7 +53,7 @@ In progress 9 Nov: built and measured, not yet on the worker.
 - Left: a worker running this branch with `INGEST_MODE=tick` for a day, matching within 2%.
 
 <a id="m3"></a>
-### [ ] M3 — Seed every known company on the boards we apply on
+### [~] M3 — Seed every known company on the boards we apply on
 Do:
 - Extend `boardSeeds.ts` / `scripts/discover-boards.ts --import` from Greenhouse, Lever and Ashby to every board in `boards.ts`, keeping Keka, Workday and Zoho slugs as hosts.
 - Import the open lists (owner, 9 Nov: all of them): ats-scrapers `ats-companies/`, upstreamit's live slugs, openroles and jobseek, and Hugging Face `latmay`, credited. Record each list's commit or checksum and its licence in `slugSources/lists.ts`.
@@ -67,6 +67,20 @@ Design: [3.3 Discovery at scale](TDD.md#33-discovery-at-scale) · [4.7 Sequence:
 - Open India-eligible jobs on Greenhouse, Ashby, Keka and Lever rise by at least 3,000 over the 7 Nov count (11,341 across all boards).
 - Every slug that came from a CC BY-NC source is refused by the test.
 - Typecheck and lint pass.
+
+In progress 10 Nov:
+- Done: the importer reads every board (`--watch-all`, `--from list:<name>`, licences in `slugSources/lists.ts`, `board-seeds-test` PASS). Dry run of ats-scrapers + upstreamit + latmay, nothing written:
+
+  | Board | New slugs checked | Live boards | India jobs on them |
+  |---|---|---|---|
+  | Greenhouse | 9,469 | 3,707 | 998 |
+  | Lever | 8,301 | 2,226 | 887 |
+  | Zoho Recruit | 1,572 | 1,182 | 286 |
+  | Ashby | 1,665 | 798 | 74 |
+  | Keka | 0 (all known) | — | — |
+
+  Workday was stopped (applied to only after M6).
+- Owner, 10 Nov: write later, once the infra runs (the worker on this code in tick mode, M1/M2 proven). The dry run keeps no per-company record, so the write re-checks every slug. Re-fetch the lists at the pinned versions, then run `discover-boards.ts --import <list> --boards <b> --watch-all --from list:<name> --write`, about 2 h for the five boards.
 
 <a id="m4"></a>
 ### [ ] M4 — Continuous discovery and re-validation (supersedes T98)
