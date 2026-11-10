@@ -1,5 +1,5 @@
 import type { Job } from "pg-boss";
-import { enqueueIngestCompany } from "@/lib/queue";
+import { enqueueIngestCompanies } from "@/lib/queue";
 import { dueCompanies, startTickRun, warmFeeds } from "@/modules/jobs";
 import { deleteOldClosedJobs } from "@/modules/jobs/ingest";
 import { embedPendingJobs } from "@/modules/jobs/semantic";
@@ -34,8 +34,7 @@ export async function handleIngestTick(jobs: Job<object>[]) {
     const due = await dueCompanies(BATCH());
     if (due.length === 0) continue;
     const runId = await startTickRun(due.length);
-    let sent = 0;
-    for (const company of due) if (await enqueueIngestCompany(company.id, company.source, runId)) sent += 1;
+    const sent = await enqueueIngestCompanies(due, runId);
     // A company already waiting or running is not sent twice (the queue's exclusive policy): `sent` counts the new ones.
     console.log(`ingest-tick: ${due.length} due, ${sent} sent (${runId})`);
   }

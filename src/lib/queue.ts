@@ -136,6 +136,28 @@ export async function enqueueIngestCompany(companyId: string, board: string, run
   return boss.send(INGEST_COMPANY_QUEUE, { companyId, runId }, { singletonKey: companyId, group: { id: board }, expireInSeconds: 15 * 60, retryLimit: 0 });
 }
 
+/**
+ * The same for a whole tick's due companies, 500 to an insert: one `send` per company took ~0.35 s against Neon (899
+ * in 5 min on 10 Nov), so 2,000 would outlast the tick. A company already waiting or running is skipped by the
+ * queue's exclusive policy (the insert's ON CONFLICT DO NOTHING); returns how many were queued.
+ */
+export async function enqueueIngestCompanies(companies: Array<{ id: string; source: string }>, runId: string) {
+  const boss = await getBoss();
+  let sent = 0;
+  for (let start = 0; start < companies.length; start += 500) {
+    const jobs = companies.slice(start, start + 500).map((company) => ({
+      data: { companyId: company.id, runId },
+      singletonKey: company.id,
+      group: { id: company.source },
+      expireInSeconds: 15 * 60,
+      retryLimit: 0,
+    }));
+    const ids = await boss.insert(INGEST_COMPANY_QUEUE, jobs, { returnId: true });
+    sent += ids?.length ?? 0;
+  }
+  return sent;
+}
+
 export async function enqueueIngest(days: number) {
   const boss = await getBoss();
   // Two hours covers hundreds of companies; a run that overlaps another skips itself (modules/jobs/ingest.ts).
