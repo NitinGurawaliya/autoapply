@@ -242,7 +242,10 @@ In progress 10 Nov:
 - First real submit tried 10 Nov for Nitin (the owner relayed Nitin's OK and answer), on Apna Full Stack Software Developer, behind `ENABLE_WORKABLE=1` on the worker and the swipe.
   - `swipeRight` blocked it with `min_match_score`: the T107 band gate ("They want about 2+ years; you have 1"; the model's verdict was a good fit).
   - All 50 Workable jobs score 0 for Nitin, so nothing was sent.
-- Left: a Workable job inside a real user's band (more companies: the Workable search API as a slug source, or M3's list), one real submit, then `APPLY_BOARDS`.
+- Owner override, 10 Nov ("override this rule for nitin, we need to test the adapter"): `min_match_score` waived for that one application only. Written as an `override` event; every other swipe rule was re-checked and passed.
+  - Run 1 sent nothing: the resume input carries `data-ui="resume"` itself, so the field was dropped and Workable refused the form. Fixed; a required field missing from the page now stops the run.
+  - Run 2: 11/11 filled, resume attached. The worker's Submit sent nothing for 60 s (Turnstile), so the window went to a person. The form's POST left 46 s later, and the window closed before Workable's thanks page showed: `pending_verification`.
+- Left: confirm run 2 from Nitin's email (then mark it sent); a Workable job inside a real user's band (more companies: the Workable search API as a slug source, or M3's list), one real submit, then `APPLY_BOARDS`.
 
 <a id="m13"></a>
 ### [ ] M13 — Zoho Recruit apply
