@@ -16,8 +16,15 @@ export { daysAgoLabel };
 // lib/queue.ts HANDOFF_BOARDS); ENABLE_ASHBY=0 switches it off.
 // Lever (T94) only where ENABLE_LEVER=1: on for the worker and test runs that try its first real handoff submits, off in
 // the feed until they pass (INGEST_CONTRACT: a board goes in after one real submit). Keka (T96) the same, ENABLE_KEKA=1:
-// a person types its image CAPTCHA and presses Apply Now in the handoff window.
-export const APPLY_BOARDS: readonly string[] = ["greenhouse", ...(process.env.ENABLE_ASHBY === "0" ? [] : ["ashby"]), ...(process.env.ENABLE_LEVER === "1" ? ["lever"] : []), ...(process.env.ENABLE_KEKA === "1" ? ["keka"] : [])];
+// a person types its image CAPTCHA and presses Apply Now in the handoff window. Workable (M12) the same, ENABLE_WORKABLE=1,
+// until its first real submit.
+export const APPLY_BOARDS: readonly string[] = [
+  "greenhouse",
+  ...(process.env.ENABLE_ASHBY === "0" ? [] : ["ashby"]),
+  ...(process.env.ENABLE_LEVER === "1" ? ["lever"] : []),
+  ...(process.env.ENABLE_KEKA === "1" ? ["keka"] : []),
+  ...(process.env.ENABLE_WORKABLE === "1" ? ["workable"] : []),
+];
 const BOARDS = APPLY_BOARDS;
 // Where a job is, for the feed's Location filter (T80): IN = in India and REMOTE = remote and open to India (Job.eligibility,
 // tagging.ts); US and OTHER = jobs abroad, shown only when the user picks them.
