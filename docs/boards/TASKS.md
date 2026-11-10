@@ -158,7 +158,11 @@ Design: [4.5 Recipe](TDD.md#45-sequence-adding-a-board-with-a-public-form-the-re
 In progress 9 Nov:
 - Done: `fetchers/smartrecruiters.ts` (India list, `country=in`; details only for postings not held; name from the first posting) and the `smartrecruiters` board entry (India-only, form host `jobs.smartrecruiters.com`, discovery by host and address). Swiggy and Freshworks added and ingested: 165 and 20 open India jobs, eligibility `india`.
 - The form, read 9 Nov without typing anything: page 1 (resume dropzone, first/last name, email twice, city autocomplete, phone with country code, structured Experience and Education lists, LinkedIn, Facebook, X, website, message), then Next to the screening questions and Submit. `GET /oneclick-ui/api/company/{companyId}/publication/{uuid}/config` says which standard fields are required (Freshworks: experience and education required). DataDome and Cloudflare scripts are on the page.
-- Left: the adapter. It needs dry runs on live forms with a real profile (the owner's OK first), then one real submit and `APPLY_BOARDS`.
+- 10 Nov, the owner's OK for dry runs given: the form is page 1 (an "Apply with resume" dropzone that parses the resume; first/last name, email twice, city autocomplete, phone with +91 preselected; Experience and Education lists, required for Freshworks; LinkedIn, Facebook, X, website; resume; message), then Next to the screening questions.
+  - Every field sits in an open shadow DOM (`spl-input`, `spl-autocomplete`, `spl-phone-field`, `spl-dropzone`).
+  - The form link is the job page's `a#st-apply`.
+  - **Blocked:** DataDome shows "Access is temporarily restricted" to the worker's browser, headless and in the visible Chrome window. See [BLOCKERS.md](../BLOCKERS.md). No adapter yet.
+- Left: the owner's choice in BLOCKERS.md; then the adapter, dry runs, one real submit and `APPLY_BOARDS`.
 
 <a id="m8"></a>
 ### [ ] M8 — SuccessFactors
