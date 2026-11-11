@@ -7,7 +7,7 @@ import { joinChoices, splitChoices } from "@/lib/choices";
 import type { AtsAdapter, FilledField, FormField, ResolvedValue, SubmitContext, SubmitResult } from "../adapter";
 import { BotCheckError, MaybeSentError, NoRetryError, NotSentError, WindowClosedError } from "../adapter";
 import { canShowWindow, livePage } from "../browser";
-import { assertJobOpen, dismissOverlays, firstVisible, friendlyError, inField } from "./common";
+import { assertJobOpen, dismissOverlays, firstVisible, friendlyError, inField, toDatePickerText } from "./common";
 
 /**
  * Workable (Phase M, M12). One page: personal information, optional Education and Experience lists, the resume, and the
@@ -81,7 +81,8 @@ export function fromWorkable(body: unknown): FormField[] {
         continue;
       }
       const selector = field.type === "phone" ? "#input_phone" : `[name="${field.id}"]`;
-      const type = field.type === "paragraph" ? "textarea" : "text";
+      // A date question is a text box masked MM/DD/YYYY with a calendar (Lokal's "How soon can you join?", 10 Nov).
+      const type = field.type === "paragraph" ? "textarea" : field.type === "date" ? "date" : "text";
       fields.push({ selector, label, type, required, hintKey });
     }
   }
@@ -172,6 +173,16 @@ async function fillChoices(page: Page, value: ResolvedValue) {
     picked.push(labels[index]);
   }
   return joinChoices(picked);
+}
+
+/** A typed value must still be in the box after typing; an empty box here would only show up as Workable's refusal. */
+async function readBack(input: ReturnType<Page["locator"]>, expected: string) {
+  const now = ((await input.inputValue().catch(() => "")) ?? "").trim();
+  const digits = (text: string) => text.replace(/\D/g, "");
+  // Short answers must come back with the same digits (a date, a phone, a number); long ones only non-empty, since a
+  // box may cut text at its length limit.
+  const short = expected.trim().length <= 60;
+  if (!now || (short && digits(expected).length > 0 && digits(now) !== digits(expected) && now !== expected.trim())) throw new Error(`the box kept "${now.slice(0, 30)}" instead of the answer`);
 }
 
 const CONFIRMATION = /thank you for (applying|your application)|application (was |has been )?(submitted|received|sent)|we('| ha)ve received your application/i;
@@ -346,12 +357,24 @@ export const workableAdapter: AtsAdapter = {
       const written = await inField(value.label, async () => {
         if (value.type === "radio" || value.type === "checkbox-group") return fillChoices(page, value);
         const input = page.locator(value.selector).first();
-        const text = value.key === "phone" ? nationalNumber(value.value) : value.value;
         await input.scrollIntoViewIfNeeded().catch(() => undefined);
+        if (value.type === "date") {
+          // "20" (days of notice) or a date → MM/DD/YYYY, typed into the mask; Escape closes its calendar, which
+          // otherwise stays open over the next field (10 Nov: the field below it was then left empty).
+          const date = /^\d{2}\/\d{2}\/\d{4}$/.test(value.value.trim()) ? value.value.trim() : toDatePickerText(value.value);
+          if (!date) throw new Error(`needs a date (MM/DD/YYYY), and the answer "${value.value.slice(0, 40)}" is not one`);
+          await input.click();
+          await input.fill("");
+          await input.pressSequentially(date, { delay: 40 });
+          await input.press("Escape").catch(() => undefined);
+          await readBack(input, date);
+          return date;
+        }
+        const text = value.key === "phone" ? nationalNumber(value.value) : value.value;
         // The address arrives prefilled from the IP's location ("Jhajjar, India"): replaced, never appended to.
         await input.fill("");
         await input.fill(text);
-        if (value.key === "city") await input.press("Escape").catch(() => undefined);
+        await readBack(input, text);
         return text;
       });
       filled.push({ key: value.key, label: value.label, value: written, source: value.source, selector: value.selector, basis: value.basis });
