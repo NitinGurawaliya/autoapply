@@ -1,6 +1,6 @@
 // Workable (M12): the form JSON → fields, and account slugs from addresses. No network, no database.
 // npx tsx scripts/workable-test.ts
-import { fromWorkable } from "../src/modules/apply/adapters/workable";
+import { fromWorkable, readReply } from "../src/modules/apply/adapters/workable";
 import { workableSlugOf } from "../src/modules/jobs/fetchers/workable";
 
 // The shape of apply.workable.com/api/v1/jobs/<shortcode>/form (Zifo and Apna forms, 10 Nov), trimmed.
@@ -62,6 +62,11 @@ const checks: Array<[string, boolean]> = [
   ["a required Education list stops the run (cannot be filled yet)", throws([{ name: "Profile", fields: [{ id: "education", label: "Education", required: true, type: "group", fields: [] }] }])],
   ["an account address is its slug", workableSlugOf(new URL("https://apply.workable.com/zifo/j/6A9E892A52/")) === "zifo"],
   ["a job address with no account is not a slug", workableSlugOf(new URL("https://apply.workable.com/j/6A9E892A52/apply")) === null],
+  // Workable's answer to the application POST (submit): what it says decides sent / not sent, not the thanks page.
+  ["a 2xx answer is the application received", readReply(201, "{\"id\":\"x\"}").kind === "sent" && readReply(200, "").kind === "sent"],
+  ["a 4xx answer is a refusal, with its words", (() => { const r = readReply(422, JSON.stringify({ error: "Captcha verification failed" })); return r.kind === "refused" && r.reason === "Captcha verification failed"; })()],
+  ["nested error lists are read too", readReply(400, JSON.stringify({ errors: { email: ["is invalid"] } })).reason === "is invalid"],
+  ["a 5xx or unreadable answer leaves the outcome unknown", readReply(502, "<html>bad gateway</html>").kind === "unknown" && readReply(0, "").kind === "unknown"],
   ["an account subdomain is its slug", workableSlugOf(new URL("https://apna.workable.com")) === "apna" && workableSlugOf(new URL("https://jobs.workable.com/search")) === null],
 ];
 

@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Page, Request } from "playwright";
+import type { Page, Request, Response } from "playwright";
 import { z } from "zod";
 import { joinChoices, splitChoices } from "@/lib/choices";
 import type { AtsAdapter, FilledField, FormField, ResolvedValue, SubmitContext, SubmitResult } from "../adapter";
@@ -205,10 +205,35 @@ async function invalidFieldLabels(page: Page) {
   ) as Promise<string[]>;
 }
 
-const AUTO_WAIT_MS = 60000;
+// Turnstile can hold the worker's own Submit for over a minute before the form goes (10 Nov: the POST left 108 s after
+// the click), so the worker waits two minutes before handing the window to a person.
+const AUTO_WAIT_MS = 120000;
 const PERSON_WAIT_MS = 15 * 60 * 1000;
 // The application leaves as a POST to the job's own apply endpoint, on Workable's host or the employer's.
 const APPLY_POST = /\/api\/v\d\/jobs\/[A-Z0-9]{6,}\/(apply|candidates|applications?)\b/i;
+
+export type WorkableReply = { kind: "sent" | "refused" | "unknown"; status: number; reason: string };
+
+/**
+ * Workable's own answer to the application's POST: a 2xx is the application received (the thanks page is only its
+ * echo, and the window may close before it shows, 10 Nov); a 4xx is a refusal with nothing recorded (a failed bot check,
+ * a field it rejects); anything else leaves the outcome unknown. Only the error's words are kept, never the body.
+ */
+export function readReply(status: number, body: string): WorkableReply {
+  if (status >= 200 && status < 300) return { kind: "sent", status, reason: "" };
+  let reason = "";
+  try {
+    const json = JSON.parse(body) as Record<string, unknown>;
+    const pick = (value: unknown): string =>
+      typeof value === "string" ? value : Array.isArray(value) ? value.map(pick).filter(Boolean).join("; ") : value && typeof value === "object" ? Object.values(value).map(pick).filter(Boolean).join("; ") : "";
+    reason = pick(json.error ?? json.message ?? json.errors ?? "");
+  } catch {
+    reason = "";
+  }
+  reason = reason.replace(/\s+/g, " ").trim().slice(0, 160);
+  if (status >= 400 && status < 500) return { kind: "refused", status, reason };
+  return { kind: "unknown", status, reason };
+}
 
 async function submitWorkable(page: Page, ctx: SubmitContext): Promise<SubmitResult> {
   await dismissOverlays(page);
@@ -219,6 +244,19 @@ async function submitWorkable(page: Page, ctx: SubmitContext): Promise<SubmitRes
   const stopWatching = workableAdapter.watchSubmit!(page, () => {
     posted = true;
   });
+  // Workable's answer to each submission, read off the response (it stays readable after the window closes).
+  let reply: WorkableReply | null = null;
+  const context = page.context();
+  const onResponse = (response: Response) => {
+    if (response.request().method() !== "POST" || !APPLY_POST.test(response.url())) return;
+    void response
+      .text()
+      .catch(() => "")
+      .then((body) => {
+        reply = readReply(response.status(), body);
+      });
+  };
+  context.on("response", onResponse);
   let withPerson = Boolean(ctx.person);
   let deadline = Date.now() + (withPerson ? PERSON_WAIT_MS : AUTO_WAIT_MS);
   const askPerson = async (what: string) => {
@@ -240,9 +278,20 @@ async function submitWorkable(page: Page, ctx: SubmitContext): Promise<SubmitRes
     }
     let challenged = false;
     for (;;) {
+      // Workable's own answer first: it settles the outcome whatever the window does next.
+      const answer = reply as WorkableReply | null;
+      if (answer?.kind === "sent") return { confirmed: true, evidence: `Workable answered ${answer.status} to the application` };
+      if (answer?.kind === "refused") {
+        reply = null;
+        posted = false;
+        const what = `Workable refused the submission (${answer.status}${answer.reason ? `: ${answer.reason}` : ""})`;
+        // A refused bot check can be passed by a person in the same window; with a person already there, they try again.
+        if (!withPerson) await askPerson(what);
+        else if (!livePage(page)) throw new NotSentError(`${what}. Nothing was sent.`);
+      }
       const live = livePage(page);
       if (!live) {
-        if (posted) throw new MaybeSentError("The Workable window closed after the form was sent, before its thanks page showed. Check your email before applying again.");
+        if (posted) throw new MaybeSentError("The Workable window closed after the form was sent, before Workable answered. Check your email before applying again.");
         throw new WindowClosedError("The Workable window was closed before the form was sent. Nothing was sent.");
       }
       const evidence = posted ? await successShown(live) : null;
@@ -271,6 +320,7 @@ async function submitWorkable(page: Page, ctx: SubmitContext): Promise<SubmitRes
     }
   } finally {
     stopWatching();
+    context.off("response", onResponse);
   }
 }
 
