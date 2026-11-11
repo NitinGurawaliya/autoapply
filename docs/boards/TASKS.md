@@ -246,6 +246,10 @@ In progress 10 Nov:
   - Run 1 sent nothing: the resume input carries `data-ui="resume"` itself, so the field was dropped and Workable refused the form. Fixed; a required field missing from the page now stops the run.
   - Run 2: 11/11 filled, resume attached. The worker's Submit sent nothing for 60 s (Turnstile), so the window went to a person. The form's POST left 46 s later, and the window closed before Workable's thanks page showed: `pending_verification`.
 - After run 2: submit now reads Workable's own answer to the application POST (`readReply`): 2xx is sent, even if the window closes; 4xx is a refusal with its words, handed to a person; else unknown. The worker waits 120 s, not 60, before handing over for Turnstile.
+- 10 Nov, test set for the adapter (the owner: more Workable jobs, Nitin's profile only).
+  - Workable's job search (`jobs.workable.com/api/v1/jobs?location=India`, 10 developer queries) gave 134 companies. 125 slugs were confirmed on the widget API by name match.
+  - Import: 55 companies added with fresh India jobs (1,303 listed); ingest stored 591 (`lokal-app` is Lokal's real account).
+  - Workable answers 429 after ~250 calls in ten minutes: discovery now counts only a 404 as "not a board" and pauses 2 s between Workable calls. The 124 rows the 429 wrote as `not_on_board` were deleted.
 - Left: confirm run 2 from Nitin's email (then mark it sent); a Workable job inside a real user's band (more companies: the Workable search API as a slug source, or M3's list), one real submit, then `APPLY_BOARDS`.
 
 <a id="m13"></a>

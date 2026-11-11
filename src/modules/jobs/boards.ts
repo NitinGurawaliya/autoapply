@@ -61,6 +61,8 @@ export type Board = {
 
 // Discovery is polite: a pause after every request it makes to a board.
 const PAUSE_MS = 300;
+// Workable answers 429 after a few hundred calls in minutes (10 Nov), so its checks are spaced further apart.
+const WORKABLE_PAUSE_MS = 2000;
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** The minimum India-eligible open jobs for discovery to add a Greenhouse company (owner, 11 Oct). */
@@ -335,10 +337,17 @@ export const BOARDS: Board[] = [
     discovery: {
       boardUrl: "apply.workable.com/<slug>",
       async open(slug) {
-        // An unknown account answers 404 (null here); one with no openings an empty list.
-        const jobs = await fetchWorkable(slug).catch(() => null);
-        await pause(PAUSE_MS);
-        return jobs;
+        // An unknown account answers 404 (null here); one with no openings an empty list. Anything else (Workable's
+        // 429 rate limit, 10 Nov: 124 accounts read as "not on board" after ~250 calls in ten minutes) is a failed
+        // check, retried later, never "not a board". Workable gets a longer pause than the other boards.
+        try {
+          return await fetchWorkable(slug);
+        } catch (error) {
+          if (error instanceof Error && / 404$/.test(error.message)) return null;
+          throw error;
+        } finally {
+          await pause(WORKABLE_PAUSE_MS);
+        }
       },
       counts: indiaEligible,
       minIndiaJobs: 1,
