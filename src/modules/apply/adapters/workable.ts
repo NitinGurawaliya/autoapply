@@ -146,6 +146,9 @@ async function attachFile(page: Page, value: ResolvedValue, bytes: Uint8Array) {
     await page.locator(fileInput("resume")).first().setInputFiles(file);
     // The drop zone shows the file's name once Workable has taken it (the input itself has no text).
     await page.waitForFunction((fileName) => document.body.innerText.toLowerCase().includes(fileName.toLowerCase()), name, { timeout: 30000 });
+    // The name shows at once, but Workable keeps uploading the file and holds Submit disabled until it is done (11 Nov:
+    // 1.8 s for a one-page file; the worker's Submit on Lokal hit a disabled button). Done means Submit is enabled again.
+    if (!(await waitSubmitEnabled(page, 60000))) throw new Error("Workable did not finish taking the file within a minute");
     return cleanup;
   } catch (error) {
     await cleanup();
@@ -194,6 +197,26 @@ async function successShown(page: Page) {
   // The form's own text is never the answer: it must be gone.
   if (match && (await page.locator('[data-ui="apply-button"]').count()) === 0) return `text "${match[0]}"`;
   return null;
+}
+
+/**
+ * Wait until Workable's Submit is enabled (true), a Turnstile challenge shows ("challenge", when `challenge` is given),
+ * or the time is up (false). Submit is disabled while a file uploads and while the form is being sent.
+ */
+async function waitSubmitEnabled(page: Page, ms: number, challenge?: () => Promise<boolean>): Promise<boolean | "challenge"> {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    const enabled = await page
+      .evaluate(() => {
+        const button = document.querySelector('[data-ui="apply-button"]') as HTMLButtonElement | null;
+        return Boolean(button && !button.disabled && button.getAttribute("aria-disabled") !== "true");
+      })
+      .catch(() => false);
+    if (enabled) return true;
+    if (challenge && (await challenge().catch(() => false))) return "challenge";
+    await page.waitForTimeout(500).catch(() => undefined);
+  }
+  return false;
 }
 
 async function challengeVisible(page: Page) {
@@ -277,14 +300,22 @@ async function submitWorkable(page: Page, ctx: SubmitContext): Promise<SubmitRes
     await ctx.announceHandoff?.(`${what}: complete it in the Chrome window on your computer, then press Submit if the form is still there`);
   };
   try {
+    // As Ashby (adapters/ashby.ts): the window in front, then one plain click, and the bot check decides. A window in the
+    // background is scored lower by these checks.
+    await page.bringToFront().catch(() => undefined);
     if (withPerson) {
-      await page.bringToFront().catch(() => undefined);
       await ctx.announceHandoff?.("Workable asked to confirm a person is applying: check the form in the Chrome window on your computer and press Submit");
     } else {
-      try {
-        await button.click({ timeout: 15000 });
-      } catch (error) {
-        throw new NotSentError(`Could not press Submit on the Workable form: ${friendlyError(error)}`);
+      // Submit stays disabled while anything is still uploading or Turnstile is still deciding: wait for it, never force it.
+      const ready = await waitSubmitEnabled(page, 60000, () => challengeVisible(page));
+      if (ready === "challenge") await askPerson("Workable's Turnstile showed a challenge");
+      else if (!ready) await askPerson("Workable kept Submit locked (its human check did not clear)");
+      else {
+        try {
+          await button.click({ timeout: 15000 });
+        } catch (error) {
+          throw new NotSentError(`Could not press Submit on the Workable form: ${friendlyError(error)}`);
+        }
       }
     }
     let challenged = false;
