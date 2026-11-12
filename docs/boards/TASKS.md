@@ -250,6 +250,9 @@ In progress 10 Nov:
   - Workable's job search (`jobs.workable.com/api/v1/jobs?location=India`, 10 developer queries) gave 134 companies. 125 slugs were confirmed on the widget API by name match.
   - Import: 55 companies added with fresh India jobs (1,303 listed); ingest stored 591 (`lokal-app` is Lokal's real account).
   - Workable answers 429 after ~250 calls in ten minutes: discovery now counts only a 404 as "not a board" and pauses 2 s between Workable calls. The 124 rows the 429 wrote as `not_on_board` were deleted.
+- 11–12 Nov, Lokal React Native Intern for Nitin (passes every rule).
+  - Bugs fixed: date questions (MM/DD/YYYY, calendar closed), values read back, Submit only once Workable unlocks it (resume upload, 1.8 s for one page), the window in front.
+  - The worker's Submit then reached Cloudflare's "Verify you are human" box. Three ticks by the owner each failed, so nothing was sent and the run was cancelled. **Blocked:** [BLOCKERS.md](../BLOCKERS.md). The adapter fills every form right; Submit cannot pass Turnstile from the agent's browser.
 - Left: confirm run 2 from Nitin's email (then mark it sent); a Workable job inside a real user's band (more companies: the Workable search API as a slug source, or M3's list), one real submit, then `APPLY_BOARDS`.
 
 <a id="m13"></a>
