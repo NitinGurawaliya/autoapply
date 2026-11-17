@@ -2,6 +2,7 @@ import type { Job } from "pg-boss";
 import { enqueueIngestCompanies } from "@/lib/queue";
 import { dueCompanies, startTickRun, warmFeeds } from "@/modules/jobs";
 import { deleteOldClosedJobs } from "@/modules/jobs/ingest";
+import { refreshLogos } from "@/modules/jobs/logos";
 import { embedPendingJobs } from "@/modules/jobs/semantic";
 
 // How many due companies one tick sends at most: 2,000 every 5 minutes reads 20,000 newly seeded companies within an
@@ -9,6 +10,10 @@ import { embedPendingJobs } from "@/modules/jobs/semantic";
 const BATCH = () => Math.min(Math.max(Number(process.env.INGEST_TICK_BATCH) || 2000, 1), 10000);
 // Old closed jobs are cleared once an hour, not every tick.
 let lastCleanup = 0;
+// Logos (owner, 18 Nov: every company on the cards has one): a few companies without one each tick, India-hiring first,
+// in the background so the tick is not held up; never two sweeps at once.
+const LOGOS_PER_TICK = () => Math.min(Math.max(Number(process.env.LOGOS_PER_TICK) || 40, 0), 500);
+let logosRunning = false;
 
 /**
  * The `ingest-tick` queue (INGEST_MODE=tick, Phase M, M2). Every tick: first the housekeeping a run used to do at its
@@ -30,6 +35,15 @@ export async function handleIngestTick(jobs: Job<object>[]) {
       lastCleanup = Date.now();
       const deleted = await deleteOldClosedJobs().catch(() => 0);
       if (deleted) console.log(`ingest-tick: deleted ${deleted} old closed jobs`);
+    }
+    if (!logosRunning && LOGOS_PER_TICK() > 0) {
+      logosRunning = true;
+      void refreshLogos({ limit: LOGOS_PER_TICK(), write: true })
+        .then((done) => done.checked > 0 && console.log(`ingest-tick: logos ${done.found} found of ${done.checked} looked at`))
+        .catch(() => undefined)
+        .finally(() => {
+          logosRunning = false;
+        });
     }
     const due = await dueCompanies(BATCH());
     if (due.length === 0) continue;

@@ -1,6 +1,6 @@
 // Company logos from their public job board pages (modules/jobs/logos.ts). Dry run by default: reads the pages and
 // counts; --write saves them (Company.logoUrl, logoCheckedAt).
-//   npx tsx scripts/backfill-logos.ts [--limit 600] [--boards greenhouse,lever,ashby] [--write]
+//   npx tsx scripts/backfill-logos.ts [--limit 600] [--boards greenhouse,lever,ashby] [--again] [--write]
 import { db } from "../src/lib/db";
 import { refreshLogos } from "../src/modules/jobs/logos";
 
@@ -13,9 +13,11 @@ async function main() {
   const write = process.argv.includes("--write");
   const limit = Number(arg("--limit")) || 600;
   const sources = arg("--boards")?.split(",");
-  console.log(`${write ? "WRITE" : "DRY RUN (nothing is written)"}: up to ${limit} companies${sources ? ` on ${sources.join(", ")}` : ""}`);
+  // --again: also the companies looked at in the last 30 days (18 Nov: misses stamped before a board had a reader).
+  const again = process.argv.includes("--again");
+  console.log(`${write ? "WRITE" : "DRY RUN (nothing is written)"}: up to ${limit} companies${sources ? ` on ${sources.join(", ")}` : ""}${again ? ", recent misses too" : ""}`);
   const t = Date.now();
-  const { examples, ...counts } = await refreshLogos({ limit, write, sources });
+  const { examples, ...counts } = await refreshLogos({ limit, write, sources, again });
   console.log(`LOGOS ${JSON.stringify(counts)} ${Math.round((Date.now() - t) / 1000)} s`);
   for (const line of examples) console.log(`  ${line}`);
   await db.$disconnect();

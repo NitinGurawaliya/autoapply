@@ -19,6 +19,11 @@ const checks: Array<[string, boolean]> = [
   ["no logo marked: null (og:image alone is not used)", logoFromHtml("greenhouse", `<meta property="og:image" content="https://x/y.png"/><img src="https://x/z.png">`) === null],
   ["http (not https) is refused", logoFromHtml("greenhouse", `<img class="logo" src="http://x/y.png">`) === null],
   ["entities are decoded", logoFromHtml("greenhouse", `<img class="logo" src="https://x/y.png?a=1&amp;b=2">`) === "https://x/y.png?a=1&b=2"],
+  // 18 Nov: Workable and Zoho Recruit name the account logo as the og:image.
+  ["workable: the account logo og:image", logoFromHtml("workable", `<meta property="og:image" content="https://workablehr.s3.amazonaws.com/uploads/account/open_graph_logo/491209/social?1779787723000">`) === "https://workablehr.s3.amazonaws.com/uploads/account/open_graph_logo/491209/social?1779787723000"],
+  ["workable: Workable's own default image is not a logo", logoFromHtml("workable", `<meta property="og:image" content="https://www.workable.com/static/default-share.png">`) === null],
+  ["zoho: the career site's company logo", logoFromHtml("zohorecruit", `<meta property="og:image" content="https://artingdigital.zohorecruit.in/recruit/viewCareerImage.do?type=meta&amp;page_id=1&amp;file_name=company_logo.jpg">`) === "https://artingdigital.zohorecruit.in/recruit/viewCareerImage.do?type=meta&page_id=1&file_name=company_logo.jpg"],
+  ["smartrecruiters: no board page logo (the website icon is used)", logoFromHtml("smartrecruiters", `<meta property="og:image" content="https://x/y.png">`) === null],
 ];
 
 let failed = 0;

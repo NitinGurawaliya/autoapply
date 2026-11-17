@@ -203,8 +203,8 @@ export async function recordChecked(
         create: { source, slug: result.slug, name: (named && (await board.nameOf?.(result.slug))) || candidate.name, stage: candidate.stage, addedBy: "discovery", tier, indiaOpen: result.indiaJobs, ...(result.indiaJobs > 0 ? { lastIndiaAt: new Date() } : {}), ...(result.openJobs === 0 ? { emptySince: new Date() } : {}) },
         update: {},
       });
-      // Its logo for the cards, from the same public board page (logos.ts); a miss is looked at again later.
-      const logoUrl = await fetchLogoUrl(source, result.slug).catch(() => null);
+      // Its logo for the cards: its board page's, else its website's icon (logos.ts); a miss is looked at again later.
+      const logoUrl = await fetchLogoUrl(source, result.slug, candidate.name).catch(() => null);
       await db.$executeRaw`UPDATE "Company" SET "logoUrl" = ${logoUrl}, "logoCheckedAt" = now() WHERE source = ${source} AND slug = ${result.slug} AND "logoUrl" IS NULL`;
       log(`discovery ${source}: added ${candidate.name} (${result.slug}): ${result.indiaJobs} India jobs, ${result.freshIndiaJobs} in the last ${FRESH_DAYS} days`);
     }
