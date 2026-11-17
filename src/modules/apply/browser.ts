@@ -4,6 +4,7 @@ import { chromium, type Browser, type BrowserContext, type Page } from "playwrig
 import { z } from "zod";
 import { storage } from "@/lib/storage";
 import { NoRetryError } from "./adapter";
+import { openStealthyBrowser, stealthEnabled } from "./real-browser";
 
 export type OpenBrowser = {
   context: BrowserContext;
@@ -147,6 +148,34 @@ async function saveState(context: BrowserContext, key: string, owner: string) {
  * Chrome is not installed. It needs a screen, so it runs only where the worker runs on the user's own computer.
  */
 export async function openBrowser(url: string, owner: string, options: { handoff?: boolean; window?: boolean } = {}): Promise<OpenBrowser> {
+  // The stealthy Chrome (real-browser.ts) is the default for every kind of run (main, handoff, window) since 17 Nov:
+  // Workable's Turnstile, Ashby's spam check and the rest see a person's Chrome. The Playwright browser below runs only
+  // with STEALTHY_BROWSER=0 (stealth off) or STEALTHY_FALLBACK=1 (allowed when the stealthy Chrome cannot start).
+  if (stealthEnabled()) {
+    const stealthy = await openStealthyBrowser(url, owner, { savedState: await loadState(stateKeyFor(owner)) });
+    if (stealthy) {
+      const stateKey = stateKeyFor(owner);
+      let closed = false;
+      return {
+        context: stealthy.context,
+        page: stealthy.page,
+        stateKey,
+        close: async () => {
+          if (closed) return;
+          closed = true;
+          await saveState(stealthy.context, stateKey, owner);
+          await stealthy.close();
+        },
+      };
+    }
+    // No silent fallback (owner, 17 Nov): a run never goes out through the Playwright browser unless STEALTHY_FALLBACK=1.
+    // Without it the run is retried later, when Python, SeleniumBase or the screen is back.
+    if (process.env.STEALTHY_FALLBACK !== "1") {
+      throw new Error("The stealthy Chrome could not start (see stealthy-browser.log); the run will be retried. Set STEALTHY_FALLBACK=1 to allow the Playwright browser.");
+    }
+    console.log(`browser: stealthy Chrome unavailable, opening the Playwright ${options.handoff || options.window ? "handoff" : "main"} browser for ${url}`);
+  }
+
   if (options.handoff && !canShowWindow() && !autoSubmitAshby()) {
     throw new NoRetryError("This form needs you to press Submit yourself, and the worker is running without a screen. Run the worker on your own computer, or open the form and apply by hand.");
   }
