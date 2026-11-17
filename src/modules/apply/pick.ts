@@ -4,7 +4,9 @@ import { greenhouseAdapter } from "./adapters/greenhouse";
 import { kekaAdapter } from "./adapters/keka";
 import { leverAdapter } from "./adapters/lever";
 import { mockAdapter } from "./adapters/mock";
+import { smartRecruitersAdapter } from "./adapters/smartrecruiters";
 import { workableAdapter } from "./adapters/workable";
+import { zohoAdapter } from "./adapters/zohorecruit";
 
 const BY_SOURCE: Record<string, AtsAdapter> = {
   greenhouse: greenhouseAdapter,
@@ -12,6 +14,8 @@ const BY_SOURCE: Record<string, AtsAdapter> = {
   ashby: ashbyAdapter,
   keka: kekaAdapter,
   workable: workableAdapter,
+  zohorecruit: zohoAdapter,
+  smartrecruiters: smartRecruitersAdapter,
 };
 
 // Job source wins: Greenhouse listings often link to a company careers site, not greenhouse.io.
@@ -23,5 +27,7 @@ export function pickAdapter(url: string, source?: string): AtsAdapter {
   if (ashbyAdapter.matches(url)) return ashbyAdapter;
   if (kekaAdapter.matches(url)) return kekaAdapter;
   if (workableAdapter.matches(url)) return workableAdapter;
+  if (zohoAdapter.matches(url)) return zohoAdapter;
+  if (smartRecruitersAdapter.matches(url)) return smartRecruitersAdapter;
   return greenhouseAdapter;
 }

@@ -111,8 +111,32 @@ export type SeedYield = {
   /** Pass the board's rule (enough fresh India jobs): added, or would be in a dry run. */
   passing: number;
   added: number;
+  /** Times the run paused because the board pushed back, and whether it gave up on the board (auto-pause, M3). */
+  paused: number;
+  stopped: boolean;
   examples: string[];
 };
+
+/** Which of `count` shards a slug belongs to (FNV-1a of the lower-cased slug): parallel runs never share a board. */
+export function shardOf(slug: string, count: number) {
+  let hash = 0x811c9dc5;
+  for (const char of slug.toLowerCase()) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash % count;
+}
+
+// Auto-pause (M3, owner 17 Nov): more than a third of the last 50 checks failing means the board is pushing back (a
+// rate limit, an outage), so this run waits, then tries again; three pauses in a row and it stops the board.
+const PAUSE_WINDOW = 50;
+const PAUSE_MIN_SEEN = 30;
+const PAUSE_SHARE = 1 / 3;
+const MAX_PAUSES = 3;
+
+/** An error's last line: Prisma's messages start with a line break and a header, which logged as nothing. */
+const lastLine = (error: unknown) =>
+  error instanceof Error ? (error.message.split("\n").map((line) => line.trim()).filter(Boolean).at(-1) ?? "failed").slice(0, 160) : "failed";
 
 /**
  * Checks up to `limit` new board identifiers of one ATS, at the daily run's pace. A dry run only reads the boards'
@@ -121,7 +145,20 @@ export type SeedYield = {
 export async function verifySeeds(
   source: SeedSource,
   slugs: string[],
-  options: { limit: number; write: boolean; from: string; recheck?: boolean; watchAll?: boolean; log?: (line: string) => void },
+  options: {
+    limit: number;
+    write: boolean;
+    from: string;
+    recheck?: boolean;
+    watchAll?: boolean;
+    log?: (line: string) => void;
+    /** Only the slugs of this shard (`index` of `count`), so several runs can share one board without overlap. */
+    shard?: { index: number; count: number };
+    /** How long an auto-pause lasts (default 10 minutes). */
+    pauseMinutes?: number;
+    /** Parallel checks in this run (default CONCURRENCY): 1 for a board that rate-limits (Workable, ~250 calls / 10 min). */
+    lanes?: number;
+  },
 ): Promise<SeedYield> {
   const log = options.log ?? (() => undefined);
   const board = boardOf(source);
@@ -134,7 +171,8 @@ export async function verifySeeds(
   const skip = options.recheck ? companies : [...companies, ...checked];
   const knownSlugs = new Set(skip.flatMap((row) => (row.slug ? [row.slug.toLowerCase()] : [])));
   const knownNames = new Set(skip.map((row) => normalName(row.name)));
-  const fresh = unique.filter((slug) => !knownSlugs.has(slug) && !knownNames.has(normalName(slug)));
+  const shard = options.shard;
+  const fresh = unique.filter((slug) => !knownSlugs.has(slug.toLowerCase()) && !knownNames.has(normalName(slug)) && (!shard || shardOf(slug, shard.count) === shard.index));
   const batch = fresh.slice(0, options.limit);
   const result: SeedYield = {
     source,
@@ -150,11 +188,39 @@ export async function verifySeeds(
     indiaJobs: 0,
     passing: 0,
     added: 0,
+    paused: 0,
+    stopped: false,
     examples: [],
+  };
+  const pauseMs = (options.pauseMinutes ?? 10) * 60 * 1000;
+  const recent: boolean[] = [];
+  let pausedUntil = 0;
+  let pausesInARow = 0;
+  const note = (failed: boolean) => {
+    recent.push(failed);
+    if (recent.length > PAUSE_WINDOW) recent.shift();
+    const fails = recent.filter(Boolean).length;
+    if (recent.length < PAUSE_MIN_SEEN) return;
+    // Healthy again: the pauses so far no longer count towards giving up.
+    if (fails / recent.length < 0.1) pausesInARow = 0;
+    if (!failed || fails / recent.length <= PAUSE_SHARE || Date.now() < pausedUntil || result.stopped) return;
+    pausesInARow += 1;
+    if (pausesInARow > MAX_PAUSES) {
+      result.stopped = true;
+      log(`seeds ${source}: STOPPED: ${fails} of the last ${recent.length} checks failed after ${MAX_PAUSES} pauses; run it again later`);
+      return;
+    }
+    result.paused += 1;
+    pausedUntil = Date.now() + pauseMs;
+    recent.length = 0;
+    log(`seeds ${source}: PAUSED ${Math.round(pauseMs / 60000)} min: ${fails} checks of the last window failed (the board is pushing back)`);
   };
   let next = 0;
   const worker = async () => {
-    while (next < batch.length) {
+    while (next < batch.length && !result.stopped) {
+      const wait = pausedUntil - Date.now();
+      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+      if (result.stopped) return;
       const slug = batch[next++];
       try {
         const found = await checkCandidate({ slugs: [slug] }, board);
@@ -174,15 +240,17 @@ export async function verifySeeds(
           const status = await recordChecked(board, { name: slug, stage: null, from: options.from }, found, log, { watchAll: options.watchAll });
           if (status === "added") result.added += 1;
         }
+        note(false);
       } catch (error) {
         result.checked += 1;
         result.failed += 1;
-        log(`seeds ${source}: ${slug}: ${error instanceof Error ? error.message.slice(0, 80) : "failed"}`);
+        log(`seeds ${source}: ${slug}: ${lastLine(error)}`);
+        note(true);
       }
       // The daily run's pace: a short pause between boards on each lane.
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
   };
-  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+  await Promise.all(Array.from({ length: Math.max(1, options.lanes ?? CONCURRENCY) }, worker));
   return result;
 }

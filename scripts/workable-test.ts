@@ -1,6 +1,6 @@
 // Workable (M12): the form JSON → fields, and account slugs from addresses. No network, no database.
 // npx tsx scripts/workable-test.ts
-import { fromWorkable, readReply } from "../src/modules/apply/adapters/workable";
+import { CONFIRMATION, fromWorkable, readReply } from "../src/modules/apply/adapters/workable";
 import { workableSlugOf } from "../src/modules/jobs/fetchers/workable";
 
 // The shape of apply.workable.com/api/v1/jobs/<shortcode>/form (Zifo and Apna forms, 10 Nov), trimmed.
@@ -68,6 +68,12 @@ const checks: Array<[string, boolean]> = [
   ["nested error lists are read too", readReply(400, JSON.stringify({ errors: { email: ["is invalid"] } })).reason === "is invalid"],
   ["a 5xx or unreadable answer leaves the outcome unknown", readReply(502, "<html>bad gateway</html>").kind === "unknown" && readReply(0, "").kind === "unknown"],
   ["an account subdomain is its slug", workableSlugOf(new URL("https://apna.workable.com")) === "apna" && workableSlugOf(new URL("https://jobs.workable.com/search")) === null],
+  // A duplicate is the application already on file: applied, never a refusal (HANDOFF-CLINE.md §5).
+  ["an \"already applied\" refusal is the application on file, counted as sent", (() => { const r = readReply(422, JSON.stringify({ error: "You have already applied to this job" })); return r.kind === "sent" && r.reason === "You have already applied to this job"; })()],
+  ["a nested \"already submitted\" counts as sent too", readReply(400, JSON.stringify({ errors: { application: ["already submitted"] } })).kind === "sent"],
+  ["\"already received\" on the page counts as applied", CONFIRMATION.test("Your application was already received.")],
+  ["\"you have already applied\" on the page counts as applied", CONFIRMATION.test("You have already applied for this job")],
+  ["an ordinary refusal still counts as refused", readReply(422, JSON.stringify({ error: "Captcha verification failed" })).kind === "refused"],
 ];
 
 let failed = 0;

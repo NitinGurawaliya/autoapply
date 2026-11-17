@@ -1,10 +1,11 @@
 import { joinChoices, splitChoices } from "@/lib/choices";
 import { customQuestionKey, detectConcept, fitsKey, getAnswerKey, matchKeyBySynonym, RISKY } from "@/modules/answers";
 import { loadRules } from "@/modules/governance";
-import { ACKNOWLEDGEMENT_KEY, ACKNOWLEDGEMENT_QUESTION, acknowledgementValue } from "./acknowledgement";
+import { ACKNOWLEDGEMENT_KEY, ACKNOWLEDGEMENT_QUESTION, acknowledgementValue, certifiesFact } from "./acknowledgement";
 import { abroadAnswer } from "./abroad";
 import type { FormField, PendingQuestion, ResolvedValue } from "./adapter";
 import { BEST_PROJECT_KEY, essayKind } from "./essay";
+import { selfIdList } from "./guess";
 import { historyValue } from "./history";
 import type { MemoryAnswer } from "./recall";
 import { outsideHome, SPONSORSHIP_ABROAD_KEY, SPONSORSHIP_ABROAD_OPTIONS, sponsorshipAbroadQuestion, standingSponsorship } from "./sponsorship";
@@ -87,6 +88,34 @@ export function numericRange(value: string, options: string[]) {
   return hits.length === 1 ? hits[0] : null;
 }
 
+/**
+ * Pay bands in rupees ("5,00,000 to 8,00,000 INR") for a pay answer in lakh ("6", "6 LPA") or rupees ("600000"): the
+ * one band holding it. A bare number under 1000 is lakh, as Indian forms and onboarding state pay. On a shared edge
+ * ("8" against "5-8 lakh" and "8-11 lakh") the band that starts there. Only when every option with a number is such a
+ * band: 17 Nov, NielsenIQ, a current CTC of 6 went to "8,00,000 to 11,00,000 INR" through a model's reuse.
+ */
+export function rupeeBand(value: string, options: string[]) {
+  const amount = (text: string) => Number(text.replace(/,/g, ""));
+  const parsed = value
+    .trim()
+    .toLowerCase()
+    .match(/^(?:₹|inr|rs\.?)?\s*(\d[\d,]*(?:\.\d+)?)\s*(lpa|lakhs?|lacs?|l|inr|rupees)?$/);
+  if (!parsed) return null;
+  let rupees = amount(parsed[1]);
+  if ((parsed[2] && parsed[2].startsWith("l")) || (!parsed[2] && rupees < 1000)) rupees *= 100_000;
+  const CUR = String.raw`(?:₹|inr|rs\.?)?\s*`;
+  const band = new RegExp(String.raw`^\s*${CUR}(\d[\d,]*)\s*(?:-|–|to)\s*${CUR}(\d[\d,]*)\s*(?:inr|rupees|₹)?\s*$`, "i");
+  const numbered = options.filter((option) => /\d/.test(option));
+  const bands = numbered.map((option) => {
+    const m = option.match(band);
+    return m ? { option, low: amount(m[1]), high: amount(m[2]) } : null;
+  });
+  if (bands.length < 2 || bands.some((item) => item === null) || Math.max(...bands.map((item) => item!.high)) < 100_000) return null;
+  const hits = bands.filter((item) => item!.low <= rupees && rupees <= item!.high);
+  const pick = hits.length === 2 ? hits.find((item) => item!.low === rupees) : hits.length === 1 ? hits[0] : undefined;
+  return pick ? pick.option : null;
+}
+
 // Currencies a pay question can name. INR covers how Indian forms state pay (LPA, lakh, CTC).
 const CURRENCIES: Array<[string, RegExp]> = [
   ["EUR", /\b(eur|euros?)\b|€/i],
@@ -105,6 +134,38 @@ function fitNumber(value: string) {
   return value.trim().match(/^[^\d-]*(-?\d+(?:\.\d+)?)\D*$/)?.[1] ?? null;
 }
 
+/**
+ * A pay number box in rupees ("Current CTC (INR)", Bosch on SmartRecruiters, 17 Nov) takes rupees: "6" or "6 LPA" (lakh,
+ * as onboarding states pay) becomes 600000; "600000" or "6,00,000" stays. A box that asks in lakh or LPA is left as is.
+ */
+export function rupeesFor(label: string, raw: string) {
+  if (detectConcept(label) !== "compensation" || currencyOf(label) !== "INR" || /\b(lpa|lakhs?|lacs?|crores?)\b/i.test(label) || MONTHLY.test(label)) return null;
+  const parsed = raw
+    .trim()
+    .toLowerCase()
+    .match(/^(?:₹|inr|rs\.?)?\s*(\d[\d,]*(?:\.\d+)?)\s*(lpa|lakhs?|lacs?|l|inr|rupees)?$/);
+  if (!parsed) return null;
+  const amount = Number(parsed[1].replace(/,/g, ""));
+  const lakh = parsed[2] ? parsed[2].startsWith("l") : amount < 1000;
+  return String(Math.round(lakh ? amount * 100_000 : amount));
+}
+
+const MONTHLY = /\b(month(ly)?|per month|p\.?\s?m\.?)\b/i;
+const YEARLY_PAY_KEYS = new Set(["current_ctc", "expected_ctc", "salary_expectation"]);
+
+/**
+ * A number box for pay: rupees where the box asks for rupees (rupeesFor); otherwise the bare number, but never from an
+ * answer in lakh ("46lpa" is not 46 of anything else) and never a yearly answer for a monthly question. 17 Nov,
+ * Miratech: "What are your financial expectations (monthly gross...)" took 46 from a saved "46lpa".
+ */
+export function payNumber(label: string, raw: string, key: string) {
+  const rupees = rupeesFor(label, raw);
+  if (rupees) return rupees;
+  if (/\d\s*(lpa|lakhs?|lacs?|l|cr|crores?)\b/i.test(raw)) return null;
+  if (detectConcept(label) === "compensation" && MONTHLY.test(label) && YEARLY_PAY_KEYS.has(key)) return null;
+  return fitNumber(raw);
+}
+
 /** Map a value onto the form's own options. Null means the value does not fit, so the user must answer. */
 // Forms mix plain and non-breaking spaces in the same option text, so compare with all whitespace collapsed.
 function norm(text: string) {
@@ -117,9 +178,11 @@ function fitOption(value: string, options: string[] | undefined, eeo: boolean) {
   const exact = options.find((option) => norm(option) === target);
   if (exact) return exact;
   if (eeo) return options.find((option) => DECLINE.test(option)) ?? null;
-  const range = numericRange(value, options);
+  const range = numericRange(value, options) ?? rupeeBand(value, options);
   if (range) return range;
-  const starts = options.filter((option) => norm(option).startsWith(target));
+  // A number is never the start of a longer number: a current CTC of "6" (lakh) took "60,00,000 to 70,00,000 INR"
+  // as its option (17 Nov, NielsenIQ on SmartRecruiters). It goes to the option mapper instead.
+  const starts = options.filter((option) => norm(option).startsWith(target) && !(/\d$/.test(target) && /^[\d.,]/.test(norm(option).slice(target.length))));
   return starts.length === 1 ? starts[0] : null;
 }
 
@@ -204,8 +267,11 @@ export function resolveValues(
     const ownPay = bank.get(questionKey)?.answer;
     const push = (valueKey: string, raw: string, source: string, eeo = false) => {
       if (foreignCurrency && valueKey !== questionKey && raw !== ownPay && currencyOf(raw) !== foreignCurrency) return false;
+      // A single box takes a yes or a no, nothing else: "Citizen (India)" reused onto a declaration box left it
+      // unticked while it counted as filled (17 Nov, NielsenIQ).
+      if (field.type === "checkbox" && !/^(yes|no|true|false|y|n|1|0|checked|unchecked|agree|i agree|accept|accepted)$/i.test(raw.trim())) return false;
       let value =
-        field.type === "file" ? raw : field.type === "number" ? fitNumber(raw) : field.type === "checkbox-group" ? fitChoices(raw, field.options, eeo) : fitOption(raw, field.options, eeo);
+        field.type === "file" ? raw : field.type === "number" ? payNumber(field.label, raw, valueKey) : field.type === "checkbox-group" ? fitChoices(raw, field.options, eeo) : fitOption(raw, field.options, eeo);
       let reworded = false;
       if (value == null && field.options?.length) {
         const mapped = optionMatches?.get(optionKey(field.label, raw));
@@ -241,7 +307,7 @@ export function resolveValues(
     const history = historyValue(field.selector, profile);
     const ownHistory = history ? bank.get(questionKey) : undefined;
     if ((ownHistory?.source === "user" || ownHistory?.source === "guessed") && push(questionKey, ownHistory.answer, ownHistory.source)) continue;
-    if (history && push(key ?? questionKey, history.value, "resume")) {
+    if (history && push(key ?? questionKey, history.value, history.source ?? "resume")) {
       values[values.length - 1].basis = history.basis;
       continue;
     }
@@ -255,9 +321,11 @@ export function resolveValues(
       // The same wording is the same question only when it names its own subject ("employed by any government entity",
       // "worked at MongoDB"); one that points at the job ("this role", "our office", "the country where the job is
       // located") means something different for every job, so even the exact wording needs the verified memory answer.
-      const exact = !refersToTheJob(field.label) ? bank.get(questionKey) : undefined;
+      // A box certifying a fact takes the user's own answer to its exact wording even when it mentions "the company":
+      // nothing else may tick it (17 Nov, NielsenIQ asked its citizenship declaration again after it was answered).
+      const exact = !refersToTheJob(field.label) || certifiesFact(field) ? bank.get(questionKey) : undefined;
       if (exact && exact.source === "user" && push(key ?? questionKey, exact.answer, exact.source)) continue;
-      const verified = memory?.get(field.label);
+      const verified = certifiesFact(field) ? undefined : memory?.get(field.label);
       if (verified && push(key ?? questionKey, verified.answer, verified.source ?? "matched")) {
         values[values.length - 1].basis = verified.basis;
         continue;
@@ -331,7 +399,7 @@ export function resolveValues(
     if (own && push(key ?? questionKey, own.answer, own.source)) continue;
 
     // The same fact, saved under another wording, verified to apply to this job.
-    const recalled = memory?.get(field.label);
+    const recalled = certifiesFact(field) ? undefined : memory?.get(field.label);
     if (recalled && push(key ?? questionKey, recalled.answer, recalled.source ?? "matched")) {
       values[values.length - 1].basis = recalled.basis;
       continue;
@@ -355,6 +423,9 @@ export function resolveValues(
     }
 
     if (!key) {
+      // A self-ID list under a label that never names it ("All applicants are invited to complete this section":
+      // Male / Female / ...) takes the EEO default like a labelled Gender question (17 Nov, NielsenIQ).
+      if (selfIdList(field.options) && push(questionKey, rules.eeo_default, "default", true)) continue;
       ask(questionKey);
       continue;
     }

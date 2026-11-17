@@ -85,6 +85,17 @@ In progress 10 Nov:
   Workday was stopped (applied to only after M6).
 - Owner, 10 Nov: write later, once the infra runs (the worker on this code in tick mode, M1/M2 proven). The dry run keeps no per-company record, so the write re-checks every slug. Re-fetch the lists at the pinned versions, then run `discover-boards.ts --import <list> --boards <b> --watch-all --from list:<name> --write`, about 2 h for the five boards.
 
+In progress 17 Nov (owner: one board at a time, each finished before the next; recorded boards first, then every list):
+- Discovery's check now counts only a 404, a 410 or "no portal" as not a board, on every board (`boards.ts openOrGone`); a 429, 5xx or timeout is a failed check, retried later, never written. The importer takes `--shard i/n` (parallel runs never share a board) and pauses itself for 10 min when more than a third of the last 50 checks fail, stopping the board after 3 pauses (`boardSeeds.ts`).
+- Lists registered: ats-scrapers, upstreamit, latmay, and (17 Nov) openroles, jobseek, open-ats-feed and job-scraper, all MIT or CC BY, pinned in `slugSources/lists.ts`. Every slug is checked live on the board's own API before it is written.
+- Greenhouse recorded boards: 2,523 checked in 6 shards, 2,479 watched, 44 gone, 0 failed. Ashby: recorded 3,407 checked, 3,336 watched; latmay 670, ats-scrapers 91, upstreamit 39 added; 0 failed, no pauses.
+- **Not checked, and why:**
+  - Workday (949 recorded tenants and its files in ats-scrapers, upstreamit, latmay and job-scraper): it answers 429 to checks from this IP; it needs its own slower run, apart from its ingest.
+  - SmartRecruiters (1,138 recorded, its ats-scrapers and job-scraper files): the board is parked (M7, DataDome).
+  - feashliaa's lists: CC BY-NC, no commercial use.
+  - ats-scrapers' files for systems we do not apply on (iCIMS, SuccessFactors, Oracle, BambooHR, Personio, Darwinbox and others), and job-scraper's Rippling, Google, Netflix and similar entries: outside M3.
+  - Keka from latmay (no Keka rows) and Zoho from ats-scrapers and upstreamit (no Zoho files).
+
 <a id="m4"></a>
 ### [ ] M4 — Continuous discovery and re-validation (supersedes T98)
 Do: build the `slugSources/` layer and the `discover-source` and `discover-verify` queues. Sources:
@@ -141,7 +152,7 @@ Design: [4.6 Sequence: Workday](TDD.md#46-sequence-workday-apply-with-an-employe
 - Typecheck and lint pass.
 
 <a id="m7"></a>
-### [-] M7 — SmartRecruiters (T95, moved here)
+### [x] M7 — SmartRecruiters (T95, moved here)
 Do: as T95, plus what 7 Nov found. First read `rajakrishna/easy-apply` (MIT, SmartRecruiters form) and `devilscrapes/smartrecruiters-jobs-scraper-javascript` (MIT, the postings API) as references ([TDD §12](TDD.md#12-research-notes-and-sources)):
 - `fetchers/smartrecruiters.ts` lists with `country=in`, then each posting's detail.
 - Add the host `jobs.smartrecruiters.com` and a discovery entry, with seeds from M3's lists.
@@ -163,6 +174,9 @@ In progress 9 Nov:
   - The form link is the job page's `a#st-apply`.
   - **Blocked:** DataDome shows "Access is temporarily restricted" to the worker's browser, headless and in the visible Chrome window. See [BLOCKERS.md](../BLOCKERS.md). No adapter yet.
 - Parked (owner, 10 Nov): M12 goes first. The reader and the 186 jobs stay; the jobs do not reach the feed. Back when the block lapses or a SmartRecruiters partner key is in hand; then the adapter, dry runs, one real submit and `APPLY_BOARDS`.
+- 17 Nov: the block is lifted in the stealthy Chrome (BLOCKERS.md): Miratech, WNS and Dr Reddy's job pages and Easy Apply forms loaded, 20 to 29 fields each. Supply: 3,498 open India jobs from 144 companies, ~610 new a day (~210 tech). Next: the adapter, dry runs on 3 forms, one real submit, `APPLY_BOARDS`.
+Done 17 Nov: dry runs pass on 17 forms from 17 employers (8 to 50 fields; two-page, revealed follow-ups, multi-selects, currency boxes, experience and education entries); 12 real submits for Nitin from 12 employers, each answered 200, none challenged by DataDome (its slider came only in back-to-back dry runs); Swiggy 167 and Freshworks 15 open India jobs ingested, 3,550 in all.
+Changed: `adapters/smartrecruiters.ts`, `adapter.ts` + `runner.ts` (`nextStep`), `history.ts` (entries), `valueResolver.ts`/`guess.ts`/`acknowledgement.ts`/`optionMap.ts` (rupee bands, pay boxes, self-ID lists, fact-certifying boxes), `match.ts` (on by default), `scripts/ats-smoke.ts`; ARCHITECTURE §6.6, §6.22.
 
 <a id="m8"></a>
 ### [ ] M8 — SuccessFactors
@@ -221,7 +235,7 @@ Design: [2 Facts](TDD.md#2-facts-the-design-rests-on-research-and-measurements-7
 - One real submit for the owner.
 
 <a id="m12"></a>
-### [~] M12 — Workable
+### [x] M12 — Workable
 Do:
 - Write `fetchers/workable.ts` on `apply.workable.com/api/v1/widget/accounts/{slug}?details=true`.
 - Add a slug source from Workable's search API (`jobs.workable.com/api/v1/jobs?location=India`): company website → careers link → slug.
@@ -253,10 +267,12 @@ In progress 10 Nov:
 - 11–12 Nov, Lokal React Native Intern for Nitin (passes every rule).
   - Bugs fixed: date questions (MM/DD/YYYY, calendar closed), values read back, Submit only once Workable unlocks it (resume upload, 1.8 s for one page), the window in front.
   - The worker's Submit then reached Cloudflare's "Verify you are human" box. Three ticks by the owner each failed, so nothing was sent and the run was cancelled. **Blocked:** [BLOCKERS.md](../BLOCKERS.md). The adapter fills every form right; Submit cannot pass Turnstile from the agent's browser.
-- Left: confirm run 2 from Nitin's email (then mark it sent); a Workable job inside a real user's band (more companies: the Workable search API as a slug source, or M3's list), one real submit, then `APPLY_BOARDS`.
+- Done 17 Nov: 7 of 7 Workable forms that reached Submit were sent by the worker in the stealthy Chrome (Turnstile silent; ARCHITECTURE 6.21); a no-submit fill of 11 forms took 221 of 221 fields.
+  Changed: `adapters/workable.ts` (number questions as bare numbers, dropdowns picked from their list), `guess.ts` (salutations never guessed), `real-browser.ts` and `scripts/seleniumbase_cdp_launcher.py`, `browser.ts` (stealthy by default), `match.ts` (Workable in `APPLY_BOARDS`, `ENABLE_WORKABLE=0` to switch off).
+  Checks: `scripts/_workable-fillcheck.ts`, `scripts/_dropdown-keys-check.ts`; record in `docs/STEALTHY-BROWSER.md`.
 
 <a id="m13"></a>
-### [ ] M13 — Zoho Recruit apply
+### [x] M13 — Zoho Recruit apply
 Do:
 - Write `adapters/zohorecruit.ts` for the guest form ("I'm interested"), as a handoff board (`HANDOFF_BOARDS`): the image CAPTCHA is typed by a person, who presses Submit.
 - Check that `fetchers/zohorecruit.ts` stores the posting's top-level id: on 7 Nov the first id found in the hidden JSON opened "no longer available".
@@ -267,8 +283,12 @@ Design: [3.1 Order](TDD.md#31-which-boards-and-in-what-order) · [4.5 Recipe](TD
 - One real handoff submit.
 - `APPLY_BOARDS`.
 
+- Done 17 Nov: 30 India portals' forms read from public JSON (`/recruit/v2/public/Job_Openings/<id>/apply/<webform_id>`; every stored job id opened its form, so the fetcher's ids are right): 20 with a CAPTCHA, 6 with an assessment after the form. Dry runs (no submit, no upload) on Quicko, Posimind, FCI and Indus took 51 of 51 fields; Execo stopped at its assessment. Real submit: Quicko Full Stack Developer for Nitin, a person typed the CAPTCHA, Zoho answered 200.
+  Changed: `adapters/zohorecruit.ts` (new: text, number, picklist, yes/no, skills and suggestion boxes; CAPTCHA forms handed to a person, others submitted by the worker; assessment, required tables and multi-selects stop the run), `pick.ts`, `adapter.ts`, `lib/queue.ts` (`HANDOFF_BOARDS`), `match.ts` (in `APPLY_BOARDS`, `ENABLE_ZOHO=0` to switch off). Checks: `scripts/_zoho-survey.ts`, `scripts/_zoho-fillcheck.ts`.
+  Left for later: the assessment page (6 of 30 forms) and questions before the browser (`questions.ts`).
+
 <a id="m14"></a>
-### [ ] M14 — The long tail of public boards, as M1 earns them
+### [-] M14 — The long tail of public boards, as M1 earns them (parked by the owner, 17 Nov: few India jobs)
 Do: for each of Jobvite, Rippling, Recruitee, BambooHR, JazzHR, Pinpoint, Gem, Teamtailor, Breezy, Personio and Polymer, but only those whose M1 numbers after M3 show at least 10 new India jobs a week:
 - a fetcher, a board entry and seeds;
 - an adapter by the recipe, a handoff board where a CAPTCHA is always shown.
@@ -276,6 +296,9 @@ Do: for each of Jobvite, Rippling, Recruitee, BambooHR, JazzHR, Pinpoint, Gem, T
 Freshteam is dropped (being shut down).
 Design: [3.1 Order](TDD.md#31-which-boards-and-in-what-order) · [4.5 Recipe](TDD.md#45-sequence-adding-a-board-with-a-public-form-the-recipe).
 **Done when:** each board taken in has passed its own dry runs and one real submit; the boards left out are named in the Done line with their weekly numbers.
+
+Parked 17 Nov (owner: the boards add few jobs). Measured from one Common Crawl's companies (`scripts/_m14-slugs.ts`, `scripts/_m14-measure.ts`, the ingest India rule), new India jobs a week over all companies found: Recruitee ~1 (64 companies; 1 with India jobs), Breezy ~1 (61; 4), Personio 0 (984; 0), Pinpoint ~0 (54; 3, 67 open India jobs, mostly inDrive), Teamtailor ~6 (470; 2), JazzHR 0 (73; 0), Jobvite ~1 (168; 5), Gem ~2 (633; 3). Not measured: Rippling, BambooHR, Polymer (the crawl index failed or my slug reader missed their address shape; Rippling's addresses start with a locale, `/en-US/<company>`).
+  Public lists that work: Breezy `/json`, Personio `/xml`, Teamtailor `/jobs.rss`, Rippling `api.rippling.com/platform/api/ats/v1/board/<slug>/jobs`, Gem `api.gem.com/job_board/v0/<slug>/job_posts/`, Recruitee `/api/offers/`, Pinpoint `/postings.json`; Jobvite and JazzHR are HTML only.
 
 <a id="m16"></a>
 ### [ ] M16 — Board health: success rate, alert, pause

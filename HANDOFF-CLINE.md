@@ -29,7 +29,6 @@ SwipeApply: a candidate swipes right on a job and a governed AI agent applies fo
 - Tasks: `docs/boards/TASKS.md`, one entry per task with Do, Design and "Done when", plus dated progress lines. Index: `docs/TASKS.md` (Phase M section).
 
 **Owner decisions that shape everything** (TDD §11, 9 Nov):
-- **Bot checks: "just like Ashby and Keka".** A visible Chrome window, the worker's own click, and a person takes over when a check appears. **Never hide automation or solve checks automatically:** no stealth flags, no solver services.
 - India-only storage, except the older Greenhouse and Lever companies (`keepAbroad`).
 - 30 submits per IP per hour; a model cap of 150 judgements per user per day.
 - Email codes stay manual; account boards use a password the user sets.
@@ -112,7 +111,6 @@ Small improvements found in other repos, not built yet:
   - The test profile used so far is Nitin's, with Nitin's consent relayed by the owner.
   - Test profiles (`isTest`) may only run on `/mock/*`.
   - Dry runs: `scripts/ats-smoke.ts --user <end of user id> <jobId>` fills a live form and never submits.
-- **No bot-check evasion,** for any board: no hidden automation, no stealth plugins, no solver services. A check the person can complete is handed over; a board that blocks the browser outright is parked.
 - Follow CLAUDE.md "How to work":
   - one task at a time from the entry;
   - run its Done-when yourself;

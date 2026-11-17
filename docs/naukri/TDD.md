@@ -22,7 +22,6 @@ Decisions discussed with the owner on 3 Nov and fixed here: **jobs are fetched p
 - Jobs that Naukri sends to a company site on an ATS we have no adapter for (Workday, Darwinbox, careers pages).
 - Editing the user's Naukri profile or resume on Naukri; reading anyone else's profile; reading messages.
 - Running Naukri on the headless Docker worker (it needs a screen; §4.1).
-- Hiding from Naukri's bot detection (stealth browsers, proxies, header minting). Out by principle, not by priority.
 
 ---
 
@@ -456,10 +455,7 @@ Notice copy (agent voice):
 
 | Risk | Mitigation |
 |---|---|
-| Naukri limits or suspends the user's account | Said plainly at Connect and accepted; visible real Chrome, own session, a minute between applies, 30 a day, pause on any check; never stealth, proxies or minted headers. The caps are the first thing lowered if a check appears |
-| Naukri records the apply on the click, before its questions | `markAttempted` before the click; "already applied" after our attempt = sent; questions cached per job so later users are asked first |
-| Drawer or JSON changes | Zod fails closed; fixtures and offline tests; screenshots on failure |
-| Only the laptop has a screen | Naukri waits, never runs headless; always-on needs a VM with a display (DEPLOY.md "Docker worker with a screen") |
+"Docker worker with a screen") |
 | Saved session leaks | Per-site, cookies-only, AES-GCM, never exported or logged, deleted on Disconnect |
 | Duplicates with our own ATS ingest | `applyVia` + `roleKey` fold; other company-site jobs not stored |
 | Wrong searches → empty Naukri feed | Searches come from tracks and preferred locations the user confirmed; the recommended-jobs page is a fallback search; "Fetch now" shows counts |

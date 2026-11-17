@@ -8,7 +8,7 @@ import { monthIndex } from "./derive";
  * box). Only what the resume states; anything it does not is left for the normal chain (asked).
  */
 
-type Role = { title?: unknown; company?: unknown; start?: unknown; end?: unknown };
+type Role = { title?: unknown; company?: unknown; start?: unknown; end?: unknown; summary?: unknown };
 type Degree = { school?: unknown; degree?: unknown; year?: unknown };
 export type HistoryProfile = { experience?: unknown; education?: unknown; skills?: unknown };
 
@@ -40,8 +40,16 @@ function degreeYears(value: string | null) {
   return { start: years.length > 1 ? years[0] : null, end: years[years.length - 1] };
 }
 
+/** A resume date as SmartRecruiters' month pickers take it: "May 2026" → "2026-05-01"; a year alone → its January. */
+function isoMonth(value: string | null) {
+  const parts = dateParts(value);
+  if (!parts) return null;
+  const month = parts.month ? MONTHS.indexOf(parts.month) + 1 : 1;
+  return `${parts.year}-${String(month).padStart(2, "0")}-01`;
+}
+
 /** The value for a history field, with what it rests on, or null when it is not one or the resume does not say. */
-export function historyValue(selector: string, profile: HistoryProfile): { value: string; basis: string } | null {
+export function historyValue(selector: string, profile: HistoryProfile): { value: string; basis: string; source?: string } | null {
   const id = selector.match(/\[id="([^"]+)"\]/)?.[1] ?? selector.replace(/^#/, "");
   const role = Array.isArray(profile.experience) ? (profile.experience as Role[]).find((item) => item && (str(item.title) || str(item.company))) : undefined;
   const degree = Array.isArray(profile.education) ? (profile.education as Degree[]).find((item) => item && (str(item.school) || str(item.degree))) : undefined;
@@ -63,6 +71,27 @@ export function historyValue(selector: string, profile: HistoryProfile): { value
   if (/^(start|end)-(year|date-year)--0$/.test(id)) {
     const years = degreeYears(str(degree?.year));
     return fromDegree(id.startsWith("start") ? years?.start ?? null : years?.end ?? null);
+  }
+
+  // SmartRecruiters' experience and education entries (adapters/smartrecruiters.ts, 17 Nov: Rodeo FX requires both).
+  // Its month pickers take ISO dates; a current role ends "present" (the adapter ticks "I currently work here"). A degree
+  // the resume gives by its last year only gets dates worked out from the usual length of that degree, marked so.
+  if (id === "sr-exp-title") return fromRole(str(role?.title));
+  if (id === "sr-exp-company") return fromRole(str(role?.company));
+  if (id === "sr-exp-description") return fromRole(str(role?.summary)?.slice(0, 1500) ?? null);
+  if (id === "sr-exp-from") return fromRole(isoMonth(str(role?.start)));
+  if (id === "sr-exp-to") return role && isCurrent(str(role.end)) ? fromRole("present") : fromRole(isoMonth(str(role?.end)));
+  if (id === "sr-edu-school") return fromDegree(str(degree?.school));
+  if (id === "sr-edu-degree") return fromDegree(str(degree?.degree));
+  if (id === "sr-edu-major") return fromDegree(disciplineOf(str(degree?.degree)));
+  if (id === "sr-edu-from" || id === "sr-edu-to") {
+    const years = degreeYears(str(degree?.year));
+    if (!years) return null;
+    const name = str(degree?.degree) ?? "degree";
+    if (id === "sr-edu-to") return { value: `${years.end}-06-01`, basis: `the resume gives ${years.end} as the last year of ${name}; June assumed`, source: "derived" };
+    if (years.start) return { value: `${years.start}-07-01`, basis: `the resume gives ${years.start} as the first year of ${name}; July assumed`, source: "derived" };
+    const length = /master|m\.?\s?tech|\bm\.?\s?e\b|mba|m\.?\s?sc|\bms\b/i.test(name) ? 2 : /b\.?\s?tech|\bb\.?\s?e\b|bachelor of (technology|engineering)/i.test(name) ? 4 : 3;
+    return { value: `${Number(years.end) - length}-07-01`, basis: `worked out: a ${length}-year ${name} ending ${years.end} (the resume gives the last year only)`, source: "derived" };
   }
 
   // Keka's rows (adapters/keka.ts): its date pickers take "June 2014", so a date the resume gives without a month is left out.

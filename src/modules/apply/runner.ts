@@ -319,8 +319,33 @@ async function execute(applicationId: string, options: { person?: boolean }) {
         selector: resume.selector,
       });
     }
+    // Multi-page forms (adapter.nextStep, M7): each further page's questions are answered by the same chain as the first
+    // page, asked when nothing answers them (the run stops here, as above), and filled. A few pages at most.
+    const allValues = [...resolved.values];
+    for (let step = 0; adapter.nextStep && step < 10; step += 1) {
+      const more = await adapter.nextStep(session.page);
+      if (!more || more.length === 0) break;
+      await writeEvent(applicationId, "inspect", `Next page: found ${more.length} fields`);
+      const { resolved: next } = await resolveForm({ userId: application.userId, source: adapter.source, fields: more, profile, answers, job: jobInfo, draftEssays: true, log: resolveLog });
+      await writeEvent(applicationId, "resolve", `Next page: resolved ${next.values.length}, pending ${next.pending.length}`);
+      const repeatedNext = await repeatedQuestion(next.pending);
+      if (repeatedNext) {
+        const message = `You answered ${MAX_ANSWERS} times, but your answer for "${repeatedNext.label.slice(0, 80)}" still does not match this form's options`;
+        await writeEvent(applicationId, "error", message);
+        await setApp(applicationId, { status: "failed", error: message, attempt: application.attempt });
+        return;
+      }
+      if (next.pending.length > 0) {
+        await setApp(applicationId, { status: "needs_input", attempt: application.attempt, pendingQuestions: next.pending as Prisma.InputJsonValue });
+        await writeEvent(applicationId, "ask_user", `Need ${next.pending.length} answers (next page)`);
+        void notifyNeedsInput(applicationId, "answers");
+        return;
+      }
+      filled.push(...(await adapter.fill(session.page, next.values.filter((value) => value.type !== "file"))));
+      allValues.push(...next.values);
+    }
     // Keep why each value was chosen (a reused answer's original question) with the field and its event.
-    const basisBySelector = new Map(resolved.values.map((value) => [value.selector, value.basis]));
+    const basisBySelector = new Map(allValues.map((value) => [value.selector, value.basis]));
     for (const field of filled) field.basis = basisBySelector.get(field.selector);
     // One write for every filled field: one at a time cost ~0.4 s each from the worker to the database (18 Oct).
     await db.applicationEvent.createMany({

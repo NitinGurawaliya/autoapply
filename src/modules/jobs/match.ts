@@ -16,14 +16,19 @@ export { daysAgoLabel };
 // lib/queue.ts HANDOFF_BOARDS); ENABLE_ASHBY=0 switches it off.
 // Lever (T94) only where ENABLE_LEVER=1: on for the worker and test runs that try its first real handoff submits, off in
 // the feed until they pass (INGEST_CONTRACT: a board goes in after one real submit). Keka (T96) the same, ENABLE_KEKA=1:
-// a person types its image CAPTCHA and presses Apply Now in the handoff window. Workable (M12) the same, ENABLE_WORKABLE=1,
-// until its first real submit.
+// a person types its image CAPTCHA and presses Apply Now in the handoff window. Workable (M12) is on since 17 Nov: in the
+// stealthy Chrome (modules/apply/real-browser.ts) Turnstile stayed silent and 7 of 7 forms that reached Submit were sent by
+// the worker itself; ENABLE_WORKABLE=0 switches it off. Zoho Recruit (M13) is on since 17 Nov (first real submit: Quicko,
+// a person typed the CAPTCHA, Zoho answered 200); ENABLE_ZOHO=0 switches it off. SmartRecruiters (M7) is on since 17 Nov
+// (12 real submits from 12 employers' forms, each answered 200, none challenged); ENABLE_SMARTRECRUITERS=0 switches it off.
 export const APPLY_BOARDS: readonly string[] = [
   "greenhouse",
   ...(process.env.ENABLE_ASHBY === "0" ? [] : ["ashby"]),
   ...(process.env.ENABLE_LEVER === "1" ? ["lever"] : []),
   ...(process.env.ENABLE_KEKA === "1" ? ["keka"] : []),
-  ...(process.env.ENABLE_WORKABLE === "1" ? ["workable"] : []),
+  ...(process.env.ENABLE_WORKABLE === "0" ? [] : ["workable"]),
+  ...(process.env.ENABLE_ZOHO === "0" ? [] : ["zohorecruit"]),
+  ...(process.env.ENABLE_SMARTRECRUITERS === "0" ? [] : ["smartrecruiters"]),
 ];
 const BOARDS = APPLY_BOARDS;
 // Where a job is, for the feed's Location filter (T80): IN = in India and REMOTE = remote and open to India (Job.eligibility,

@@ -67,7 +67,7 @@ export type SubmitContext = {
 };
 
 export interface AtsAdapter {
-  source: "greenhouse" | "lever" | "ashby" | "keka" | "workable" | "mock";
+  source: "greenhouse" | "lever" | "ashby" | "keka" | "workable" | "zohorecruit" | "smartrecruiters" | "mock";
   /**
    * Fills and submits in the same real Chrome window as a handoff (visible where the worker has a screen, headless
    * where it has none), with the worker pressing Submit itself (25 Oct: Greenhouse, as Ashby).
@@ -82,6 +82,12 @@ export interface AtsAdapter {
   /** Attach a file the way this ATS expects; returns a cleanup that deletes the temp file. Defaults to setInputFiles. */
   uploadFile?(page: Page, value: ResolvedValue, bytes: Uint8Array): Promise<() => Promise<void>>;
   fill(page: Page, values: ResolvedValue[]): Promise<FilledField[]>;
+  /**
+   * Multi-page forms (SmartRecruiters' screening page, M7; Workday later): after the current page is filled, move to the
+   * next one and return its fields, which the runner answers through the same chain as the first page and fills with
+   * `fill`. Returns null once the form is at its Submit step. Called repeatedly, a few pages at most.
+   */
+  nextStep?(page: Page): Promise<FormField[] | null>;
   submit(page: Page, ctx: SubmitContext): Promise<SubmitResult>;
   /**
    * Handoff boards: calls onSubmit when the window sends the board's submission, from the moment the window opens (a

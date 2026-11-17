@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { callJson } from "@/lib/llm";
+import { certifiesFact } from "./acknowledgement";
 import type { FormField } from "./adapter";
 import type { MemoryAnswer } from "./recall";
 
@@ -94,9 +95,22 @@ export type GuessProfile = {
 };
 type SavedRow = { key: string; question?: string | null; answer: string; source: string; updatedAt?: Date };
 
-/** Whether a question may be guessed at all (the never-guess list above). */
-export function guessable(field: Pick<FormField, "label" | "type">) {
-  return field.type !== "file" && !NEVER.test(field.label);
+// A salutation (Mr, Ms, Mrs, Miss, Mx) states a gender, so a list of them is never guessed, whatever its label says
+// (smartstream's required "Title", 17 Nov, once Workable dropdowns could be filled).
+const SALUTATION = /^(mr|mrs|ms|miss|mx|master)\.?$/i;
+// A self-identification list whose label never says what it asks ("All applicants are invited to complete this
+// section", options Male / Female: guessed "Male", 17 Nov, NielsenIQ): its options give it away.
+const EEO_OPTION = /^(male|female|man|woman|non-?binary|transgender|genderqueer|hispanic|latino|white|black|asian|native hawaiian|american indian|two or more races|(i am )?(a |not a )?(protected )?veteran|(yes, )?i have a disability|no, i do(n't| not) have a disability)\b/i;
+
+/** A list of gender, race, veteran or disability answers, whatever its label says. */
+export function selfIdList(options: string[] | undefined) {
+  return (options ?? []).filter((option) => EEO_OPTION.test(option.trim())).length >= 2;
+}
+
+/** Whether a question may be guessed at all (the never-guess list above, a list of salutations or of self-ID answers). */
+export function guessable(field: Pick<FormField, "label" | "type" | "options">) {
+  if (field.type === "file" || NEVER.test(field.label) || /\b(salutation|honorific)\b/i.test(field.label) || certifiesFact(field)) return false;
+  return (field.options ?? []).filter((option) => SALUTATION.test(option.trim())).length < 2 && !selfIdList(field.options);
 }
 
 /** The model's answer, if it fits the field: an option of the form, a number for a number box, sane plain text. */

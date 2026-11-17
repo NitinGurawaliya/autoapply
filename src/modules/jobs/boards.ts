@@ -65,6 +65,23 @@ const PAUSE_MS = 300;
 const WORKABLE_PAUSE_MS = 2000;
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Discovery's check of one board: a board that is not there answers 404 or 410, or has no portal page (Keka, Zoho), and
+ * is null here. Anything else (a 429 rate limit, a 5xx, a timeout) is a failed check, retried later, never "not a board":
+ * Workable on 10 Nov (124 accounts read as gone after ~250 calls) and Workday on 17 Nov (48 of 50 recorded tenants read as
+ * gone during a 429) both lost real boards that way.
+ */
+async function openOrGone(read: () => Promise<FetchedJob[] | null>, pauseMs = PAUSE_MS): Promise<FetchedJob[] | null> {
+  try {
+    return await read();
+  } catch (error) {
+    if (error instanceof Error && (/ (404|410)$/.test(error.message) || /: no portal$/.test(error.message))) return null;
+    throw error;
+  } finally {
+    await pause(pauseMs);
+  }
+}
+
 /** The minimum India-eligible open jobs for discovery to add a Greenhouse company (owner, 11 Oct). */
 export const MIN_INDIA_JOBS = 3;
 
@@ -93,9 +110,7 @@ export const BOARDS: Board[] = [
       boardUrl: "boards.greenhouse.io/<slug>",
       async open(slug) {
         // The list without descriptions (M3): enough to count India jobs; a board that is not there answers 404.
-        const jobs = await fetchGreenhouseList(slug).catch(() => null);
-        await pause(PAUSE_MS);
-        return jobs;
+        return openOrGone(() => fetchGreenhouseList(slug));
       },
       counts: indiaEligible,
       minIndiaJobs: MIN_INDIA_JOBS,
@@ -123,9 +138,7 @@ export const BOARDS: Board[] = [
       boardUrl: "jobs.lever.co/<slug>",
       async open(slug) {
         // The public postings API ingest uses; an unknown slug answers 404, a board with no openings an empty list.
-        const jobs = await fetchLever(slug).catch(() => null);
-        await pause(PAUSE_MS);
-        return jobs;
+        return openOrGone(() => fetchLever(slug));
       },
       counts: indiaEligible,
       minIndiaJobs: MIN_INDIA_JOBS,
@@ -151,9 +164,7 @@ export const BOARDS: Board[] = [
       boardUrl: "jobs.ashbyhq.com/<slug>",
       async open(slug) {
         // The same public posting API ingest uses; an unknown slug answers 404.
-        const jobs = await fetchAshby(slug).catch(() => null);
-        await pause(PAUSE_MS);
-        return jobs;
+        return openOrGone(() => fetchAshby(slug));
       },
       // Ashby: one India tech job is enough, the jobs ingest stores from Ashby (owner, 15 Oct: as many companies as
       // possible). Few Ashby companies hire in India, so the Greenhouse bar would add almost none.
@@ -187,9 +198,8 @@ export const BOARDS: Board[] = [
       boardUrl: "<tenant>.<wdN>.myworkdayjobs.com/<site>",
       async open(slug) {
         // The list alone (one request a page): enough to count India jobs and their age.
-        const jobs = /^[a-z0-9-]+\.wd\d{1,3}\/[A-Za-z0-9_-]+$/.test(slug) ? await fetchWorkday(slug, { details: false }).catch(() => null) : null;
-        await pause(PAUSE_MS);
-        return jobs;
+        if (!/^[a-z0-9-]+\.wd\d{1,3}\/[A-Za-z0-9_-]+$/.test(slug)) return null;
+        return openOrGone(() => fetchWorkday(slug, { details: false }));
       },
       counts: indiaEligible,
       minIndiaJobs: MIN_INDIA_JOBS,
@@ -207,7 +217,7 @@ export const BOARDS: Board[] = [
   },
   {
     // Zoho Recruit (T99): the newest Indian listings in tsenta.com's index are mostly Zoho portals. The public portal
-    // page carries its openings as JSON (fetchers/zohorecruit.ts). Discovery and ingest only, no adapter yet. Many
+    // page carries its openings as JSON (fetchers/zohorecruit.ts). Applied on by adapters/zohorecruit.ts (M13). Many
     // .com portals are US firms: only India-eligible jobs are stored.
     source: "zohorecruit",
     label: "Zoho Recruit",
@@ -223,9 +233,7 @@ export const BOARDS: Board[] = [
       boardUrl: "<company>.zohorecruit.in/jobs/Careers",
       async open(slug) {
         // An unknown host has no portal: fetchZohoRecruit throws, which is null here.
-        const jobs = await fetchZohoRecruit(slug).catch(() => null);
-        await pause(PAUSE_MS);
-        return jobs;
+        return openOrGone(() => fetchZohoRecruit(slug));
       },
       // Small Indian companies with a few openings each: one fresh India job is enough.
       counts: indiaEligible,
@@ -259,9 +267,7 @@ export const BOARDS: Board[] = [
       boardUrl: "<company>.keka.com/careers",
       async open(slug) {
         // An unknown subdomain has no portal: fetchKeka throws, which is null here.
-        const jobs = await fetchKeka(slug).catch(() => null);
-        await pause(PAUSE_MS);
-        return jobs;
+        return openOrGone(() => fetchKeka(slug));
       },
       // Indian companies with a few openings each, as Zoho: one fresh India job is enough.
       counts: indiaEligible,
@@ -299,8 +305,7 @@ export const BOARDS: Board[] = [
       boardUrl: "jobs.smartrecruiters.com/<Company>",
       async open(slug) {
         // The India list alone; an identifier that is not a company lists nothing, which is not a board.
-        const jobs = await fetchSmartRecruiters(slug, { details: false }).catch(() => null);
-        await pause(PAUSE_MS);
+        const jobs = await openOrGone(() => fetchSmartRecruiters(slug, { details: false }));
         if (jobs && jobs.length === 0) return (await smartRecruitersName(slug)) ? jobs : null;
         return jobs;
       },
@@ -340,14 +345,7 @@ export const BOARDS: Board[] = [
         // An unknown account answers 404 (null here); one with no openings an empty list. Anything else (Workable's
         // 429 rate limit, 10 Nov: 124 accounts read as "not on board" after ~250 calls in ten minutes) is a failed
         // check, retried later, never "not a board". Workable gets a longer pause than the other boards.
-        try {
-          return await fetchWorkable(slug);
-        } catch (error) {
-          if (error instanceof Error && / 404$/.test(error.message)) return null;
-          throw error;
-        } finally {
-          await pause(WORKABLE_PAUSE_MS);
-        }
+        return openOrGone(() => fetchWorkable(slug), WORKABLE_PAUSE_MS);
       },
       counts: indiaEligible,
       minIndiaJobs: 1,

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { callJson } from "@/lib/llm";
-import { numericRange, optionKey, type UnfitAnswer } from "./valueResolver";
+import { numericRange, optionKey, rupeeBand, type UnfitAnswer } from "./valueResolver";
 
 /**
  * Re-word a known answer onto a form's own options when the deterministic fit (exact, prefix, number range) fails:
@@ -30,7 +30,7 @@ export async function mapToOptions(items: UnfitAnswer[]): Promise<Map<string, st
   const todo = items.filter((item) => item.options.length > 0 && item.options.length <= 60 && item.answer.trim());
   // A number in exactly one range of the same unit is arithmetic, not a judgement: no model needed.
   for (const item of todo) {
-    const range = cache.has(cacheKey(item)) ? undefined : numericRange(item.answer, item.options);
+    const range = cache.has(cacheKey(item)) ? undefined : (numericRange(item.answer, item.options) ?? rupeeBand(item.answer, item.options));
     if (range) cache.set(cacheKey(item), range);
   }
   const ask = todo.filter((item) => !cache.has(cacheKey(item)));

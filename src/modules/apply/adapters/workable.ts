@@ -80,9 +80,18 @@ export function fromWorkable(body: unknown): FormField[] {
         fields.push({ selector: `[data-ui="${field.id}"]`, label, type: field.singleOption ? "radio" : "checkbox-group", required, options });
         continue;
       }
+      if (field.type === "dropdown") {
+        // A custom select: a read-only combobox that opens a listbox (Zyte's "English Level", smartstream's "Title",
+        // 17 Nov: typed as text, the box kept ""). Picked from its list in fill (fillDropdown).
+        const options = (field.options ?? []).map((option) => option.value.replace(/\s+/g, " ").trim()).filter(Boolean);
+        fields.push({ selector: `[data-ui="${field.id}"]`, label, type: "select", required, options });
+        continue;
+      }
       const selector = field.type === "phone" ? "#input_phone" : `[name="${field.id}"]`;
       // A date question is a text box masked MM/DD/YYYY with a calendar (Lokal's "How soon can you join?", 10 Nov).
-      const type = field.type === "paragraph" ? "textarea" : field.type === "date" ? "date" : "text";
+      // A "number" question is a text box that drops every non-digit as it is typed ("1.5 years" became "1.5" and the
+      // read-back failed, docyt 17 Nov): resolved and typed as a bare number (valueResolver fitNumber, guess.ts).
+      const type = field.type === "paragraph" ? "textarea" : field.type === "date" ? "date" : field.type === "number" ? "number" : "text";
       fields.push({ selector, label, type, required, hintKey });
     }
   }
@@ -178,6 +187,61 @@ async function fillChoices(page: Page, value: ResolvedValue) {
   return joinChoices(picked);
 }
 
+/**
+ * Workable's dropdown: `[data-ui=ID][data-input-type=select]` holds a read-only `input[role=combobox]` that opens a
+ * `ul[role=listbox]` of `li[role=option]`; the chosen option's label shows in the combobox and its id lands in the
+ * hidden `input[name=ID]`. Escape closes a list left open, as the date picker's calendar did.
+ *
+ * The box is centred before the list opens: at the window's top edge the list sat under Workable's sticky
+ * "Overview / Application" bar and the option click timed out (pricelabs, 17 Nov, one run in two). A click that still
+ * fails falls back to a DOM click on the option, which needs it neither visible nor unobstructed. The keyboard is no
+ * fallback: ArrowDown opens the list but does not move its highlight, and Enter moves focus to the first field.
+ */
+async function fillDropdown(page: Page, value: ResolvedValue) {
+  const wrapper = page.locator(value.selector).first();
+  const box = wrapper.locator('input[role="combobox"]').first();
+  const shown = async () => ((await box.inputValue().catch(() => "")) ?? "").replace(/\s+/g, " ").trim();
+  const close = async () => {
+    if ((await wrapper.getAttribute("data-open").catch(() => null)) === "true") await box.press("Escape").catch(() => undefined);
+  };
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await box.evaluate((element) => element.scrollIntoView({ block: "center" })).catch(() => undefined);
+    await page.waitForTimeout(150);
+    if ((await wrapper.getAttribute("data-open")) !== "true") await box.click({ timeout: 5000 });
+    const owns = await box.getAttribute("aria-owns");
+    const listbox = (owns ? page.locator(`#${owns}`) : wrapper.locator('[role="listbox"]')).first();
+    await listbox.waitFor({ timeout: 5000 });
+    const options = listbox.locator('[role="option"]');
+    const texts = (await options.allInnerTexts()).map((text) => text.replace(/\s+/g, " ").trim());
+    const index = pickIndex(texts, value.value);
+    if (index < 0) {
+      await close();
+      throw new Error(`No option "${value.value}" for "${value.label}" (the list shows: ${texts.slice(0, 6).join(" | ")})`);
+    }
+    if (attempt < 2) await options.nth(index).click({ timeout: 5000 }).catch(() => undefined);
+    else await options.nth(index).evaluate((element) => (element as HTMLElement).click()).catch(() => undefined);
+    await page.waitForTimeout(300);
+    const now = await shown();
+    await close();
+    if (norm(now) === norm(texts[index])) return texts[index];
+  }
+  throw new Error(`the box kept "${(await shown()).slice(0, 30)}" instead of the answer`);
+}
+
+/**
+ * What a Workable number box can hold: the first number in the answer ("1.5 years" → "1.5", "6,00,000" → "600000",
+ * "6 LPA" → "600000"); "none", "no", "NA", "nil", "fresher" and "immediate" are 0. Anything else needs a number.
+ */
+export function numberText(answer: string, label: string) {
+  const text = answer.trim();
+  if (/^(none|no|n\/?a|nil|nothing|fresher|immediate(ly)?|not applicable)\b/i.test(text) || text === "") return "0";
+  const plain = text.replace(/(\d),(?=\d)/g, "$1");
+  const match = plain.match(/\d+(?:\.\d+)?/);
+  if (!match) throw new NoRetryError(`"${label}" takes a number only, and the answer "${text.slice(0, 40)}" has none`);
+  const lakhs = /\b(lpa|lakh|lacs?|lakhs)\b/i.test(plain) || /^\s*₹?\s*\d+(?:\.\d+)?\s*l\b/i.test(plain);
+  return String(lakhs ? Math.round(Number(match[0]) * 100000) : Number(match[0]));
+}
+
 /** A typed value must still be in the box after typing; an empty box here would only show up as Workable's refusal. */
 async function readBack(input: ReturnType<Page["locator"]>, expected: string) {
   const now = ((await input.inputValue().catch(() => "")) ?? "").trim();
@@ -188,9 +252,12 @@ async function readBack(input: ReturnType<Page["locator"]>, expected: string) {
   if (!now || (short && digits(expected).length > 0 && digits(now) !== digits(expected) && now !== expected.trim())) throw new Error(`the box kept "${now.slice(0, 30)}" instead of the answer`);
 }
 
-const CONFIRMATION = /thank you for (applying|your application)|application (was |has been )?(submitted|received|sent)|we('| ha)ve received your application/i;
+// "Already applied/submitted/received" counts as applied too: the application is on file (a duplicate, never a refusal).
+export const CONFIRMATION = /thank you for (applying|your application)|application (was |has been )?(already )?(submitted|received|sent)|we('| ha)ve received your application|you('| ha)ve already applied/i;
 
 async function successShown(page: Page) {
+  // Workable's own success marker is the strongest sign: it shows only once the application is taken.
+  if (await page.locator('[data-ui="application-success"]').first().isVisible().catch(() => false)) return "marker [data-ui=application-success]";
   if (/\/apply\/?(success|thank|confirmation)/i.test(page.url())) return `url ${page.url()}`;
   const body = await page.locator("body").innerText().catch(() => "");
   const match = body.match(CONFIRMATION);
@@ -226,7 +293,17 @@ async function challengeVisible(page: Page) {
     const box = await frames.nth(index).boundingBox({ timeout: 1000 }).catch(() => null);
     if (box && box.height > 40 && (await frames.nth(index).isVisible())) return true;
   }
-  return false;
+  // The frame tree catches a widget whose iframe the locator's src glob misses (Cloudflare rewrites it as it loads).
+  for (const frame of page.frames()) {
+    if (!/challenges\.cloudflare\.com/.test(frame.url())) continue;
+    const element = await frame.frameElement().catch(() => null);
+    const box = element ? await element.boundingBox().catch(() => null) : null;
+    if (box && box.height > 40) return true;
+  }
+  // A full-page challenge (possible on an employer's own domain) carries the words as page text; the widget's own
+  // words sit inside its cross-origin iframe and never reach the body's text.
+  const body = await page.locator("body").innerText().catch(() => "");
+  return /verify you are human/i.test(body);
 }
 
 async function invalidFieldLabels(page: Page) {
@@ -251,7 +328,8 @@ export type WorkableReply = { kind: "sent" | "refused" | "unknown"; status: numb
 /**
  * Workable's own answer to the application's POST: a 2xx is the application received (the thanks page is only its
  * echo, and the window may close before it shows, 10 Nov); a 4xx is a refusal with nothing recorded (a failed bot check,
- * a field it rejects); anything else leaves the outcome unknown. Only the error's words are kept, never the body.
+ * a field it rejects) unless it says the application was already submitted or received: that is the application already
+ * on file, counted as sent. Anything else leaves the outcome unknown. Only the error's words are kept, never the body.
  */
 export function readReply(status: number, body: string): WorkableReply {
   if (status >= 200 && status < 300) return { kind: "sent", status, reason: "" };
@@ -265,7 +343,11 @@ export function readReply(status: number, body: string): WorkableReply {
     reason = "";
   }
   reason = reason.replace(/\s+/g, " ").trim().slice(0, 160);
-  if (status >= 400 && status < 500) return { kind: "refused", status, reason };
+  // A duplicate is the application already on file (an earlier run, a person's own try): applied, never a refusal.
+  if (status >= 400 && status < 500) {
+    if (/already (submitted|received|applied)|have already applied/i.test(reason)) return { kind: "sent", status, reason };
+    return { kind: "refused", status, reason };
+  }
   return { kind: "unknown", status, reason };
 }
 
@@ -322,7 +404,7 @@ async function submitWorkable(page: Page, ctx: SubmitContext): Promise<SubmitRes
     for (;;) {
       // Workable's own answer first: it settles the outcome whatever the window does next.
       const answer = reply as WorkableReply | null;
-      if (answer?.kind === "sent") return { confirmed: true, evidence: `Workable answered ${answer.status} to the application` };
+      if (answer?.kind === "sent") return { confirmed: true, evidence: `Workable answered ${answer.status} to the application${answer.reason ? `: ${answer.reason}` : ""}` };
       if (answer?.kind === "refused") {
         reply = null;
         posted = false;
@@ -387,6 +469,7 @@ export const workableAdapter: AtsAdapter = {
       if (value.type === "file") continue;
       const written = await inField(value.label, async () => {
         if (value.type === "radio" || value.type === "checkbox-group") return fillChoices(page, value);
+        if (value.type === "select") return fillDropdown(page, value);
         const input = page.locator(value.selector).first();
         await input.scrollIntoViewIfNeeded().catch(() => undefined);
         if (value.type === "date") {
@@ -401,7 +484,7 @@ export const workableAdapter: AtsAdapter = {
           await readBack(input, date);
           return date;
         }
-        const text = value.key === "phone" ? nationalNumber(value.value) : value.value;
+        const text = value.key === "phone" ? nationalNumber(value.value) : value.type === "number" ? numberText(value.value, value.label) : value.value;
         // The address arrives prefilled from the IP's location ("Jhajjar, India"): replaced, never appended to.
         await input.fill("");
         await input.fill(text);

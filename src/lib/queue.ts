@@ -12,7 +12,13 @@ const APPLY_QUEUE = "apply";
  */
 // Keka (T96): every application form has an image CAPTCHA, which only a person types (adapters/keka.ts).
 // Lever (T94): hCaptcha on Submit; the worker presses it in a visible window and a challenge goes to the person (adapters/lever.ts).
-export const HANDOFF_BOARDS: readonly string[] = ["ashby", "keka", "lever", "workable"];
+// Workable (M12): the worker presses Submit itself in the stealthy Chrome (17 Nov: 7 of 7 sent, Turnstile silent); it stays
+// here because that Chrome is a visible window, so only a worker with a screen takes it, and a challenge goes to the person.
+// Zoho Recruit (M13): 20 of 30 forms carry an image CAPTCHA, which a person types and then presses Submit; the worker
+// submits a form without one itself (adapters/zohorecruit.ts).
+// SmartRecruiters (M7): DataDome lets the stealthy Chrome through (17 Nov), a visible window, so a worker with a screen;
+// the worker presses Submit itself and a challenge goes to the person.
+export const HANDOFF_BOARDS: readonly string[] = ["ashby", "keka", "lever", "workable", "zohorecruit", "smartrecruiters"];
 /**
  * Handoff applications of a company that set Ashby's spam protection (low, medium, high, or unreadable): only a worker with
  * a screen takes them (worker/index.ts). It fills the form in a visible Chrome window and, with ASHBY_AUTO_SUBMIT=1,

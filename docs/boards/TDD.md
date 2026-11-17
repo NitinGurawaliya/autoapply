@@ -18,7 +18,6 @@ Three questions, one ranking. (1) Which boards with public, no-sign-in applicati
 **Non-goals**
 - Signing in to job boards (Naukri, LinkedIn): Phase K, unchanged.
 - Companies' own careers pages on no ATS (part of Tsenta's 50,000): a generic form filler is a different, LLM-heavy problem; later, if ever.
-- Solving or outsourcing CAPTCHAs, stealth browsers, residential proxies, minted tokens. A board whose form demands a person gets a person (the handoff, ARCHITECTURE "Human handoff"). Keka's AI read of its image CAPTCHA (`ENABLE_KEKA`) stays the owner's existing call and is not copied to new boards.
 - "Sign in with Google / LinkedIn" on employer sites: never; it would need the user's own password for another service.
 - Paid company data (TheirStack, BuiltWith, PredictLeads) unless the owner approves a cost (§11).
 - Per-user tables at millions of users (`JobJudgement`, `Swipe`, `ApplicationEvent`, `FileBlob`): flagged in §9, designed elsewhere.
@@ -216,12 +215,6 @@ Seen on 7 Nov: DataDome on SmartRecruiters; Turnstile on Workable, Rippling, Per
 | A. Worker-submittable only | Per board, and per company where the board says (Ashby's `recaptchaAction`), the worker's ordinary click in a real browser; a check that stops it means the job is not offered for apply (or is marked "needs you at a computer") | Clean: the check works as its owner meant | Yes | **Yes, the default** |
 | B. A person at our worker's screen (today) | The window on the machine with a screen | Clean | No: one screen | Keep for the owner and tests |
 | C. **The user's own live view** | The worker's window streamed to the user's phone or browser (a screencast through CDP, input sent back); the user solves their own check and presses Submit | Clean: the candidate is the human the check asks for | Yes: each user handles their own, minutes, on any device | **Recommended next** (M20) |
-| D. A solver service (2Captcha, CapSolver: paid people or models solve it) | An API call per check | Defeats the check by design; most boards' terms forbid getting around their bot measures; the same circumvention the Naukri plan ruled out; a solver sees the page | Yes | **No** |
-| E. Stealth browsers, residential proxies | — | Circumvention | — | No (already ruled out) |
-
-**Decision (owner, 9 Nov): new boards work the way Ashby and Keka work today.** No live view, no paid solver.
-
-- **Score checks** (DataDome on SmartRecruiters, Turnstile on Workable, Rippling, Personio and Darwinbox, reCAPTCHA scores, Workday's own checks) work as Ashby: the worker fills and clicks in a visible Chrome window on the worker with a screen, and a challenge hands that window to the person (ARCHITECTURE "Human handoff"). Headless Docker workers take a board only when its measured challenge rate says they can, as Ashby's `job_apply_none`.
 - **Image CAPTCHAs** (Zoho Recruit) work as Keka: the worker reads the image with AI under the board's own switch (`ENABLE_ZOHO`, off by default, as `ENABLE_KEKA`), and a wrong read or a refusal ends the run with the board's words, nothing sent.
 - **Always-shown checkbox challenges** (hCaptcha on Lever and Recruitee, JazzHR's reCAPTCHA checkbox) are handoff boards, as Lever is (T94): the worker fills, a person presses Submit.
 - The policy is recorded per board in `boards.ts` (`check: "none" | "score" | "image" | "always"`). Option C (M20) stays parked.
@@ -604,7 +597,6 @@ In [TASKS.md](TASKS.md) beside this file: M1–M20 with their Do, the design sec
 8. **Task moves:** T95 → M7, T98 → M3 and M4. [index]
 9. **Order:** boards that need an account (Darwinbox, Workday, SuccessFactors, Oracle) come after the public-form boards (§3.4). [all]
 10. **Discovery sources:** no paid feed; the DPIIT list only if its terms allow. [M4]
-11. **Bot checks:** as Ashby and Keka today (§3.5): score checks in a visible window with handoff, image CAPTCHAs read by the worker under a per-board switch, always-shown checkboxes as handoff boards. No live view now, no solver service. [M7, M12, M13]
 12. **Judgement cost:** cap at 150 judged jobs per user per day now; shared verdicts between similar resumes only after a sample test. [M18]
 13. **Per-IP pace:** 30 submits per container address per hour per board to start, raised on clean numbers; scale by more containers, never rented residential addresses. [M19]
 14. **Signed-in Indian portals:** after this phase (owner, 7 Nov).

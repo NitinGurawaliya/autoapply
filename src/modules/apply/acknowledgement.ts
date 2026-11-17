@@ -24,6 +24,15 @@ const AFFIRMATIVE = /^(yes\b|i (hereby )?(agree|acknowledge|accept|confirm|certi
 const CHOICE_TYPES = new Set(["select", "radio", "yesno", "combobox", "checkbox-group"]);
 
 /**
+ * A single box that certifies a fact about the candidate ("I declare that the information regarding my citizenship
+ * is true...", work authorization, age, record): never ticked from another question's answer, only from the user's own
+ * answer to this box. 17 Nov, NielsenIQ: the citizenship answer "Citizen (India)" was reused for its declaration box.
+ */
+export function certifiesFact(field: Pick<FormField, "label" | "type">) {
+  return field.type === "checkbox" && ACKNOWLEDGE.test(field.label) && NOT_ACKNOWLEDGEMENT.test(field.label) && !/opt.?in|newsletter|marketing|\bsms\b|text message|whatsapp|talent (community|pool|network)|future (opportunities|roles|openings|positions)|keep (me|my)|contact me about/i.test(field.label);
+}
+
+/**
  * The value that ticks this field if it is a required acknowledgement, else null.
  * One box, a group with exactly one box, or a choice with one affirmative option.
  */
