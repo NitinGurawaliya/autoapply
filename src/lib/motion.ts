@@ -16,10 +16,14 @@ export const ease = {
   bounce: [0.34, 1.56, 0.64, 1] as Bezier,
   /** Fades. */
   out: [0, 0, 0.58, 1] as Bezier,
+  /** Phase O (Direction B): the one curve outside the swipe, a short ease-out with no overshoot. Taps, toasts, sheets. */
+  calm: [0.2, 0.8, 0.2, 1] as Bezier,
 };
 
 /** Durations in seconds (Framer Motion units). */
 export const duration = {
+  /** A tap: the control shrinks to 98 % and back. */
+  tap: 0.12,
   press: 0.2,
   fade: 0.24,
   exit: 0.26,
@@ -34,12 +38,16 @@ export const duration = {
 };
 
 export const transition = {
+  /** A tap anywhere outside the swipe (Phase O): scale 0.98 with the calm curve. */
+  tap: { duration: duration.tap, ease: ease.calm },
+  /** Apply / Skip growing under a drag: finger-driven, so it may overshoot. */
   press: { duration: duration.press, ease: ease.pop },
   fade: { duration: duration.fade, ease: ease.out },
   cardExit: { duration: duration.exit, ease: ease.exit },
   cardReturn: { duration: duration.spring, ease: ease.spring },
   backCard: { duration: duration.back, ease: ease.settle },
-  toastIn: { duration: duration.toast, ease: ease.pop },
+  // Phase O: the toast arrives with the calm curve; an overshoot here was the bouncy "playful" feel the audit names.
+  toastIn: { duration: duration.fade, ease: ease.calm },
   segment: { duration: duration.segment, ease: ease.settle },
   segmentSlow: { duration: duration.segmentSlow, ease: ease.settle },
   bar: { duration: duration.bar, ease: ease.settle },

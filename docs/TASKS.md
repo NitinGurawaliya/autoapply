@@ -214,3 +214,14 @@ Design: [docs/match-score/TDD.md](match-score/TDD.md). Tasks: [docs/match-score/
 - [x] [N1 — Tracks: no QA or DevOps from tools alone, ML/AI from AI skills](match-score/TASKS.md#n1)
 - [x] [N2 — The score: work 50, skills 40, experience 10](match-score/TASKS.md#n2)
 - [x] [N3 — Measure on real feeds](match-score/TASKS.md#n3)
+
+## Phase O — UI craft: a designed UI, not an AI template (owner, 18 Nov)
+
+Audit and plan: [docs/ui-craft/AUDIT.md](ui-craft/AUDIT.md). Tasks: [docs/ui-craft/TASKS.md](ui-craft/TASKS.md). Skill: `.claude/skills/ui-craft/SKILL.md`. Order O1 → O6.
+
+- [x] [O1 — Direction mockups, owner picks one](ui-craft/TASKS.md#o1)
+- [x] [O2 — Foundations and ui-lint](ui-craft/TASKS.md#o2)
+- [x] [O3 — Components](ui-craft/TASKS.md#o3)
+- [x] [O4 — Screens, one at a time](ui-craft/TASKS.md#o4)
+- [x] [O5 — Copy and voice](ui-craft/TASKS.md#o5)
+- [x] [O6 — Motion and the small things](ui-craft/TASKS.md#o6)

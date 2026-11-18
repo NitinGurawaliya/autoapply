@@ -31,7 +31,7 @@ export function FilterSheet({
         >
           <Icon name="filters" size={20} />
           {activeCount > 0 ? (
-            <span className="absolute -top-1 -right-1 box-border flex h-5 min-w-5 items-center justify-center rounded-full border-[1.5px] border-primary-edge bg-primary px-[5px] text-[11px] font-bold text-ink">
+            <span className="absolute -top-1 -right-1 box-border flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-inverse px-1 text-xs leading-none font-semibold text-inverse-foreground tabular-nums">
               {activeCount}
             </span>
           ) : null}
@@ -43,14 +43,14 @@ export function FilterSheet({
       )}
       <SheetContent aria-label="Filters">
         <div className="mt-2.5 flex h-11 items-center justify-between">
-          <SheetTitle className="m-0 type-display-sm">Filters</SheetTitle>
+          <SheetTitle className="m-0 type-heading">Filters</SheetTitle>
           <a href={resetHref} className={buttonVariants({ variant: "underline", size: "text" })}>
             Reset
           </a>
         </div>
         <SheetDescription className="sr-only">Pick what you want to see. The page reloads with your choice.</SheetDescription>
         {children}
-        <SheetClose render={<Button variant="primary" size="xl" className="mt-[26px] w-full" />}>Show jobs</SheetClose>
+        <SheetClose render={<Button variant="primary" size="xl" className="mt-6 w-full" />}>Show jobs</SheetClose>
       </SheetContent>
     </Sheet>
   );

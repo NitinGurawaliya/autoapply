@@ -4,6 +4,32 @@ The look comes from the owner's design in `design/` (exported from Claude Design
 
 Rules from CLAUDE.md still apply: mobile first at 390 px, centred at 480 px on desktop, shadcn/ui, one brand accent, no gradients, no emoji.
 
+**Phase O direction (owner, 18 Nov; `docs/ui-craft/AUDIT.md`): Direction B, `design/craft-b.html`, replaces the lime-and-ink look.** Warm paper and ink with one orange accent (Apply and the match number only), one family (Schibsted Grotesk) at 13 / 15 / 17 / 24 / 32, radii 10 and 16, meaning by form rather than tints, open job-page sections divided by rules. Until O3–O4 rebuild components and screens, the rest of this file describes the shipped look; where they conflict on a screen already rebuilt, Direction B holds. The premium pass, `design/craft-b2.html`, is the target (owner, 18 Nov).
+
+**Direction B foundations (Phase O2).** The app runs in one of two looks: `b` (the default since O6, 18 Nov) or `classic` (the old lime look, kept one release as a fallback, then removed). `layout.tsx` sets `<html data-look>` from `NEXT_PUBLIC_LOOK`; `?look=b` or `?look=classic` on any page saves a cookie that wins (a head script, before paint), so the owner can preview B in the real app. `globals.css` keeps every token name and gives `[data-look="b"]` (and `.dark[data-look="b"]`) Direction B's values, so components change look without code changes; O3–O4 then fix structure. `NEXT_PUBLIC_LOOK=classic` sets the default back without a deploy of code.
+
+| | Light | Dark |
+|---|---|---|
+| Background · surface · sunk | `#f6f4ef` · `#fffefc` · `#eeebe4` | `#11100e` · `#1b1916` · `#161512` |
+| Text · muted · faint | `#1a1814` · `#77726a` · `#a8a39a` | `#efebe5` · `#9d978e` · `#6a655e` |
+| Lines (line · line-strong) | ink at 10 % · 18 %, drawn at 0.5 px where they separate | `#efebe5` at 9 % · 16 % |
+| Accent (`primary`) · pressed · as text (`brand-text`) · on it (`ink`) | `#c2410c` · `#a8380a` · `#b23c0b` · `#fffaf5` | `#e2733f` · `#cc6534` · `#ec8a5a` · `#1a1814` |
+
+- **Accent:** only the main action and the match number. Nothing else is orange: not "New", not gaps, not icons.
+- **Type:** Schibsted Grotesk only (`--font-schibsted`). Five utilities: `type-score` 40/500, `type-heading` 24/600 (−0.025em), `type-section` 17/600, `type-body` 15/1.5, `type-meta` 13/1.5. In look `b` the classic `type-display-*` become 600 at 24 (32 for `2xl`) and `type-eyebrow` loses its capitals, so unrebuilt screens degrade gracefully.
+- **Radii:** `rounded-tag` 6, `rounded-control` / `field` / `tile` 10, `rounded-card` / `panel` 16. Pills only for toggles.
+- **Depth:** `shadow-lift`, a half-pixel ring plus one long soft shadow (dark adds a 1 px top highlight). In look `b`, `shadow-hard*` and `shadow-card` resolve to it and `shadow-button` to none.
+- **Motion:** `ease.calm` (0.2, 0.8, 0.2, 1) for everything outside the swipe; taps shrink to 0.98 in 120 ms (`transition.tap`); the toast arrives with `calm`. Overshoot only where a finger drags.
+- **Meaning by form:** a required skill you lack has an ink dashed underline; a nice-to-have you lack is grey; you have it is plain ink. No tints.
+- **Checks:** `npx tsx scripts/ui-lint.ts` counts, per file, the patterns the audit named (arbitrary sizes, capitals, pills, offset shadows, the classic display face, thick borders, classic type utilities, raw colours). `--check` fails when a file gains any over `docs/ui-craft/ui-lint-baseline.json` (678 hits on 18 Nov); a rebuilt file goes to zero and the baseline is rewritten.
+
+**Voice (Phase O5, owner 18 Nov).** The product speaks plainly; the agent is named only when it acted.
+- Say what happened or what to do, in the fewest words: "Sent", "Needs you", "Didn't go through", "New jobs arrive through the day." No narration of work in progress ("Your agent is finding jobs" → "Finding your matches").
+- "Your agent" only for its own actions the user must know about: it pressed Submit, it needs a code or an answer, it held one back, it wrote a note or a best guess.
+- No helper paragraph that explains how the system works; a fact or a trust line in one sentence ("We never guess these, and they only go to jobs you swipe right on.").
+- Numbers and names over adjectives; sentence case everywhere, labels too; no exclamation marks; no "·"-joined strings of three or more parts.
+- Match reasons say what the work is and which of the user's skills it uses, at most two short sentences; years and place are facts on the card, so a reason repeats them only when the years are well over the user's.
+
 **Agent voice (owner, 24 Oct), where the app knowingly departs from the design's copy.** The user sees their agent at work, never the pipeline behind it:
 - Words: stages read "Getting ready to apply", "Reading the application form", "Writing your answers", "Sent" (`lib/status-meta.ts STAGES`); outcomes say what happened and what to do, never a rule name, worker, queue count or raw page text (`lib/explain.ts`); the card's eyebrow is "Why your agent picked it", its reason written as sentences (`modules/jobs/match.ts`); the application story is the agent's steps with counts, without rule checks (`lib/steps.ts`).
 - The agent: `patterns/agent-status.tsx`, a lime disc with the agent spark (icon `agent`) that pulses while it works, and its words with three thinking dots; still under reduced motion. It replaces the segmented progress on in-progress rows and the after-swipe toast, and is the live card on the application page and the feed's loading line.

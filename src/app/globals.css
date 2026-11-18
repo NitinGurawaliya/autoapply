@@ -10,9 +10,10 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  /* Faces go through --face-* so the look switch (data-look, Phase O) can swap them. */
+  --font-sans: var(--face-ui);
   --font-mono: var(--font-geist-mono);
-  --font-display: var(--font-bricolage);
+  --font-display: var(--face-display);
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -77,7 +78,13 @@
   --color-ok: var(--ok);
   --color-gap-bg: var(--gap-bg);
   --color-gap: var(--gap);
+  /* Phase O (Direction B): a recessed fill, the faintest text, the accent pressed, and the accent as text (the score). */
+  --color-sunk: var(--sunk);
+  --color-faint: var(--faint);
+  --color-brand-press: var(--brand-press);
+  --color-brand-text: var(--brand-text);
 
+  --shadow-lift: var(--shadow-lift);
   --shadow-card: var(--shadow-card);
   --shadow-pop: var(--shadow-pop);
   --shadow-hard: var(--shadow-hard);
@@ -94,13 +101,16 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
   /* Named radii from the design: swipe card and sheets, section cards, buttons, inputs, company tiles. */
-  --radius-card: 1.75rem;
-  --radius-panel: 1.25rem;
-  --radius-control: 1rem;
-  --radius-field: 0.875rem;
-  --radius-tile: 0.75rem;
+  --radius-card: var(--r-card);
+  --radius-panel: var(--r-panel);
+  --radius-control: var(--r-control);
+  --radius-field: var(--r-field);
+  --radius-tile: var(--r-tile);
+  --radius-tag: var(--r-tag);
 
-  /* Motion curves (mirrored in src/lib/motion.ts for Framer Motion). */
+  /* Motion curves (mirrored in src/lib/motion.ts for Framer Motion). `calm` is Direction B's one curve outside the
+     swipe: a short ease-out with no overshoot. */
+  --ease-calm: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-pop: cubic-bezier(0.2, 0.9, 0.3, 1.2);
   --ease-settle: cubic-bezier(0.2, 0.9, 0.3, 1);
   --ease-spring: cubic-bezier(0.2, 0.9, 0.3, 1.15);
@@ -175,6 +185,31 @@
   --sidebar-border: #e6e6ea;
   --sidebar-ring: #16171a;
 
+  --face-ui: var(--font-geist-sans);
+  --face-display: var(--font-bricolage);
+  --sunk: #eeeef1;
+  --faint: #9a9ba2;
+  --brand-press: #b4e02a;
+  --brand-text: #16171a;
+  --r-card: 1.75rem;
+  --r-panel: 1.25rem;
+  --r-control: 1rem;
+  --r-field: 0.875rem;
+  --r-tile: 0.75rem;
+  --r-tag: 0.5rem;
+  /* The type utilities read these, so the look switch can change the display style in one place. */
+  --display-weight: 800;
+  --display-2xl: 2.75rem;
+  --display-xl: 2.375rem;
+  --display-lg: 2.125rem;
+  --display-md: 2rem;
+  --display-sm: 1.625rem;
+  --eyebrow-size: 0.75rem;
+  --eyebrow-weight: 700;
+  --eyebrow-tracking: 0.08em;
+  --eyebrow-case: uppercase;
+  --shadow-lift: 0 1px 2px rgb(22 23 26 / 6%), 0 6px 20px rgb(22 23 26 / 6%);
+
   /* The design's depth: a solid ink shadow straight down, no blur. */
   --shadow-color: #16171a;
   --shadow-hard: 0 4px 0 #16171a;
@@ -247,6 +282,11 @@
   --sidebar-accent-foreground: #f2f2f3;
   --sidebar-border: #2a2b30;
   --sidebar-ring: #c6f432;
+  --sunk: #141518;
+  --faint: #6d6f74;
+  --brand-press: #b4e02a;
+  --brand-text: #f2f2f3;
+  --shadow-lift: 0 1px 2px rgb(0 0 0 / 30%), 0 6px 20px rgb(0 0 0 / 25%);
 
   --shadow-color: #000000;
   --shadow-hard: 0 4px 0 #000000;
@@ -258,40 +298,200 @@
   --shadow-pop: 0 4px 12px rgb(0 0 0 / 40%), 0 16px 40px rgb(0 0 0 / 45%);
 }
 
-/* Type scale. Display styles use Bricolage Grotesque 800; the rest is Geist.
+/* Direction B (Phase O, owner 18 Nov; design/craft-b2.html, docs/ui-craft/AUDIT.md). Warm paper and ink, one burnt
+   orange accent (the main action and the match number), one family, radii 6 / 10 / 16, one long soft lift instead of
+   offset shadows, half-pixel hairlines. Applied when <html data-look="b"> (layout.tsx). The dark block repeats every
+   name the light block sets, because both selectors match in dark. "ink" keeps its job (what sits on the accent). */
+[data-look="b"] {
+  --face-ui: var(--font-schibsted);
+  --face-display: var(--font-schibsted);
+  --background: #f6f4ef;
+  --foreground: #1a1814;
+  --card: #fffefc;
+  --card-foreground: #1a1814;
+  --popover: #fffefc;
+  --popover-foreground: #1a1814;
+  --primary: #c2410c;
+  --primary-foreground: #fffaf5;
+  --primary-edge: #c2410c;
+  --secondary: #eeebe4;
+  --secondary-foreground: #1a1814;
+  --muted: #eeebe4;
+  --muted-foreground: #77726a;
+  --accent: #eeebe4;
+  --accent-foreground: #1a1814;
+  --border: rgb(26 24 20 / 10%);
+  --line-strong: rgb(26 24 20 / 18%);
+  --input: rgb(26 24 20 / 22%);
+  --edge: rgb(26 24 20 / 18%);
+  --inverse: #1a1814;
+  --inverse-foreground: #f6f4ef;
+  --bar: #1a1814;
+  --track: rgb(26 24 20 / 8%);
+  --ink: #fffaf5;
+  --sketch-line: #e2ded6;
+  --sketch-fill: #eeebe4;
+  --dash: #bdb7ad;
+  --draft-dash: #a8a39a;
+  --badge-edge: rgb(26 24 20 / 18%);
+  --toast-seg-on: #f6f4ef;
+  --toast-seg-off: rgb(246 244 239 / 20%);
+  --splash: #f6f4ef;
+  --splash-card: #c2410c;
+  --splash-card-ink: #fffaf5;
+  --ok-bg: #eeebe4;
+  --ok: #1a1814;
+  --gap-bg: transparent;
+  --gap: #1a1814;
+  --ring: #1a1814;
+  --chart-3: #c2410c;
+  --sidebar-primary: #c2410c;
+  --sidebar-primary-foreground: #fffaf5;
+  --sidebar-ring: #1a1814;
+  --sunk: #eeebe4;
+  --faint: #a8a39a;
+  --brand-press: #a8380a;
+  --brand-text: #b23c0b;
+  --r-card: 1rem;
+  --r-panel: 1rem;
+  --r-control: 0.625rem;
+  --r-field: 0.625rem;
+  --r-tile: 0.625rem;
+  --r-tag: 0.375rem;
+  --radius: 0.625rem;
+  --display-weight: 600;
+  --display-2xl: 2rem;
+  --display-xl: 1.5rem;
+  --display-lg: 1.5rem;
+  --display-md: 1.5rem;
+  --display-sm: 1.5rem;
+  --eyebrow-size: 0.8125rem;
+  --eyebrow-weight: 500;
+  --eyebrow-tracking: 0;
+  --eyebrow-case: none;
+  --shadow-lift: 0 0 0 0.5px rgb(26 24 20 / 8%), 0 1px 1px rgb(26 24 20 / 3%), 0 28px 56px -18px rgb(26 24 20 / 16%);
+  --shadow-hard: var(--shadow-lift);
+  --shadow-hard-lg: var(--shadow-lift);
+  --shadow-button: none;
+  --shadow-card: var(--shadow-lift);
+  --shadow-soft: 0 8px 24px -8px rgb(26 24 20 / 14%);
+  --shadow-pop: 0 0 0 0.5px rgb(26 24 20 / 8%), 0 24px 48px -12px rgb(26 24 20 / 22%);
+  --shadow-float: 0 0 0 0.5px rgb(26 24 20 / 8%), 0 24px 48px -12px rgb(26 24 20 / 22%);
+}
+
+.dark[data-look="b"],
+[data-look="b"] .dark {
+  --face-ui: var(--font-schibsted);
+  --face-display: var(--font-schibsted);
+  --background: #11100e;
+  --foreground: #efebe5;
+  --card: #1b1916;
+  --card-foreground: #efebe5;
+  --popover: #1b1916;
+  --popover-foreground: #efebe5;
+  --primary: #e2733f;
+  --primary-foreground: #1a1814;
+  --primary-edge: #e2733f;
+  --secondary: #26231f;
+  --secondary-foreground: #efebe5;
+  --muted: #26231f;
+  --muted-foreground: #9d978e;
+  --accent: #26231f;
+  --accent-foreground: #efebe5;
+  --border: rgb(239 235 229 / 9%);
+  --line-strong: rgb(239 235 229 / 16%);
+  --input: rgb(239 235 229 / 20%);
+  --edge: rgb(239 235 229 / 16%);
+  --inverse: #efebe5;
+  --inverse-foreground: #11100e;
+  --bar: #efebe5;
+  --track: rgb(239 235 229 / 9%);
+  --ink: #1a1814;
+  --sketch-line: #3a3630;
+  --sketch-fill: #26231f;
+  --dash: #4a453e;
+  --draft-dash: #6a655e;
+  --badge-edge: rgb(239 235 229 / 16%);
+  --toast-seg-on: #1a1814;
+  --toast-seg-off: rgb(26 24 20 / 18%);
+  --splash: #11100e;
+  --splash-card: #e2733f;
+  --splash-card-ink: #1a1814;
+  --ok-bg: #26231f;
+  --ok: #efebe5;
+  --gap-bg: transparent;
+  --gap: #efebe5;
+  --ring: #efebe5;
+  --chart-3: #e2733f;
+  --sidebar-primary: #e2733f;
+  --sidebar-primary-foreground: #1a1814;
+  --sidebar-ring: #efebe5;
+  --sunk: #161512;
+  --faint: #6a655e;
+  --brand-press: #cc6534;
+  --brand-text: #ec8a5a;
+  --r-card: 1rem;
+  --r-panel: 1rem;
+  --r-control: 0.625rem;
+  --r-field: 0.625rem;
+  --r-tile: 0.625rem;
+  --r-tag: 0.375rem;
+  --radius: 0.625rem;
+  --display-weight: 600;
+  --display-2xl: 2rem;
+  --display-xl: 1.5rem;
+  --display-lg: 1.5rem;
+  --display-md: 1.5rem;
+  --display-sm: 1.5rem;
+  --eyebrow-size: 0.8125rem;
+  --eyebrow-weight: 500;
+  --eyebrow-tracking: 0;
+  --eyebrow-case: none;
+  --shadow-lift: 0 0 0 0.5px rgb(255 255 255 / 6%), 0 28px 56px -18px rgb(0 0 0 / 60%), inset 0 1px 0 rgb(255 255 255 / 6%);
+  --shadow-hard: var(--shadow-lift);
+  --shadow-hard-lg: var(--shadow-lift);
+  --shadow-button: none;
+  --shadow-card: var(--shadow-lift);
+  --shadow-soft: 0 8px 24px -8px rgb(0 0 0 / 50%);
+  --shadow-pop: 0 0 0 0.5px rgb(255 255 255 / 6%), 0 24px 48px -12px rgb(0 0 0 / 60%);
+  --shadow-float: 0 0 0 0.5px rgb(255 255 255 / 6%), 0 24px 48px -12px rgb(0 0 0 / 60%);
+}
+
+/* Type scale. Display styles use Bricolage Grotesque 800; the rest is Geist (classic look). In look "b" the display
+   styles become Schibsted Grotesk 600 at 24 / 32 and the eyebrow loses its capitals (the variables above).
    Named type-* (not text-*) so class merging never mistakes them for colours. */
 @utility type-display-2xl {
   font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 2.75rem;
+  font-weight: var(--display-weight);
+  font-size: var(--display-2xl);
   line-height: 1;
   letter-spacing: -0.045em;
 }
 @utility type-display-xl {
   font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 2.375rem;
+  font-weight: var(--display-weight);
+  font-size: var(--display-xl);
   line-height: 1.02;
   letter-spacing: -0.035em;
 }
 @utility type-display-lg {
   font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 2.125rem;
+  font-weight: var(--display-weight);
+  font-size: var(--display-lg);
   line-height: 1.04;
   letter-spacing: -0.04em;
 }
 @utility type-display-md {
   font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 2rem;
+  font-weight: var(--display-weight);
+  font-size: var(--display-md);
   line-height: 1.05;
   letter-spacing: -0.04em;
 }
 @utility type-display-sm {
   font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 1.625rem;
+  font-weight: var(--display-weight);
+  font-size: var(--display-sm);
   line-height: 1.1;
   letter-spacing: -0.035em;
 }
@@ -314,12 +514,41 @@
   line-height: 1.45;
 }
 @utility type-eyebrow {
-  font-size: 0.75rem;
+  font-size: var(--eyebrow-size);
   line-height: 1.2;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: var(--eyebrow-weight);
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: var(--eyebrow-case);
   color: var(--muted-foreground);
+}
+
+/* Direction B's scale (Phase O2): five sizes, three weights, the face of the current look. Rebuilt components and
+   screens (O3, O4) use only these; the type-display-* and type-lead/callout/caption utilities above retire with them. */
+@utility type-score {
+  font-size: 2.5rem;
+  line-height: 1;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+}
+@utility type-heading {
+  font-size: 1.5rem;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+@utility type-section {
+  font-size: 1.0625rem;
+  line-height: 1.35;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+@utility type-body {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+@utility type-meta {
+  font-size: 0.8125rem;
+  line-height: 1.5;
 }
 
 @layer base {

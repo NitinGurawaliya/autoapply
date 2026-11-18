@@ -38,32 +38,32 @@ export function AgentToast({
   let body;
   let action: string | null = "View";
   if (group === "sent") {
-    body = <AgentStatus className="min-w-0 flex-1" text={`Sent to ${company}`} detail="Your agent submitted it" active={false} />;
+    body = <AgentStatus className="min-w-0 flex-1" text={`Sent to ${company}`} detail="Your agent submitted it" active={false} onInverse />;
   } else if (group === "failed") {
-    body = <AgentStatus className="min-w-0 flex-1" text="Didn't go through" detail={`${detail ?? outcome.headline} · ${company}`} active={false} />;
+    body = <AgentStatus className="min-w-0 flex-1" text="Didn't go through" detail={`${detail ?? outcome.headline} · ${company}`} active={false} onInverse />;
   } else if (group === "needs") {
     action = "Answer";
-    // The lime pill sits beside the company, so the question's line keeps the width.
+    // The "Needs you" label sits beside the company, so the question's line keeps the width; flipped on the toast.
     body = (
       <div role="status" aria-live="polite" className="flex min-w-0 flex-1 items-center gap-3">
-        <AgentAvatar active={false} />
+        <AgentAvatar active={false} onInverse />
         <span className="flex min-w-0 flex-col gap-px">
-          <span className="flex min-w-0 items-center gap-2 text-[15px] font-semibold">
+          <span className="flex min-w-0 items-center gap-2 type-body font-semibold">
             <span className="truncate">{company}</span>
-            <AccentPill className="h-6 flex-none px-2.5 text-xs">Needs you</AccentPill>
+            <AccentPill className="h-6 flex-none bg-inverse-foreground px-2 text-xs text-inverse">Needs you</AccentPill>
           </span>
-          <span className="truncate text-[13px] opacity-75">{detail ?? outcome.headline}</span>
+          <span className="truncate type-meta opacity-75">{detail ?? outcome.headline}</span>
         </span>
       </div>
     );
   } else {
-    body = <AgentStatus className="min-w-0 flex-1" text={`Applying to ${company}`} detail={STAGES[at]} active />;
+    body = <AgentStatus className="min-w-0 flex-1" text={`Applying to ${company}`} detail={STAGES[at]} active onInverse />;
   }
 
   const classes = cn(
-    "box-border flex items-center gap-3 rounded-panel border-[1.5px] bg-inverse px-3.5 py-3 text-inverse-foreground no-underline shadow-float transition-[transform,opacity] duration-[380ms] ease-pop",
+    "box-border flex items-center gap-3 rounded-panel border bg-inverse px-3.5 py-3 text-inverse-foreground no-underline shadow-float transition-[transform,opacity] duration-380 ease-calm",
     group === "failed" ? "border-dashed border-dash" : "border-transparent",
-    visible ? "pointer-events-auto translate-y-0 scale-100 opacity-100" : "pointer-events-none -translate-y-[18px] scale-[0.97] opacity-0",
+    visible ? "pointer-events-auto translate-y-0 scale-100 opacity-100" : "pointer-events-none -translate-y-4.5 scale-[0.97] opacity-0",
     className,
   );
 
@@ -78,7 +78,7 @@ export function AgentToast({
   return (
     <Link href={href} aria-hidden={!visible} tabIndex={visible ? undefined : -1} data-agent-toast="" data-status={status} className={classes}>
       {body}
-      {action ? <span className="flex-none text-[13px] font-semibold underline underline-offset-3">{action}</span> : null}
+      {action ? <span className="flex-none type-meta font-semibold underline decoration-1 underline-offset-4">{action}</span> : null}
     </Link>
   );
 }

@@ -103,7 +103,14 @@ export type IconName = keyof typeof PATHS;
 
 type IconProps = Omit<SVGProps<SVGSVGElement>, "name"> & { name: IconName; size?: number; strokeWidth?: number };
 
-export function Icon({ name, size = 24, strokeWidth = 2, className, ...props }: IconProps) {
+/**
+ * One stroke weight for the whole app (Direction B, Phase O3): 1.75 on the 24-unit grid, a touch heavier below 16 px so
+ * small icons keep the same visual weight. `strokeWidth` from callers is ignored on purpose: per-icon weights (2, 2.5,
+ * 3, 3.5) were one of the details that made the old screens read as hand-assembled.
+ */
+export function Icon({ name, size = 24, className, ...rest }: IconProps) {
+  const { strokeWidth: _, ...props } = rest;
+  void _;
   return (
     <svg
       width={size}
@@ -111,7 +118,7 @@ export function Icon({ name, size = 24, strokeWidth = 2, className, ...props }: 
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={strokeWidth}
+      strokeWidth={size < 16 ? 2.25 : 1.75}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"

@@ -25,7 +25,7 @@ export function ThemeToggle() {
 
   return (
     <div className="flex flex-col gap-2 px-2 py-2">
-      <span id="appearance-label" className="text-[15px] font-semibold">
+      <span id="appearance-label" className="type-body font-semibold">
         Appearance
       </span>
       <div role="radiogroup" aria-labelledby="appearance-label" className="grid grid-cols-3 gap-1 rounded-tile bg-subtle p-1">
@@ -38,7 +38,7 @@ export function ThemeToggle() {
               role="radio"
               aria-checked={picked}
               onClick={() => setTheme(choice.value)}
-              className={`min-h-9 cursor-pointer rounded-[10px] text-[13px] font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50 ${picked ? "bg-surface text-foreground shadow-[0_1px_2px_var(--shadow-color)]" : "text-muted-foreground hover:text-foreground"}`}
+              className={`min-h-9 cursor-pointer rounded-control type-meta font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring ${picked ? "bg-surface text-foreground shadow-[0_1px_2px_var(--shadow-color)]" : "text-muted-foreground hover:text-foreground"}`}
             >
               {choice.label}
             </button>

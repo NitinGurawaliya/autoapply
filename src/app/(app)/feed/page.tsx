@@ -18,7 +18,7 @@ import { Icon } from "@/components/ui/icons";
 import { ChipGroup } from "@/components/patterns/chip-group";
 import { EmptyState } from "@/components/patterns/content";
 import { DeckEmptyArt } from "@/components/patterns/drawings";
-import { CARD_HEIGHT } from "@/components/patterns/job-card";
+import { JobCardSkeleton } from "@/components/patterns/job-card";
 import { FeedTopBar } from "@/components/patterns/top-bar";
 import { FilterSheet } from "./filter-sheet";
 import { SwipeDeck } from "./swipe-deck";
@@ -252,8 +252,8 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
       </Suspense>
       {view === "skipped" ? (
         <div className="flex items-center justify-between gap-3 px-5 pt-3">
-          <h1 className="m-0 type-title">Jobs you skipped</h1>
-          <Link href={mainHref} className="inline-flex min-h-11 flex-none items-center text-sm font-semibold underline underline-offset-3">
+          <h1 className="m-0 type-heading">Jobs you skipped</h1>
+          <Link href={mainHref} className="inline-flex min-h-11 flex-none items-center text-sm font-semibold underline decoration-1 underline-offset-4">
             Back to your feed
           </Link>
         </div>
@@ -284,11 +284,11 @@ async function GapsLine({ userId }: { userId: string }) {
 function DeckSkeleton() {
   return (
     <div className="flex flex-1 flex-col justify-center gap-6 px-5 pb-2" aria-busy="true" aria-label="Loading jobs">
-      <AgentStatus text="Your agent is finding jobs for you" className="mt-[18px] justify-center" />
-      <Skeleton className={`${CARD_HEIGHT} rounded-card`} />
-      <div className="flex items-center justify-center gap-8">
-        <Skeleton className="size-16 rounded-full" />
-        <Skeleton className="size-18 rounded-full" />
+      <AgentStatus text="Finding your matches" className="mt-4 justify-center" />
+      <JobCardSkeleton />
+      <div className="flex items-center gap-2">
+        <Skeleton className="h-12 flex-1 rounded-control" />
+        <Skeleton className="h-12 flex-[2] rounded-control" />
       </div>
     </div>
   );
@@ -362,10 +362,10 @@ async function FeedDeck({
             key={filter.label}
             href={filter.removeHref}
             aria-label={`Remove filter ${filter.label}`}
-            className="inline-flex h-10 items-center gap-1.5 rounded-full border-2 border-edge bg-surface pr-2.5 pl-3.5 text-sm font-semibold text-foreground no-underline"
+            className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line-strong bg-surface pr-2.5 pl-3.5 type-meta font-medium text-foreground no-underline active:bg-sunk"
           >
             {filter.label}
-            <Icon name="closeSmall" size={16} strokeWidth={2.5} />
+            <Icon name="closeSmall" size={14} />
           </a>
         ))}
         actions={
@@ -384,7 +384,7 @@ async function FeedDeck({
     <EmptyState
       art={<DeckEmptyArt />}
       title="No new jobs right now"
-      text="Your agent keeps looking. New jobs land through the day, and we'll let you know."
+      text="New jobs arrive through the day. We'll let you know."
       actions={
         <>
           <Link href="/applications" className={buttonVariants({ variant: "primary", size: "xl", className: "w-full" })}>

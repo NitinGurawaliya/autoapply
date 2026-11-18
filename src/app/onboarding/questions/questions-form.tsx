@@ -136,7 +136,7 @@ export function QuestionsForm({ initial, standing }: { initial: QuestionValues; 
         <StepHeader step={3} backHref="/onboarding/confirm" />
         <ScreenBody className="gap-5 overflow-y-auto pb-5">
           <PageIntro eyebrow="Questions 1 of 2" title="A few answers every form asks" />
-          <Callout>We never guess these. They only go to jobs you swipe right on. Anything else a form asks, your agent answers from your resume and answers, and shows you why.</Callout>
+          <Callout>We never guess these, and they only go to jobs you swipe right on.</Callout>
           <div className="flex flex-col gap-2">
             <FieldLabel htmlFor="current_ctc">Current CTC</FieldLabel>
             <InputBox id="current_ctc" inputMode="decimal" prefix="₹" suffix="lakh a year" value={values.current_ctc} onChange={(event) => set("current_ctc", event.target.value)} />
@@ -163,7 +163,7 @@ export function QuestionsForm({ initial, standing }: { initial: QuestionValues; 
   return (
     <>
       <StepHeader step={3} onBack={() => setScreen("money")} />
-      <ScreenBody className="gap-[22px] overflow-y-auto pb-5">
+      <ScreenBody className="gap-5.5 overflow-y-auto pb-5">
         <PageIntro eyebrow="Questions 2 of 2" title="What are you looking for?" />
         <ChipGroup
           legend="Kind of job"
@@ -173,7 +173,7 @@ export function QuestionsForm({ initial, standing }: { initial: QuestionValues; 
           legend="Where · pick any"
           options={LOCATIONS.map((location) => ({ label: location, selected: values.preferred_location.includes(location), onSelect: () => toggleLocation(location) }))}
         />
-        <div className="box-border flex flex-col gap-3.5 rounded-panel border-2 border-edge bg-surface p-4 shadow-hard">
+        <div className="box-border flex flex-col gap-3.5 rounded-panel bg-surface p-4 shadow-lift">
           <span className="text-base font-semibold">Country questions</span>
           <ChipGroup
             shape="block"
@@ -202,11 +202,11 @@ export function QuestionsForm({ initial, standing }: { initial: QuestionValues; 
             legendClassName="mb-2 font-normal text-muted-foreground"
             options={standing.sponsorship.options.map((option) => ({ label: option, selected: values.sponsorship_outside_home === option, onSelect: () => set("sponsorship_outside_home", option) }))}
           />
-          <p className="m-0 text-[13px] leading-[1.45] text-muted-foreground">
+          <p className="m-0 type-meta leading-[1.45] text-muted-foreground">
             Forms ask these in many wordings (based in the US? authorized to work in Canada? citizen of one of these countries?). We answer each from these.
           </p>
         </div>
-        <div className="box-border flex flex-col gap-3.5 rounded-panel border-2 border-edge bg-surface p-4 shadow-hard">
+        <div className="box-border flex flex-col gap-3.5 rounded-panel bg-surface p-4 shadow-lift">
           <span className="text-base font-semibold">Routine consents</span>
           <ChipGroup
             shape="block"
@@ -214,7 +214,7 @@ export function QuestionsForm({ initial, standing }: { initial: QuestionValues; 
             legendClassName="mb-2 font-normal text-muted-foreground"
             options={CONSENT.map((option) => ({ label: option.label, selected: values.accept_acknowledgements === option.value, onSelect: () => set("accept_acknowledgements", option.value) }))}
           />
-          <p className="m-0 text-[13px] leading-[1.45] text-muted-foreground">Marketing opt-ins and statements about you, such as work authorization, are never accepted for you.</p>
+          <p className="m-0 type-meta leading-[1.45] text-muted-foreground">Marketing opt-ins and statements about you, such as work authorization, are never accepted for you.</p>
         </div>
         {status === "error" ? <FieldError>Answer every question before saving.</FieldError> : null}
         {status === "failed" ? <FieldError>Could not save your answers. Try again.</FieldError> : null}
@@ -222,7 +222,7 @@ export function QuestionsForm({ initial, standing }: { initial: QuestionValues; 
       <StickyFooter>
         <Button variant="primary" size="xl" className="w-full" disabled={status === "saving"} onClick={() => void save()}>
           {status === "saving" ? "Saving…" : "Start swiping"}
-          {status === "saving" ? null : <Icon name="arrowRight" size={20} strokeWidth={2.5} />}
+          {status === "saving" ? null : <Icon name="arrowRight" size={20} />}
         </Button>
       </StickyFooter>
     </>

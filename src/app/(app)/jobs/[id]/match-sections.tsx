@@ -2,12 +2,13 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { cn } from "cn";
 import { Icon } from "@/components/ui/icons";
+import type { FitTier } from "@/components/ui/marks";
 import type { FeedJob } from "@/modules/jobs";
 import type { Breakdown, ScorePart } from "@/modules/jobs/match";
 
-// The job page's match sections (Phase M7, design/job.html, approved 18 Nov). Everything here is read from the
-// scorer's own numbers and the job's own skills (FeedJob.breakdown, FeedJob.skills); nothing is written by a model.
-// Neutral by default: lime = you have it / good, rose = a gap (docs/job-match/TDD.md 11 item 5).
+// The job page's match sections (Phase O4, design/craft-b2.html; content from Phase M7). Everything here is read from
+// the scorer's own numbers and the job's own skills (FeedJob.breakdown, FeedJob.skills); nothing is written by a model.
+// Open sections divided by rules, no panels; meaning by form: a check, an info mark, a dashed underline, grey.
 
 const share = (part: ScorePart) => (part.max === 0 ? 1 : part.points / part.max);
 const list = (items: string[]) => (items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`);
@@ -15,56 +16,50 @@ const list = (items: string[]) => (items.length <= 1 ? (items[0] ?? "") : `${ite
 const some = (items: string[]) => (items.length <= 4 ? list(items) : `${items.slice(0, 4).join(", ")} and ${items.length - 4} more`);
 const sentence = (text: string) => (/[.!?]$/.test(text) ? text : `${text}.`);
 
-/** The score as a ring that fills to it (ink in light, lime in dark, like the progress bars). */
-export function ScoreRing({ score }: { score: number }) {
-  const circumference = 2 * Math.PI * 38;
+const TIER_WORD: Record<FitTier, string> = { strong: "Strong fit", good: "Good fit", stretch: "A stretch" };
+
+/** The header's match: the tier and the reason on the left, the score large and light in the accent on the right. */
+export function MatchHero({ score, tier, reason }: { score: number; tier: FitTier; reason: string }) {
   return (
-    <div className="relative size-[88px] flex-none" role="img" aria-label={`${score} percent match`}>
-      <svg viewBox="0 0 88 88" className="size-[88px] -rotate-90" aria-hidden="true">
-        <circle cx="44" cy="44" r="38" fill="none" stroke="var(--track)" strokeWidth="8" />
-        <circle cx="44" cy="44" r="38" fill="none" stroke="var(--bar)" strokeWidth="8" strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={circumference * (1 - Math.min(100, Math.max(0, score)) / 100)} />
-      </svg>
-      <span className="absolute inset-0 flex items-center justify-center font-display text-[30px] font-extrabold tracking-[-0.05em]">{score}</span>
+    <div className="mt-6 flex items-end justify-between gap-6">
+      <p className="m-0 type-body text-pretty text-muted-foreground">
+        <span className="mb-1 block font-semibold text-foreground">{TIER_WORD[tier]}</span>
+        {sentence(reason)}
+      </p>
+      <span className="flex flex-none flex-col items-end" aria-label={`${score} match`}>
+        <span className="type-score text-brand-text">{score}</span>
+        <span className="mt-1.5 type-meta text-muted-foreground">match</span>
+      </span>
     </div>
   );
 }
 
-/** A fact chip in the header: grey, rose when it is a gap, a quiet outline when the board gives nothing. */
-export function FactChip({ icon, tone = "plain", children }: { icon?: "pin" | "clock"; tone?: "plain" | "gap" | "quiet"; children: ReactNode }) {
+/** The job at a glance as a labelled grid. `gap` underlines a value that works against the candidate (years over). */
+export function JobFacts({ items }: { items: Array<{ label: string; value: string; gap?: boolean; quiet?: boolean }> }) {
   return (
-    <span
-      className={cn(
-        "inline-flex h-[30px] max-w-full min-w-0 items-center gap-[5px] rounded-full px-2.5 text-[13px] whitespace-nowrap",
-        tone === "plain" && "bg-muted font-semibold",
-        tone === "gap" && "bg-gap-bg font-semibold text-gap",
-        tone === "quiet" && "font-medium text-muted-foreground shadow-[inset_0_0_0_1.5px_var(--line-strong)]",
-      )}
-    >
-      {icon ? <Icon name={icon} size={14} className={cn("flex-none", tone !== "gap" && "opacity-65")} /> : null}
-      <span className="truncate">{children}</span>
-    </span>
+    <dl aria-label="The job at a glance" className="m-0 mt-6 grid grid-cols-2 gap-4">
+      {items.map((item) => (
+        <div key={item.label} className="min-w-0">
+          <dt className="type-meta text-muted-foreground">{item.label}</dt>
+          <dd className={cn("m-0 mt-0.5 truncate type-body font-medium", item.quiet && "font-normal text-muted-foreground")} title={item.value}>
+            <span className={cn(item.gap && "underline decoration-dashed decoration-1 underline-offset-4")}>{item.value}</span>
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
-function SectionTitle({ id, children, aside }: { id: string; children: ReactNode; aside?: ReactNode }) {
+/** An open section under a rule, with its title and an optional count on the right. */
+export function Section({ id, title, aside, className, children }: { id: string; title: ReactNode; aside?: ReactNode; className?: string; children: ReactNode }) {
   return (
-    <h2 id={id} className="m-0 mb-3 flex items-center gap-2 font-display text-2xl font-extrabold tracking-[-0.03em]">
+    <section aria-labelledby={id} className={cn("border-t border-line pt-6", className)}>
+      <h2 id={id} className="m-0 mb-4 flex items-baseline justify-between gap-3 type-section">
+        <span>{title}</span>
+        {aside ? <span className="type-meta font-normal text-muted-foreground tabular-nums">{aside}</span> : null}
+      </h2>
       {children}
-      {aside ? <span className="ml-auto flex gap-1.5 font-sans text-[13px] font-bold tracking-normal">{aside}</span> : null}
-    </h2>
-  );
-}
-
-const eyebrow = "mt-[18px] mb-2 block text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase";
-
-function Mark({ yes }: { yes: boolean }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn("mt-px flex size-[22px] flex-none items-center justify-center rounded-full", yes ? "border-[1.5px] border-ink bg-primary text-ink" : "bg-gap-bg text-gap")}
-    >
-      <Icon name={yes ? "check" : "closeSmall"} size={12} strokeWidth={3} />
-    </span>
+    </section>
   );
 }
 
@@ -74,7 +69,7 @@ export function matchesAndGaps(job: Pick<FeedJob, "breakdown" | "skills">) {
   const gaps: string[] = [];
   for (const part of job.breakdown.parts) {
     if (share(part) >= 0.7) {
-      if (part.key === "skills" && job.skills.have.length > 0) matches.push(`${sentence(part.note)}: ${some(job.skills.have)}.`);
+      if (part.key === "skills" && job.skills.have.length > 0) matches.push(`${part.note.replace(/[.\s]+$/, "")}: ${some(job.skills.have)}.`);
       else if (part.key === "work") matches.push("The work is like your own.");
       else matches.push(sentence(part.note));
     } else if (share(part) < 0.5) {
@@ -98,77 +93,45 @@ export function WhyMatch({ job }: { job: FeedJob }) {
   const { matches, gaps } = matchesAndGaps(job);
   const missing = job.skills.missing.slice(0, 3);
   return (
-    <section aria-labelledby="why-match">
-      <SectionTitle
-        id="why-match"
-        aside={
-          <>
-            <span className="inline-flex h-6 items-center rounded-full bg-ok-bg px-2 text-ok">{matches.length} ✓</span>
-            {gaps.length > 0 ? <span className="inline-flex h-6 items-center rounded-full bg-gap-bg px-2 text-gap">{gaps.length} ✕</span> : null}
-          </>
-        }
-      >
-        Why this is a match
-      </SectionTitle>
-      <div className="rounded-panel border-[1.5px] border-line bg-surface p-[18px]">
-        <p className="m-0 text-base leading-normal font-medium text-pretty">{sentence(job.reason)}</p>
-        {matches.length > 0 ? (
-          <>
-            <span className={eyebrow}>Matches · {matches.length}</span>
-            <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
-              {matches.map((text) => (
-                <li key={text} className="flex gap-2 text-[15px] leading-[1.45] text-pretty">
-                  <Mark yes />
-                  {text}
-                </li>
-              ))}
-            </ul>
-          </>
-        ) : null}
-        {gaps.length > 0 ? (
-          <>
-            <span className={eyebrow}>Gaps · {gaps.length}</span>
-            <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
-              {gaps.map((text) => (
-                <li key={text} className="flex gap-2 text-[15px] leading-[1.45] text-pretty">
-                  <Mark yes={false} />
-                  {text}
-                </li>
-              ))}
-            </ul>
-          </>
-        ) : null}
-        {missing.length > 0 ? (
-          <p className="m-0 mt-[18px] rounded-[14px] bg-background px-3.5 py-3 text-sm leading-[1.45] text-pretty">
-            Used {list(missing).replace(/ and /, " or ")}?{" "}
-            <Link href="/onboarding/confirm" className="font-bold text-foreground underline underline-offset-3">
-              Add {missing.length === 1 ? "it" : "them"} to your profile
-            </Link>{" "}
-            so your agent can say so on the form.
-          </p>
-        ) : null}
-      </div>
-    </section>
+    <Section id="why-match" title="Why it's a match">
+      <ul className="m-0 flex list-none flex-col gap-3 p-0">
+        {matches.map((text) => (
+          <li key={text} className="flex gap-3 type-body text-pretty">
+            <Icon name="check" size={16} className="mt-1 flex-none" />
+            <span>
+              <span className="sr-only">Match: </span>
+              {text}
+            </span>
+          </li>
+        ))}
+        {gaps.map((text) => (
+          <li key={text} className="flex gap-3 type-body text-pretty">
+            <Icon name="info" size={16} className="mt-1 flex-none" />
+            <span>
+              <span className="sr-only">Gap: </span>
+              {text}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {missing.length > 0 ? (
+        <p className="m-0 mt-4 type-meta text-pretty text-muted-foreground">
+          Used {list(missing).replace(/ and /, " or ")}?{" "}
+          <Link href="/onboarding/confirm" className="font-medium text-foreground underline decoration-1 underline-offset-4">
+            Add {missing.length === 1 ? "it" : "them"} to your profile
+          </Link>
+          .
+        </p>
+      ) : null}
+    </Section>
   );
 }
 
-function SkillChips({ items, tone }: { items: string[]; tone: "have" | "missing" | "mentioned" }) {
+function SkillGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {items.map((skill) => (
-        <span
-          key={skill}
-          className={cn(
-            "inline-flex h-7 items-center gap-1 rounded-lg px-2.5 text-[13px] font-semibold",
-            tone === "have" && "bg-ok-bg text-ok",
-            tone === "missing" && "bg-gap-bg text-gap",
-            tone === "mentioned" && "text-muted-foreground shadow-[inset_0_0_0_1.5px_var(--line-strong)]",
-          )}
-        >
-          {tone === "have" ? <Icon name="check" size={12} strokeWidth={3} /> : null}
-          {skill}
-        </span>
-      ))}
+    <div className="pb-4 last:pb-0">
+      <p className="m-0 mb-1 type-meta text-muted-foreground">{label}</p>
+      <p className="m-0 type-body">{children}</p>
     </div>
   );
 }
@@ -177,40 +140,24 @@ function SkillChips({ items, tone }: { items: string[]; tone: "have" | "missing"
 export function SkillsPanel({ skills }: { skills: FeedJob["skills"] }) {
   if (skills.total === 0) return null;
   return (
-    <section aria-labelledby="skills">
-      <SectionTitle id="skills">Skills</SectionTitle>
-      <div className="rounded-panel border-[1.5px] border-line bg-surface p-[18px]">
-        <div className="flex items-center gap-2.5 text-[13px] font-semibold text-muted-foreground">
-          <span>
-            You cover {skills.have.length} of {skills.total}
-          </span>
-          <span className="h-2 flex-1 overflow-hidden rounded-full bg-track">
-            <span className="block h-full rounded-full bg-bar" style={{ width: `${Math.round((100 * skills.have.length) / skills.total)}%` }} />
-          </span>
-        </div>
-        {skills.have.length > 0 ? (
-          <>
-            <span className={eyebrow}>On your resume · {skills.have.length}</span>
-            <SkillChips items={skills.have} tone="have" />
-          </>
-        ) : null}
-        {skills.missing.length > 0 ? (
-          <>
-            <span className={eyebrow}>
-              {skills.split ? "Required, not on your resume" : "Not on your resume"} · {skills.missing.length}
+    <Section id="skills" title="Skills" aside={`You have ${skills.have.length} of ${skills.total}`}>
+      {skills.have.length > 0 ? <SkillGroup label="On your resume">{skills.have.join(", ")}</SkillGroup> : null}
+      {skills.missing.length > 0 ? (
+        <SkillGroup label={skills.split ? "Required, not on your resume" : "Not on your resume"}>
+          {skills.missing.map((skill, index) => (
+            <span key={skill}>
+              {index > 0 ? ", " : null}
+              <span className="underline decoration-dashed decoration-1 underline-offset-4">{skill}</span>
             </span>
-            <SkillChips items={skills.missing} tone="missing" />
-          </>
-        ) : null}
-        {skills.mentioned.length > 0 ? (
-          <>
-            <span className={eyebrow}>Nice to have, not on your resume · {skills.mentioned.length}</span>
-            <SkillChips items={skills.mentioned} tone="mentioned" />
-          </>
-        ) : null}
-        <p className="m-0 mt-3.5 text-[13px] leading-[1.45] text-muted-foreground">Only the tech the posting names. Your profile skills and resume both count as having it.</p>
-      </div>
-    </section>
+          ))}
+        </SkillGroup>
+      ) : null}
+      {skills.mentioned.length > 0 ? (
+        <SkillGroup label="Nice to have, not on your resume">
+          <span className="text-muted-foreground">{skills.mentioned.join(", ")}</span>
+        </SkillGroup>
+      ) : null}
+    </Section>
   );
 }
 
@@ -228,50 +175,44 @@ export function ScoreBreakdown({ score, breakdown }: { score: number; breakdown:
   if (breakdown.parts.length === 0) return null;
   const back = heldBack(breakdown);
   return (
-    <section aria-labelledby="how-we-got">
-      <SectionTitle id="how-we-got">How we got to {score}</SectionTitle>
-      <div className="rounded-panel border-[1.5px] border-line bg-surface p-[18px]">
+    <Section id="how-we-got" title={<>How we got to <span className="tabular-nums">{score}</span></>}>
+      <div className="flex flex-col gap-5">
         {breakdown.parts.map((part) => (
-          <div key={part.key} className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 border-b-[1.5px] border-line py-3 first:pt-0">
-            <span className="text-[15px] font-semibold">{part.label}</span>
-            <span className={cn("text-right text-[15px] font-bold tabular-nums", share(part) < 0.5 && "text-gap")}>
-              {part.points} <span className="font-medium text-muted-foreground">/ {part.max}</span>
+          <div key={part.key} className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-0.5">
+            <span className="type-body font-medium">{part.label}</span>
+            <span className="text-right type-body tabular-nums">
+              {part.points} <span className="text-muted-foreground">/ {part.max}</span>
             </span>
-            <p className="col-span-2 m-0 text-[13px] leading-[1.4] text-muted-foreground">{sentence(part.note)}</p>
-            <span className="col-span-2 mt-1.5 h-1.5 overflow-hidden rounded-full bg-track" aria-hidden="true">
-              <span className="block h-full rounded-full bg-bar" style={{ width: `${Math.round(share(part) * 100)}%` }} />
+            <p className="col-span-2 m-0 type-meta text-muted-foreground">{sentence(part.note)}</p>
+            <span className="col-span-2 mt-2 h-1 overflow-hidden rounded-xs bg-track" aria-hidden="true">
+              <span className="block h-full rounded-xs bg-bar" style={{ width: `${Math.round(share(part) * 100)}%` }} />
             </span>
           </div>
         ))}
-        <div className="flex flex-col gap-1 border-b-[1.5px] border-line py-3">
-          {breakdown.adjustments.length === 0 ? (
-            <div className="flex justify-between text-[15px]">
-              <span className="text-muted-foreground">Caps and floors</span>
-              <span className="text-muted-foreground">none</span>
-            </div>
-          ) : (
-            breakdown.adjustments.map((adjustment) => (
-              <div key={adjustment.key} className="flex justify-between gap-3 text-[15px]">
-                <span className="text-muted-foreground">{adjustment.label}</span>
-                <span className={cn("flex-none font-bold tabular-nums", adjustment.effect < 0 && "text-gap")}>
-                  {adjustment.effect > 0 ? "+" : ""}
-                  {adjustment.effect}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
-        <div className="flex items-baseline justify-between pt-3.5">
-          <span className="text-base font-bold">Match score</span>
-          <span className="font-display text-[32px] font-extrabold tracking-[-0.04em]">{score}</span>
-        </div>
-        {back ? (
-          <div className="mt-3 rounded-[14px] bg-background px-3.5 py-3 text-sm leading-[1.45] text-pretty">
-            <span className="mb-1 block text-[11px] font-bold tracking-[0.08em] text-gap uppercase">What held it back</span>
-            {back}
-          </div>
-        ) : null}
       </div>
-    </section>
+      {breakdown.adjustments.length > 0 ? (
+        <div className="mt-5 flex flex-col gap-1">
+          {breakdown.adjustments.map((adjustment) => (
+            <div key={adjustment.key} className="flex justify-between gap-3 type-meta">
+              <span className="text-muted-foreground">{adjustment.label}</span>
+              <span className="flex-none font-medium tabular-nums">
+                {adjustment.effect > 0 ? "+" : ""}
+                {adjustment.effect}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <div className="mt-5 flex items-baseline justify-between border-t border-line pt-4">
+        <span className="type-body font-semibold">Match</span>
+        <span className="type-heading font-medium text-brand-text tabular-nums">{score}</span>
+      </div>
+      {back ? (
+        <p className="m-0 mt-3 type-meta text-pretty text-muted-foreground">
+          <span className="font-medium text-foreground">What held it back: </span>
+          {back}
+        </p>
+      ) : null}
+    </Section>
   );
 }

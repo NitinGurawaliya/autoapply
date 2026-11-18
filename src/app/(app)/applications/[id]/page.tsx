@@ -154,8 +154,8 @@ export default async function ApplicationPage({ params, searchParams }: { params
       <div className="flex flex-col px-5 pb-10">
         <header className="flex flex-col gap-1.5 pt-3.5">
           <CompanyMark name={company} logoUrl={job?.company.logoUrl} size={56} />
-          <h1 className="m-0 mt-2.5 type-display-md">{role}</h1>
-          <span className="text-[15px] text-muted-foreground">
+          <h1 className="m-0 mt-2.5 type-heading">{role}</h1>
+          <span className="type-body text-muted-foreground">
             {company}
             {job?.location ? ` · ${job.location}` : ""}
             {board ? ` · via ${board}` : ""}
@@ -197,7 +197,7 @@ export default async function ApplicationPage({ params, searchParams }: { params
 
         <section aria-label="What was filled in" className="mt-6">
           <Eyebrow as="h2" className="mb-1.5">
-            {sent ? "Everything your agent filled in" : stopped ? "What your agent filled in before it stopped" : "What your agent has filled in so far"}
+            {sent ? "Everything that was sent" : stopped ? "Filled in before it stopped" : "Filled in so far"}
             {fields.length > 0 ? ` · ${fields.length} fields` : ""}
           </Eyebrow>
           {fields.length === 0 ? (
@@ -211,10 +211,10 @@ export default async function ApplicationPage({ params, searchParams }: { params
 
         {application.screenshotKey ? (
           <section aria-label="Screenshot" className="mt-8 flex flex-col gap-3">
-            <Eyebrow as="h2">{sent ? "The form just before your agent sent it" : "The form as your agent filled it"}</Eyebrow>
+            <Eyebrow as="h2">{sent ? "The form just before it was sent" : "The form as it was filled in"}</Eyebrow>
             <ScreenshotFrame src={`/api/files/${application.screenshotKey}`} alt="The filled application form" address={address} />
             {shot ? (
-              <span className="text-[13px] text-muted-foreground">
+              <span className="type-meta text-muted-foreground">
                 Taken at {clock(shot.createdAt, true)}
                 {sent ? ", right before your agent pressed Submit." : "."}
               </span>
@@ -234,7 +234,7 @@ export default async function ApplicationPage({ params, searchParams }: { params
           <section aria-label="Confirmation" className="mt-8 flex flex-col gap-3">
             <Eyebrow as="h2">What the job board showed after Submit</Eyebrow>
             <ScreenshotFrame src={`/api/files/${sentShot.message}`} alt="The job board's confirmation page" address={address} />
-            <span className="text-[13px] text-muted-foreground">Taken at {clock(sentShot.createdAt, true)}, right after it confirmed.</span>
+            <span className="type-meta text-muted-foreground">Taken at {clock(sentShot.createdAt, true)}, right after it confirmed.</span>
             <a
               href={`/api/files/${sentShot.message}`}
               target="_blank"
@@ -250,7 +250,7 @@ export default async function ApplicationPage({ params, searchParams }: { params
           <section aria-label="Where it stopped" className="mt-8 flex flex-col gap-3">
             <Eyebrow as="h2">Where it stopped</Eyebrow>
             <ScreenshotFrame src={`/api/files/${failShot.message}`} alt="The page when the application stopped" address={address} />
-            <span className="text-[13px] text-muted-foreground">What your agent saw at {clock(failShot.createdAt, true)}.</span>
+            <span className="type-meta text-muted-foreground">What your agent saw at {clock(failShot.createdAt, true)}.</span>
           </section>
         ) : null}
 
@@ -259,7 +259,7 @@ export default async function ApplicationPage({ params, searchParams }: { params
             href={job.applyUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-6 flex h-12 items-center gap-2 self-start text-[15px] font-semibold text-foreground underline underline-offset-3"
+            className="mt-6 flex h-12 items-center gap-2 self-start type-body font-semibold text-foreground underline decoration-1 underline-offset-4"
           >
             Open the original posting
             <Icon name="external" size={16} />
@@ -267,14 +267,14 @@ export default async function ApplicationPage({ params, searchParams }: { params
         ) : null}
 
         {debug ? (
-        <details className="group mt-4 rounded-[18px] border-[1.5px] border-line bg-surface">
-          <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-4 text-[15px] font-semibold marker:hidden">
+        <details className="group mt-4 rounded-card border border-line bg-surface">
+          <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-4 type-body font-semibold marker:hidden">
             Technical details
-            <span className="text-[13px] font-normal text-muted-foreground group-open:hidden">for debugging</span>
+            <span className="type-meta font-normal text-muted-foreground group-open:hidden">for debugging</span>
           </summary>
           <div className="flex flex-col gap-3 px-4 pb-4">
-            {application.error ? <p className="m-0 text-[13px] break-words text-muted-foreground">Raw error: {application.error}</p> : null}
-            <ol className="m-0 flex list-none flex-col gap-1.5 p-0 text-[13px]">
+            {application.error ? <p className="m-0 type-meta break-words text-muted-foreground">Raw error: {application.error}</p> : null}
+            <ol className="m-0 flex list-none flex-col gap-1.5 p-0 type-meta">
               {application.events
                 .filter((event) => event.type !== "fill")
                 .map((event) => (

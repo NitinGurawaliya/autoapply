@@ -270,10 +270,10 @@ export function ConfirmForm({
         <ResumeChangesPanel />
 
         {askPhone ? (
-          <div className="box-border flex flex-col gap-3 rounded-panel border-2 border-dashed border-edge bg-surface p-4">
+          <div className="box-border flex flex-col gap-3 rounded-panel border border-dashed border-line-strong bg-surface p-4">
             <div className="flex items-center gap-2.5">
               <Icon name="info" size={20} className="flex-none" />
-              <span className="text-[15px] font-semibold">We couldn&apos;t find your phone number</span>
+              <span className="type-body font-semibold">We couldn&apos;t find your phone number</span>
             </div>
             <FieldLabel tone="small" htmlFor="phone-missing">
               Phone
@@ -390,8 +390,8 @@ export function ConfirmForm({
           </div>
           {suggestedTracks.length > 0 &&
           (suggestedTracks.length !== values.tracks.length || suggestedTracks.some((track) => !values.tracks.includes(track))) ? (
-            <div className="mt-3 flex items-center justify-between gap-3 rounded-[14px] bg-background px-3 py-2.5">
-              <p className="m-0 text-[13px] text-muted-foreground">
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-control bg-background px-3 py-2.5">
+              <p className="m-0 type-meta text-muted-foreground">
                 Your resume suggests{" "}
                 <span className="font-semibold text-foreground">
                   {suggestedTracks.map((id) => trackOptions.find((option) => option.id === id)?.label ?? id).join(", ")}
@@ -399,7 +399,7 @@ export function ConfirmForm({
               </p>
               <button
                 type="button"
-                className="flex-none text-[13px] font-bold underline underline-offset-2"
+                className="flex-none type-meta font-bold underline underline-offset-2"
                 onClick={() => setValues((current) => ({ ...current, tracks: [...suggestedTracks] }))}
               >
                 Use these

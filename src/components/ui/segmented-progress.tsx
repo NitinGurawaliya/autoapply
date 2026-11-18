@@ -30,8 +30,8 @@ export function SegmentedProgress({
             key={index}
             data-lit={lit ? "" : undefined}
             className={cn(
-              "block rounded-full transition-colors duration-300",
-              thickness === 4 ? "h-1" : thickness === 5 ? "h-[5px]" : "h-1.5",
+              "block rounded-xs transition-colors duration-300 ease-calm",
+              thickness === 6 ? "h-1.5" : "h-1",
               tone === "toast" ? (lit ? "bg-toast-seg-on" : "bg-toast-seg-off") : lit ? "bg-bar" : "bg-track",
             )}
           />
@@ -44,9 +44,9 @@ export function SegmentedProgress({
 /** A thin bar (daily usage, reading the resume). `value` is 0 to 100. */
 export function ProgressBar({ value, thickness = 6, className }: { value: number; thickness?: 4 | 6; className?: string }) {
   return (
-    <span aria-hidden="true" className={cn("block overflow-hidden rounded-full bg-track", thickness === 4 ? "h-1" : "h-1.5", className)}>
+    <span aria-hidden="true" className={cn("block overflow-hidden rounded-xs bg-track", thickness === 4 ? "h-1" : "h-1.5", className)}>
       <span
-        className="block h-full rounded-full bg-bar transition-[width] duration-[900ms] ease-settle"
+        className="block h-full rounded-xs bg-bar transition-[width] duration-900 ease-calm"
         style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
       />
     </span>

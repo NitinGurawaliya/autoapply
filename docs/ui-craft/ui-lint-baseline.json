@@ -1,0 +1,77 @@
+{
+ "src/app/(app)/applications/applications-list.tsx": {
+  "pill": 1
+ },
+ "src/app/(app)/feed/filter-sheet.tsx": {
+  "pill": 1
+ },
+ "src/app/(app)/feed/loading.tsx": {
+  "pill": 1
+ },
+ "src/app/(app)/feed/page.tsx": {
+  "pill": 1
+ },
+ "src/app/(app)/gaps/gaps-form.tsx": {
+  "pill": 1
+ },
+ "src/app/(app)/gaps/page.tsx": {
+  "pill": 1
+ },
+ "src/app/(app)/jobs/[id]/page.tsx": {
+  "pill": 1
+ },
+ "src/app/(auth)/sign-in/page.tsx": {
+  "pill": 1
+ },
+ "src/app/dev/ui/gallery.tsx": {
+  "pill": 1
+ },
+ "src/app/mock/greenhouse/loading.tsx": {
+  "px": 1
+ },
+ "src/app/mock/greenhouse/page.tsx": {
+  "px": 1
+ },
+ "src/app/mock/submissions/error.tsx": {
+  "px": 1
+ },
+ "src/app/mock/submissions/loading.tsx": {
+  "px": 1
+ },
+ "src/app/mock/submissions/page.tsx": {
+  "px": 1
+ },
+ "src/app/onboarding/resume/upload-form.tsx": {
+  "pill": 1
+ },
+ "src/components/notifications.tsx": {
+  "pill": 2
+ },
+ "src/components/patterns/agent-status.tsx": {
+  "pill": 3
+ },
+ "src/components/patterns/content.tsx": {
+  "pill": 1
+ },
+ "src/components/patterns/detail.tsx": {
+  "pill": 3
+ },
+ "src/components/patterns/drawings.tsx": {
+  "pill": 1
+ },
+ "src/components/patterns/states.tsx": {
+  "pill": 1
+ },
+ "src/components/patterns/tab-bar.tsx": {
+  "pill": 1
+ },
+ "src/components/sent-celebration.tsx": {
+  "pill": 3
+ },
+ "src/components/ui/chip.tsx": {
+  "pill": 3
+ },
+ "src/components/ui/marks.tsx": {
+  "pill": 1
+ }
+}

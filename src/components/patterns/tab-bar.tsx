@@ -23,7 +23,7 @@ export function TabBar({ placement = "fixed" }: { placement?: "fixed" | "static"
       aria-label="Main"
       className={cn(
         placement === "fixed" && "fixed inset-x-0 bottom-0 z-40",
-        "mx-auto box-border grid w-full max-w-[480px] grid-cols-2 border-t border-line bg-surface pt-1.5 pb-[max(24px,env(safe-area-inset-bottom))]",
+        "mx-auto box-border grid w-full max-w-120 grid-cols-2 border-t border-line bg-background pt-1.5 pb-[max(24px,env(safe-area-inset-bottom))]",
       )}
     >
       {TABS.map((tab) => {
@@ -35,7 +35,7 @@ export function TabBar({ placement = "fixed" }: { placement?: "fixed" | "static"
             href={tab.href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "relative flex h-[52px] flex-col items-center justify-center gap-[3px] text-xs no-underline",
+              "relative flex h-13 flex-col items-center justify-center gap-1 text-xs no-underline",
               active ? "font-semibold text-foreground" : "font-medium text-muted-foreground",
             )}
           >
@@ -44,7 +44,7 @@ export function TabBar({ placement = "fixed" }: { placement?: "fixed" | "static"
               {badge ? (
                 <span
                   data-pending-badge=""
-                  className="absolute -top-[5px] -right-[11px] box-border flex h-5 min-w-5 items-center justify-center rounded-full border-[1.5px] border-primary-edge bg-primary px-[5px] text-[11px] font-bold text-ink"
+                  className="absolute -top-1 -right-3 box-border flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-inverse px-1 text-xs leading-none font-semibold text-inverse-foreground tabular-nums"
                 >
                   {count}
                 </span>

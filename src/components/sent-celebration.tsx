@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion, type PanInfo } from "framer-motion";
 import { Icon } from "@/components/ui/icons";
+import { ease } from "@/lib/motion";
 import { useApplicationsSummary, type SentNews } from "@/components/applications-summary";
 
 // How long the toast stays before it slides away on its own; a finger or pointer on it holds it.
@@ -21,7 +22,7 @@ function burst(count: number): Piece[] {
       rotate: (Math.random() - 0.5) * 360,
       size: 4 + Math.round(Math.random() * 3),
       round: index % 2 === 0,
-      tone: index % 3 === 0 ? "bg-inverse-foreground" : "bg-primary",
+      tone: index % 3 === 0 ? "bg-inverse-foreground" : "bg-inverse-foreground/45",
       delay: 0.12 + Math.random() * 0.08,
     };
   });
@@ -81,7 +82,8 @@ export function SentToast({ news, onDone, onOpen }: { news: SentNews; onDone: ()
     return () => window.clearTimeout(timer);
   }, [held]);
 
-  const pop = still ? { duration: 0.2 } : { type: "spring" as const, stiffness: 460, damping: 14 };
+  // Direction B (Phase O6): the check settles in with the calm curve; no spring, no spin.
+  const pop = { duration: still ? 0.2 : 0.32, ease: ease.calm };
 
   return (
     <motion.div
@@ -119,7 +121,7 @@ export function SentToast({ news, onDone, onOpen }: { news: SentNews; onDone: ()
           <>
             <motion.span
               aria-hidden="true"
-              className="absolute inset-0 rounded-full border-2 border-primary"
+              className="absolute inset-0 rounded-full border border-inverse-foreground/60"
               initial={{ scale: 1, opacity: 0.9 }}
               animate={{ scale: 2, opacity: 0 }}
               transition={{ delay: 0.12, duration: 0.7, ease: [0.2, 0.7, 0.3, 1] }}
@@ -128,7 +130,7 @@ export function SentToast({ news, onDone, onOpen }: { news: SentNews; onDone: ()
               <motion.span
                 key={index}
                 aria-hidden="true"
-                className={`absolute top-1/2 left-1/2 ${piece.tone} ${piece.round ? "rounded-full" : "rounded-[1px]"}`}
+                className={`absolute top-1/2 left-1/2 ${piece.tone} ${piece.round ? "rounded-full" : "rounded-xs"}`}
                 style={{ width: piece.size, height: piece.size, marginLeft: -piece.size / 2, marginTop: -piece.size / 2 }}
                 initial={{ x: 0, y: 0, opacity: 1, scale: 0.4, rotate: 0 }}
                 animate={{ x: piece.x, y: piece.y, opacity: 0, scale: 1, rotate: piece.rotate }}
@@ -138,19 +140,19 @@ export function SentToast({ news, onDone, onOpen }: { news: SentNews; onDone: ()
           </>
         ) : null}
         <motion.span
-          className="relative flex size-full items-center justify-center rounded-full border-[1.5px] border-ink bg-primary text-ink"
-          initial={still ? { opacity: 0 } : { scale: 0, rotate: -30 }}
-          animate={{ scale: 1, rotate: 0, opacity: 1 }}
+          className="relative flex size-full items-center justify-center rounded-full bg-inverse-foreground text-inverse"
+          initial={still ? { opacity: 0 } : { scale: 0.6, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
           transition={{ delay: still ? 0 : 0.06, ...pop }}
         >
-          <Icon name="check" size={24} strokeWidth={3} />
+          <Icon name="check" size={24} />
         </motion.span>
       </div>
       <span className="flex min-w-0 flex-1 flex-col gap-px">
-        <span className="truncate text-[15px] font-semibold">{title}</span>
-        <span className="truncate text-[13px] opacity-75">{line}</span>
+        <span className="truncate type-body font-semibold">{title}</span>
+        <span className="truncate type-meta opacity-75">{line}</span>
       </span>
-      <span className="flex-none text-[13px] font-semibold underline underline-offset-3">View</span>
+      <span className="flex-none type-meta font-semibold underline decoration-1 underline-offset-4">View</span>
     </motion.div>
   );
 }
@@ -166,7 +168,7 @@ export function SentCelebration() {
   const last = news ? Math.max(...news.sent.map((item) => item.submittedAt)) : 0;
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-[calc(max(12px,env(safe-area-inset-top))+52px)] z-50 mx-auto box-border w-full max-w-[480px] px-4">
+    <div className="pointer-events-none fixed inset-x-0 top-[calc(max(12px,env(safe-area-inset-top))+52px)] z-50 mx-auto box-border w-full max-w-120 px-4">
       <AnimatePresence>
         {news ? (
           <SentToast

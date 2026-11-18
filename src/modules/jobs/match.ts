@@ -430,9 +430,8 @@ function scoreInBand(
   // A big seniority gap can't be offset by a matching title or skills.
   const ceiling = gap >= 4 ? 25 : gap === 3 ? 35 : gap === 2 ? 50 : 100;
 
-  const prefs = candidate.preferredLocations;
-  const inPlace = placeFits(job, prefs);
-
+  // The reason says what the work is and which of the candidate's skills it uses; years and place are on the card as
+  // facts, so the reason does not repeat them (Phase O5) unless the years are well over the candidate's.
   const parts: string[] = [];
   const trackName = job.track ? TRACK_LABELS[job.track as Track] ?? job.track : null;
   if (fit === "same" && trackName) parts.push(`${trackName} work, like yours`);
@@ -440,9 +439,6 @@ function scoreInBand(
   else if (titleHits.length > 0) parts.push("Similar to roles you've had");
   if (skillHits.length > 0) parts.push(usesSkills(skillHits));
   if (gap >= 2 && asks != null) parts.unshift(`They want about ${asks}+ years; you have ${have}`);
-  else if (asks != null && gap <= 0) parts.push("Fits your experience");
-  else if (asks != null) parts.push("Close to your experience level");
-  if (inPlace && prefs.length > 0) parts.push("In a place you want");
 
   const workNote =
     fit === "same" && trackName ? `${trackName} work, one of your tracks` : fit === "adjacent" && trackName ? `${trackName} work, next to your tracks` : titleHits.length > 0 ? "Similar to roles you've had" : "Not much like roles you've had";
@@ -498,8 +494,6 @@ function scoreByMeaning(
   parts.push(verdict ? sentence(verdict.why) : trackName ? `${close} (${trackName})` : close);
   if (job.skillHits.length > 0) parts.push(usesSkills(job.skillHits));
   if (gap >= 2 && asks != null) parts.unshift(`They want about ${asks}+ years; you have ${have}`);
-  else if (asks != null && gap <= 0) parts.push("Fits your experience");
-  else if (asks != null) parts.push("Close to your experience level");
 
   // The model's verdict is the floor when nothing else holds the job back (no years over the candidate's, the place
   // fits): closeness by meaning only orders such jobs. A posting padded with the company's story scored 0.39 and showed
@@ -507,7 +501,7 @@ function scoreByMeaning(
   // Since Phase N the floor also needs half the job's needed skills: a good verdict from the title's track alone lifted
   // QA roles to 60 for a developer who has none of what they ask (owner, 18 Nov).
   const floor = verdict && gap <= 0 && inPlace && skills.floorOk ? VERDICT_FLOOR[verdict.fit] : 0;
-  const verdictWords = { strong: "your own field", good: "close to your field", stretch: "a stretch from your field" } as const;
+  const verdictWords = { strong: "a strong fit", good: "a good fit", stretch: "a stretch" } as const;
   const finished = finish(
     [
       {
@@ -516,8 +510,8 @@ function scoreByMeaning(
         points: meaningScore,
         max: WORK_MAX,
         note: verdict
-          ? `Your agent's verdict: ${verdictWords[verdict.fit as keyof typeof verdictWords]} (${verdictScore} of 35), and how near the posting reads to your resume (${closenessScore} of ${CLOSENESS_MAX})`
-          : `How near the posting reads to your resume (${closenessScore} of ${CLOSENESS_MAX}); your agent has not judged it yet (${verdictScore})`,
+          ? `Rated ${verdictWords[verdict.fit as keyof typeof verdictWords]} (${verdictScore} of 35); reads close to your resume (${closenessScore} of ${CLOSENESS_MAX})`
+          : `Reads close to your resume (${closenessScore} of ${CLOSENESS_MAX}); not rated yet (${verdictScore})`,
       },
       { key: "skills", label: "Skills", points: skills.points, max: SKILLS_MAX, note: skills.note },
       { key: "experience", label: "Experience", points: experienceScore, max: EXPERIENCE_MAX, note: experienceNote(asks, have) },
@@ -525,7 +519,7 @@ function scoreByMeaning(
     ceiling,
     gap,
     floor,
-    verdict ? `Your agent rated it ${verdict.fit === "strong" ? "a strong" : "a good"} fit: raised to ${floor}` : "",
+    verdict ? `Rated ${verdict.fit === "strong" ? "a strong" : "a good"} fit: raised to ${floor}` : "",
   );
   return {
     score: finished.score,

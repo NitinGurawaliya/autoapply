@@ -142,13 +142,13 @@ export function NeedsInputDialog() {
             <div className="mt-2.5 flex items-center gap-3">
               <CompanyMark name={current.company} size={44} />
               <div className="flex min-w-0 flex-col gap-0.5">
-                <SheetTitle className="m-0 text-[15px] font-semibold">
+                <SheetTitle className="m-0 type-body font-semibold">
                   <span className="sr-only">{current.company} asks. </span>
                   <span aria-hidden="true">
                     {current.company} · {current.title}
                   </span>
                 </SheetTitle>
-                <SheetDescription className="m-0 text-[13px] text-muted-foreground">
+                <SheetDescription className="m-0 type-meta text-muted-foreground">
                   <span className="sr-only">{current.title}. </span>
                   {isCode ? "Their job board emailed you a code" : "Your answer is saved and the application continues."}
                   {others > 0 ? ` ${others} more waiting after this.` : ""}
@@ -162,11 +162,11 @@ export function NeedsInputDialog() {
               if (question.key === CODE_KEY) {
                 return (
                   <div key={question.key} className="flex flex-col">
-                    <label htmlFor={id} className="mt-[22px] type-title">
+                    <label htmlFor={id} className="mt-5.5 type-heading">
                       Enter the {CODE_LENGTH}-character code
                     </label>
                     <p className="m-0 mt-1.5 text-sm text-muted-foreground">{question.label}</p>
-                    <div className="mt-[18px]">
+                    <div className="mt-4.5">
                       <OtpInput id={id} label={`${CODE_LENGTH}-character code`} length={CODE_LENGTH} value={value} onChange={(next) => setValue(question.key, next)} />
                     </div>
                     <span className="mt-2.5 min-h-5 text-sm text-muted-foreground">
@@ -186,7 +186,7 @@ export function NeedsInputDialog() {
                 setValue(question.key, joinChoices(options.filter((item) => (item === option ? !chosen.includes(item) : chosen.includes(item)))));
               return (
                 <div key={question.key} id={`question-${question.key}`} className="flex flex-col">
-                  <label htmlFor={multi || (options.length > 0 && options.length <= MAX_ANSWER_BUTTONS) ? undefined : id} className={single ? "mt-[22px] type-title" : "mt-[18px] type-lead font-semibold"}>
+                  <label htmlFor={multi || (options.length > 0 && options.length <= MAX_ANSWER_BUTTONS) ? undefined : id} className={single ? "mt-5.5 type-heading" : "mt-4.5 type-section font-semibold"}>
                     {question.label}
                   </label>
                   {multi ? (
@@ -227,7 +227,7 @@ export function NeedsInputDialog() {
             })}
 
             {/* Pinned to the bottom of the sheet: with many questions, Save and its message stay in view. */}
-            <div className="sticky bottom-[-30px] -mx-5 mt-5 -mb-[30px] border-t border-line bg-surface px-5 pt-3.5 pb-[30px]">
+            <div className="sticky bottom-[-30px] -mx-5 mt-5 -mb-7.5 border-t border-line bg-surface px-5 pt-3.5 pb-7.5">
               {error ? <FieldError className="mb-3">{error}</FieldError> : null}
               <Button type="submit" variant="primary" size="xl" className="w-full" disabled={saving}>
                 {saving ? "Saving…" : "Save"}

@@ -2,21 +2,22 @@ import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "cn";
 
-// The design's containers: raised (ink edge + hard shadow), quiet (hairline), dashed (didn't go through), subtle fill.
+// Containers (Direction B, Phase O3): raised (one soft lift), quiet (a hairline), dashed (didn't go through), subtle
+// fill. The variant names stay so screens keep working; "outline" is the dashed edge for a missing field.
 const surfaceVariants = cva("box-border", {
   variants: {
     variant: {
-      raised: "border-2 border-edge bg-surface shadow-hard",
-      quiet: "border-[1.5px] border-line bg-surface",
-      dashed: "border-[1.5px] border-dashed border-dash bg-transparent",
-      outline: "border-2 border-dashed border-edge bg-surface",
+      raised: "bg-surface shadow-lift",
+      quiet: "border border-line bg-surface",
+      dashed: "border border-dashed border-dash bg-transparent",
+      outline: "border border-dashed border-line-strong bg-surface",
       subtle: "bg-subtle",
     },
     radius: {
       card: "rounded-card",
-      large: "rounded-[22px]",
+      large: "rounded-card",
       panel: "rounded-panel",
-      row: "rounded-[18px]",
+      row: "rounded-panel",
       control: "rounded-control",
     },
   },

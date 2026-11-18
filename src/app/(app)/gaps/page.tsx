@@ -33,7 +33,7 @@ export default async function GapsPage() {
       <div className="flex flex-col gap-5 px-5 pt-4 pb-6">
         {!scan ? (
           <div className="flex flex-col gap-3 rounded-panel bg-subtle p-4" aria-busy="true">
-            <p className="m-0 text-[15px] font-semibold">Reading the application questions of your top jobs</p>
+            <p className="m-0 type-body font-semibold">Reading the application questions of your top jobs</p>
             <p className="m-0 text-sm text-muted-foreground">This takes a minute.</p>
             <div className="h-1.5 animate-pulse rounded-full bg-track" />
             <AutoRefresh active everyMs={5000} />
@@ -42,7 +42,7 @@ export default async function GapsPage() {
           <>
             <div className="flex flex-col gap-2.5 rounded-panel bg-subtle p-4">
               <Eyebrow>Ready to apply without asking</Eyebrow>
-              <p className="m-0 font-display text-[44px] leading-none font-extrabold tracking-[-0.045em]">{percent === null ? "–" : `${percent}%`}</p>
+              <p className="m-0 type-score leading-none font-semibold ">{percent === null ? "–" : `${percent}%`}</p>
               {percent !== null ? <ProgressBar value={percent} /> : null}
               <p className="m-0 text-sm leading-normal">
                 {scan.scanned === 0

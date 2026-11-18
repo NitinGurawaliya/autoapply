@@ -11,6 +11,8 @@ import { OtpInput } from "@/components/ui/otp-input";
 import { Surface } from "@/components/ui/surface";
 import { CompanyMark, MatchBadge, StatusMark, StatusPill, stampClass } from "@/components/ui/marks";
 import { SourceBadge } from "@/components/ui/source-badge";
+import { JobFacts, MatchHero, ScoreBreakdown, SkillsPanel, WhyMatch } from "@/app/(app)/jobs/[id]/match-sections";
+import type { FeedJob } from "@/modules/jobs";
 import { ProgressBar, SegmentedProgress } from "@/components/ui/segmented-progress";
 import { Eyebrow, Skeleton } from "@/components/ui/eyebrow";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -48,7 +50,7 @@ function SentDemo() {
       <Button variant="line" size="row" onClick={() => setShown(one(10))}>Tenth</Button>
       <Button variant="line" size="row" onClick={() => setShown(one(3))}>This week</Button>
       <Button variant="line" size="row" onClick={() => setShown(several)}>While away</Button>
-      <div className="pointer-events-none fixed inset-x-0 top-[64px] z-50 mx-auto box-border w-full max-w-[480px] px-4">
+      <div className="pointer-events-none fixed inset-x-0 top-16 z-50 mx-auto box-border w-full max-w-120 px-4">
         <AnimatePresence>{shown ? <SentToast key={JSON.stringify(shown)} news={shown} onDone={() => setShown(null)} onOpen={() => setShown(null)} /> : null}</AnimatePresence>
       </div>
     </div>
@@ -71,15 +73,15 @@ function Primitives() {
   return (
     <div className="flex flex-col gap-8">
       <Section title="Type">
-        <p className="m-0 type-display-2xl">Swipe right.</p>
-        <p className="m-0 type-display-xl">Backend Engineer, Payments</p>
-        <p className="m-0 type-display-lg">Applications</p>
-        <p className="m-0 type-display-md">You&apos;re all caught up</p>
-        <p className="m-0 type-display-sm">Filters</p>
-        <p className="m-0 type-title">Can you work from our Pune office 3 days a week?</p>
-        <p className="m-0 type-lead">Your Go, Postgres and Kafka work lines up.</p>
-        <p className="m-0 type-callout">Backend Engineer, Payments</p>
-        <p className="m-0 type-caption text-muted-foreground">Lumen Pay · paused 4m ago</p>
+        <p className="m-0 type-score">Swipe right.</p>
+        <p className="m-0 type-heading">Backend Engineer, Payments</p>
+        <p className="m-0 type-heading">Applications</p>
+        <p className="m-0 type-heading">You&apos;re all caught up</p>
+        <p className="m-0 type-heading">Filters</p>
+        <p className="m-0 type-heading">Can you work from our Pune office 3 days a week?</p>
+        <p className="m-0 type-section">Your Go, Postgres and Kafka work lines up.</p>
+        <p className="m-0 type-body">Backend Engineer, Payments</p>
+        <p className="m-0 type-meta text-muted-foreground">Lumen Pay · paused 4m ago</p>
       </Section>
 
       <Section title="Buttons">
@@ -90,12 +92,29 @@ function Primitives() {
           <Button variant="strong" size="lg">Paste code</Button>
           <Button variant="plain" size="lg">Open email</Button>
         </div>
-        <Button variant="primary" size="md" className="rounded-field">Retry</Button>
-        <Button variant="plain" size="md" className="rounded-field">Leave it</Button>
-        <Button variant="primary" size="row" className="shadow-none">Answer</Button>
+        <Button variant="primary" size="md">Retry</Button>
+        <Button variant="plain" size="md">Leave it</Button>
         <div className="flex gap-4">
           <Button variant="underline" size="text">Reset</Button>
           <Button variant="quiet" size="text">Later</Button>
+        </div>
+      </Section>
+
+      {/* Every state of the two buttons a screen uses (Phase O3): rest, pressed, focus, disabled, loading. */}
+      <Section title="Button states">
+        {(["primary", "line"] as const).map((variant) => (
+          <div key={variant} className="grid grid-cols-5 gap-1.5">
+            <Button variant={variant} size="md" className="px-0">{variant === "primary" ? "Apply" : "Skip"}</Button>
+            <Button variant={variant} size="md" className={variant === "primary" ? "scale-98 bg-brand-press px-0" : "scale-98 bg-sunk px-0"}>{variant === "primary" ? "Apply" : "Skip"}</Button>
+            <Button variant={variant} size="md" className="px-0 ring-2 ring-ring ring-offset-2 ring-offset-background">{variant === "primary" ? "Apply" : "Skip"}</Button>
+            <Button variant={variant} size="md" className="px-0" disabled>{variant === "primary" ? "Apply" : "Skip"}</Button>
+            <Button variant={variant} size="md" className="px-0" aria-busy="true" aria-label={variant === "primary" ? "Sending" : "Skipping"}>
+              <span aria-hidden="true" className="size-4 animate-spin rounded-full border border-current border-r-transparent" />
+            </Button>
+          </div>
+        ))}
+        <div className="grid grid-cols-5 gap-1.5 text-center type-meta text-muted-foreground">
+          <span>Rest</span><span>Pressed</span><span>Focus</span><span>Disabled</span><span>Loading</span>
         </div>
       </Section>
 
@@ -103,9 +122,9 @@ function Primitives() {
         <div className="flex items-center gap-3">
           <IconButton variant="subtle" aria-label="Your profile and sign out">AK</IconButton>
           <IconButton variant="line" aria-label="Filters"><Icon name="filters" size={20} /></IconButton>
-          <IconButton variant="ghost" aria-label="Back"><Icon name="back" size={22} strokeWidth={2.25} /></IconButton>
-          <IconButton variant="skip" size="skip" aria-label="Skip"><Icon name="close" size={26} strokeWidth={2.25} /></IconButton>
-          <IconButton variant="apply" size="apply" aria-label="Apply"><Icon name="check" size={30} strokeWidth={2.5} /></IconButton>
+          <IconButton variant="ghost" aria-label="Back"><Icon name="back" size={22} /></IconButton>
+          <IconButton variant="skip" size="skip" aria-label="Skip"><Icon name="close" size={26} /></IconButton>
+          <IconButton variant="apply" size="apply" aria-label="Apply"><Icon name="check" size={30} /></IconButton>
         </div>
       </Section>
 
@@ -184,9 +203,9 @@ function Primitives() {
           <StatusMark kind="ok" />
           <StatusMark kind="stop" />
         </div>
-        <div className="relative h-36 overflow-hidden rounded-panel border-[1.5px] border-line bg-surface">
-          <span className={stampClass("apply")}>APPLY</span>
-          <span className={stampClass("skip")}>SKIP</span>
+        <div className="relative h-36 overflow-hidden rounded-panel border border-line bg-surface">
+          <span className={stampClass("apply")}>Apply</span>
+          <span className={stampClass("skip")}>Skip</span>
         </div>
         <StatusPill kind="ok">Sent today, 10:42</StatusPill>
         <StatusPill kind="stop">Didn&apos;t go through</StatusPill>
@@ -203,7 +222,7 @@ function Primitives() {
       <Section title="Progress">
         <SegmentedProgress count={3} done={1} thickness={6} />
         <SegmentedProgress count={4} done={2} />
-        <div className="rounded-[20px] bg-inverse p-3.5">
+        <div className="rounded-card bg-inverse p-3.5">
           <SegmentedProgress count={4} done={2} tone="toast" thickness={4} />
         </div>
         <ProgressBar value={60} />
@@ -214,8 +233,8 @@ function Primitives() {
         <Sheet>
           <SheetTrigger render={<Button variant="line" size="lg" />}>Open a sheet</SheetTrigger>
           <SheetContent aria-label="Example sheet">
-            <SheetTitle className="mt-2.5 type-display-sm">Filters</SheetTitle>
-            <p className="type-callout text-muted-foreground">Tap outside or press Escape to close.</p>
+            <SheetTitle className="mt-2.5 type-heading">Filters</SheetTitle>
+            <p className="type-body text-muted-foreground">Tap outside or press Escape to close.</p>
           </SheetContent>
         </Sheet>
       </Section>
@@ -234,8 +253,28 @@ const JOB = {
   stage: "Startup",
   skills: { have: ["Go", "PostgreSQL", "Kafka"], missing: ["Kubernetes"], split: true, total: 6, mentioned: ["Terraform", "Docker"] },
   score: 86,
+  parts: [
+    { label: "The work", points: 40, max: 50 },
+    { label: "Skills", points: 36, max: 40 },
+    { label: "Experience", points: 10, max: 10 },
+  ],
   board: "Greenhouse",
 };
+
+// The job page's sections on a sample match (Phase O4), so they can be checked without a signed-in feed.
+const MATCH = {
+  score: 86,
+  reason: "React and TypeScript, the stack on your resume",
+  breakdown: {
+    parts: [
+      { key: "work", label: "The work", points: 40, max: 50, note: "Rated a strong fit (35 of 35); reads close to your resume (5 of 15)" },
+      { key: "skills", label: "Skills", points: 36, max: 40, note: "You have 5 of its 6 required skills and 2 of 4 nice to have" },
+      { key: "experience", label: "Experience", points: 10, max: 10, note: "Asks 0+ years; you have 1 year" },
+    ],
+    adjustments: [],
+  },
+  skills: { have: ["React", "TypeScript", "Next.js", "CSS", "Git"], missing: ["Jest"], split: true, total: 9, mentioned: ["Storybook", "GraphQL", "Cypress"] },
+} as unknown as FeedJob;
 
 const DECK = [
   { ...JOB, board: "Greenhouse" },
@@ -268,7 +307,7 @@ function Patterns() {
               usage={<UsagePill sent={18} used={18} cap={100} />}
               filters={<IconButton variant="line" aria-label="Filters"><Icon name="filters" size={20} /></IconButton>}
             />
-            <TitleTopBar title="Applications" sub="19 sent today · 81 left · Your agent is working on 3" />
+            <TitleTopBar title="Applications" sub="19 sent today · 3 in progress" />
             <BackTopBar href="#" label="Application" backLabel="Back to applications" />
             <StepHeader step={2} onBack={() => undefined} />
           </div>
@@ -279,14 +318,31 @@ function Patterns() {
         <Section title="Sent moment">
           <SentDemo />
         </Section>
+        <Section title="Job page">
+          <MatchHero score={86} tier="strong" reason={MATCH.reason} />
+          <JobFacts
+            items={[
+              { label: "Location", value: "Bengaluru, on-site" },
+              { label: "Experience", value: "2+ yrs · you have 1", gap: true },
+              { label: "Pay", value: "Not published", quiet: true },
+              { label: "Company", value: "Startup" },
+            ]}
+          />
+          <div className="mt-8 flex flex-col gap-8">
+            <WhyMatch job={MATCH} />
+            <SkillsPanel skills={MATCH.skills} />
+            <ScoreBreakdown score={86} breakdown={MATCH.breakdown} />
+          </div>
+        </Section>
+
         <Section title="Job card">
-          <div className="relative mt-[18px] grid grid-cols-[minmax(0,1fr)]">
-            <article className="relative h-[460px]">
+          <div className="relative mt-4.5 grid grid-cols-[minmax(0,1fr)]">
+            <article className="relative h-115">
               <JobCard job={JOB} />
             </article>
           </div>
-          <div className="relative mt-[18px] grid grid-cols-[minmax(0,1fr)]">
-            <article className="relative h-[460px]">
+          <div className="relative mt-4.5 grid grid-cols-[minmax(0,1fr)]">
+            <article className="relative h-115">
               <JobCard
                 job={{
                   ...JOB,
@@ -301,8 +357,8 @@ function Patterns() {
               />
             </article>
           </div>
-          <div className="relative mt-[18px] grid grid-cols-[minmax(0,1fr)]">
-            <article className="relative h-[460px]">
+          <div className="relative mt-4.5 grid grid-cols-[minmax(0,1fr)]">
+            <article className="relative h-115">
               <JobCard job={{ ...JOB, company: "Anthropic", logoUrl: "https://s8-recruiting.cdn.greenhouse.io/external_greenhouse_job_boards/logos/400/040/300/original/2025-04-07-greenhouse.png?1744056137", score: 64, board: "Ashby", skills: { have: ["SQL", "REST", "Python"], missing: [], split: true, total: 12, mentioned: ["Wireshark", "Datadog", "Grafana", "Prometheus", "Jira", "AWS", "GCP", "Azure", "Bash"] } }} />
             </article>
           </div>
@@ -360,11 +416,11 @@ function Patterns() {
 export function Gallery() {
   return (
     <div className="flex flex-wrap items-start">
-      <div data-gallery="light" className="box-border w-[390px] bg-background px-5 py-10 text-foreground">
+      <div data-gallery="light" className="box-border w-97.5 bg-background px-5 py-10 text-foreground">
         <Primitives />
         <div className="mt-12"><Patterns /></div>
       </div>
-      <div data-gallery="dark" className="dark box-border w-[390px] bg-background px-5 py-10 text-foreground">
+      <div data-gallery="dark" className="dark box-border w-97.5 bg-background px-5 py-10 text-foreground">
         <Primitives />
         <div className="mt-12"><Patterns /></div>
       </div>

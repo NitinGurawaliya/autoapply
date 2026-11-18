@@ -38,6 +38,7 @@ function cardData(job: FeedJob, query: string): JobCardData {
     salary: job.salary,
     stage: job.stage ? (STAGE_LABEL[job.stage] ?? null) : null,
     skills: job.skills,
+    parts: job.breakdown.parts,
     score: job.score,
     tier: job.tier,
     board: boardLabel(job.source),
@@ -298,7 +299,7 @@ export function SwipeDeck({
   const after = cards[2];
 
   const toastNode = agent ? (
-    <div className="fixed inset-x-0 top-[calc(max(12px,env(safe-area-inset-top))+52px)] z-40 mx-auto box-border w-full max-w-[480px] px-4">
+    <div className="fixed inset-x-0 top-[calc(max(12px,env(safe-area-inset-top))+52px)] z-40 mx-auto box-border w-full max-w-120 px-4">
       <AgentToast
         company={agent.company}
         stage={agent.stage}

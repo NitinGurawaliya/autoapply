@@ -24,9 +24,9 @@ export async function GapsLink({ userId }: { userId: string }) {
     <Link
       href="/gaps"
       title={sentence}
-      className="inline-flex min-h-8 max-w-full min-w-0 items-center gap-1.5 self-start text-[13px] font-semibold text-foreground underline underline-offset-3"
+      className="inline-flex min-h-8 max-w-full min-w-0 items-center gap-1.5 self-start type-meta font-semibold text-foreground underline decoration-1 underline-offset-4"
     >
-      <Icon name="info" size={14} strokeWidth={2.25} className="flex-none" />
+      <Icon name="info" size={14} className="flex-none" />
       <span className="truncate">{sentence}</span>
     </Link>
   );

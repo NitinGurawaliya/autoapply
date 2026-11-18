@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { buttonVariants } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
-import { CompanyMark, TierPill, tierFor } from "@/components/ui/marks";
+import { CompanyMark, tierFor } from "@/components/ui/marks";
 import { EmptyState } from "@/components/patterns/content";
 import { DeckEmptyArt } from "@/components/patterns/drawings";
 import { BackTopBar } from "@/components/patterns/top-bar";
@@ -16,7 +16,7 @@ import { APPLY_BOARDS, DEFAULT_FEED_DAYS, DEFAULT_PLACES, listFeed, parseFeedFil
 import { formatSalary } from "@/modules/jobs/salary";
 import { FeedBackLink } from "./feed-back-link";
 import { JobActions, NextJobLink, type NextJob } from "./job-actions";
-import { FactChip, ScoreBreakdown, ScoreRing, SkillsPanel, WhyMatch } from "./match-sections";
+import { JobFacts, MatchHero, ScoreBreakdown, Section, SkillsPanel, WhyMatch } from "./match-sections";
 
 type Query = Record<string, string | string[] | undefined>;
 
@@ -29,7 +29,7 @@ function one(value: string | string[] | undefined) {
 /** One block of the description (lib/description.ts), as plain text: nothing from the job board is rendered as markup. */
 function Block({ block }: { block: DescriptionBlock }) {
   if (block.kind === "heading") {
-    return <h3 className="m-0 pt-2 text-[17px] leading-snug font-semibold text-balance">{block.text.replace(/\s*:$/, "")}</h3>;
+    return <h3 className="m-0 pt-2 type-section leading-snug font-semibold text-balance">{block.text.replace(/\s*:$/, "")}</h3>;
   }
   if (block.kind === "list") {
     return (
@@ -136,60 +136,55 @@ export default async function JobPage({ params, searchParams }: { params: Promis
     <>
       {/* BackTopBar's look; opened from the deck, Back goes through history (feed-back-link.tsx). */}
       <div className="flex h-11 flex-none items-center gap-1 px-3">
-        <FeedBackLink jobId={job.id} href={backHref} ariaLabel="Back to the feed" className="flex size-11 items-center justify-center rounded-full text-foreground">
-          <Icon name="back" size={22} strokeWidth={2.25} />
+        <FeedBackLink jobId={job.id} href={backHref} ariaLabel="Back to the feed" className="flex size-11 items-center justify-center rounded-control text-foreground active:bg-sunk">
+          <Icon name="back" size={22} />
         </FeedBackLink>
-        <span className="text-base font-semibold">Job</span>
+        <span className="type-body font-medium">Feed</span>
       </div>
-      <div className="flex flex-1 flex-col px-5">
-        <header className="flex flex-col pt-1">
+      <div className="flex flex-1 flex-col px-6">
+        <header className="flex flex-col pt-2">
           <div className="flex items-center gap-3">
-            <CompanyMark name={job.company.name} logoUrl={job.company.logoUrl} size={48} />
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="truncate text-base font-bold">{job.company.name}</span>
-              <span className="truncate text-[13px] text-muted-foreground">{board ? `via ${board}` : "On the company's site"}</span>
+            <CompanyMark name={job.company.name} logoUrl={job.company.logoUrl} size={40} />
+            <div className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate type-body font-semibold">{job.company.name}</span>
+              <span className="truncate type-meta text-muted-foreground">
+                {board ? `via ${board}` : "On the company's site"} · {postedLabel(daysAgo).replace(/^Posted /, "")}
+                {match?.isNew ? <span className="font-semibold text-foreground"> · New</span> : null}
+              </span>
             </div>
-            {match ? <ScoreRing score={match.score} /> : null}
           </div>
-          <h1 className="m-0 mt-4 type-display-md break-words text-balance">{job.title}</h1>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            {match ? <TierPill tier={tierFor(match.score, match.tier)} /> : null}
-            {postedLabel(daysAgo)}
-            {match?.isNew ? <span className="inline-flex h-[18px] items-center rounded-full border-[1.5px] border-ink bg-primary px-[7px] text-[10px] font-bold text-ink">New</span> : null}
-          </div>
-          <div aria-label="The job at a glance" className="mt-3.5 flex flex-wrap gap-1.5">
-            <FactChip icon="pin">{whereLabel(job)}</FactChip>
-            <FactChip icon="clock" tone={experience.over ? "gap" : "plain"}>
-              {experience.label}
-            </FactChip>
-            {stage ? <FactChip>{stage}</FactChip> : null}
-            {salary ? <FactChip>{salary}</FactChip> : <FactChip tone="quiet">Pay not published</FactChip>}
-          </div>
-          {match?.hint ? <p className="m-0 mt-2.5 type-caption text-muted-foreground">{match.hint}</p> : null}
+          <h1 className="m-0 mt-6 type-heading break-words text-balance">{job.title}</h1>
+          {match ? <MatchHero score={match.score} tier={tierFor(match.score, match.tier)} reason={match.reason} /> : null}
+          <JobFacts
+            items={[
+              { label: "Location", value: whereLabel(job) },
+              { label: "Experience", value: experience.label, gap: experience.over },
+              { label: "Pay", value: salary ?? "Not published", quiet: !salary },
+              ...(stage ? [{ label: "Company", value: stage }] : []),
+            ]}
+          />
+          {match?.hint ? <p className="m-0 mt-4 type-meta text-muted-foreground">{match.hint}</p> : null}
         </header>
 
-        <div className="mt-7 flex flex-col gap-7">
+        <div className="mt-8 flex flex-col gap-8">
           {match ? <WhyMatch job={match} /> : null}
           {match ? <SkillsPanel skills={match.skills} /> : null}
         </div>
 
-        <section aria-labelledby="about-the-job" className="mt-7 flex flex-col gap-4">
-          <h2 id="about-the-job" className="m-0 font-display text-2xl font-extrabold tracking-[-0.03em]">
-            About the role
-          </h2>
+        <Section id="about-the-job" title="About the role" className="mt-8 flex flex-col gap-4">
           {blocks.length === 0 ? (
-            <p className="m-0 text-base leading-[1.65] text-muted-foreground">The company did not post a description. The full posting is on {board ?? "their site"}.</p>
+            <p className="m-0 type-body leading-relaxed text-muted-foreground">The company did not post a description. The full posting is on {board ?? "their site"}.</p>
           ) : (
             // Body text at 16 px with room between lines; headings, paragraphs and lists come from the text itself.
-            <div className="flex flex-col gap-4 text-base leading-[1.65]">
+            <div className="flex flex-col gap-4 type-body leading-relaxed">
               {lead.map((block, index) => (
                 <Block key={index} block={block} />
               ))}
               {rest.length > 0 ? (
                 <details className="group flex flex-col gap-4">
-                  <summary className="flex min-h-12 cursor-pointer list-none items-center justify-center gap-1.5 rounded-control border-[1.5px] border-line text-[15px] font-semibold marker:hidden group-open:hidden">
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 self-start type-body font-medium underline decoration-1 underline-offset-4 marker:hidden group-open:hidden">
                     Read the full description
-                    <Icon name="chevronRight" size={16} strokeWidth={2.5} className="rotate-90" />
+                    <Icon name="chevronRight" size={16} className="rotate-90" />
                   </summary>
                   <div className="flex flex-col gap-4">
                     {rest.map((block, index) => (
@@ -204,24 +199,24 @@ export default async function JobPage({ params, searchParams }: { params: Promis
             href={job.applyUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex min-h-11 items-center gap-1.5 self-start type-caption font-semibold text-muted-foreground underline underline-offset-3"
+            className="inline-flex min-h-11 items-center gap-1.5 self-start type-meta font-medium text-muted-foreground underline decoration-1 underline-offset-4"
           >
             Original posting{board ? ` on ${board}` : ""}
             <Icon name="external" size={14} />
           </a>
-        </section>
+        </Section>
 
         {match ? (
-          <div className="mt-7">
+          <div className="mt-8">
             <ScoreBreakdown score={match.score} breakdown={match.breakdown} />
           </div>
         ) : null}
 
-        <div className="sticky bottom-[calc(82px+max(0px,env(safe-area-inset-bottom)-24px))] z-10 -mx-5 mt-8 border-t-[1.5px] border-line bg-background px-5 pt-3 pb-3">
+        <div className="sticky bottom-[calc(82px+max(0px,env(safe-area-inset-bottom)-24px))] z-10 -mx-6 mt-8 border-t border-line bg-background/90 px-4 pt-3 pb-3 backdrop-blur-md">
           {application || swipe?.direction === "right" || job.closedAt ? (
             // Already applied to, or closed: say so, and keep going through the feed from here.
             <div className="flex flex-col gap-2">
-              <p className="m-0 text-center type-caption text-muted-foreground">
+              <p className="m-0 text-center type-meta text-muted-foreground">
                 {application ? "Your agent has this one." : job.closedAt ? "The company has closed this job." : "You applied to this job."}
               </p>
               <div className="flex gap-3">
@@ -240,7 +235,7 @@ export default async function JobPage({ params, searchParams }: { params: Promis
           ) : (
             <>
               {/* Skipped before: it can still be applied to (lib: swipeRight turns the skip into the apply). */}
-              {swipe?.direction === "left" ? <p className="m-0 mb-2 text-center type-caption text-muted-foreground">You skipped this job before. Apply if you&apos;ve changed your mind.</p> : null}
+              {swipe?.direction === "left" ? <p className="m-0 mb-2 text-center type-meta text-muted-foreground">You skipped this job before. Apply if you&apos;ve changed your mind.</p> : null}
               <JobActions jobId={job.id} company={job.company.name} backHref={backHref} next={next} />
             </>
           )}

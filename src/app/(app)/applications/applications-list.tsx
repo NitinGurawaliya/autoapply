@@ -164,7 +164,7 @@ export function ApplicationsList() {
           ))}
         </div>
         {[0, 1, 2].map((n) => (
-          <Skeleton key={n} className="h-24 rounded-[18px]" />
+          <Skeleton key={n} className="h-24 rounded-card" />
         ))}
       </div>
     );
@@ -230,7 +230,7 @@ export function ApplicationsList() {
           ["failed", "cancelled"].includes(row.status) ? (
             <ApplicationActions id={row.id} status={row.status} company={row.company} onChanged={changed} />
           ) : row.status === "blocked" && row.applyUrl && APPLY_YOURSELF.includes((row.error ?? "").trim()) ? (
-            <a href={row.applyUrl} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "underline", size: "text", className: "h-auto min-h-9 max-w-[84px] text-center text-sm leading-tight whitespace-normal" })}>
+            <a href={row.applyUrl} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "underline", size: "text", className: "h-auto min-h-9 max-w-21 text-center text-sm leading-tight whitespace-normal" })}>
               Open the posting
             </a>
           ) : undefined
@@ -272,7 +272,7 @@ export function ApplicationsList() {
           }
         />
       ) : (
-        <div className="flex flex-col gap-[22px] px-5 pt-1 pb-6">
+        <div className="flex flex-col gap-5.5 px-5 pt-1 pb-6">
           {sections.map((group) => (
             <section key={group} className="flex flex-col gap-2.5" aria-label={SECTION_TITLE[group]}>
               <Eyebrow as="h2">

@@ -28,11 +28,11 @@ export function OtpInput({ id, value, onChange, length = 6, label, disabled }: O
             key={index}
             aria-hidden="true"
             className={cn(
-              "box-border flex h-[58px] items-center justify-center rounded-field bg-background font-display text-[26px] font-extrabold uppercase tabular-nums",
-              active ? "border-3 border-ring" : chars[index] ? "border-2 border-edge" : "border-2 border-input",
+              "box-border flex h-14 items-center justify-center rounded-field border bg-background type-heading tabular-nums transition-colors duration-120 ease-calm",
+              active ? "border-foreground ring-1 ring-foreground" : chars[index] ? "border-line-strong" : "border-line",
             )}
           >
-            {chars[index] ?? ""}
+            {chars[index]?.toUpperCase() ?? ""}
           </span>
         );
       })}

@@ -55,13 +55,13 @@ export function ProfileMenu({ align = "left" }: { align?: "left" | "right" }) {
         <div
           role="menu"
           className={cn(
-            "absolute top-[52px] z-50 box-border flex w-[280px] flex-col gap-1 rounded-panel border-2 border-edge bg-surface p-2 shadow-hard",
+            "absolute top-13 z-50 box-border flex w-70 flex-col gap-1 rounded-panel bg-surface p-2 shadow-lift",
             align === "left" ? "left-0" : "right-0",
           )}
         >
           <div className="flex flex-col gap-0.5 px-2 pt-1.5 pb-2.5">
-            <span className="truncate text-[15px] font-semibold">{shell.name || "Your account"}</span>
-            <span className="truncate text-[13px] text-muted-foreground">{shell.email}</span>
+            <span className="truncate type-body font-semibold">{shell.name || "Your account"}</span>
+            <span className="truncate type-meta text-muted-foreground">{shell.email}</span>
           </div>
           {LINKS.map((link) => (
             <Link
@@ -69,7 +69,7 @@ export function ProfileMenu({ align = "left" }: { align?: "left" | "right" }) {
               href={link.href}
               role="menuitem"
               onClick={() => setOpen(false)}
-              className="flex min-h-11 items-center justify-between rounded-tile px-2 text-[15px] font-semibold text-foreground no-underline outline-none hover:bg-subtle focus-visible:ring-3 focus-visible:ring-ring/50"
+              className="flex min-h-11 items-center justify-between rounded-tile px-2 type-body font-semibold text-foreground no-underline outline-none hover:bg-subtle focus-visible:ring-2 focus-visible:ring-ring"
             >
               {link.label}
               <Icon name="chevronRight" size={18} className="text-muted-foreground" />

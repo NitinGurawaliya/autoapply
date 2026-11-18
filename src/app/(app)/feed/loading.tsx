@@ -1,5 +1,6 @@
 import { AgentStatus } from "@/components/patterns/agent-status";
 import { Skeleton } from "@/components/ui/eyebrow";
+import { JobCardSkeleton } from "@/components/patterns/job-card";
 
 export default function FeedLoading() {
   return (
@@ -7,11 +8,15 @@ export default function FeedLoading() {
       <div className="flex h-11 items-center gap-2.5">
         <Skeleton className="size-11 rounded-full" />
         <div className="flex-1" />
-        <Skeleton className="h-9 w-24 rounded-full" />
-        <Skeleton className="size-11 rounded-full" />
+        <Skeleton className="h-8 w-24 rounded-control" />
+        <Skeleton className="size-11 rounded-control" />
       </div>
-      <AgentStatus text="Your agent is finding jobs for you" className="mt-[18px] justify-center" />
-      <Skeleton className="h-[420px] rounded-card" />
+      <AgentStatus text="Finding your matches" className="mt-4 justify-center" />
+      <JobCardSkeleton />
+      <div className="flex items-center gap-2">
+        <Skeleton className="h-12 flex-1 rounded-control" />
+        <Skeleton className="h-12 flex-[2] rounded-control" />
+      </div>
     </div>
   );
 }

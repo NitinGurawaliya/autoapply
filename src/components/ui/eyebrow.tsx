@@ -1,12 +1,12 @@
 import * as React from "react";
 import { cn } from "cn";
 
-/** Small uppercase section label: "WHY IT FITS", "NEEDS YOU · 2". */
+/** A quiet section label in sentence case: "Why it fits", "Needs you · 2" (Direction B: no letter-spaced capitals). */
 export function Eyebrow({ as: Tag = "span", className, ...props }: React.HTMLAttributes<HTMLElement> & { as?: "span" | "h2" | "h3" | "p" }) {
-  return <Tag className={cn("m-0 type-eyebrow", className)} {...props} />;
+  return <Tag className={cn("m-0 type-meta font-medium text-muted-foreground", className)} {...props} />;
 }
 
-/** Loading placeholder in the quiet fill. */
+/** Loading placeholder in the recessed fill; a slow fade, no shimmer. */
 export function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
-  return <div aria-hidden="true" className={cn("animate-pulse rounded-panel bg-subtle", className)} {...props} />;
+  return <div aria-hidden="true" className={cn("animate-pulse rounded-tag bg-sunk", className)} {...props} />;
 }

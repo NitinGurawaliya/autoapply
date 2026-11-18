@@ -180,21 +180,21 @@ export function NotificationsToggle() {
       title={label}
       disabled={blocked}
       onClick={() => void toggle()}
-      className="flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-tile px-2 text-left text-[15px] font-semibold outline-none hover:bg-subtle focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60"
+      className="flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-tile px-2 text-left type-body font-semibold outline-none hover:bg-subtle focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
     >
       <Icon name="bell" size={20} />
       <span className="flex flex-1 flex-col gap-0.5">
         <span>Notifications</span>
-        <span className="text-[13px] font-normal text-muted-foreground">{blocked ? "Blocked in your browser settings" : "New jobs for you, and applications that need you"}</span>
+        <span className="type-meta font-normal text-muted-foreground">{blocked ? "Blocked in your browser settings" : "New jobs for you, and applications that need you"}</span>
       </span>
       <span
         aria-hidden="true"
         className={cn(
-          "box-border flex h-[26px] w-[44px] flex-none items-center rounded-full border-2 px-0.5 transition-colors",
-          enabled ? "justify-end border-primary-edge bg-primary" : "justify-start border-input bg-surface",
+          "box-border flex h-6.5 w-11 flex-none items-center rounded-full border px-0.5 transition-colors",
+          enabled ? "justify-end border-inverse bg-inverse" : "justify-start border-line-strong bg-surface",
         )}
       >
-        <span className={cn("block size-[18px] rounded-full", enabled ? "bg-ink" : "bg-line-strong")} />
+        <span className={cn("block size-4.5 rounded-full transition-transform duration-120 ease-calm", enabled ? "bg-inverse-foreground" : "bg-line-strong")} />
       </span>
     </button>
   );
