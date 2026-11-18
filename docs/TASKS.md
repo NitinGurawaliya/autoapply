@@ -262,9 +262,9 @@ Audit and plan: [docs/ui-craft/AUDIT.md](ui-craft/AUDIT.md). Tasks: [docs/ui-cra
 
 ## Phase P — Relevance: a feed built from what the user wants and what each job is (owner, 18 Nov)
 
-Design: [docs/relevance/TDD.md](relevance/TDD.md) (v4, 19 Nov, after three independent reviews; built on `main` after the boards merge; decisions in its section 11). Tasks: [docs/relevance/TASKS.md](relevance/TASKS.md), in build order.
+Design: [docs/relevance/TDD.md](relevance/TDD.md) (v5, 19 Nov, after four independent reviews; built on `main` after the boards merge; decisions in its section 11). Tasks: [docs/relevance/TASKS.md](relevance/TASKS.md), in build order.
 
-- [ ] [P1 — One after-ingest tail, job reading, gate functions, LLM resilience](relevance/TASKS.md#p1)
+- [~] [P1 — One after-ingest tail, job reading, gate functions, LLM resilience](relevance/TASKS.md#p1)
 - [ ] [P2 — Evaluation harness and round-1 labels](relevance/TASKS.md#p2)
 - [ ] [P3 — One gate in the feed, the score and the swipe check](relevance/TASKS.md#p3)
 - [ ] [P4 — Fields and avoids on the confirm screen](relevance/TASKS.md#p4)

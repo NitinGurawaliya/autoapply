@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { afterIngest, afterIngestDeadline } from "./after-ingest";
 import { boardOf } from "./boards";
 import { GENTLE_BOARDS, GENTLE_GROUP_TIER, GENTLE_PER_TICK, GENTLE_SCALE, nextFetchAt, REFUSED, tierOf, type Tier } from "./cadence";
 import { classifyTitle } from "./functions";
 import type { FetchedJob } from "./normalize";
-import { embedPendingJobs, forgetJobVectors, labelPendingSkills } from "./semantic";
+import { forgetJobVectors } from "./semantic";
 import { jobSkills } from "./skills";
 import { tagPosting } from "./tagging";
 
@@ -14,9 +15,6 @@ import { tagPosting } from "./tagging";
 const CONCURRENCY = 4;
 const PAUSE_MS = 300;
 const RUN_LIMIT_MS = 2 * 60 * 60 * 1000;
-// Closed jobs nobody swiped or applied to are deleted this long after they closed (30 days until M2; 7 since, so the
-// table stays near the open jobs at 50,000 companies, docs/boards/TDD.md §4.8).
-const DELETE_CLOSED_AFTER_DAYS = 7;
 // Run mode (INGEST_MODE=run): a company is switched off after this many failed fetches in a row (8 runs = a day), or
 // after this long with no open jobs at all. Its offReason says which; seeding it again turns it on. Tick mode (M2)
 // switches nobody off: such a company is `dead` and read once a month (cadence.ts).
@@ -233,15 +231,7 @@ export async function recordRead(company: CompanyState, result: CompanyResult, m
 
 const COMPANY_STATE = { id: true, source: true, slug: true, name: true, keepAbroad: true, listHash: true, failedFetches: true, notFoundFetches: true, emptySince: true, lastIndiaAt: true, indiaOpen: true, lastFetchCount: true } as const;
 
-/** Closed jobs nobody swiped or applied to, closed more than DELETE_CLOSED_AFTER_DAYS ago: deleted to keep the table small. */
-export async function deleteOldClosedJobs(now = new Date()) {
-  const before = new Date(now.getTime() - DELETE_CLOSED_AFTER_DAYS * 24 * 60 * 60 * 1000);
-  return db.$executeRaw`
-    DELETE FROM "Job" j
-    WHERE j."closedAt" IS NOT NULL AND j."closedAt" < ${before}
-      AND NOT EXISTS (SELECT 1 FROM "Swipe" s WHERE s."jobId" = j.id)
-      AND NOT EXISTS (SELECT 1 FROM "Application" a WHERE a."jobId" = j.id)`;
-}
+export { deleteOldClosedJobs } from "./after-ingest";
 
 /**
  * Pull every active company's board and keep the jobs posted within `days`. Returns the run's counts, or null when
@@ -288,19 +278,9 @@ export async function ingestJobs(days: number) {
   };
   try {
     await Promise.all(Array.from({ length: CONCURRENCY }, worker));
-    totals.deleted = await deleteOldClosedJobs();
-    // New and changed jobs get their vectors for resume matching; a failure leaves them for the next run.
-    const embedded = await embedPendingJobs().catch((error) => {
-      console.error(`ingest: embedding failed (${error instanceof Error ? error.message.slice(0, 80) : "error"}); the next run retries`);
-      return 0;
-    });
-    console.log(`ingest: embedded ${embedded} jobs`);
-    // Required or nice-to-have for the skills of new and changed jobs (Phase M3); unlabelled ones show unsplit.
-    const levels = await labelPendingSkills().catch((error) => {
-      console.error(`ingest: skill labels failed (${error instanceof Error ? error.message.slice(0, 80) : "error"}); the next run retries`);
-      return { labelled: 0, failed: 0 };
-    });
-    console.log(`ingest: skills labelled=${levels.labelled} failed=${levels.failed}`);
+    // Embed, skills labels, job reading, warm and cleanup: the same tail as the tick and the workflow (after-ingest.ts).
+    const after = await afterIngest({ deadlineMs: afterIngestDeadline("run"), label: "run" });
+    totals.deleted = after.deleted ?? 0;
   } finally {
     const { switchedOff, ...recorded } = totals;
     void switchedOff;

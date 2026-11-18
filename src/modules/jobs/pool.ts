@@ -1,0 +1,20 @@
+import { Prisma } from "@prisma/client";
+
+// Boards the agent applies on: the feed, its filters, swipes, retries and the runner all read this list. One fixed list
+// (owner, 18 Nov), no per-board switches: every board runs in the stealthy Chrome (modules/apply/real-browser.ts), the
+// worker presses Submit and a challenge goes to the person in that window. Since 15 Nov: Greenhouse 21 of 22 sent, Keka
+// 21 of 24, SmartRecruiters 12 of 12, Ashby 8 of 14, Workable 7 of 14 (the misses mostly not the board). Left out until
+// they prove themselves (INGEST_CONTRACT: a board goes in after real submits), their jobs still ingested: Zoho Recruit
+// (one real submit), Lever (none: hCaptcha), Workday (no adapter).
+export const APPLY_BOARDS: readonly string[] = ["greenhouse", "ashby", "keka", "workable", "smartrecruiters"];
+
+/**
+ * The feed's pool (Phase P, docs/relevance/TDD.md 4.1.1) as SQL on "Job" `alias`: open, on a board the agent applies
+ * on, India-eligible, posted within INGEST_DAYS (60). Skills labels and job readings are spent on these jobs only.
+ */
+export function poolSql(alias = "j") {
+  const days = Number(process.env.INGEST_DAYS) || 60;
+  const j = Prisma.raw(`"${alias}"`);
+  return Prisma.sql`${j}."closedAt" IS NULL AND ${j}.source = ANY(${[...APPLY_BOARDS]}::text[])
+    AND ${j}.eligibility IN ('india', 'remote_india') AND ${j}."postedAt" >= (now() AT TIME ZONE 'UTC') - make_interval(days => ${days}::int)`;
+}

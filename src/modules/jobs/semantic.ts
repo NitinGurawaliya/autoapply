@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { z } from "zod";
 import { callJson, embed } from "@/lib/llm";
 import { ADJACENT, classifyTitle, seniorityOf, TRACK_LABELS, tracksOf, type Track } from "./functions";
+import { poolSql } from "./pool";
 import { requiredYears } from "./tagging";
 
 /**
@@ -50,16 +51,16 @@ const literal = (vector: number[]) => `[${vector.map((x) => x.toFixed(5)).join("
  * Embeds open jobs that have no vector yet (new, or changed since: ingest clears it), India-eligible ones first, up to
  * `max` per call. Returns how many were embedded.
  */
-export async function embedPendingJobs(max = 20000) {
+export async function embedPendingJobs(max = 20000, deadline?: number) {
   let done = 0;
-  while (done < max) {
+  while (done < max && (!deadline || Date.now() < deadline)) {
     const rows = await db.$queryRaw<Array<{ id: string; title: string; description: string }>>`
       SELECT id, title, description FROM "Job"
       WHERE embedding IS NULL AND "closedAt" IS NULL AND source <> 'mock'
       ORDER BY (eligibility IN ('india', 'remote_india')) DESC, "postedAt" DESC
       LIMIT ${Math.min(BATCH, max - done)}`;
     if (rows.length === 0) break;
-    const vectors = await embed(rows.map(jobText), { dimensions: SEMANTIC_DIMENSIONS });
+    const vectors = await embed(rows.map(jobText), { dimensions: SEMANTIC_DIMENSIONS, lane: "background" });
     await db.$executeRaw`
       UPDATE "Job" j SET embedding = v.e::halfvec
       FROM unnest(${rows.map((row) => row.id)}::text[], ${vectors.map(literal)}::text[]) AS v(id, e)
@@ -292,7 +293,7 @@ type LevelJob = { title: string; description: string; skills: string[] };
 /** One call: the required subset of each job's skills, by index. Terms outside a job's own list are dropped. */
 export async function skillLevelsBatch(jobs: LevelJob[]): Promise<Map<number, string[]>> {
   const payload = jobs.map((job, n) => ({ n, title: job.title, description: job.description.replace(/\s+/g, " ").slice(0, LEVELS_DESCRIPTION_CHARS), skills: job.skills }));
-  const answer = await callJson(levelsSchema, LEVELS_SYSTEM, JSON.stringify({ jobs: payload }));
+  const answer = await callJson(levelsSchema, LEVELS_SYSTEM, JSON.stringify({ jobs: payload }), { lane: "background" });
   const out = new Map<number, string[]>();
   for (const result of answer.results) {
     const job = jobs[result.n];
@@ -306,21 +307,21 @@ export async function skillLevelsBatch(jobs: LevelJob[]): Promise<Map<number, st
 }
 
 /**
- * Labels open jobs whose skills have no current label (skillsHash ≠ contentHash), India-eligible and newest first, at
- * most `max`. A failed batch stays unlabelled for the next run; the card then shows its skills unsplit. Returns how
- * many were labelled.
+ * Labels the feed's pool jobs (reading.ts poolSql) whose skills have no current label (skillsHash ≠ contentHash),
+ * newest first, at most `max`, until the deadline. A failed batch stays unlabelled for the next run; the card then
+ * shows its skills unsplit. Returns how many were labelled.
  */
-export async function labelPendingSkills(max = Number(process.env.SKILL_LEVELS_PER_RUN ?? 2000)) {
+export async function labelPendingSkills(max = Number(process.env.SKILL_LEVELS_PER_RUN ?? 2000), deadline?: number) {
   let done = 0;
   let failed = 0;
   // A job the model left out is not asked again in the same run.
   const tried: string[] = [];
-  while (done + failed < max) {
+  while (done + failed < max && (!deadline || Date.now() < deadline)) {
     const rows = await db.$queryRaw<Array<{ id: string; title: string; description: string; skills: string[]; hash: string }>>`
-      SELECT id, title, description, skills, COALESCE("contentHash", 'none') AS hash FROM "Job"
-      WHERE "closedAt" IS NULL AND source <> 'mock' AND cardinality(skills) > 0
+      SELECT id, title, description, skills, COALESCE("contentHash", 'none') AS hash FROM "Job" j
+      WHERE ${poolSql("j")} AND cardinality(skills) > 0
         AND "skillsHash" IS DISTINCT FROM COALESCE("contentHash", 'none') AND NOT (id = ANY(${tried}::text[]))
-      ORDER BY (eligibility IN ('india', 'remote_india')) DESC, "postedAt" DESC
+      ORDER BY "postedAt" DESC
       LIMIT ${Math.min(LEVELS_BATCH * LEVELS_PARALLEL, max - done - failed)}`;
     if (rows.length === 0) break;
     tried.push(...rows.map((row) => row.id));

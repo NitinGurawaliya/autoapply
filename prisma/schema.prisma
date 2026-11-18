@@ -245,6 +245,19 @@ model Job {
   salaryMax          Int?
   salaryCurrency     String?
   salaryPeriod       String? // year | month | hour
+  // Phase P (docs/relevance/TDD.md 4.1.2): the model's reading of the posting (modules/jobs/reading.ts): its field,
+  // kind (full_time | contract | internship | ...), flags (commission_only, gig, ...) and the verified evidence and
+  // requirement lines. readingCurrent is cleared by the job_reading_stale trigger when the title or description
+  // really changes; the reader claims rows through readClaimedUntil and gives up for 24 h after 3 failed attempts.
+  roleFamily         String?
+  kind               String?
+  flags              String[] @default([])
+  reading            Json?
+  readingCurrent     Boolean  @default(false)
+  readAt             DateTime?
+  readFailedAt       DateTime?
+  readAttempts       Int      @default(0)
+  readClaimedUntil   DateTime?
   raw           Json
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)

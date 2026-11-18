@@ -96,8 +96,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # Only companies whose next read is due (modules/jobs/cadence.ts), most overdue first; then embeds new jobs, warms
-      # the feeds, sends new-match pushes, deletes old closed jobs and looks for missing logos.
+      # Only companies whose next read is due (modules/jobs/cadence.ts), most overdue first; then looks for missing logos.
       - shell: bash
         env:
           LIMIT: ${{ inputs.limit }}
@@ -105,6 +104,32 @@ jobs:
           limit="${LIMIT:-6000}"
           [[ "$limit" =~ ^[0-9]+$ ]] || { echo "limit must be a number"; exit 1; }
           npx tsx scripts/ingest-tick-now.ts --limit "$limit"
+
+  after-ingest:
+    name: After ingest (embed, label, read, warm)
+    # Its own job (Phase P, docs/relevance/TDD.md 4.1.1), so the company read's 2 hours never starve it; it runs even when
+    # the read failed or ran out of time, for what that read did write.
+    needs: ingest
+    if: ${{ always() && (github.event.schedule == '15 */3 * * *' || (github.event_name == 'workflow_dispatch' && inputs.task == 'ingest')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: after-ingest
+      cancel-in-progress: false
+    env:
+      JOB_READINGS_PER_DAY: "4000"
+      AFTER_INGEST_RUN_MS: "2400000"
+      LLM_BACKGROUND_CONCURRENT: "6"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Embeds new jobs, labels the pool's skills, reads pool jobs until the day's budget or 40 minutes, warms the feeds
+      # (new-match pushes), deletes old closed jobs.
+      - run: npx tsx scripts/after-ingest-now.ts
 
   board-day:
     name: Board day

@@ -1,16 +1,14 @@
 // Phase M, M2: read every company that is due now, the way tick mode does, without the worker: the same per-company
-// read (ingest.ts ingestOne), at most 8 at once and 4 of one board, recorded as one IngestRun. Then embeds the new jobs.
-// Then what the worker's tick does after its reads (handlers/ingest-tick.ts): warms the feeds and sends new-match pushes
-// when there were new jobs, deletes old closed jobs, and looks for missing logos. Prints per board: companies read,
+// read (ingest.ts ingestOne), at most 8 at once and 4 of one board, recorded as one IngestRun. Then looks for missing
+// logos. Embedding, skills labels, job reading, warming and cleanup are the shared tail (modules/jobs/after-ingest.ts),
+// which the workflow runs as its own job after this one (scripts/after-ingest-now.ts). Prints per board: companies read,
 // unchanged, failed, new jobs, tiers after. The scheduled ingest on GitHub Actions runs this (M21, .github/workflows/jobs.yml).
 //   npx tsx scripts/ingest-tick-now.ts [--all] [--board greenhouse] [--limit 500] [--logos 300]
 //   --all reads every active company, due or not.
 import { db } from "../src/lib/db";
 import { guardUndiciParserAssertions } from "../src/lib/undici-guard";
-import { warmFeeds } from "../src/modules/jobs";
-import { deleteOldClosedJobs, ingestOne, startTickRun } from "../src/modules/jobs/ingest";
+import { ingestOne, startTickRun } from "../src/modules/jobs/ingest";
 import { refreshLogos } from "../src/modules/jobs/logos";
-import { embedPendingJobs } from "../src/modules/jobs/semantic";
 
 function arg(name: string) {
   const at = process.argv.indexOf(name);
@@ -70,16 +68,6 @@ async function main() {
   const seconds = Math.round((Date.now() - started) / 1000);
   console.log(`read ${done} companies in ${seconds} s`);
   console.table([...stats.entries()].map(([source, s]) => ({ source, ...s, tiers: Object.entries(s.tiers).map(([tier, n]) => `${tier} ${n}`).join(", ") })));
-  const embedded = await embedPendingJobs().catch((error) => {
-    console.error(`embedding failed: ${error instanceof Error ? error.message.slice(0, 80) : "error"}`);
-    return 0;
-  });
-  console.log(`embedded ${embedded} jobs`);
-  if (embedded > 0) {
-    const warm = await warmFeeds().catch(() => null);
-    if (warm) console.log(`warmed ${warm.warmed} of ${warm.active} feeds, new-match push to ${warm.alerted}`);
-  }
-  console.log(`deleted ${await deleteOldClosedJobs().catch(() => 0)} old closed jobs`);
   const logos = Number(arg("--logos") ?? 300);
   if (logos > 0) {
     const found = await refreshLogos({ limit: logos, write: true }).catch(() => null);

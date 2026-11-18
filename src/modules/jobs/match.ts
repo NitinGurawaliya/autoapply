@@ -5,6 +5,7 @@ import { cachedFeed, rememberFeed } from "@/lib/feed-cache";
 import { companyKey, feedHistory, loadRules, roleKey } from "@/modules/governance";
 import { classifyTitle, SENIORITIES, TRACK_LABELS, TRACKS, trackFit, type Track, tracksOf } from "./functions";
 import { companyResultsById, judge } from "./results";
+import { APPLY_BOARDS } from "./pool";
 import { formatSalary } from "./salary";
 import { judgeJobs, type Judgement, profileVector } from "./semantic";
 import { candidateSkills, compareSkills, jobSkills } from "./skills";
@@ -12,13 +13,7 @@ import { requiredYears } from "./tagging";
 
 export { daysAgoLabel };
 
-// Boards the agent applies on: the feed, its filters, swipes, retries and the runner all read this list. One fixed list
-// (owner, 18 Nov), no per-board switches: every board runs in the stealthy Chrome (modules/apply/real-browser.ts), the
-// worker presses Submit and a challenge goes to the person in that window. Since 15 Nov: Greenhouse 21 of 22 sent, Keka
-// 21 of 24, SmartRecruiters 12 of 12, Ashby 8 of 14, Workable 7 of 14 (the misses mostly not the board). Left out until
-// they prove themselves (INGEST_CONTRACT: a board goes in after real submits), their jobs still ingested: Zoho Recruit
-// (one real submit), Lever (none: hCaptcha), Workday (no adapter).
-export const APPLY_BOARDS: readonly string[] = ["greenhouse", "ashby", "keka", "workable", "smartrecruiters"];
+export { APPLY_BOARDS };
 const BOARDS = APPLY_BOARDS;
 // Where a job is, for the feed's Location filter (T80): IN = in India and REMOTE = remote and open to India (Job.eligibility,
 // tagging.ts); US and OTHER = jobs abroad, shown only when the user picks them.
