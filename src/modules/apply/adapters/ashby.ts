@@ -142,6 +142,31 @@ async function readFields(page: Page): Promise<FormField[]> {
   const rows = (await page.evaluate(READ_FORM)) as Row[];
   if (rows.length === 0) throw new Error("The application form did not load properly (it had no fields)");
   const schema = await readSchema(page);
+  seenPaths.set(page, new Set(rows.map((row) => row.path)));
+  return toFields(rows, schema);
+}
+
+// The question paths already read on a page, so newQuestions returns only the ones that appeared after filling.
+const seenPaths = new WeakMap<Page, Set<string>>();
+
+/**
+ * Questions Ashby shows only once another is answered (17 Nov, Commure: "Please specify the type of sponsorship you will
+ * require" appears when "require sponsorship to work in the US?" is Yes; it is in neither the first read nor Ashby's form
+ * description, so Submit stopped on it as empty, twice). After each fill the form is read again and the new questions
+ * go back to the runner, which answers them like the first ones (adapter.nextStep); nothing new: null.
+ */
+async function newQuestions(page: Page): Promise<FormField[] | null> {
+  await page.waitForTimeout(600);
+  const seen = seenPaths.get(page) ?? new Set<string>();
+  const rows = ((await page.evaluate(READ_FORM)) as Row[]).filter((row) => !seen.has(row.path));
+  if (rows.length === 0) return null;
+  for (const row of rows) seen.add(row.path);
+  seenPaths.set(page, seen);
+  const fields = toFields(rows, await readSchema(page));
+  return fields.length > 0 ? fields : null;
+}
+
+function toFields(rows: Row[], schema: Record<string, { required: boolean; options: string[] | null }> | null): FormField[] {
   const fields: FormField[] = [];
   for (const raw of rows) {
     const known = schema?.[raw.path];
@@ -857,6 +882,7 @@ export const ashbyAdapter: AtsAdapter = {
   inspect(page: Page) {
     return readFields(page);
   },
+  nextStep: newQuestions,
   // The window is the person's from the moment it opens: they can press Submit while the agent is still filling, or while
   // it waits its turn (21 Oct: Sarvam AI and Matter Labs were sent that way and their runs never saw it).
   watchSubmit(page: Page, onSubmit: () => void) {

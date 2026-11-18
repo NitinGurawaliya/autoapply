@@ -3,7 +3,7 @@
 // npx tsx scripts/guess-test.ts
 import { customQuestionKey, matchKeyBySynonym } from "../src/modules/answers";
 import type { FormField } from "../src/modules/apply/adapter";
-import { fitGuess, guessable } from "../src/modules/apply/guess";
+import { fitGuess, guessable, ownLink } from "../src/modules/apply/guess";
 import type { MemoryAnswer } from "../src/modules/apply/recall";
 import { resolveValues } from "../src/modules/apply/valueResolver";
 
@@ -24,6 +24,14 @@ for (const label of ["How many years of experience do you have with Kafka?", "Di
 }
 check("Indian disability wordings are the disability question (Decline to answer, never guessed)", ["Specially abled", "Differently-abled?", "Are you a PwD candidate?", "Physically challenged"].every((label) => matchKeyBySynonym(label) === "disability"));
 check("a file is never guessed", !guessable(field("Cover letter upload", "file")));
+// 18 Nov, secfix: a link to a video the candidate records is asked, never guessed; a choice about video is still guessed.
+const video = "Video (1–1.5 minutes, link via Loom, YouTube or similar): What is one technical skill you learned in the past 6 months?";
+check("a video link to record is never guessed", !guessable(field(video, "text")) && !guessable(field("Loom recording URL", "text")));
+check("a yes/no about video is still guessed", guessable(field("Have you edited YouTube videos?", "radio", ["Yes", "No"])));
+const resumeText = "Projects: https://github.com/someone/tool and portfolio www.someone.dev/work";
+check("a guessed link the resume has is kept", ownLink(field("GitHub link"), "https://github.com/someone/tool", resumeText) === "https://github.com/someone/tool");
+check("a guessed link the candidate never gave is refused", ownLink(field("Portfolio URL"), "https://someone-portfolio.com/", resumeText) === null && ownLink(field("Portfolio URL"), "I do not have one yet", resumeText) === null);
+check("a question that is not about a link passes unchanged", ownLink(field("Why this role?"), "Because of the product", resumeText) === "Because of the product" && ownLink(field("LinkedIn profile"), "x", "") === "x");
 
 // A guess fits its field.
 const offices = ["Bengaluru - HSR", "Mumbai - BKC", "Pune"];

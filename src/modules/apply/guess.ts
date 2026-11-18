@@ -107,10 +107,31 @@ export function selfIdList(options: string[] | undefined) {
   return (options ?? []).filter((option) => EEO_OPTION.test(option.trim())).length >= 2;
 }
 
+// A link to a video or recording the candidate is to make (18 Nov, secfix: "Video (1–1.5 minutes, link via Loom, YouTube
+// or similar)", a URL box): no guess can be true, and the sentence guessed was refused by the box on every retry.
+const RECORDING = /\b(video|loom|vimeo|youtube|recording|screencast)\b/i;
+// A question asking for a link: a guess must be a link the candidate already gave (resume or own answers), never invented.
+const LINK_QUESTION = /\b(links?|urls?)\b/i;
+const URL_IN = /\bhttps?:\/\/[^\s"'<>]+|\b(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\/[^\s"'<>]*/gi;
+
 /** Whether a question may be guessed at all (the never-guess list above, a list of salutations or of self-ID answers). */
 export function guessable(field: Pick<FormField, "label" | "type" | "options">) {
   if (field.type === "file" || NEVER.test(field.label) || /\b(salutation|honorific)\b/i.test(field.label) || certifiesFact(field)) return false;
+  if (!field.options?.length && RECORDING.test(field.label) && LINK_QUESTION.test(field.label)) return false;
   return (field.options ?? []).filter((option) => SALUTATION.test(option.trim())).length < 2 && !selfIdList(field.options);
+}
+
+const bare = (url: string) => url.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/[/.,;)]+$/, "");
+
+/**
+ * A guess for a question asking for a link, kept only when it is a link found in what the candidate gave (`known`: their
+ * resume and own answers); any other question's guess passes unchanged. null: the question is asked instead.
+ */
+export function ownLink(field: Pick<FormField, "label" | "options">, answer: string, known: string): string | null {
+  if (field.options?.length || !LINK_QUESTION.test(field.label)) return answer;
+  const given = new Set((known.match(URL_IN) ?? []).map(bare));
+  const link = (answer.match(URL_IN) ?? [])[0];
+  return link && given.has(bare(link)) ? link : null;
 }
 
 /** The model's answer, if it fits the field: an option of the form, a number for a number box, sane plain text. */
@@ -178,10 +199,12 @@ export async function guessAnswers(input: {
     const again = await ask(missing.map((question, index) => ({ ...question, index })));
     for (const result of again) if (missing[result.index]) results.push({ ...result, index: missing[result.index].index });
   }
+  const known = [profile.resumeText, ...input.answers.filter((row) => row.source === "user" || row.source === "resume").map((row) => row.answer)].join("\n");
   for (const result of results) {
     const field = fields[result.index];
     if (!field || out.has(field.label)) continue;
-    const answer = fitGuess(field, result.answer, input.today);
+    const fitted = fitGuess(field, result.answer, input.today);
+    const answer = fitted && ownLink(field, fitted, known);
     // GUESS_DEBUG=1: why a guess was not used (dry runs only; it prints the model's answer).
     if (!answer && process.env.GUESS_DEBUG === "1") console.log(`guess refused: "${field.label.slice(0, 60)}" (${field.type}) -> ${JSON.stringify(result.answer).slice(0, 120)}${field.options?.length ? ` options ${JSON.stringify(field.options).slice(0, 200)}` : ""}`);
     if (!answer) continue;
