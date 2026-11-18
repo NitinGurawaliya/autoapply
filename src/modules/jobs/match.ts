@@ -176,7 +176,9 @@ type JobSkillsInput = { names: string[]; required: string[] | null };
 // Phase N (owner, 18 Nov): the work and the job's skills decide the score. Experience is 10 and location none, since
 // both are gates already (bandMiss, the place filter): at 20 + 10 they gave every card 24-30 points for passing them.
 const SKILLS_MAX = 40;
-const NO_TECH_POINTS = 15; // a posting that names no vocabulary skill: a middle score, never the top of the feed
+// A posting that names no vocabulary skill earns no skills points (owner, 19 Nov). It was a middle 15, and with the 5
+// for unstated years those 20 points carried mechanical, lab and art roles from the new boards over the minimum of 40.
+const NO_TECH_POINTS = 0;
 const EXPERIENCE_MAX = 10;
 const MIN_NAMED = 5;
 const MIN_REQUIRED = 3;
@@ -186,22 +188,22 @@ const MIN_REQUIRED = 3;
  * share of everything named; without, 40 for the share of everything named. `floorOk`: the candidate shows at least
  * half the needed skills (required, else all named) and at least two of them, which the verdict floor needs.
  */
-function skillsPart(input: JobSkillsInput | undefined, shows: Set<string>): { points: number; floorOk: boolean; note: string } {
+function skillsPart(input: JobSkillsInput | undefined, shows: Set<string>): { points: number; floorOk: boolean; note: string; matched: number } {
   const names = input?.names ?? [];
-  if (names.length === 0) return { points: NO_TECH_POINTS, floorOk: false, note: "The posting names no tech skills we know" };
+  if (names.length === 0) return { points: NO_TECH_POINTS, floorOk: false, note: "The posting names no tech skills we know", matched: 0 };
   const required = input?.required?.filter((skill) => names.includes(skill)) ?? [];
   const compared = compareSkills(names, required.length > 0 ? required : null, shows);
   // A posting that names one or two skills says little: the shares count at least 5 named and 3 required, so "Python,
   // and you have it" is not full marks (an "AI Research Contributor" naming only Python scored 40 of 40, 18 Nov).
   const allShare = compared.have.length / Math.max(names.length, MIN_NAMED);
   if (required.length === 0) {
-    return { points: Math.round(SKILLS_MAX * allShare), floorOk: compared.have.length >= 2 && compared.have.length * 2 >= names.length, note: `You have ${compared.have.length} of the ${names.length} skills it names` };
+    return { points: Math.round(SKILLS_MAX * allShare), floorOk: compared.have.length >= 2 && compared.have.length * 2 >= names.length, note: `You have ${compared.have.length} of the ${names.length} skills it names`, matched: compared.have.length };
   }
   const requiredHave = required.length - compared.missing.length;
   const requiredShare = requiredHave / Math.max(required.length, MIN_REQUIRED);
   const optional = names.length - required.length;
   const note = `You have ${requiredHave} of its ${required.length} required ${required.length === 1 ? "skill" : "skills"}${optional > 0 ? ` and ${compared.have.length - requiredHave} of ${optional} nice to have` : ""}`;
-  return { points: Math.round(30 * requiredShare + 10 * allShare), floorOk: requiredHave >= 2 && requiredHave * 2 >= required.length, note };
+  return { points: Math.round(30 * requiredShare + 10 * allShare), floorOk: requiredHave >= 2 && requiredHave * 2 >= required.length, note, matched: compared.have.length };
 }
 
 /** Experience out of 10: the years fit 10, one more than the candidate has 7, two more 3, not stated 5. */
@@ -479,6 +481,11 @@ function scoreByMeaning(
   const verdictScore = verdict ? FIT_POINTS[verdict.fit] : UNJUDGED_POINTS;
   const meaningScore = closenessScore + verdictScore;
   const skills = skillsPart(job.jobSkills, candidate.shows ?? candidateSkills({ skills: candidate.skills }));
+  // A stretch with none of the job's skills on the resume is not a match (owner, 19 Nov): the model called it only a
+  // stretch, and nothing in the posting shows the candidate can do it.
+  if (verdict?.fit === "stretch" && skills.matched === 0) {
+    return { score: 0, reason: "A stretch, and none of its skills are on your resume", requiredYears: job.requiredYears, skillHits: job.skillHits, breakdown: NO_BREAKDOWN };
+  }
 
   const asks = job.requiredYears;
   const have = candidate.yearsExperience ?? 0;
