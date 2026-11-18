@@ -61,7 +61,8 @@ export function SentToast({ news, onDone, onOpen }: { news: SentNews; onDone: ()
 
   // A short buzz on a phone that can; nothing else moves or takes focus.
   useEffect(() => {
-    if (still) return;
+    // Only after the user has touched the page: before that the browser refuses and logs an error (e2e 18 Nov).
+    if (still || !navigator.userActivation?.hasBeenActive) return;
     try {
       navigator.vibrate?.([18, 40, 28]);
     } catch {

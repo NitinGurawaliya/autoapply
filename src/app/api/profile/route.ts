@@ -6,7 +6,7 @@ import { forgetFeed } from "@/lib/feed-cache";
 import { enqueuePrescan } from "@/lib/queue";
 import { TRACKS } from "@/modules/jobs";
 import { remove, upsert } from "@/modules/answers";
-import { profileSchema, resumeAnswers } from "@/modules/profile";
+import { invalidLinks, profileSchema, resumeAnswers } from "@/modules/profile";
 
 /** The details resumeAnswers reads, from a stored profile. */
 function pick(row: { fullName: string; email: string; phone: string | null; city: string | null; country: string | null; linkedin: string | null; github: string | null; portfolio: string | null; yearsExperience: number | null; currentTitle: string | null; currentCompany: string | null }) {
@@ -62,6 +62,8 @@ export async function PUT(req: Request) {
   const raw = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   const parsed = profileSchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ error: "invalid" }, { status: 400 });
+  const badLinks = invalidLinks(raw);
+  if (badLinks.length > 0) return NextResponse.json({ error: "invalid_link", fields: badLinks }, { status: 400 });
 
   const existing = await db.profile.findUnique({ where: { userId: user.id } });
   if (!existing) return NextResponse.json({ error: "not_found" }, { status: 404 });

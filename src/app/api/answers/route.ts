@@ -11,7 +11,8 @@ const putSchema = z.object({
         key: z.string().min(1).max(80),
         // Shortened, not refused: see applications/[id]/answers/route.ts.
         question: z.string().max(5000).transform((text) => text.slice(0, 1000)),
-        answer: z.string().max(2000),
+        // A blank answer is no answer (e2e finding 4): the gaps and needs-you routes refuse it too.
+        answer: z.string().trim().min(1).max(2000),
         source: z.enum(["resume", "user", "ai_draft", "default"]),
       }),
     )
@@ -35,13 +36,15 @@ export async function GET() {
 export async function PUT(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const parsed = putSchema.safeParse(await req.json());
+  // A body that is not JSON is the client's mistake: 400, not 500 (e2e finding 3).
+  const parsed = putSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "invalid" }, { status: 400 });
 
   try {
-    for (const row of parsed.data.answers) {
-      await upsert(user.id, row);
-    }
+    // Together, not one after another: each is a round trip to the database, and onboarding saves nine at once
+    // (e2e 18 Nov: 3 s for nine rows in a loop). One row per key, the last as before, so two never race on one key.
+    const rows = [...new Map(parsed.data.answers.map((row) => [row.key, row])).values()];
+    await Promise.all(rows.map((row) => upsert(user.id, row)));
   } catch (error) {
     const message = error instanceof Error ? error.message : "invalid";
     return NextResponse.json({ error: message }, { status: 400 });

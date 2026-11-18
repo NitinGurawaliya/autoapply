@@ -116,7 +116,9 @@ export default async function ApplicationPage({ params, searchParams }: { params
     { key: "swiped", time: clock(application.createdAt), title: "You picked this job", state: "done" as const },
     ...buildSteps(application.events, application.status, answers).map((step): StoryStep => {
       const event = application.events.find((item) => STEP_EVENT[step.key]?.(item));
-      const sub = step.state === "current" ? "working on it now" : step.state === "stopped" ? "stopped here" : (step.note ?? null);
+      // A step that waits for the user says so; "working on it now" is for the agent's own steps (e2e finding 7).
+      const waitingOnUser = step.state === "current" && ((step.key === "asked" && application.status === "needs_input") || step.key === "code");
+      const sub = waitingOnUser ? "waiting for you" : step.state === "current" ? "working on it now" : step.state === "stopped" ? "stopped here" : (step.note ?? null);
       const state: StoryStep["state"] = step.key === "submitted" && step.state === "done" ? "end" : step.state;
       return { key: step.key, time: event && step.state !== "todo" ? clock(event.createdAt) : "", title: step.label, sub, state };
     }),
@@ -161,7 +163,7 @@ export default async function ApplicationPage({ params, searchParams }: { params
             {board ? ` · via ${board}` : ""}
           </span>
           <span className="mt-2 flex">
-            <StatusPill kind={stopped ? "stop" : "ok"}>
+            <StatusPill kind={stopped ? "stop" : sent ? "ok" : "wait"}>
               {sent && application.submittedAt ? `Sent ${when(application.submittedAt)}` : statusMeta(application.status).label}
             </StatusPill>
           </span>

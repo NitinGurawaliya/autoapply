@@ -18,18 +18,31 @@ function nullableText(max = 500) {
 
 // A link must be an address: a resume's link text ("LinkedIn") read as the link is dropped, or a job form gets a value
 // it rejects (30 Oct: Ashby refused Dhanush's LinkedIn twice and the run failed). A bare "linkedin.com/in/x" gets https://.
+export function toLink(value: unknown, max = 300): string | null {
+  if (typeof value !== "string" || placeholder(value)) return null;
+  const trimmed = value.trim().slice(0, max);
+  if (!trimmed || /\s/.test(trimmed)) return null;
+  try {
+    const link = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    return new URL(link).hostname.includes(".") ? link : null;
+  } catch {
+    return null;
+  }
+}
+
 function nullableLink(max = 300) {
-  return z.preprocess((value) => {
-    if (typeof value !== "string" || placeholder(value)) return null;
-    const trimmed = value.trim().slice(0, max);
-    if (!trimmed || /\s/.test(trimmed)) return null;
-    try {
-      const link = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-      return new URL(link).hostname.includes(".") ? link : null;
-    } catch {
-      return null;
-    }
-  }, z.string().nullable());
+  return z.preprocess((value) => toLink(value, max), z.string().nullable());
+}
+
+/**
+ * The link fields a user typed that are not addresses. Resume parsing drops such a value quietly (above); a user's own
+ * edit must not, or a typo erases the link they had saved (e2e finding 10, 18 Nov).
+ */
+export function invalidLinks(raw: Record<string, unknown> | null): string[] {
+  return ["linkedin", "github", "portfolio"].filter((key) => {
+    const value = raw?.[key];
+    return typeof value === "string" && value.trim() !== "" && !placeholder(value) && toLink(value) === null;
+  });
 }
 
 const short =(max: number) => z.string().default("").transform((value) => value.slice(0, max));
@@ -60,7 +73,8 @@ export const profileSchema = z.object({
   yearsExperience: z.preprocess((value) => {
     if (value == null || value === "") return null;
     const number = typeof value === "number" ? value : Number(value);
-    return Number.isFinite(number) ? number : null;
+    // Years out of range are no answer (e2e 18 Nov: -5 was saved and read as experience).
+    return Number.isFinite(number) && number >= 0 && number <= 60 ? number : null;
   }, z.number().nullable()),
   currentTitle: nullableText(200),
   currentCompany: nullableText(200),

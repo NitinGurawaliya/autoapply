@@ -1,8 +1,6 @@
 "use client";
 
-import { forgetVisitedPages } from "@/lib/forget-pages";
 import { useState, useSyncExternalStore } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Chip, SkillTag } from "@/components/ui/chip";
 import { FieldError, FieldLabel, InputBox, TextAreaBox } from "@/components/ui/field";
@@ -211,10 +209,11 @@ export function ConfirmForm({
   trackOptions: Array<{ id: string; label: string }>;
   suggestedTracks?: string[];
 }) {
-  const router = useRouter();
   const [values, setValues] = useState(initial);
   const [editing, setEditing] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "saving" | "error" | "missing">("idle");
+  // Link fields the server refused as not an address (e2e finding 10): named, so the user can fix them.
+  const [badLinks, setBadLinks] = useState<string[]>([]);
   // The phone card shows when the resume had no number, and stays while it is being typed.
   const [askPhone] = useState(!initial.phone.trim());
 
@@ -252,11 +251,16 @@ export function ConfirmForm({
       body: JSON.stringify(profile),
     }).catch(() => null);
     if (!response?.ok) {
+      const body = response?.status === 400 ? ((await response.json().catch(() => null)) as { error?: string; fields?: string[] } | null) : null;
+      setBadLinks(body?.error === "invalid_link" ? (body.fields ?? []) : []);
       setStatus("error");
       return;
     }
-    await forgetVisitedPages();
-    router.push(next);
+    setBadLinks([]);
+    // A full load, not router.push after forgetVisitedPages: that server action re-rendered this page, and the refresh
+    // often won over the push, leaving the user here with the profile saved (e2e 18 Nov, 3 of 6 tries). A full load
+    // also starts with no kept pages, which is what forgetting them was for.
+    window.location.assign(next);
   }
 
   const skills = values.skills.split(",").map((item) => item.trim()).filter(Boolean);
@@ -423,7 +427,13 @@ export function ConfirmForm({
           )}
         </SectionCard>
 
-        {status === "error" ? <FieldError>Could not save. Try again.</FieldError> : null}
+        {status === "error" ? (
+          <FieldError>
+            {badLinks.length > 0
+              ? `${badLinks.map((key) => ({ linkedin: "LinkedIn", github: "GitHub", portfolio: "Portfolio" })[key] ?? key).join(" and ")} ${badLinks.length === 1 ? "isn't a web address" : "aren't web addresses"}. Fix or clear ${badLinks.length === 1 ? "it" : "them"}.`
+              : "Could not save. Try again."}
+          </FieldError>
+        ) : null}
         {status === "missing" ? <FieldError>Add your full name and email to continue.</FieldError> : null}
       </ScreenBody>
       <StickyFooter>

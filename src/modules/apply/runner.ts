@@ -107,6 +107,7 @@ async function captureConfirmation(page: Awaited<ReturnType<typeof openBrowser>>
 // Handoff: how long the board's Success stays on screen before the window closes itself, and the event that marks a
 // window opened again after the user closed it before Submit.
 const HANDOFF_SUCCESS_SHOWN_MS = 3000;
+const ANSI_COLOUR = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
 const WINDOW_REOPENED = "The window was closed before Submit, so it opened again";
 // A CAPTCHA the board refused (CaptchaRejectedError): the run starts again from the form with a new one, this many times
 // in a row before it fails. Not counted as failed attempts: nothing was sent.
@@ -164,7 +165,24 @@ async function execute(applicationId: string, options: { person?: boolean }) {
   const rules = loadRules();
 
   // The reaper treats a running application whose heartbeat stops as belonging to a dead worker.
-  const touch = () => db.application.updateMany({ where: { id: applicationId, status: { not: "cancelled" } }, data: { heartbeatAt: new Date() } }).catch(() => undefined);
+  // It also notices a cancel: no row updated means the user cancelled, and the run stops writing progress (below).
+  let cancelSeen = false;
+  const touch = () =>
+    db.application
+      .updateMany({ where: { id: applicationId, status: { not: "cancelled" } }, data: { heartbeatAt: new Date() } })
+      .then((result) => {
+        if (result.count === 0) cancelSeen = true;
+      })
+      .catch(() => undefined);
+  // A cancel between steps stops the run at the next one (e2e finding 2, 18 Nov: a cancelled run kept opening the form,
+  // reading it and drafting essays for 34 s before setApp(filling) refused). Checked after every slow step.
+  const stopIfCancelled = async () => {
+    if (!cancelSeen) {
+      const row = await db.application.findUnique({ where: { id: applicationId }, select: { status: true } });
+      cancelSeen = !row || row.status === "cancelled";
+    }
+    if (cancelSeen) throw new CancelledError();
+  };
 
   const adapter = pickAdapter(job.applyUrl, job.source);
   const formUrl = adapter.formUrl?.({ applyUrl: job.applyUrl, externalId: job.externalId, companySlug: job.company.slug }) ?? job.applyUrl;
@@ -204,6 +222,8 @@ async function execute(applicationId: string, options: { person?: boolean }) {
   const upload: { cleanup: (() => Promise<void>) | null } = { cleanup: null };
   const jobInfo = { company: job.company.name, title: job.title, location: job.location, country: job.country, description: job.description };
   const resolveLog = async (message: string, data?: Record<string, unknown>) => {
+    // Nothing is added to a cancelled application's story after "Cancelled by you".
+    if (cancelSeen) return;
     await writeEvent(applicationId, "resolve", message, undefined, data as Prisma.InputJsonValue | undefined);
   };
   // A saved answer only proves a loop when the user gave it in reply to THIS application's own prompt and the form
@@ -251,8 +271,10 @@ async function execute(applicationId: string, options: { person?: boolean }) {
     // them first; anything genuinely missing is asked now, with no browser open and no half-filled form. Essays the run
     // will draft do not count as missing. If the questions cannot be read, the run asks mid-form as before.
     const known = await jobQuestions(job);
+    await stopIfCancelled();
     if (known && known.length > 0) {
       const before = await resolveForm({ userId: application.userId, source: adapter.source, fields: known, profile, answers, job: jobInfo, draftEssays: false, log: async (message, data) => resolveLog(`Before opening the form: ${message}`, data) });
+      await stopIfCancelled();
       if (before.missing.length > 0) {
         const repeatedEarly = await repeatedQuestion(before.missing);
         if (repeatedEarly) {
@@ -270,11 +292,14 @@ async function execute(applicationId: string, options: { person?: boolean }) {
       await writeEvent(applicationId, "resolve", "Every question on the form can be answered; opening it");
     }
     session = early ? await early : await openBrowser(formUrl, application.userId, { handoff, window: adapter.window });
+    await stopIfCancelled();
     // A handoff window is the person's from the moment it opens: a Submit pressed before the agent is ready still counts.
     if (handoff) stopWatchingSubmit = adapter.watchSubmit?.(session.page, () => void markAttempted());
     const fields = await adapter.inspect(session.page);
+    await stopIfCancelled();
     await writeEvent(applicationId, "inspect", `Found ${fields.length} fields`);
     const { resolved } = await resolveForm({ userId: application.userId, source: adapter.source, fields, profile, answers, job: jobInfo, draftEssays: true, log: resolveLog });
+    await stopIfCancelled();
     await writeEvent(applicationId, "resolve", `Resolved ${resolved.values.length}, pending ${resolved.pending.length}`);
     const repeated = await repeatedQuestion(resolved.pending);
     if (repeated) {
@@ -487,7 +512,8 @@ async function execute(applicationId: string, options: { person?: boolean }) {
       void notifyNeedsInput(applicationId, "answers");
       return;
     }
-    let message = error instanceof Error ? error.message : "apply failed";
+    // Playwright colours its messages for a terminal; the stored error is read on a page (e2e 18 Nov).
+    let message = (error instanceof Error ? error.message : "apply failed").replace(ANSI_COLOUR, "");
     let retryable = !(error instanceof NoRetryError);
     // "Closed" is only believed when the company's own board agrees. A page that did not load looks the same.
     if (!attempted && /no longer open/i.test(message)) {

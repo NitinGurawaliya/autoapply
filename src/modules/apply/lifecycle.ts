@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { cachedFeedScore, forgetFeed } from "@/lib/feed-cache";
+import { cachedFeedScore, dropFromFeed } from "@/lib/feed-cache";
 import { APPLY_QUEUES, enqueueApply } from "@/lib/queue";
 import { check, historyFor, loadRules, writeEvent } from "@/modules/governance";
 import { APPLY_BOARDS, candidateSkills, jobSimilarity, judgeJobs, profileVector, scoreJob, tracksOf } from "@/modules/jobs";
@@ -50,11 +50,14 @@ export async function cancelApplication(applicationId: string, userId: string) {
     const exists = await db.application.findFirst({ where: { id: applicationId, userId }, select: { id: true } });
     return exists ? ("not_cancellable" as const) : ("not_found" as const);
   }
-  await db.$executeRaw`
-    UPDATE pgboss.job SET state = 'cancelled', completed_on = now()
-    WHERE name = ANY(${APPLY_QUEUES}) AND state IN ('created', 'retry', 'active') AND data->>'applicationId' = ${applicationId}`;
-  await db.$executeRaw`DELETE FROM "SubmitLock" WHERE "holderId" = ${applicationId}`;
-  await writeEvent(applicationId, "cancel", "Cancelled by you");
+  // The three are independent once the row says cancelled: together, one round trip instead of three (e2e verify, 18 Nov).
+  await Promise.all([
+    db.$executeRaw`
+      UPDATE pgboss.job SET state = 'cancelled', completed_on = now()
+      WHERE name = ANY(${APPLY_QUEUES}) AND state IN ('created', 'retry', 'active') AND data->>'applicationId' = ${applicationId}`,
+    db.$executeRaw`DELETE FROM "SubmitLock" WHERE "holderId" = ${applicationId}`,
+    writeEvent(applicationId, "cancel", "Cancelled by you"),
+  ]);
   return "cancelled" as const;
 }
 
@@ -157,7 +160,7 @@ export async function swipeRight(
   jobId: string,
   enqueue: (applicationId: string, job: { source: string; applyUrl: string }) => Promise<string | null> = (applicationId, job) => enqueueApply(applicationId, 0, { job }),
 ): Promise<SwipeResult> {
-  // The card's score, read before this swipe clears the cached feed (forgetFeed below).
+  // The card's score, read before this swipe takes it out of the cached feed (dropFromFeed below).
   const seen = cachedFeedScore(userId, jobId);
   // Each read is a round trip of 0.3-0.45 s to the database (1 Nov), so the two independent ones go together. A job
   // already swiped is not looked up first: the swipe's unique key refuses it in the transaction (P2002 below).
@@ -191,7 +194,7 @@ export async function swipeRight(
       return { application: created, history: counts };
     }, { maxWait: 60000, timeout: 60000 }));
     // The swiped job leaves the feed; a cached feed must not show it again (lib/feed-cache.ts).
-    forgetFeed(userId);
+    dropFromFeed(userId, jobId);
   } catch (error) {
     if (error instanceof QueueFull) return { ok: false, reason: "blocked", rule: "max_in_flight" };
     // Two swipes on the same job at once: the unique key lets exactly one through. Anything else is a real error.
