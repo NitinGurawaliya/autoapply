@@ -26,7 +26,7 @@ on:
       limit:
         description: "Ingest only: at most this many due companies"
         type: string
-        default: "3000"
+        default: "6000"
 
 permissions:
   contents: read
@@ -83,7 +83,8 @@ jobs:
     name: Ingest (companies due)
     if: github.event.schedule == '15 */3 * * *' || (github.event_name == 'workflow_dispatch' && inputs.task == 'ingest')
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # ~30,800 companies at their tiers' pace need ~39,000 reads a day (18 Nov): 8 runs of up to 6,000 cover that.
+    timeout-minutes: 120
     # A run still going when the next is due: the next waits, so two never read the same companies at once.
     concurrency:
       group: ingest
@@ -101,7 +102,7 @@ jobs:
         env:
           LIMIT: ${{ inputs.limit }}
         run: |
-          limit="${LIMIT:-3000}"
+          limit="${LIMIT:-6000}"
           [[ "$limit" =~ ^[0-9]+$ ]] || { echo "limit must be a number"; exit 1; }
           npx tsx scripts/ingest-tick-now.ts --limit "$limit"
 

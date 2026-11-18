@@ -101,7 +101,7 @@ The Docker image has no Python, so the stealthy Chrome cannot start in it: run D
 2. Run `ingest` by hand once and read its log: companies read per board, jobs embedded, feeds warmed.
 3. After two days of green scheduled runs, start every worker with `INGEST_MODE=off`, `DISCOVER_CRON=off` and `BOARD_DAY_CRON=off`. The schedules live in the database, so a worker started without them puts them back; all workers need the same three. The laptop worker then only applies; the Docker worker has nothing left to do.
 
-Minutes: discovery takes up to about an hour a day and ingest about 10–15 minutes a run, roughly 4,700 minutes a month. A private repository's free plan has 2,000; past that GitHub bills about $0.008 a minute (public repositories are free). Runs come from GitHub's datacenter addresses, which Workable's rate limit and Workday's bot check treat worse than a home connection.
+Minutes: the repository is public, so Actions minutes are free. Each ingest run reads up to 6,000 due companies (2 hours at most). Runs come from GitHub's datacenter addresses, which Workable's rate limit and Workday's bot check treat worse than a home connection.
 
 ## 5. End-to-end test (do this before trusting it)
 
