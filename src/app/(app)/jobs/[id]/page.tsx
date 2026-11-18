@@ -65,7 +65,7 @@ export default async function JobPage({ params, searchParams }: { params: Promis
   // Written like the feed's own URL (lib/feed-url.ts), so Back lands on the exact page the user left.
   const backHref = withView(feedHref(filters, { boards: APPLY_BOARDS, places: DEFAULT_PLACES, days: DEFAULT_FEED_DAYS }));
 
-  const [job, swipe, application, feed] = await Promise.all([
+  const [job, swipe, application, feed, profile] = await Promise.all([
     db.job.findUnique({
       where: { id },
       select: {
@@ -91,6 +91,8 @@ export default async function JobPage({ params, searchParams }: { params: Promis
     db.application.findFirst({ where: { userId: user.id, jobId: id }, orderBy: { createdAt: "desc" }, select: { id: true } }),
     // The feed for these filters is cached for a minute (lib/feed-cache.ts), so this is the card's own score and reason.
     listFeed(user.id, filters, view).catch(() => []),
+    // The user's years, for a job no longer in the feed (e2e finding 5: it read "you have 0" for a 2-year user).
+    db.profile.findUnique({ where: { userId: user.id }, select: { yearsExperience: true } }),
   ]);
 
   if (!job) {
@@ -115,7 +117,7 @@ export default async function JobPage({ params, searchParams }: { params: Promis
   const board = boardLabel(job.source);
   const daysAgo = daysSince(job.postedAt);
   // From the card's own feed item when the job is in the feed, else from the stored job (the same rules).
-  const experience = match ? experienceChip(match) : experienceChip({ requiredYears: job.experienceMin, seniority: job.seniority, yourYears: null });
+  const experience = match ? experienceChip(match) : experienceChip({ requiredYears: job.experienceMin, seniority: job.seniority, yourYears: profile?.yearsExperience ?? null });
   const salary = match ? match.salary : formatSalary({ min: job.salaryMin, max: job.salaryMax, currency: job.salaryCurrency, period: job.salaryPeriod });
   const stage = job.company.stage ? (STAGE_LABEL[job.company.stage] ?? null) : null;
   const blocks = describe(job.description);

@@ -38,7 +38,21 @@ export function cachedFeedScore(userId: string, jobId: string): number | null {
   return null;
 }
 
-/** Drop every cached feed of this user (all filters): after a swipe, a profile edit or a change of preferred locations. */
+/**
+ * After a swipe: take the swiped job out of this user's cached feeds instead of dropping them, so the deck's refill
+ * stays a cache hit (e2e 18 Nov: forgetting the feed on every swipe made each refill rebuild it, 14-42 s, and fast
+ * swiping queued those rebuilds for up to a minute). The skipped view changes with a swipe, so it is dropped. Caps the
+ * swipe may have reached (a company's weekly limit) show when the minute is over; the swipe itself checks them.
+ */
+export function dropFromFeed(userId: string, jobId: string) {
+  for (const [key, entry] of cache) {
+    if (!key.startsWith(`${userId}\u0000`)) continue;
+    if (key.endsWith("|skipped") || !Array.isArray(entry.value)) cache.delete(key);
+    else entry.value = (entry.value as Array<{ id?: unknown }>).filter((item) => item?.id !== jobId);
+  }
+}
+
+/** Drop every cached feed of this user (all filters): after a profile edit or a change of preferred locations. */
 export function forgetFeed(userId: string) {
   for (const key of cache.keys()) if (key.startsWith(`${userId}\u0000`)) cache.delete(key);
 }

@@ -114,17 +114,26 @@ export function stampClass(kind: "apply" | "skip") {
   );
 }
 
-/** Check or "!" in a circle: sent rows, the detail status line. */
-export function StatusMark({ kind, size = 26 }: { kind: "ok" | "stop"; size?: 22 | 26 }) {
+/**
+ * A check (sent), "!" (didn't go through) or a clock (still under way or waiting for the user) in a circle: sent rows,
+ * the detail status line. A check means sent and nothing else (e2e finding 7: "Needs you" showed one).
+ */
+export function StatusMark({ kind, size = 26 }: { kind: "ok" | "stop" | "wait"; size?: 22 | 26 }) {
   return (
     <span aria-hidden="true" className={cn("inline-flex flex-none items-center justify-center rounded-full bg-inverse text-inverse-foreground", size === 26 ? "size-6" : "size-5")}>
-      {kind === "ok" ? <Icon name="check" size={size === 26 ? 14 : 12} /> : <span className="type-meta leading-none font-semibold">!</span>}
+      {kind === "ok" ? (
+        <Icon name="check" size={size === 26 ? 14 : 12} />
+      ) : kind === "wait" ? (
+        <Icon name="clock" size={size === 26 ? 14 : 12} />
+      ) : (
+        <span className="type-meta leading-none font-semibold">!</span>
+      )}
     </span>
   );
 }
 
 /** Status line under the detail title: "✓ Sent today, 10:42". */
-export function StatusPill({ kind, children }: { kind: "ok" | "stop"; children: React.ReactNode }) {
+export function StatusPill({ kind, children }: { kind: "ok" | "stop" | "wait"; children: React.ReactNode }) {
   return (
     <span className="box-border inline-flex h-8 items-center gap-2 self-start rounded-tag bg-sunk pr-3 pl-1.5 type-meta font-medium">
       <StatusMark kind={kind} size={22} />

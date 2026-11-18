@@ -38,8 +38,10 @@ export type JobCardData = {
   detailHref?: string;
 };
 
-// A skill line's room at 390 px: the card's 310 px of content less the 72 px label and its gap (craft-b2, 18 Nov).
-const LINE_PX = 226;
+// A skill line's room at 390 px: the card's 310 px of content less the widest label ("Not on resume", 102 px) and its
+// 12 px gap. The labels share one grid column sized to the longest (e2e finding 1, 18 Nov: a fixed 72 px column let
+// "Not on resume" run into the skills).
+const LINE_PX = 196;
 const CHAR_PX = 7.7; // 15 px Schibsted Grotesk, a little over its average glyph
 const SEP_PX = 8; // ", "
 const MORE_PX = 28; // " +n"
@@ -58,12 +60,13 @@ function fitLine(items: string[], most = 4) {
   return { shown, more: items.length - shown.length };
 }
 
+/** One label and its list, as two cells of the skills grid (the parent sets the columns). */
 function SkillLine({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <p className="m-0 flex min-w-0 gap-2 type-body whitespace-nowrap">
-      <span className="w-18 flex-none text-muted-foreground">{label}</span>
-      <span className="min-w-0 truncate">{children}</span>
-    </p>
+    <>
+      <span className="type-body whitespace-nowrap text-muted-foreground">{label}</span>
+      <span className="min-w-0 truncate type-body whitespace-nowrap">{children}</span>
+    </>
   );
 }
 
@@ -153,7 +156,7 @@ export function JobCard({ job, stamps }: { job: JobCardData; stamps?: ReactNode 
       ) : null}
 
       {skills && have && missing ? (
-        <div className="mt-6 flex flex-col gap-2 border-t border-line pt-4">
+        <div className="mt-6 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-2 border-t border-line pt-4">
           <SkillLine label="You have">
             {have.shown.length > 0 ? (
               <>
@@ -182,24 +185,22 @@ export function JobCard({ job, stamps }: { job: JobCardData; stamps?: ReactNode 
         </div>
       ) : null}
 
-      <p className="m-0 mt-auto line-clamp-2 pt-4 type-body text-pretty text-muted-foreground [@media(max-height:790px)]:line-clamp-1">
-        {why}
+      {/* The link sits beside the reason, not inside it: in the clamped paragraph it fell on a hidden third line (e2e 18 Nov). */}
+      <div className="mt-auto flex items-end gap-3 pt-4">
+        <p className="m-0 line-clamp-2 min-w-0 flex-1 type-body text-pretty text-muted-foreground [@media(max-height:790px)]:line-clamp-1">{why}</p>
         {job.detailHref ? (
-          <>
-            {" "}
-            <Link
-              href={job.detailHref}
-              draggable={false}
-              onPointerDown={(event) => event.stopPropagation()}
-              // The card itself opens the job on a tap: stop here so the page is not pushed twice.
-              onClick={(event) => event.stopPropagation()}
-              className="font-medium text-foreground underline decoration-1 underline-offset-4"
-            >
-              Details
-            </Link>
-          </>
+          <Link
+            href={job.detailHref}
+            draggable={false}
+            onPointerDown={(event) => event.stopPropagation()}
+            // The card itself opens the job on a tap: stop here so the page is not pushed twice.
+            onClick={(event) => event.stopPropagation()}
+            className="flex-none type-body font-medium text-foreground underline decoration-1 underline-offset-4"
+          >
+            Details
+          </Link>
         ) : null}
-      </p>
+      </div>
       {stamps}
     </div>
   );

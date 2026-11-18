@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Eyebrow, Skeleton } from "@/components/ui/eyebrow";
 import { FieldError } from "@/components/ui/field";
 import { EmptyState } from "@/components/patterns/content";
-import { DeckDoneArt, DeckEmptyArt } from "@/components/patterns/drawings";
+import { DeckEmptyArt } from "@/components/patterns/drawings";
 import { FailedRow, NeedsRow, ProgressRow, SentRow } from "@/components/patterns/application-row";
 import { explainOutcome } from "@/lib/explain";
 import { GROUP_TABS, STAGES, statusMeta, type StatusGroup } from "@/lib/status-meta";
@@ -260,9 +260,17 @@ export function ApplicationsList() {
             </Link>
           }
         />
+      ) : sections.length === 0 && stale && (counts[tab] ?? 0) > 0 ? (
+        // The tab's own rows are still loading (they live in another group's pages): show their shape, not "Nothing here"
+        // (e2e finding 6: Sent → Didn't go through showed the empty state for up to 1.5 s).
+        <div aria-busy="true" aria-label="Loading applications" className="flex flex-col gap-3">
+          {[1, 2].map((n) => (
+            <Skeleton key={n} className="h-24 rounded-card" />
+          ))}
+        </div>
       ) : sections.length === 0 ? (
         <EmptyState
-          art={<DeckDoneArt />}
+          art={<DeckEmptyArt />}
           title="Nothing here"
           text="No applications in this group right now."
           actions={

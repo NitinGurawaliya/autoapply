@@ -15,14 +15,9 @@ export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  // Each upload costs a model call, so a user gets a generous but finite number per hour.
-  const limit = await rateLimit(`resume:${user.id}`, 10, 3600);
-  if (!limit.ok) {
-    return NextResponse.json({ error: "rate_limited", retryAfterSeconds: limit.retryAfterSeconds }, { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } });
-  }
-
-  const form = await req.formData();
-  const file = form.get("resume");
+  // A body that is not a form is the client's mistake: 400, not 500 (e2e finding 3).
+  const form = await req.formData().catch(() => null);
+  const file = form?.get("resume");
   if (!(file instanceof File) || file.size === 0) {
     return NextResponse.json({ error: "pdf_required" }, { status: 400 });
   }
@@ -34,6 +29,13 @@ export async function POST(req: Request) {
   const header = new TextDecoder().decode(bytes.subarray(0, 5));
   if (!header.startsWith("%PDF")) {
     return NextResponse.json({ error: "pdf_required" }, { status: 400 });
+  }
+
+  // Each upload costs a model call, so a user gets a generous but finite number per hour. Counted only for a real PDF,
+  // so a malformed request does not use up the user's uploads (e2e verify, 18 Nov).
+  const limit = await rateLimit(`resume:${user.id}`, 10, 3600);
+  if (!limit.ok) {
+    return NextResponse.json({ error: "rate_limited", retryAfterSeconds: limit.retryAfterSeconds }, { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } });
   }
 
   const result = await ingestResume(user.id, bytes);

@@ -30,7 +30,7 @@ async function main() {
   // expected the old "every 6 hours, last 7 days").
   check("the worker logs the ingest schedule", line.includes(`ingest scheduled: "${DEFAULT_INGEST_CRON}" UTC, last ${DEFAULT_INGEST_DAYS} days`), line.trim());
 
-  const boss = await getBoss();
+  const boss = await getBoss("worker");
   const stored = await boss.getSchedule("ingest");
   check(`the schedule is stored in the database as "${DEFAULT_INGEST_CRON}", UTC`, stored?.cron === DEFAULT_INGEST_CRON && stored.timezone === "UTC", `${stored?.cron} ${stored?.timezone}`);
   check("it carries the lookback window", (stored?.data as { days?: number } | undefined)?.days === DEFAULT_INGEST_DAYS);

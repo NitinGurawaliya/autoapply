@@ -37,7 +37,7 @@ export function buildSteps(events: EventLite[], status: string, answers?: Answer
     // Questions asked before the form was opened come before "read"; asked mid-form, after "wrote".
     const firstAsk = events.findIndex((e) => e.type === "ask_user" && !/security code/i.test(e.message));
     const firstRead = events.findIndex((e) => e.type === "inspect");
-    const wait = { key: "asked", label: "Waited for your answer", done: status !== "needs_input" && (has("fill") || has("inspect") || submitted || STOPPED.includes(status) || status === "filling") };
+    const wait = { key: "asked", label: status === "needs_input" ? "Waiting for your answer" : "Waited for your answer", done: status !== "needs_input" && (has("fill") || has("inspect") || submitted || STOPPED.includes(status) || status === "filling") };
     if (firstRead < 0 || firstAsk < firstRead) steps.splice(0, 0, wait);
     else steps.push(wait);
   }

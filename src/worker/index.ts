@@ -12,7 +12,7 @@ import { claimWorkerLock } from "./single";
 
 async function main() {
   claimWorkerLock();
-  const boss = await getBoss();
+  const boss = await getBoss("worker");
   // Runs share one Chromium, each in its own context (modules/apply/browser.ts), so concurrency is bounded by RAM
   // (a context is a fraction of a browser) and by how many simultaneous submissions from one IP the ATS tolerates.
   // A run waiting on a security code holds one slot for up to 10 minutes.

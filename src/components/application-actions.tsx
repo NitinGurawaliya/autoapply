@@ -19,6 +19,9 @@ type Props = { id: string; status: string; company: string; onChanged?: () => vo
 export function ApplicationActions({ id, status, company, onChanged, look = "inline", className }: Props) {
   const [busy, setBusy] = useState<"cancel" | "retry" | "verify" | null>(null);
   const [confirming, setConfirming] = useState(false);
+  // The status an action just changed: its buttons go at once, not when the page next polls (e2e 18 Nov: Cancel stayed
+  // 3-8 s after a cancel). A new status from the page brings the right buttons back.
+  const [actedOn, setActedOn] = useState<string | null>(null);
 
   // An unanswered "are you sure" goes away by itself.
   useEffect(() => {
@@ -27,6 +30,7 @@ export function ApplicationActions({ id, status, company, onChanged, look = "inl
     return () => window.clearTimeout(timer);
   }, [confirming]);
 
+  if (actedOn === status) return null;
   const canCancel = CANCELLABLE.includes(status);
   const canRetry = RETRYABLE.includes(status);
   // Submit may have gone out unconfirmed: the user says whether the employer's email came. No Retry until they do.
@@ -46,6 +50,7 @@ export function ApplicationActions({ id, status, company, onChanged, look = "inl
       if (response.ok) {
         const done = { cancel: `Cancelled ${company}`, retry: `Retrying ${company}`, sent: `Marked ${company} as sent`, "not-sent": `Marked ${company} as not sent. You can retry it.` };
         toast.success(done[action]);
+        setActedOn(status);
         void forgetVisitedPages();
         onChanged?.();
       } else if (response.status === 403 && body.blocked) {

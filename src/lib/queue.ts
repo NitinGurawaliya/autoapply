@@ -36,34 +36,40 @@ const INGEST_QUEUE = "ingest";
 const PRESCAN_QUEUE = "prescan";
 const DISCOVER_QUEUE = "discover";
 
-let bossPromise: Promise<PgBoss> | null = null;
-
 async function ensureQueue(boss: PgBoss, name: string) {
   const existing = await boss.getQueue(name);
   if (!existing) await boss.createQueue(name);
 }
 
-export function getBoss() {
-  if (!bossPromise) {
+// One started queue per process, kept on globalThis (e2e verify, 18 Nov): as a module variable each route bundle
+// (swipes, answers, retry, every after()) started its own pg-boss on first use, 2.5 s for start() plus 1.7 s for seven
+// queue checks one after another, about 4.2 s per bundle, and each ran the queue's maintenance in the web process.
+const global = globalThis as unknown as { swipeapplyBoss?: Promise<PgBoss> };
+
+/**
+ * The queue. `role: "worker"` (src/worker) also runs pg-boss's maintenance and schedules; the web app only sends jobs,
+ * so it starts without either. Queues are checked in parallel, once per process.
+ */
+export function getBoss(role: "web" | "worker" = "web") {
+  if (!global.swipeapplyBoss) {
     const connectionString = process.env.DIRECT_URL;
     if (!connectionString) throw new Error("DIRECT_URL is not set");
-    const boss = new PgBoss(connectionString);
+    const boss = new PgBoss(role === "worker" ? { connectionString } : { connectionString, supervise: false, schedule: false });
     // A lost connection (Wi-Fi drop, DNS failure, Neon waking up) is reported as an "error" event; with no listener Node
     // treats it as fatal and the whole worker exits (11/12 Oct: "getaddrinfo ENOTFOUND"). pg-boss keeps polling and
     // recovers by itself once the network is back, so the error is only logged.
     boss.on("error", (error: Error) => console.error(`queue: ${error.message.slice(0, 160)}`));
-    bossPromise = boss.start().then(async (started) => {
-      await ensureQueue(started, APPLY_QUEUE);
-      await ensureQueue(started, HANDOFF_QUEUE);
-      await ensureQueue(started, UNPROTECTED_QUEUE);
-      await ensureQueue(started, PERSON_QUEUE);
-      await ensureQueue(started, INGEST_QUEUE);
-      await ensureQueue(started, PRESCAN_QUEUE);
-      await ensureQueue(started, DISCOVER_QUEUE);
+    const starting = boss.start().then(async (started) => {
+      await Promise.all([APPLY_QUEUE, HANDOFF_QUEUE, UNPROTECTED_QUEUE, PERSON_QUEUE, INGEST_QUEUE, PRESCAN_QUEUE, DISCOVER_QUEUE].map((name) => ensureQueue(started, name)));
       return started;
     });
+    // A start that fails (network down) is not cached, so the next call tries again.
+    starting.catch(() => {
+      if (global.swipeapplyBoss === starting) global.swipeapplyBoss = undefined;
+    });
+    global.swipeapplyBoss = starting;
   }
-  return bossPromise;
+  return global.swipeapplyBoss;
 }
 
 /**

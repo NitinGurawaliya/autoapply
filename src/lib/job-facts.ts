@@ -15,7 +15,9 @@ export function experienceChip(job: Pick<FeedJob, "requiredYears" | "seniority" 
   const asks = job.requiredYears;
   if (asks == null) return { label: job.seniority === "intern" || job.seniority === "entry" ? "Fresher" : "Years not stated", over: false };
   if (asks <= 0) return { label: "Fresher", over: false };
-  const have = job.yourYears == null ? 0 : Math.floor(job.yourYears);
+  // Unknown years are not zero: without them the chip states what the job asks and compares nothing.
+  if (job.yourYears == null) return { label: `${asks}+ yrs`, over: false };
+  const have = Math.floor(job.yourYears);
   return asks > have ? { label: `${asks}+ yrs · you have ${have}`, over: true } : { label: `${asks}+ yrs`, over: false };
 }
 

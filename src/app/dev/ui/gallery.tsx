@@ -202,6 +202,7 @@ function Primitives() {
           <MatchBadge score={86} size="md" />
           <StatusMark kind="ok" />
           <StatusMark kind="stop" />
+          <StatusMark kind="wait" />
         </div>
         <div className="relative h-36 overflow-hidden rounded-panel border border-line bg-surface">
           <span className={stampClass("apply")}>Apply</span>
