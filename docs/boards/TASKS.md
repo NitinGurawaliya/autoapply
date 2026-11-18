@@ -301,27 +301,29 @@ Parked 17 Nov (owner: the boards add few jobs). Measured from one Common Crawl's
   Public lists that work: Breezy `/json`, Personio `/xml`, Teamtailor `/jobs.rss`, Rippling `api.rippling.com/platform/api/ats/v1/board/<slug>/jobs`, Gem `api.gem.com/job_board/v0/<slug>/job_posts/`, Recruitee `/api/offers/`, Pinpoint `/postings.json`; Jobvite and JazzHR are HTML only.
 
 <a id="m21"></a>
-### [ ] M21 — Discovery on a GitHub Actions schedule (owner, 18 Nov)
-Why: discovery should run every day whether or not a worker is up (the laptop sleeps, dies, or is off). Applying stays on the worker with a screen (stealthy Chrome); this moves only discovery, and gives ingest a backup run.
+### [ ] M21 — Discovery and ingest on a GitHub Actions schedule (owner, 18 Nov)
+Why: finding companies and reading their jobs should run on time whether or not a worker is up (the laptop sleeps, dies, or is off). Both move to scheduled GitHub Actions; the worker with a screen keeps only applying (stealthy Chrome) and the pre-scan.
 
 Do:
-- `.github/workflows/discovery.yml`: `on: schedule` (`30 1 * * *`, as `DEFAULT_DISCOVER_CRON`) and `workflow_dispatch` (boards and count as inputs). One job: checkout, Node 22, `npm ci`, `npx prisma generate`, then `npx tsx scripts/discover-now.ts` (all boards; `--boards` from the input). `timeout-minutes: 120`, `concurrency: discovery` so two runs never overlap. Secrets: `DATABASE_URL`, `DIRECT_URL`, `OPENAI_API_KEY` (the owner adds them in the repository settings; never in the workflow file).
-- `src/worker/schedule.ts`: `DISCOVER_CRON=off` stops the worker scheduling discovery, so it runs in one place. Off on the worker once two scheduled Actions runs have passed.
-- A second job, `ingest-backup`, on its own schedule (every 6 hours) runs `scripts/ingest-tick-now.ts --limit 1500`: only companies already due, so a run beside a live worker reads nothing twice (exclusive per company in the queue, `nextFetchAt` in the database). It embeds new jobs but does not warm feeds or send new-match pushes; the worker does those when it is up.
-- Logs: each run prints the discovery summary (companies checked, added per board) and the tick summary; a failed run fails the job, which GitHub emails to the owner.
-- ARCHITECTURE §6.2 (discovery) and docs/DEPLOY.md: where discovery runs, the secrets, `DISCOVER_CRON=off`.
+- `.github/workflows/jobs.yml`, two jobs, each `on: schedule` plus `workflow_dispatch`, each with its own `concurrency` group so a run never overlaps the one before. Steps: checkout, Node 22, `npm ci` (cached), `npx prisma generate`, the script. Secrets, added by the owner in the repository settings, never in the file: `DATABASE_URL`, `DIRECT_URL`, `OPENAI_API_KEY`, and `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` / `APP_URL` for new-match pushes.
+  - `discovery`: daily `30 1 * * *` (as `DEFAULT_DISCOVER_CRON`), `npx tsx scripts/discover-now.ts` (boards and count as dispatch inputs), `timeout-minutes: 120`.
+  - `ingest`: every 3 hours (the active tier's interval, cadence.ts), `npx tsx scripts/ingest-tick-now.ts --limit 3000` (companies already due only), `timeout-minutes: 60`. Then the daily board measurement (`board-day`, `30 23 * * *`) as a third small job.
+- `scripts/ingest-tick-now.ts`: after the reads, `warmFeeds()` as the worker's tick does (handlers/ingest-tick.ts), so feeds are warm and new-match pushes still go out; and the hourly delete of old closed jobs the tick does.
+- `src/worker/schedule.ts`: `INGEST_MODE=off` and `DISCOVER_CRON=off` stop the worker scheduling ingest, discovery and the board day (one switch each, read at start). The laptop and Docker workers run with both off once the Actions runs have passed twice; the Docker worker then has nothing to do and is stopped.
+- ARCHITECTURE §6.2 (discovery), §5b (ingest tick) and docs/DEPLOY.md: where each runs, the secrets, the two switches.
 
 Facts and limits to keep in mind:
-- GitHub runs scheduled workflows late at busy times (often 10–30 minutes) and may skip one; discovery is daily, so a late run is harmless.
-- Minutes: discovery today takes up to about an hour (Greenhouse took 52 minutes on 2 Nov). On a private repository the free plan has 2,000 minutes a month: daily discovery (~30 × 60 = 1,800) leaves little for `ingest-backup`, so that job stays off (`if: false` or no schedule) unless the repository is public or on a paid plan. Measure the first runs before turning it on.
-- Runs come from GitHub's datacenter addresses: Workable's rate limit and Workday's Cloudflare treat them worse than a home connection. Workday reads are paused (18 Nov); Workable discovery keeps its 2 s pace and auto-pause.
+- Minutes: discovery up to about an hour a day (Greenhouse took 52 minutes on 2 Nov), ingest about 10–15 minutes a run (about 1,500 due companies every 3 hours at 8 at once). A month: ~1,800 + 8 × 30 × ~12 ≈ 4,700 minutes. A private repository's free plan has 2,000; the rest is billed (about $0.008 a minute on Linux, ≈ $20 a month), or free on a public repository. Measure the first runs and set the ingest interval from them.
+- GitHub runs scheduled workflows late at busy times (often 10–30 minutes) and may skip one; every 3 hours with reads of only due companies tolerates that, but jobs are fresh to within hours, not 5 minutes as with the worker's tick.
+- Runs come from GitHub's datacenter addresses: Workable's rate limit and Workday's Cloudflare treat them worse than a home connection. Workday reads are paused (18 Nov); Workable keeps its pace and auto-pause, and a refused read is not a failure (cadence.ts REFUSED).
 - Scheduled workflows are switched off after 60 days without a commit on a public repository.
+- The worker's per-board cap across workers (pg-boss `groupConcurrency`) does not reach the Actions run; `ingest-tick-now.ts` keeps its own cap (8 at once, 4 of one board), so a run beside a live worker stays under the boards' limits only once the worker's ingest is off.
 
-Design: ARCHITECTURE §6.2 (discovery), §5b (ingest tick); no TDD (two files and a workflow).
+Design: ARCHITECTURE §6.2 (discovery), §5b (ingest tick); no TDD (a workflow and three small changes).
 **Done when:**
-- A `workflow_dispatch` run of `discovery.yml` with `--boards greenhouse` finishes green and its log shows the companies checked and added.
-- Two scheduled runs on consecutive days finish green; the worker runs with `DISCOVER_CRON=off` and its log shows no discovery.
-- `schedule-smoke` PASS with `DISCOVER_CRON=off`; typecheck and lint pass.
+- `workflow_dispatch` runs of `discovery` (`--boards greenhouse`) and `ingest` finish green; their logs show companies checked and added, and companies read, new jobs and feeds warmed.
+- Two days of scheduled runs finish green; the workers run with `INGEST_MODE=off` and `DISCOVER_CRON=off`, and the feed's newest India jobs are no older than the last ingest run.
+- `schedule-smoke` PASS with both switches off; typecheck and lint pass.
 
 <a id="m16"></a>
 ### [ ] M16 — Board health: success rate, alert, pause

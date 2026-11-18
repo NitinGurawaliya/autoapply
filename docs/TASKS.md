@@ -208,7 +208,7 @@ Order (owner, 9 Nov): measure and scale, seed every known company, then the boar
 - [x] [M12 — Workable](boards/TASKS.md#m12)
 - [x] [M13 — Zoho Recruit apply](boards/TASKS.md#m13)
 - [ ] [M4 — Continuous discovery and re-validation (supersedes T98)](boards/TASKS.md#m4)
-- [ ] [M21 — Discovery on a GitHub Actions schedule](boards/TASKS.md#m21)
+- [ ] [M21 — Discovery and ingest on a GitHub Actions schedule](boards/TASKS.md#m21)
 - [ ] [M16 — Board health: success rate, alert, pause](boards/TASKS.md#m16)
 - [ ] [M17 — The feed at 200,000 jobs](boards/TASKS.md#m17)
 - [ ] [M18 — Model cost: filter, cap, measure](boards/TASKS.md#m18)
