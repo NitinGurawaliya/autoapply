@@ -27,6 +27,23 @@ export const DEAD_AFTER_FAILURES = 8;
 export const MAX_BACKOFF_MS = 7 * DAY;
 export const JITTER = 0.1;
 
+/**
+ * Boards read gently (owner, 18 Nov): Workday's Cloudflare put this server's reads through a bot check when we read it
+ * hard (206 tenants every 3 hours, four postings at a time). Their companies are read GENTLE_SCALE times less often
+ * (active: every 12 hours), one company at a time across workers (queue group tier "gentle"), at most GENTLE_PER_TICK
+ * sent a tick. Workday jobs are not in the feed yet (no adapter), so a slower read costs nobody a fresh job.
+ */
+export const GENTLE_BOARDS: ReadonlySet<string> = new Set(["workday"]);
+export const GENTLE_SCALE = 4;
+export const GENTLE_PER_TICK = 3;
+export const GENTLE_GROUP_TIER = "gentle";
+
+/**
+ * A read the board refused (a 429 or its bot check, "... refused" from the fetcher): it says nothing about the company,
+ * so it is not a failure in a row (no back-off, never makes the company dead); the company is read at its tier's pace.
+ */
+export const REFUSED = /\brefused\b/;
+
 export type WatchState = {
   /** Jobs the board listed at this read (0 when the read failed). */
   listed: number;
@@ -60,9 +77,12 @@ function emptyOrDead(emptySince: Date, now: Date): Tier {
   return now.getTime() - emptySince.getTime() > DEAD_AFTER_EMPTY_DAYS * DAY ? "dead" : "empty";
 }
 
-/** When to read the company next: its tier's interval, doubled per failure in a row (at most 7 days), jittered ±10%. */
-export function nextFetchAt(tier: Tier, failures: number, now = new Date(), random: () => number = Math.random) {
-  const base = INTERVAL_MS[tier];
+/**
+ * When to read the company next: its tier's interval (times `scale` for a gentle board, except dead), doubled per
+ * failure in a row (at most 7 days), jittered ±10%.
+ */
+export function nextFetchAt(tier: Tier, failures: number, now = new Date(), random: () => number = Math.random, scale = 1) {
+  const base = INTERVAL_MS[tier] * (tier === "dead" ? 1 : scale);
   const backedOff = failures > 0 && tier !== "dead" ? Math.min(base * 2 ** failures, Math.max(MAX_BACKOFF_MS, base)) : base;
   const jitter = 1 + (random() * 2 - 1) * JITTER;
   return new Date(now.getTime() + Math.round(backedOff * jitter));

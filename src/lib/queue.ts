@@ -147,14 +147,15 @@ export async function enqueueIngestCompany(companyId: string, board: string, run
  * in 5 min on 10 Nov), so 2,000 would outlast the tick. A company already waiting or running is skipped by the
  * queue's exclusive policy (the insert's ON CONFLICT DO NOTHING); returns how many were queued.
  */
-export async function enqueueIngestCompanies(companies: Array<{ id: string; source: string }>, runId: string) {
+export async function enqueueIngestCompanies(companies: Array<{ id: string; source: string; groupTier?: string }>, runId: string) {
   const boss = await getBoss();
   let sent = 0;
   for (let start = 0; start < companies.length; start += 500) {
     const jobs = companies.slice(start, start + 500).map((company) => ({
       data: { companyId: company.id, runId },
       singletonKey: company.id,
-      group: { id: company.source },
+      // A gentle board's group tier ("gentle", modules/jobs/cadence.ts) is read one company at a time (worker/index.ts).
+      group: company.groupTier ? { id: company.source, tier: company.groupTier } : { id: company.source },
       expireInSeconds: 15 * 60,
       retryLimit: 0,
     }));

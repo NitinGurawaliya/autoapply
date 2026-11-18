@@ -53,6 +53,8 @@ async function main() {
   const C = await make("c");
   const D = await make("d");
   const E = await make("e");
+  // Hiring in India, two failed reads behind it: a refused read neither adds a third nor backs off (18 Nov, Workday).
+  const F = await db.company.create({ data: { source: SOURCE, slug: "f", name: "M2 F", tier: "active", failedFetches: 2, lastIndiaAt: new Date(), indiaOpen: 4, nextFetchAt: new Date(Date.now() - 60_000) } });
   const off = await db.company.create({ data: { source: SOURCE, slug: "off", name: "M2 OFF", active: false } });
   try {
     const due = await dueCompanies(100000);
@@ -106,9 +108,15 @@ async function main() {
     for (let i = 0; i < 3; i += 1) await ingestOne(E.id);
     const eRow = await db.company.findUniqueOrThrow({ where: { id: E.id } });
     check("3 reads finding no board: dead, still active (watched monthly, not switched off)", eRow.tier === "dead" && eRow.notFoundFetches === 3 && eRow.active && eRow.lastError?.includes("404") === true, `${eRow.tier} ${eRow.notFoundFetches}`);
+    listing.set("f", new Error(`${SOURCE} f 429 refused (bot check)`));
+    const beforeF = Date.now();
+    await ingestOne(F.id);
+    const fRow = await db.company.findUniqueOrThrow({ where: { id: F.id } });
+    const fWait = fRow.nextFetchAt.getTime() - beforeF;
+    check("a refused read: asked once, failures stay 2, still active, read again at its pace (no back-off)", reads.get("f") === 1 && fRow.failedFetches === 2 && fRow.tier === "active" && fRow.indiaOpen === 4 && fWait <= INTERVAL_MS.active * 1.11, `reads ${reads.get("f")} fails ${fRow.failedFetches} ${fRow.tier} ${Math.round(fWait / 60000)} min`);
     check("an inactive company is not read", (await ingestOne(off.id)) === null);
     const dueAfter = await dueCompanies(100000);
-    check("companies just read are no longer due", ![A, B, C, D, E].some((c) => dueAfter.some((x) => x.id === c.id)));
+    check("companies just read are no longer due", ![A, B, C, D, E, F].some((c) => dueAfter.some((x) => x.id === c.id)));
     await db.ingestRun.delete({ where: { id: runId } });
   } finally {
     await db.job.deleteMany({ where: { source: SOURCE } });

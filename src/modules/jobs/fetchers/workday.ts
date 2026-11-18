@@ -10,8 +10,16 @@ import { asDate, plainText, type FetchedJob } from "../normalize";
 
 const PAGE = 20; // the API refuses more
 const MAX_JOBS = 400;
-const DETAIL_CONCURRENCY = 4;
+// Gently (owner, 18 Nov): from 17 Nov Workday's Cloudflare put this server's reads through a bot check (429,
+// `cf-mitigated: challenge`) for 201 of 206 tenants. One request at a time with a second between them; a refused read
+// is reported as refused (the company waits, it does not count as a failure: cadence.ts), never retried at once.
+const DETAIL_CONCURRENCY = 1;
+const PAGE_PAUSE_MS = 1000;
+const DETAIL_PAUSE_MS = 1000;
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Workday's Cloudflare refusing this server: a 429, or a 403 marked as its bot check. */
+const refusal = (response: Response) => response.status === 429 || (response.status === 403 && !!response.headers.get("cf-mitigated"));
 
 const SLUG = /^([a-z0-9-]+)\.(wd\d{1,3})\/([A-Za-z0-9_-]+)$/;
 
@@ -102,6 +110,7 @@ async function list(api: string, body: object) {
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(30000),
   });
+  if (refusal(response)) throw new Error(`workday ${api.split("/cxs/")[1]} ${response.status} refused${response.headers.get("cf-mitigated") ? " (bot check)" : ""}`);
   if (!response.ok) throw new Error(`workday ${api.split("/cxs/")[1]} ${response.status}`);
   return listSchema.parse(await response.json());
 }
@@ -124,7 +133,7 @@ export async function fetchWorkday(slug: string, options: { details?: boolean; k
     const items = page.jobPostings ?? [];
     postings.push(...items);
     if (items.length < PAGE) break;
-    await pause(200);
+    await pause(PAGE_PAUSE_MS);
   }
   const listed = (posting: (typeof postings)[number]): FetchedJob | null => {
     const postedAt = postedOnDate(posting.postedOn);
@@ -158,12 +167,15 @@ export async function fetchWorkday(slug: string, options: { details?: boolean; k
     }
   }
   let next = 0;
+  // Once a posting's page is refused, the rest are kept from the list alone instead of asking again.
+  let refused = false;
   const worker = async () => {
     while (next < toRead.length) {
       const posting = toRead[next++];
-      const response = await fetch(`${site.api}${posting.externalPath}`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(30000) }).catch(() => null);
+      const response = refused ? null : await fetch(`${site.api}${posting.externalPath}`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(30000) }).catch(() => null);
+      if (response && refusal(response)) refused = true;
       const parsed = response?.ok ? detailSchema.safeParse(await response.json().catch(() => null)) : null;
-      await pause(150);
+      if (response) await pause(DETAIL_PAUSE_MS);
       if (!parsed?.success) {
         // A posting whose page fails is kept from the list alone rather than closed.
         const fallback = listed(posting);

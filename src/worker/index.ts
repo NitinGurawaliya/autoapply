@@ -42,7 +42,8 @@ async function main() {
   await boss.work("ingest-tick", handleIngestTick);
   const ingestConcurrency = Math.min(Math.max(Number(process.env.INGEST_CONCURRENCY) || 8, 1), 32);
   const perHost = Math.min(Math.max(Number(process.env.INGEST_PER_HOST) || 4, 1), ingestConcurrency);
-  await boss.work("ingest-company", { localConcurrency: ingestConcurrency, groupConcurrency: perHost }, handleIngestCompany);
+  // A gentle board (Workday, modules/jobs/cadence.ts) one company at a time (owner, 18 Nov: its bot check).
+  await boss.work("ingest-company", { localConcurrency: ingestConcurrency, groupConcurrency: { default: perHost, tiers: { gentle: 1 } } }, handleIngestCompany);
   const auto = autoSubmitAshby() ? ", auto submit" : "";
   console.log(`worker listening for apply (x${concurrency})${unprotected ? `, ${UNPROTECTED_QUEUE} (x${concurrency}${auto})` : ""}${handoff ? `, ${HANDOFF_QUEUE} (x${concurrency}${auto}), ${PERSON_QUEUE}` : ", no screen: no protected Ashby"} and ingest`);
 

@@ -1,6 +1,6 @@
 // Phase M, M2: the watch tiers, intervals, jitter bounds, back-off, promotion on a new India job, dead after 90 days
 // empty or 3 reads finding no board. Offline. npx tsx scripts/cadence-test.ts
-import { DEAD_AFTER_FAILURES, INTERVAL_MS, MAX_BACKOFF_MS, nextFetchAt, readsPerDay, tierOf, type WatchState } from "../src/modules/jobs/cadence";
+import { DEAD_AFTER_FAILURES, GENTLE_SCALE, INTERVAL_MS, MAX_BACKOFF_MS, nextFetchAt, readsPerDay, REFUSED, tierOf, type WatchState } from "../src/modules/jobs/cadence";
 
 let failed = 0;
 function check(name: string, ok: boolean, detail = "") {
@@ -36,6 +36,11 @@ check("jitter stays within ±10%", low >= INTERVAL_MS.active * 0.9 - 1 && high <
 check("a failure doubles the interval", nextFetchAt("active", 1, now, mid).getTime() - now.getTime() === 2 * INTERVAL_MS.active);
 check("back-off stops at 7 days", nextFetchAt("open", 6, now, mid).getTime() - now.getTime() === MAX_BACKOFF_MS);
 check("reads a day: 8, 1, 1/3, 1/30", readsPerDay("active") === 8 && readsPerDay("open") === 1 && Math.abs(readsPerDay("empty") - 1 / 3) < 1e-9 && Math.abs(readsPerDay("dead") - 1 / 30) < 1e-9);
+
+// 18 Nov: gentle boards (Workday) read 4 times less often, the monthly dead read unchanged; a refused read is told apart.
+check("gentle board, active: every 12 hours", nextFetchAt("active", 0, now, mid, GENTLE_SCALE).getTime() - now.getTime() === 12 * 60 * 60 * 1000);
+check("gentle board, dead: still every 30 days", nextFetchAt("dead", 0, now, mid, GENTLE_SCALE).getTime() - now.getTime() === 30 * DAY);
+check("a refused read is recognised, a server error is not", REFUSED.test("workday cw/External 429 refused (bot check)") && !REFUSED.test("lever plus-2 500") && !REFUSED.test("workable emsar 429"));
 
 console.log(failed ? `FAIL cadence-test: ${failed} failed` : "PASS cadence-test");
 if (failed) process.exitCode = 1;

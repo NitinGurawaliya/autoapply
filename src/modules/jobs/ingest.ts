@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { boardOf } from "./boards";
-import { nextFetchAt, tierOf, type Tier } from "./cadence";
+import { GENTLE_BOARDS, GENTLE_GROUP_TIER, GENTLE_PER_TICK, GENTLE_SCALE, nextFetchAt, REFUSED, tierOf, type Tier } from "./cadence";
 import { classifyTitle } from "./functions";
 import type { FetchedJob } from "./normalize";
 import { embedPendingJobs, forgetJobVectors } from "./semantic";
@@ -92,7 +92,10 @@ export async function ingestCompany(company: IngestCompany, cutoff: number): Pro
   let jobs: FetchedJob[];
   try {
     jobs = await fetchCompany(company.source, company.slug, known);
-  } catch {
+  } catch (first) {
+    // A refused read (cadence.ts REFUSED) is not tried again at once: asking again is what got it refused.
+    const message = first instanceof Error ? first.message : "fetch failed";
+    if (REFUSED.test(message)) return { ...empty, listHash: null, error: message };
     await pause(2000);
     try {
       jobs = await fetchCompany(company.source, company.slug, known);
@@ -171,13 +174,16 @@ const NOT_FOUND = /\b(404|410)\b/;
  * when to read it next (cadence.ts). Run mode also switches a company off as before M2; tick mode never does.
  */
 export async function recordRead(company: CompanyState, result: CompanyResult, mode: "run" | "tick", now = new Date()) {
-  const failures = result.error ? company.failedFetches + 1 : 0;
+  // A refused read (cadence.ts REFUSED) keeps the failures in a row where they were and is not backed off.
+  const refused = !!result.error && REFUSED.test(result.error);
+  const failures = result.error ? (refused ? company.failedFetches : company.failedFetches + 1) : 0;
   const notFound = result.error && NOT_FOUND.test(result.error) ? company.notFoundFetches + 1 : 0;
   const listed = result.unchanged ? (company.lastFetchCount ?? 0) : result.fetched;
   const emptySince = result.error ? company.emptySince : listed === 0 ? (company.emptySince ?? now) : null;
   const indiaListed = result.error ? 0 : result.unchanged ? company.indiaOpen : (result.indiaListed ?? 0);
   const lastIndiaAt = !result.error && indiaListed > 0 ? now : company.lastIndiaAt;
-  const tier: Tier = tierOf({ listed: result.error ? 0 : listed, indiaListed, lastIndiaAt, emptySince, failures, notFound }, now);
+  // Judged as a failed read (keep it where its last good read put it), whatever the count.
+  const tier: Tier = tierOf({ listed: result.error ? 0 : listed, indiaListed, lastIndiaAt, emptySince, failures: refused ? Math.max(failures, 1) : failures, notFound }, now);
   const off =
     mode === "run" && failures >= OFF_AFTER_FAILURES
       ? `fetch failed ${failures} times in a row: ${result.error?.slice(0, 80)}`
@@ -197,7 +203,7 @@ export async function recordRead(company: CompanyState, result: CompanyResult, m
       lastIndiaAt,
       listHash: result.error ? company.listHash ?? null : result.listHash,
       tier,
-      nextFetchAt: nextFetchAt(tier, failures, now),
+      nextFetchAt: nextFetchAt(tier, refused ? 0 : failures, now, Math.random, GENTLE_BOARDS.has(company.source) ? GENTLE_SCALE : 1),
       ...(off ? { active: false, offReason: off } : {}),
     },
   });
@@ -279,9 +285,19 @@ export async function ingestJobs(days: number) {
 
 // ---- Tick mode (INGEST_MODE=tick, M2): one queue job per company, each read when its tier says (cadence.ts).
 
-/** Active companies due for a read, most overdue first. */
-export function dueCompanies(limit: number, now = new Date()) {
-  return db.company.findMany({ where: { active: true, nextFetchAt: { lte: now } }, orderBy: { nextFetchAt: "asc" }, take: limit, select: { id: true, source: true } });
+/**
+ * Active companies due for a read, most overdue first; of a gentle board (cadence.ts) at most GENTLE_PER_TICK a tick,
+ * marked with the queue group tier that reads them one at a time. The rest stay due for the next ticks.
+ */
+export async function dueCompanies(limit: number, now = new Date()) {
+  const due = await db.company.findMany({ where: { active: true, nextFetchAt: { lte: now } }, orderBy: { nextFetchAt: "asc" }, take: limit, select: { id: true, source: true } });
+  const gentle = new Map<string, number>();
+  return due.flatMap((company) => {
+    if (!GENTLE_BOARDS.has(company.source)) return [company];
+    const sent = (gentle.get(company.source) ?? 0) + 1;
+    gentle.set(company.source, sent);
+    return sent <= GENTLE_PER_TICK ? [{ ...company, groupTier: GENTLE_GROUP_TIER }] : [];
+  });
 }
 
 /** An IngestRun row for one tick: the companies it sent; each company's read adds its counts (ingestOne). */
