@@ -9,14 +9,19 @@ const DELETE_CLOSED_AFTER_DAYS = 7;
 const CLEANUP_EVERY_MS = 60 * 60 * 1000;
 let lastCleanup = 0;
 
-/** Closed jobs nobody swiped or applied to, closed more than DELETE_CLOSED_AFTER_DAYS ago: deleted to keep the table small. */
+/**
+ * Closed jobs nobody swiped or applied to, closed more than DELETE_CLOSED_AFTER_DAYS ago: deleted to keep the table
+ * small. Jobs in an evaluation pool or labelled by the owner are kept (Phase P, P2: the eval ranks within its stored pool).
+ */
 export async function deleteOldClosedJobs(now = new Date()) {
   const before = new Date(now.getTime() - DELETE_CLOSED_AFTER_DAYS * 24 * 60 * 60 * 1000);
   return db.$executeRaw`
     DELETE FROM "Job" j
     WHERE j."closedAt" IS NOT NULL AND j."closedAt" < ${before}
       AND NOT EXISTS (SELECT 1 FROM "Swipe" s WHERE s."jobId" = j.id)
-      AND NOT EXISTS (SELECT 1 FROM "Application" a WHERE a."jobId" = j.id)`;
+      AND NOT EXISTS (SELECT 1 FROM "Application" a WHERE a."jobId" = j.id)
+      AND NOT EXISTS (SELECT 1 FROM "EvalPool" e WHERE e."jobId" = j.id)
+      AND NOT EXISTS (SELECT 1 FROM "FeedLabel" f WHERE f."jobId" = j.id)`;
 }
 
 export type AfterIngestResult = {

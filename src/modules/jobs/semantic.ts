@@ -216,9 +216,25 @@ export async function judgeBatch(candidate: { summary: string; years: number | n
   return out;
 }
 
+/** Where verdicts are cached: JobJudgement for the feed; the eval (P2) passes its own, which never writes JobJudgement. */
+export type JudgementStore = {
+  read(profileId: string, jobIds: string[]): Promise<Array<{ jobId: string; fromHash: string; jobHash: string; fit: string; why: string }>>;
+  write(profileId: string, fromHash: string, rows: Array<{ jobId: string; jobHash: string; fit: Fit; why: string }>): Promise<void>;
+};
+
+const jobJudgementStore: JudgementStore = {
+  read: (profileId, jobIds) => db.jobJudgement.findMany({ where: { profileId, jobId: { in: jobIds } } }),
+  async write(profileId, fromHash, rows) {
+    await db.$transaction([
+      db.jobJudgement.deleteMany({ where: { profileId, jobId: { in: rows.map((row) => row.jobId) } } }),
+      db.jobJudgement.createMany({ data: rows.map((row) => ({ profileId, fromHash, ...row })), skipDuplicates: true }),
+    ]);
+  },
+};
+
 /**
- * The model's verdict for each job against this resume, cached in JobJudgement until the resume or the posting
- * changes. Jobs the model leaves out, or a failed call, are missing from the result (the caller scores them by
+ * The model's verdict for each job against this resume, cached in JobJudgement (or `store`) until the resume or the
+ * posting changes. Jobs the model leaves out, or a failed call, are missing from the result (the caller scores them by
  * closeness alone, more strictly).
  */
 export async function judgeJobs(
@@ -226,6 +242,7 @@ export async function judgeJobs(
   /** Without a description, a job's text is read only when it has no valid cached verdict (16 Oct: a new user's feed
    * read every description just to check its cache, about 1 s a batch of 150). */
   jobs: Array<{ id: string; title: string; description?: string; contentHash: string | null }>,
+  store: JudgementStore = jobJudgementStore,
 ): Promise<Map<string, Judgement>> {
   const out = new Map<string, Judgement>();
   if (jobs.length === 0) return out;
@@ -233,7 +250,7 @@ export async function judgeJobs(
   const tracks = tracksOf(profile);
   const fromHash = createHash("md5").update(`${JUDGE_VERSION}\n${profile.yearsExperience ?? ""}\n${tracks.join(",")}\n${summary}`).digest("hex");
   const hashOf = (job: { contentHash: string | null }) => job.contentHash ?? "none";
-  const cached = await db.jobJudgement.findMany({ where: { profileId: profile.id, jobId: { in: jobs.map((job) => job.id) } } });
+  const cached = await store.read(profile.id, jobs.map((job) => job.id));
   const valid = new Map(cached.map((row) => [row.jobId, row]));
   const missing = jobs.filter((job) => {
     const row = valid.get(job.id);
@@ -266,12 +283,7 @@ export async function judgeJobs(
       }),
     );
   }
-  if (fresh.length > 0) {
-    await db.$transaction([
-      db.jobJudgement.deleteMany({ where: { profileId: profile.id, jobId: { in: fresh.map((row) => row.jobId) } } }),
-      db.jobJudgement.createMany({ data: fresh.map((row) => ({ profileId: profile.id, fromHash, ...row })), skipDuplicates: true }),
-    ]);
-  }
+  if (fresh.length > 0) await store.write(profile.id, fromHash, fresh);
   return out;
 }
 

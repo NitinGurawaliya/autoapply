@@ -7,7 +7,7 @@ import { classifyTitle, SENIORITIES, TRACK_LABELS, TRACKS, trackFit, type Track,
 import { companyResultsById, judge } from "./results";
 import { APPLY_BOARDS } from "./pool";
 import { formatSalary } from "./salary";
-import { judgeJobs, type Judgement, profileVector } from "./semantic";
+import { judgeJobs, type Judgement, type JudgementStore, profileVector } from "./semantic";
 import { candidateSkills, compareSkills, jobSkills } from "./skills";
 import { requiredYears } from "./tagging";
 
@@ -562,7 +562,7 @@ export function dedupeListings<T extends { roleKey: string; location: string; so
   return rows.filter((row) => best.get(`${row.roleKey}|${row.location.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()}`) === row);
 }
 
-type FeedRow = {
+export type FeedRow = {
   id: string;
   title: string;
   /** For the verdict cache (semantic.ts judgeJobs): read here, so the shortlist needs no second query. */
@@ -625,7 +625,13 @@ export async function feedRows(input: {
   prefilter: boolean;
   /** Only the jobs this user swiped left (the "jobs you skipped" view); otherwise only jobs not swiped either way. */
   skippedOnly?: boolean;
+  /**
+   * The evaluation's stored pool (Phase P, P2): only these jobs, whether or not they are still open, within the cutoff or
+   * swiped. Null for the feed.
+   */
+  onlyIds?: string[] | null;
 }) {
+  const onlyIds = input.onlyIds ?? null;
   // One row per skill: its words (all must be among the job's words, looked up in the GIN index on terms) and, for
   // a skill that is more than one word, the regex that then checks they appear in that exact spelling.
   const indexes: number[] = [];
@@ -676,11 +682,12 @@ export async function feedRows(input: {
         AND (${input.stages}::text[] IS NULL OR c.stage = ANY(${input.stages}::text[]))
         AND (${input.tracks}::text[] IS NULL OR j.source = 'mock' OR j.track = ANY(${input.tracks}::text[]))
         AND (${input.vector}::text IS NULL OR j.embedding IS NULL OR 1 - (j.embedding <=> ${input.vector}::halfvec) >= ${SIMILARITY_FLOOR})
-        AND j."postedAt" >= ${input.cutoff}
-        AND j."closedAt" IS NULL
+        AND (${onlyIds}::text[] IS NULL OR j.id = ANY(${onlyIds}::text[]))
+        AND (${onlyIds}::text[] IS NOT NULL OR j."postedAt" >= ${input.cutoff})
+        AND (${onlyIds}::text[] IS NOT NULL OR j."closedAt" IS NULL)
         AND (${input.expMax}::int IS NULL OR j."experienceMin" IS NULL OR j."experienceMin" <= ${input.expMax}::int)
         -- A swiped job never comes back to the feed, left or right; the skipped view is the left ones alone.
-        AND (CASE WHEN ${input.skippedOnly ?? false}::boolean
+        AND (${onlyIds}::text[] IS NOT NULL OR CASE WHEN ${input.skippedOnly ?? false}::boolean
                   THEN EXISTS (SELECT 1 FROM "Swipe" s WHERE s."userId" = ${input.userId} AND s."jobId" = j.id AND s.direction = 'left')
                   ELSE NOT EXISTS (SELECT 1 FROM "Swipe" s WHERE s."userId" = ${input.userId} AND s."jobId" = j.id) END)
     )
@@ -724,7 +731,28 @@ export async function listFeed(userId: string, filters: FeedFilters, view: FeedV
   return feed;
 }
 
-async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView): Promise<FeedJob[]> {
+/**
+ * How the evaluation (Phase P, P2, scripts/relevance-eval.ts) ranks with this same code: within its stored pool
+ * (`onlyIds`: closed, old and swiped jobs included, the weekly company and role limits ignored), with a field gate of
+ * its own in place of the SQL track filter (`gate`), its own verdict cache (`store`, never JobJudgement) and the whole
+ * ranked list instead of the first FEED_SIZE (`limit`). The feed passes none of it.
+ */
+export type EvalRanking = {
+  /** The stored pool; null when building it (the feed's own open, recent, unswiped rows). */
+  onlyIds: string[] | null;
+  /** Building the pool: hand the rows that pass the hard gates (no field gate) to this and score nothing. */
+  rowsOnly?: (rows: FeedRow[]) => void;
+  gate?: { keep: (job: FeedRow, tracks: string[] | null) => boolean; trackOf: (job: FeedRow) => string | null };
+  store: JudgementStore;
+  limit?: number;
+};
+
+/** The default feed of this user ranked the evaluation's way (EvalRanking). */
+export function rankForEval(userId: string, options: EvalRanking): Promise<FeedJob[]> {
+  return scoreFeed(userId, parseFeedFilters({}), "new", options);
+}
+
+async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, evaluation?: EvalRanking): Promise<FeedJob[]> {
   // Independent reads run together: every database round trip is ~250 ms from India to the database.
   const [profile, answers] = await Promise.all([
     db.profile.findUnique({ where: { userId } }),
@@ -757,7 +785,8 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView): 
       countries: filters.countries,
       levelYears: filters.level === "fresher" ? 1 : filters.level === "early" ? 2 : null,
       stages: filters.stages.length > 0 ? filters.stages : null,
-      tracks: shown,
+      // The eval's own gate replaces the SQL track filter; it is applied to the rows below.
+      tracks: evaluation?.gate ? null : shown,
       band: { maxYears: yearsBand(years), levels: levelsFor(years) },
       vector,
       cutoff,
@@ -767,14 +796,20 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView): 
       // Every job in a reachable track can reach the minimum on its track alone, so none is left out early.
       prefilter: minScore > 30 && tracks.length === 0 && !vector,
       skippedOnly: view === "skipped",
-    }),
+      onlyIds: evaluation?.onlyIds ?? null,
+    }).then((rows) => (evaluation?.gate ? rows.filter((row) => row.source === "mock" || evaluation.gate!.keep(row, shown)) : rows)),
     feedHistory(userId, loadRules().max_per_company_per_week),
     companyResultsById().catch(() => new Map<string, never>()),
   ]);
 
+  if (evaluation?.rowsOnly) {
+    evaluation.rowsOnly(jobs);
+    return [];
+  }
+
   // The closest jobs (by meaning) that the user can still apply to are judged by the model against the resume
   // (semantic.ts, cached); jobs further away are left out. Mock jobs and jobs without a vector are scored by tracks.
-  const open = (job: FeedRow) => !history.roles.has(roleKey(companyKey(job.company), job.title)) && !history.companiesAtCap.has(companyKey(job.company));
+  const open = (job: FeedRow) => Boolean(evaluation) || (!history.roles.has(roleKey(companyKey(job.company), job.title)) && !history.companiesAtCap.has(companyKey(job.company)));
   const closest = jobs
     .filter((job) => job.similarity != null && job.source !== "mock" && open(job))
     .sort((a, b) => b.similarity! - a.similarity! || (a.id < b.id ? -1 : 1));
@@ -786,7 +821,7 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView): 
       const hits = new Set(job.hits);
       const match = scoreFeatures(
         // A job stored without a track (a fixture, a row from before tracks) is classified from its title, as scoreJob does.
-        { title: job.title, track: job.track ?? classifyTitle(job.title).track, seniority: job.seniority, similarity: job.similarity, judgement: judgements.get(job.id) ?? null, country: job.country, remoteType: job.remoteType, requiredYears: job.experienceMin, skillHits: skills.filter((_, index) => hits.has(index)), jobSkills: labelledSkills(job) },
+        { title: job.title, track: evaluation?.gate ? evaluation.gate.trackOf(job) : (job.track ?? classifyTitle(job.title).track), seniority: job.seniority, similarity: job.similarity, judgement: judgements.get(job.id) ?? null, country: job.country, remoteType: job.remoteType, requiredYears: job.experienceMin, skillHits: skills.filter((_, index) => hits.has(index)), jobSkills: labelledSkills(job) },
         {
           currentTitle: profile?.currentTitle ?? null,
           skills,
@@ -828,9 +863,9 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView): 
       };
     })
     .filter((job) => job.mock || job.score >= minScore)
-    .filter((job) => !history.roles.has(job.roleKey))
+    .filter((job) => Boolean(evaluation) || !history.roles.has(job.roleKey))
     // A company already at its weekly limit: a swipe would be blocked, so its jobs wait until the week is over.
-    .filter((job) => !history.companiesAtCap.has(companyKey(job.company)))
+    .filter((job) => Boolean(evaluation) || !history.companiesAtCap.has(companyKey(job.company)))
     .filter((job) => filters.expMax == null || job.requiredYears == null || job.requiredYears <= filters.expMax);
 
   // The closest SHORTLIST are judged; when that leaves fewer than a deck of cards (the user swiped most of them), the
@@ -843,7 +878,7 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView): 
       // Title and fingerprint come with the feed rows; judgeJobs reads descriptions only for jobs not judged yet.
       const missingSet = new Set(missing);
       const texts = jobs.filter((job) => missingSet.has(job.id)).map((job) => ({ id: job.id, title: job.title, contentHash: job.contentHash }));
-      for (const [id, judgement] of await judgeJobs(profile, texts)) judgements.set(id, judgement);
+      for (const [id, judgement] of await judgeJobs(profile, texts, evaluation?.store)) judgements.set(id, judgement);
     }
     scored = scoreAll(new Set(shortlist.map((job) => job.id)));
     if (scored.length >= FEED_SIZE || limit >= closest.length || limit >= MAX_SHORTLIST) break;
@@ -884,5 +919,5 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView): 
       void rank;
       return job;
     })
-    .slice(0, FEED_SIZE);
+    .slice(0, evaluation?.limit ?? FEED_SIZE);
 }

@@ -195,7 +195,8 @@ export async function claimJobs(limit: number, onlyIds?: string[]) {
     UPDATE "Job" AS t SET "readClaimedUntil" = ${NOW} + make_interval(mins => ${CLAIM_MINUTES}::int)
     FROM (
       SELECT j.id FROM "Job" j
-      WHERE ${poolSql("j")}
+      -- The feed's pool, and jobs in an evaluation pool even once closed or old (P2: the eval's gates need their readings).
+      WHERE (${poolSql("j")} OR EXISTS (SELECT 1 FROM "EvalPool" e WHERE e."jobId" = j.id))
         AND (j.reading IS NULL OR NOT j."readingCurrent")
         AND (j."readClaimedUntil" IS NULL OR j."readClaimedUntil" < ${NOW})
         AND NOT (j."readAttempts" >= ${MAX_ATTEMPTS}::int AND j."readFailedAt" > ${NOW} - make_interval(hours => ${RETRY_AFTER_HOURS}::int))

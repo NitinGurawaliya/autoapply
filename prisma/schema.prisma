@@ -107,6 +107,9 @@ model Profile {
   updatedAt       DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  evalPools      EvalPool[]
+  feedLabels     FeedLabel[]
+  evalJudgements EvalJudgement[]
 }
 
 model Answer {
@@ -261,6 +264,9 @@ model Job {
   raw           Json
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  evalPools      EvalPool[]
+  feedLabels     FeedLabel[]
+  evalJudgements EvalJudgement[]
 
   @@unique([source, externalId])
   @@index([postedAt])
@@ -445,4 +451,57 @@ model JobJudgement {
   createdAt DateTime @default(now())
 
   @@id([profileId, jobId])
+}
+
+// Phase P, P2 (docs/relevance/TDD.md 7.1): the evaluation's stored pools, the owner's relevance labels and the verdicts
+// the eval asked for. Written only by scripts/label-candidates.ts and scripts/relevance-eval.ts; never read by the feed.
+// deleteOldClosedJobs keeps pooled and labelled jobs; an account deletion removes its rows (cascade).
+model EvalPool {
+  profileId String
+  round     Int
+  jobId     String
+  // Which candidate lists picked the job for labelling ("old,reading", "random"), or "pool" when none did.
+  source    String
+  createdAt DateTime @default(now())
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  job     Job     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@id([profileId, round, jobId])
+  @@index([jobId])
+}
+
+model FeedLabel {
+  profileId String
+  jobId     String
+  // Relevant to this profile; null = the labeller could not tell.
+  relevant  Boolean?
+  by        String
+  at        DateTime @default(now())
+  round     Int
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  job     Job     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@id([profileId, jobId])
+  @@index([jobId])
+}
+
+model EvalJudgement {
+  profileId String
+  jobId     String
+  // old (semantic.ts judgeBatch) | fit (fit.ts dry run, P6)
+  path      String
+  fromHash  String
+  jobHash   String
+  fit       String
+  why       String
+  evidence  Int?
+  createdAt DateTime @default(now())
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  job     Job     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@id([profileId, jobId, path])
+  @@index([jobId])
 }
