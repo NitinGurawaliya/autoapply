@@ -106,7 +106,7 @@ npx playwright test
 
 - `scripts/*-test.ts` and `*-smoke.ts` are the backend checks; each prints a PASS/FAIL line.
 - `tests/smoke.spec.ts` is the end-to-end test on a test profile and the mock form (stretch T22).
-- `DEMO_HEADED=1` makes the worker run Playwright headed so the demo shows the browser.
+- Every application runs in the stealthy Chrome, a visible window, so the worker that applies needs a screen; a worker without one (Docker) reads jobs only.
 
 ## Env
 

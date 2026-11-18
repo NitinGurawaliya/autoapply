@@ -56,20 +56,13 @@ export function canShowWindow() {
   return Boolean(process.env.DISPLAY);
 }
 
-/**
- * ASHBY_AUTO_SUBMIT=1: the worker presses Ashby's Submit itself (adapters/ashby.ts), so a worker without a screen can take
- * the handoff queue too, in a headless browser. Off by default: a person presses Submit.
- */
-export function autoSubmitAshby() {
-  return process.env.ASHBY_AUTO_SUBMIT === "1";
-}
-
 type Shared = { browser: Promise<Browser>; opened: number; open: number; retiring: boolean };
 const shared = new Map<"main" | "handoff", Shared>();
 
 async function launch(kind: "main" | "handoff"): Promise<Browser> {
-  // A handoff window is visible where there is a screen; a worker without one (ASHBY_AUTO_SUBMIT) runs it headless.
-  const headless = !(process.env.DEMO_HEADED === "1" || (kind === "handoff" && canShowWindow()));
+  // The Playwright browser (stealth off, or its fallback): a handoff window is visible where there is a screen; the main
+  // browser is headless (tests, the mock form).
+  const headless = !(kind === "handoff" && canShowWindow());
   if (kind === "handoff") {
     // Maximized, with the page sized to the window (no fixed viewport): a 1280x800 page in a smaller window hid the
     // Submit button below the screen's edge (21 Oct).
@@ -82,8 +75,6 @@ async function launch(kind: "main" | "handoff"): Promise<Browser> {
     }
     return chromium.launch({ headless, args });
   }
-  // A visible main browser (DEMO_HEADED=1: every board in a window) is Google Chrome too where the machine has it.
-  if (!headless) return chromium.launch({ headless, channel: "chrome" }).catch(() => chromium.launch({ headless }));
   return chromium.launch({ headless });
 }
 
@@ -176,7 +167,7 @@ export async function openBrowser(url: string, owner: string, options: { handoff
     console.log(`browser: stealthy Chrome unavailable, opening the Playwright ${options.handoff || options.window ? "handoff" : "main"} browser for ${url}`);
   }
 
-  if (options.handoff && !canShowWindow() && !autoSubmitAshby()) {
+  if (options.handoff && !canShowWindow()) {
     throw new NoRetryError("This form needs you to press Submit yourself, and the worker is running without a screen. Run the worker on your own computer, or open the form and apply by hand.");
   }
   // `window` (AtsAdapter.window): the same real Chrome window as a handoff, but the worker presses Submit itself.

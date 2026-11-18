@@ -75,7 +75,7 @@ export function codeRequester(applicationId: string) {
   };
 }
 
-/** `person`: the board already asked for a person on this application (lib/queue.ts PERSON_QUEUE). */
+/** `person`: the board already asked for a person on this application (lib/queue.ts withPerson, the job's `person`). */
 export async function runApplication(applicationId: string, options: { person?: boolean } = {}) {
   try {
     await execute(applicationId, options);
@@ -228,8 +228,8 @@ async function execute(applicationId: string, options: { person?: boolean }) {
   // A handoff board opens its window only once the answers are ready, so nothing is opened early for it.
   // The browser is open for inspect, fill and submit only (T100): when the job's questions are already on its row they
   // are answered first, with no browser open, and the form opens after; only questions still to be fetched overlap it.
-  // A person presses Submit on handoff boards (lib/queue.ts HANDOFF_BOARDS: Ashby), in a visible window opened when the
-  // form is ready (adapters/ashby.ts waitForUserSubmit); other boards submit by themselves.
+  // Handoff boards (lib/queue.ts HANDOFF_BOARDS) open their window once the form is ready, since a challenge there goes to
+  // the person in that window (adapters/ashby.ts waitForUserSubmit); the worker presses Submit itself on every board.
   const handoff = HANDOFF_BOARDS.includes(adapter.source);
   const early = !handoff && !questionsCached(job) ? openBrowser(formUrl, application.userId, { handoff: false, window: adapter.window }) : null;
   let submitting = false;

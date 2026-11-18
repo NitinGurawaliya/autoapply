@@ -3,7 +3,8 @@
 // Part A is pure. Part B uses the test profile and the mock job only, opens no browser, and deletes what it creates.
 // npx tsx scripts/submit-guard-test.ts
 import { db } from "../src/lib/db";
-import { APPLY_QUEUES, HANDOFF_BOARDS, HANDOFF_QUEUE, PERSON_QUEUE, queueFor, UNPROTECTED_QUEUE } from "../src/lib/queue";
+import { APPLY_QUEUE, APPLY_QUEUES, HANDOFF_BOARDS, LEGACY_APPLY_QUEUES } from "../src/lib/queue";
+import { APPLY_BOARDS } from "../src/modules/jobs/match";
 import { CaptchaRejectedError, MaybeSentError, NoRetryError, NotSentError, RefusedError, WindowClosedError } from "../src/modules/apply/adapter";
 import { retryApplication, resolveVerification } from "../src/modules/apply/lifecycle";
 import { decideAfterError, lastRunMaySendTwice, rerunsInRow, SUBMIT_ATTEMPT } from "../src/modules/apply/outcome";
@@ -67,17 +68,11 @@ for (const error of errors)
           }
 check("no automatic retry or reopen after a possible submission (all 192 combinations)", unsafe === 0, `${unsafe} unsafe`);
 
-// Routing: a person presses Submit on Ashby, so its applications go to the queue only a worker with a screen takes.
-check("Ashby applications go to the handoff queue", queueFor("ashby") === HANDOFF_QUEUE);
-check("Greenhouse and mock applications go to the normal queue", ["greenhouse", "mock"].every((source) => queueFor(source) === "apply"));
-check("Lever and Keka applications go to the handoff queue (T94, T96)", ["lever", "keka"].every((source) => queueFor(source) === HANDOFF_QUEUE));
-check("an application whose board is unknown goes to the normal queue", queueFor(undefined) === "apply");
-check("Ashby at protection none goes to the queue a Docker worker takes", queueFor("ashby", "job_apply_none") === UNPROTECTED_QUEUE);
-check("Ashby at low, medium, high or an unseen level goes to the screen queue", ["job_apply_low", "job_apply_medium", "job_apply_high", "job_apply_very_high"].every((level) => queueFor("ashby", level) === HANDOFF_QUEUE));
-check("Ashby with an unread level goes to the screen queue", queueFor("ashby", null) === HANDOFF_QUEUE && queueFor("ashby", undefined) === HANDOFF_QUEUE);
-check("a level never moves Greenhouse off the normal queue", queueFor("greenhouse", "job_apply_none") === "apply" && queueFor("greenhouse", "job_apply_high") === "apply");
-check("every apply queue is read by code that cancels or reaps apply jobs", ["apply", HANDOFF_QUEUE, UNPROTECTED_QUEUE, PERSON_QUEUE].every((queue) => APPLY_QUEUES.includes(queue)));
-check("handoff boards are exactly Ashby, Keka and Lever", [...HANDOFF_BOARDS].sort().join(",") === "ashby,keka,lever");
+// Routing (18 Nov): one apply queue; the pre-18 Nov queues are still read by cancel and reap code and emptied by the worker.
+check("one apply queue, named apply", APPLY_QUEUE === "apply");
+check("every apply queue, old ones included, is read by code that cancels or reaps apply jobs", ["apply", "apply-handoff", "apply-unprotected", "apply-person"].every((queue) => APPLY_QUEUES.includes(queue)) && LEGACY_APPLY_QUEUES.length === 3);
+check("the boards applied on are one fixed list: Greenhouse, Ashby, Keka, Workable, SmartRecruiters", [...APPLY_BOARDS].sort().join(",") === "ashby,greenhouse,keka,smartrecruiters,workable");
+check("every board applied on but Greenhouse hands a challenge to the person", APPLY_BOARDS.filter((board) => board !== "greenhouse").every((board) => HANDOFF_BOARDS.includes(board)));
 
 // The last run's Submit attempt, read from events (for a cancelled application's Retry).
 const at = (seconds: number) => new Date(Date.UTC(2026, 9, 21, 10, 0, seconds));

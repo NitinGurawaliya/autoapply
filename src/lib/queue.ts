@@ -1,43 +1,27 @@
 import { PgBoss } from "pg-boss";
-import { protectionLevel, UNPROTECTED } from "@/lib/ashby-protection";
 import { db, loadEnvFile } from "@/lib/db";
 
 loadEnvFile();
 
-const APPLY_QUEUE = "apply";
 /**
- * Boards where a person presses Submit (human handoff): the worker fills the form in a visible window and waits.
- * Ashby's reCAPTCHA stops a Submit the worker presses itself before anything is sent (21 Oct: 1 of 23 through, and a
- * traced automated run never sent its submit request), while a person's Submit went through 7 of 7.
+ * One queue for every application (owner, 18 Nov). Every run is the stealthy Chrome (modules/apply/real-browser.ts), a
+ * visible window: the worker fills the form and presses Submit itself, and a challenge the board still shows (an image
+ * CAPTCHA, a bot check) hands that window to the person. So only a worker with a screen takes this queue (worker/index.ts);
+ * the Docker worker reads jobs only. The earlier split by screen and Ashby protection level (apply-handoff,
+ * apply-unprotected, apply-person, ASHBY_AUTO_SUBMIT) is gone.
  */
-// Keka (T96): every application form has an image CAPTCHA, which only a person types (adapters/keka.ts).
-// Lever (T94): hCaptcha on Submit; the worker presses it in a visible window and a challenge goes to the person (adapters/lever.ts).
-// Workable (M12): the worker presses Submit itself in the stealthy Chrome (17 Nov: 7 of 7 sent, Turnstile silent); it stays
-// here because that Chrome is a visible window, so only a worker with a screen takes it, and a challenge goes to the person.
-// Zoho Recruit (M13): 20 of 30 forms carry an image CAPTCHA, which a person types and then presses Submit; the worker
-// submits a form without one itself (adapters/zohorecruit.ts).
-// SmartRecruiters (M7): DataDome lets the stealthy Chrome through (17 Nov), a visible window, so a worker with a screen;
-// the worker presses Submit itself and a challenge goes to the person.
-export const HANDOFF_BOARDS: readonly string[] = ["ashby", "keka", "lever", "workable", "zohorecruit", "smartrecruiters"];
-/**
- * Handoff applications of a company that set Ashby's spam protection (low, medium, high, or unreadable): only a worker with
- * a screen takes them (worker/index.ts). It fills the form in a visible Chrome window and, with ASHBY_AUTO_SUBMIT=1,
- * presses Submit itself; a challenge hands the window to the person. Headless, every such Submit was challenged (21-27
- * Oct: 31 of 31); in a visible window the worker's own click went through at "low" (27 Oct: 5 of 6).
- */
-export const HANDOFF_QUEUE = "apply-handoff";
-/**
- * Handoff applications of a company with no spam protection ("job_apply_none"): a worker presses Submit itself, so a
- * headless Docker worker with ASHBY_AUTO_SUBMIT=1 takes them as well as a worker with a screen (21-27 Oct: 8 of 8 sent).
- */
-export const UNPROTECTED_QUEUE = "apply-unprotected";
-/**
- * Handoff applications the board already asked a person for (Ashby's bot check stopped a worker's own Submit): only a
- * worker with a screen takes them, and a person presses Submit there, never the worker.
- */
-export const PERSON_QUEUE = "apply-person";
+export const APPLY_QUEUE = "apply";
+/** The queues before 18 Nov: a worker with a screen still empties them, and cancel and reap code still reads them. */
+export const LEGACY_APPLY_QUEUES = ["apply-handoff", "apply-unprotected", "apply-person"];
 /** Every queue an application can be on, for code that reads or cancels its queue jobs. */
-export const APPLY_QUEUES = [APPLY_QUEUE, HANDOFF_QUEUE, UNPROTECTED_QUEUE, PERSON_QUEUE];
+export const APPLY_QUEUES = [APPLY_QUEUE, ...LEGACY_APPLY_QUEUES];
+/**
+ * Boards whose challenge goes to the person in the window (the adapters' `ctx.handoff`), and where an Ashby check, once
+ * shown, keeps later runs of that application with the person (`withPerson`).
+ * Keka (T96) and Zoho Recruit (M13): image CAPTCHAs only a person types. Ashby, Lever, Workable, SmartRecruiters: the worker
+ * presses Submit and a challenge goes to the person.
+ */
+export const HANDOFF_BOARDS: readonly string[] = ["ashby", "keka", "lever", "workable", "zohorecruit", "smartrecruiters"];
 const INGEST_QUEUE = "ingest";
 const PRESCAN_QUEUE = "prescan";
 const DISCOVER_QUEUE = "discover";
@@ -64,10 +48,7 @@ export function getBoss() {
     // recovers by itself once the network is back, so the error is only logged.
     boss.on("error", (error: Error) => console.error(`queue: ${error.message.slice(0, 160)}`));
     bossPromise = boss.start().then(async (started) => {
-      await ensureQueue(started, APPLY_QUEUE);
-      await ensureQueue(started, HANDOFF_QUEUE);
-      await ensureQueue(started, UNPROTECTED_QUEUE);
-      await ensureQueue(started, PERSON_QUEUE);
+      for (const queue of APPLY_QUEUES) await ensureQueue(started, queue);
       await ensureQueue(started, INGEST_QUEUE);
       await ensureQueue(started, PRESCAN_QUEUE);
       await ensureQueue(started, DISCOVER_QUEUE);
@@ -81,19 +62,10 @@ export function getBoss() {
   return bossPromise;
 }
 
-/**
- * The queue an application of this board goes on: handoff boards need a worker with a screen, unless the company's Ashby
- * protection level is "none" (`level`, from lib/ashby-protection.ts). Anything else, an unread level included, needs a screen.
- */
-export function queueFor(source: string | undefined, level?: string | null) {
-  if (!source || !HANDOFF_BOARDS.includes(source)) return APPLY_QUEUE;
-  return level === UNPROTECTED ? UNPROTECTED_QUEUE : HANDOFF_QUEUE;
-}
-
 /** The event that hands an application to a person (runner.ts), and the one that starts it afresh (lifecycle.ts retry). */
 export const PERSON_HANDOFF = "Ashby asked to confirm a person is applying, so a person presses Submit";
 const RETRIED_BY_YOU = "Retried by you";
-/** How long a person handoff waits for a worker with a screen before it fails (worker/reaper.ts). */
+/** How long an application waits for a worker with a screen before it fails (worker/reaper.ts). */
 export const PERSON_WAIT_HOURS = 24;
 
 /**
@@ -122,15 +94,10 @@ export async function enqueueApply(applicationId: string, delaySeconds = 0, opti
     handoff &&
     (options.person ??
       withPerson(await db.applicationEvent.findMany({ where: { applicationId, OR: [{ type: "ask_user", message: { startsWith: PERSON_HANDOFF } }, { type: "retry", message: { startsWith: RETRIED_BY_YOU } }] }, select: { type: true, message: true, createdAt: true } })));
-  // Read on every enqueue (a company can change its setting); a short wait, since a swipe waits on it, and a level not read
-  // in time sends the application to a worker with a screen.
-  // Ashby only: a Keka form always has its CAPTCHA, so it never goes to the no-screen queue.
-  const level = row && handoff && !person && row.source === "ashby" ? await protectionLevel(row.applyUrl, 4000) : null;
-  const queue = person ? PERSON_QUEUE : queueFor(row?.source, level);
   // One hour covers a form plus waiting behind another application's security code, or a person pressing Submit (15
   // minutes); no automatic pg-boss retry, because the runner retries on its own and a blind re-run could apply twice.
   const data = person ? { applicationId, person: true } : { applicationId };
-  return boss.send(queue, data, { expireInSeconds: 3600, retryLimit: 0, ...(delaySeconds > 0 ? { startAfter: delaySeconds } : {}) });
+  return boss.send(APPLY_QUEUE, data, { expireInSeconds: 3600, retryLimit: 0, ...(delaySeconds > 0 ? { startAfter: delaySeconds } : {}) });
 }
 
 /**

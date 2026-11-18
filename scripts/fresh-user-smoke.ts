@@ -6,8 +6,6 @@
 // npx tsx scripts/fresh-user-smoke.ts [--jobs 20] [--per-board 5] (--per-board: that many recent software jobs in India from
 // each board, Greenhouse, Ashby, Lever and Keka, instead of the feed, so every board's forms are checked; --only <words>:
 // just the jobs of a company whose name has these words; GUESS_DEBUG=1 prints guesses that did not fit)
-process.env.ENABLE_KEKA ??= "1";
-process.env.ENABLE_LEVER ??= "1";
 
 const STANDING = /^(accept_acknowledgements|citizenship|relocate_outside_home|sponsorship_outside_home)$/;
 

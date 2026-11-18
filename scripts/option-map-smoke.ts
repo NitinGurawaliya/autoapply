@@ -2,7 +2,6 @@
 // "Yes, I am authorized to work", which is not one of the mock's options ("Authorized" / "Need sponsorship"). A real run
 // must re-word it onto "Authorized", say why, and submit without asking. The test profile's answers are restored.
 // npx tsx scripts/option-map-smoke.ts   (needs `npm run dev` for the mock form)
-process.env.DEMO_HEADED = "0";
 import { db } from "../src/lib/db";
 import { customQuestionKey, upsert } from "../src/modules/answers";
 import { runApplication } from "../src/modules/apply";

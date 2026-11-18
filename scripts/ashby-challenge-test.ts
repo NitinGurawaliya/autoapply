@@ -1,4 +1,4 @@
-// Ashby's checks on the worker's own Submit (ASHBY_AUTO_SUBMIT=1) and the person handoff that follows, offline: a
+// Ashby's checks on the worker's own Submit and the person handoff that follows, offline: a
 // reCAPTCHA challenge or an emailed code hands the run to a person (this window where there is a screen, BotCheckError
 // where there is none), a person run never presses Submit itself, HTTP 429/403 on the submission is "not sent", and
 // what may have been sent is never called "not sent". The person is simulated by the test (it sends the form the way the
@@ -109,7 +109,6 @@ async function run(browser: Browser, kind: string, options: RunOptions = {}) {
 const at = (minutes: number) => new Date(Date.UTC(2026, 9, 25, 12, minutes));
 
 async function main() {
-  process.env.ASHBY_AUTO_SUBMIT = "1";
   const browser = await chromium.launch({ headless: true });
   try {
     // ---- Docker worker (no screen): Ashby's check stops it, nothing sent, nothing attempted.
@@ -120,16 +119,6 @@ async function main() {
     check("no screen: an emailed code on the worker's Submit is a bot check, nothing sent", out.error instanceof BotCheckError && !out.attempted, String(out.error));
     out = await run(browser, "uploadThenChallenge");
     check("no screen: the page's own resume upload before a challenge is not 'sent' (27 Oct, Resend)", out.error instanceof BotCheckError && !out.attempted, String(out.error));
-    out = await run(browser, "submit", { level: "job_apply_low" });
-    check("no screen: a company protected at 'low' goes to a person with no click at all", out.error instanceof BotCheckError && /spam protection \(job_apply_low\)/.test(String(out.error)) && out.clicks === 0 && !out.attempted, `${out.error} clicks=${out.clicks}`);
-    out = await run(browser, "submit", { level: "job_apply_high" });
-    check("no screen: 'high' also goes to a person", out.error instanceof BotCheckError && out.clicks === 0);
-    out = await run(browser, "submit", { level: "job_apply_none" });
-    check("no screen: a company at 'none' is sent by the worker's own Submit, after one level read", out.result?.confirmed === true && out.clicks === 1 && out.levelReads === 1, JSON.stringify(out.result));
-    out = await run(browser, "submit", { level: "unreadable" });
-    check("no screen: an unreadable level is protected: a person, no click", out.error instanceof BotCheckError && /could not be read/.test(String(out.error)) && out.clicks === 0 && !out.attempted, `${out.error} clicks=${out.clicks}`);
-    out = await run(browser, "submit", { level: "job_apply_very_high" });
-    check("no screen: a level never seen before is protected, not 'none'", out.error instanceof BotCheckError && /job_apply_very_high/.test(String(out.error)) && out.clicks === 0, `${out.error} clicks=${out.clicks}`);
     out = await run(browser, "sentThenChallenge", { cancelAfterMs: 4000 });
     check("no screen: a challenge after the submission already left is never 'not sent' (may have been sent)", out.error instanceof MaybeSentError && out.attempted, String(out.error));
 

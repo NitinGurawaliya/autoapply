@@ -3,7 +3,6 @@
 // from memory (source "matched", with its basis), submit without asking, and the mock receives the value. The test
 // profile's answers are restored afterwards.
 // npx tsx scripts/recall-smoke.ts   (needs `npm run dev` for the mock form)
-process.env.DEMO_HEADED = "0";
 import { db } from "../src/lib/db";
 import { customQuestionKey, upsert } from "../src/modules/answers";
 import { runApplication } from "../src/modules/apply";

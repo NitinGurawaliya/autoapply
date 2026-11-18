@@ -5,7 +5,6 @@
 // - after answering, the run fills the form straight through, with no pause;
 // - the feed pre-scan reports the gap, and full coverage once it is answered.
 // The test profile's answers are restored. npx tsx scripts/precheck-smoke.ts   (needs `npm run dev`)
-process.env.DEMO_HEADED = "0";
 import { randomBytes } from "node:crypto";
 import { db } from "../src/lib/db";
 import { customQuestionKey } from "../src/modules/answers";

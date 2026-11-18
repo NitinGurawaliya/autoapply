@@ -16,7 +16,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 async function main() {
   // 1. A real worker process registers the schedule and says so in its log.
   let out = "";
-  const worker = spawn("npx", ["tsx", "src/worker/index.ts"], { shell: true, env: { ...process.env, DEMO_HEADED: "0" } });
+  const worker = spawn("npx", ["tsx", "src/worker/index.ts"], { shell: true, env: process.env });
   worker.stdout.on("data", (chunk) => (out += String(chunk)));
   worker.stderr.on("data", (chunk) => (out += String(chunk)));
   for (let i = 0; i < 90 && !/ingest scheduled/.test(out); i += 1) await sleep(1000);

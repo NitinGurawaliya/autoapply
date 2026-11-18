@@ -63,7 +63,7 @@ In Google Cloud Console, edit your OAuth client:
    | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | browser push (step 0.6); web and worker |
 
 3. Deploy. Check: `/sign-in` loads, Google sign-in returns to `/onboarding/resume`, resume upload parses.
-4. Do **not** set `DEMO_HEADED` on Vercel.
+4. The worker's settings (`APPLY_CONCURRENCY`, `STEALTHY_*`) are not needed on Vercel.
 5. Resumes are stored in Postgres (`FileBlob`). Vercel limits request bodies to about 4.5 MB, which is fine for resumes.
 
 ## 4. Worker (Docker on Railway / Fly / a VM)
@@ -78,7 +78,7 @@ docker run --init --env-file .env -v swipeapply-profiles:/data/browser-profiles 
 ```
 
 - `npm run worker:prod` runs `tsx` without watching (`npm run worker` is `tsx watch`, for development).
-- The worker needs the same variables as the web app except the `AUTH_*` ones, plus `VAPID_*` and `APP_URL`. Leave `DEMO_HEADED` unset (headless; there is no screen).
+- The worker needs the same variables as the web app except the `AUTH_*` ones, plus `VAPID_*` and `APP_URL`. Without a screen it reads jobs only: every application runs in the stealthy Chrome, a visible window, so applications go to a worker on a computer with a screen (`npm run worker:prod`).
 - No volume is needed: since T100 users' browser cookies are kept in the database (`browser-state/` files), so any worker replica can run any user. `/data/browser-profiles` holds only the pid lock.
 - A restart is safe: an application cut off before Submit is picked up again by the next worker (up to twice); one cut off after Submit is marked "may have been sent, check your email", never sent twice.
 - Parallelism: set `APPLY_CONCURRENCY` (default 3, max 24 per worker). Budget about 0.5 GB RAM per concurrent run plus headroom, so 3 runs want roughly 2 GB. A run waiting for a security code holds a slot for up to 10 minutes. More simultaneous submissions from one cloud IP may raise how often the employer asks for a verification code.
@@ -87,19 +87,11 @@ docker run --init --env-file .env -v swipeapply-profiles:/data/browser-profiles 
 - Railway: New Project → Deploy from GitHub → set the Dockerfile path to `Dockerfile.worker` → add the variables. Fly: `fly launch --dockerfile Dockerfile.worker`, `fly secrets set ...`, `fly scale count 1`.
 - Check the logs for `worker listening for apply and ingest`, then `<your-domain>/api/health`: `"worker": "up"` (the worker beats every minute), `lastIngest` within 3 hours, `lastDiscovery` within a day. It answers 503 when no worker has beaten for 5 minutes: point an uptime monitor at it.
 
-### Docker worker with a screen (every Ashby level on one machine)
+### The worker that applies (a computer with a screen)
 
-A headless worker sends Ashby only for companies with no spam protection (`job_apply_none`); low, medium and high wait on `apply-handoff` for a worker that can show a window (ARCHITECTURE.md, Routing). Given the host's display, the same container is that worker: it opens a visible Google Chrome window on the host's screen for protected Ashby, presses Submit itself with `ASHBY_AUTO_SUBMIT=1`, and leaves the window to the person at the computer when Ashby shows a challenge. Greenhouse, Lever and unprotected Ashby stay headless. Nothing about the browser is changed; it is the same window a person could use.
+Since 18 Nov every application runs in the stealthy Chrome (SeleniumBase, ARCHITECTURE.md 6.21), a visible window: the worker fills the form and presses Submit, and a challenge the board still shows (an image CAPTCHA, a bot check) waits in that window for the person at the computer (15 minutes, then not sent). So the worker that applies runs on your own computer with Python and SeleniumBase installed: `npm run worker:prod`. Its first log line says `worker listening for apply (x3) and ingest`; a worker without a screen says `ingest only`.
 
-Windows (Docker Desktop on WSL 2 with WSLg; `wsl --version` lists a WSLg version). In Git Bash put `MSYS_NO_PATHCONV=1` in front, so the `/run/...` paths are not rewritten:
-
-```bash
-docker run -d --init --name swipeapply-worker --restart unless-stopped --env-file .env.worker   -e ASHBY_AUTO_SUBMIT=1 -e WORKER_NAME=laptop-docker   -v /run/desktop/mnt/host/wslg/.X11-unix:/tmp/.X11-unix -v /run/desktop/mnt/host/wslg:/mnt/wslg   -e DISPLAY=:0 -e WAYLAND_DISPLAY=wayland-0 -e XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir   -v swipeapply-profiles:/data/browser-profiles swipeapply-worker
-```
-
-Linux desktop: run `xhost +local:` once per login, then the same command with `-v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY=$DISPLAY` in place of the four WSLg lines.
-
-Check the first log line: `apply-unprotected (x3, auto submit), apply-handoff (x3, auto submit), apply-person`. If it says `no screen: no protected Ashby`, the display socket is not mounted (`canShowWindow()` checks it); the worker still runs, headless. Someone must be at the machine for a challenge: an unanswered handoff ends after 15 minutes, nothing sent. Stop any separate `npm run worker` on that machine, so windows open in one place only.
+The Docker image has no Python, so the stealthy Chrome cannot start in it: run Docker workers without a display (ingest only). Given the host's display (the old WSLg mounts), a container would take applications and fail to open the window on each, so do not mount one.
 
 ## 5. End-to-end test (do this before trusting it)
 
@@ -130,6 +122,6 @@ The workers run on a computer that stays on, from the image GitHub Actions build
 
 - `deploy/docker-compose.yml`: two workers (`home-1`, `home-2`, 4 runs each), `restart: unless-stopped`, `init: true`, `stop_grace_period: 16m` so a restart or update lets the runs in progress finish (the worker stops taking jobs on SIGTERM and waits for them). Secrets in `deploy/.env.worker` and the image owner in `deploy/.env`, both gitignored (examples: `env.worker.example`, `env.example`).
 - Updates: `deploy/update.sh` (`docker compose pull` then `up -d`) every 5 minutes from a systemd timer (`swipeapply-update.service` and `.timer`). An unchanged image leaves the workers alone.
-- These workers have no screen, so they never take the `apply-handoff` queue (Ashby). Ashby applications wait there for a worker on a computer where a person presses Submit (`npm run worker:prod` on your own machine). With `ASHBY_AUTO_SUBMIT=1` in `deploy/.env.worker` they take Ashby too and press Submit themselves (see ARCHITECTURE.md, "Auto submit").
+- These workers have no screen, so they read jobs only. Applications wait on `apply` for a worker on a computer with a screen (`npm run worker:prod` on your own machine).
 - GitHub repository secrets: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (write). The home server logs in with a separate read-only token. Keep the Docker Hub repository private: the image holds the code (never the secrets).
 - Uptime: point a monitor at `/api/health` (503 when no worker has beaten for 5 minutes).

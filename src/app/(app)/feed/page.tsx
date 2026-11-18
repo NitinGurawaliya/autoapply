@@ -23,7 +23,7 @@ import { FeedTopBar } from "@/components/patterns/top-bar";
 import { FilterSheet } from "./filter-sheet";
 import { SwipeDeck } from "./swipe-deck";
 
-// Exactly the boards the feed serves (APPLY_BOARDS: Keka with ENABLE_KEKA=1, Lever with ENABLE_LEVER=1).
+// Exactly the boards the feed serves (APPLY_BOARDS, one fixed list in modules/jobs/match.ts).
 const BOARDS = APPLY_BOARDS.map((id) => ({ id, label: boardLabel(id) ?? id }));
 const FEED_DEFAULTS = { boards: APPLY_BOARDS, places: DEFAULT_PLACES, days: DEFAULT_FEED_DAYS };
 

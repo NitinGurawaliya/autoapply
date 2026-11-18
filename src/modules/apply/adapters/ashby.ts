@@ -2,12 +2,11 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Locator, Page, Request, Response } from "playwright";
-import { protectionLevel, UNPROTECTED } from "@/lib/ashby-protection";
 import { joinChoices, splitChoices } from "@/lib/choices";
 import { customQuestionKey } from "@/modules/answers";
 import type { AtsAdapter, FilledField, FormField, ResolvedValue, SubmitContext, SubmitResult } from "../adapter";
 import { BotCheckError, MaybeSentError, NeedsAnswerError, NoRetryError, NotSentError, RefusedError, WindowClosedError } from "../adapter";
-import { autoSubmitAshby, canShowWindow, livePage } from "../browser";
+import { canShowWindow, livePage } from "../browser";
 import { categorize, watchAshby } from "./ashbyDiagnostics";
 import { assertJobOpen, dismissOverlays, firstVisible, inField, toDatePickerText } from "./common";
 
@@ -673,25 +672,11 @@ async function waitForUserSubmit(page: Page, ctx: SubmitContext): Promise<Submit
     await button?.scrollIntoViewIfNeeded().catch(() => undefined);
     await page.bringToFront().catch(() => undefined);
     state.counting = true;
-    // ASHBY_AUTO_SUBMIT=1 (browser.ts autoSubmitAshby): the worker presses Submit once itself, a plain click with nothing
-    // about the browser changed, and reCAPTCHA decides. 24 Oct, visible Chrome: 8 clicks, none blocked, 4 sent. Never on a
-    // run Ashby already asked a person for (ctx.person): a person presses Submit and answers Ashby's check.
-    let auto = autoSubmitAshby() && !ctx.person;
-    // Without a screen (headless Chromium), the company's own spam protection decides before any click. Every Ashby Submit
-    // from 21 to 27 Oct: headless, "none" sent 8 of 8 and "low" or above was challenged 31 of 31 (Windows and Docker, 11
-    // reruns included); in a visible Chrome window the worker's click at "low" was challenged 0 of 6 (24 Oct, Sardine and
-    // OpenGov sent). So only a headless run is held back: anything but "none", an unreadable level included, goes to a
-    // person with no click. With a screen the worker clicks, and a challenge hands this window to the person (askPerson).
-    if (auto && !canShowWindow()) {
-      const level = await protectionLevel(page.url());
-      if (level !== UNPROTECTED) {
-        throw new BotCheckError(
-          level
-            ? `This company's Ashby spam protection (${level}) needs a person to press Submit. Nothing was sent.`
-            : "This company's Ashby spam protection could not be read, so a person presses Submit. Nothing was sent.",
-        );
-      }
-    }
+    // The worker presses Submit once itself, a plain click in the stealthy Chrome window, and reCAPTCHA decides (17-18 Nov:
+    // 5 of 5 sent, none challenged; the ASHBY_AUTO_SUBMIT switch is gone, 18 Nov). Never on a run Ashby already asked a
+    // person for (ctx.person): a person presses Submit and answers Ashby's check. A challenge hands this window to the
+    // person (askPerson).
+    let auto = !ctx.person;
     if (auto && button) {
       await button.click().catch(() => undefined);
       setTimeout(() => console.log(`ashby auto submit: posts=${state.posts} submits=${state.sent.length} accepted=${watcher.accepted()}`), 15000);
@@ -941,7 +926,7 @@ export const ashbyAdapter: AtsAdapter = {
       const empty = await emptyRequired(page);
       diagnostics.mark(`checked required fields empty=${empty.length}`);
       if (empty.length > 0) throw new NoRetryError(`These required questions are still empty: ${empty.slice(0, 5).join(", ")}`);
-      // The person's Submit (lib/queue.ts HANDOFF_BOARDS), or the worker's own with ASHBY_AUTO_SUBMIT=1.
+      // The worker's own Submit, or the person's on a run Ashby already asked a person for.
       const result = await waitForUserSubmit(page, ctx);
       outcome = "confirmed";
       return result;

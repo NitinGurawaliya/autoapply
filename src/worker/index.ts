@@ -1,8 +1,8 @@
 import { hostname } from "node:os";
 import { db } from "@/lib/db";
-import { getBoss, HANDOFF_QUEUE, PERSON_QUEUE, UNPROTECTED_QUEUE } from "@/lib/queue";
+import { APPLY_QUEUE, getBoss, LEGACY_APPLY_QUEUES } from "@/lib/queue";
 import { guardUndiciParserAssertions } from "@/lib/undici-guard";
-import { autoSubmitAshby, canShowWindow } from "@/modules/apply/browser";
+import { canShowWindow } from "@/modules/apply/browser";
 import { handleApply } from "./handlers/apply";
 import { handleBoardDay } from "./handlers/board-day";
 import { handleDiscover } from "./handlers/discover";
@@ -22,16 +22,10 @@ async function main() {
   // (a context is a fraction of a browser) and by how many simultaneous submissions from one IP the ATS tolerates.
   // A run waiting on a security code holds one slot for up to 10 minutes.
   const concurrency = Math.min(Math.max(Number(process.env.APPLY_CONCURRENCY) || 3, 1), 24);
-  await boss.work("apply", { localConcurrency: concurrency }, handleApply);
-  // Ashby applications by the company's spam protection (lib/queue.ts queueFor). "none": a Docker worker (Linux, no display)
-  // with ASHBY_AUTO_SUBMIT=1 presses Submit itself, as does a worker with a screen. Low, medium, high or unread: only a
-  // worker with a screen, in a visible Chrome window, since a headless Submit there was challenged every time.
-  const unprotected = canShowWindow() || autoSubmitAshby();
-  if (unprotected) await boss.work(UNPROTECTED_QUEUE, { localConcurrency: concurrency }, handleApply);
-  const handoff = canShowWindow();
-  if (handoff) await boss.work(HANDOFF_QUEUE, { localConcurrency: concurrency }, handleApply);
-  // The applications Ashby asked a person for: a window a person can see, so a screen is needed whatever the settings.
-  if (canShowWindow()) await boss.work(PERSON_QUEUE, { localConcurrency: concurrency }, handleApply);
+  // Every application runs in the stealthy Chrome, a visible window (lib/queue.ts APPLY_QUEUE), so only a worker with a
+  // screen applies; one without (the Docker worker) reads jobs only. The pre-18 Nov queues are emptied here too.
+  const applies = canShowWindow();
+  if (applies) for (const queue of [APPLY_QUEUE, ...LEGACY_APPLY_QUEUES]) await boss.work(queue, { localConcurrency: concurrency }, handleApply);
   await boss.work("ingest", handleIngest);
   await boss.work("prescan", handlePrescan);
   // The daily run hands each board its own job; this takes them one at a time (handlers/discover.ts).
@@ -44,8 +38,7 @@ async function main() {
   const perHost = Math.min(Math.max(Number(process.env.INGEST_PER_HOST) || 4, 1), ingestConcurrency);
   // A gentle board (Workday, modules/jobs/cadence.ts) one company at a time (owner, 18 Nov: its bot check).
   await boss.work("ingest-company", { localConcurrency: ingestConcurrency, groupConcurrency: { default: perHost, tiers: { gentle: 1 } } }, handleIngestCompany);
-  const auto = autoSubmitAshby() ? ", auto submit" : "";
-  console.log(`worker listening for apply (x${concurrency})${unprotected ? `, ${UNPROTECTED_QUEUE} (x${concurrency}${auto})` : ""}${handoff ? `, ${HANDOFF_QUEUE} (x${concurrency}${auto}), ${PERSON_QUEUE}` : ", no screen: no protected Ashby"} and ingest`);
+  console.log(applies ? `worker listening for apply (x${concurrency}) and ingest` : "worker listening for ingest only (no screen, so no applications)");
 
   // Graceful stop (Ctrl+C, `docker stop -t 960`): take no new jobs and let the runs in progress finish, up to a handoff's
   // 15-minute wait, so a restart never cuts off a run after its Submit (21 Oct: a restart seconds after Rubrik's Submit

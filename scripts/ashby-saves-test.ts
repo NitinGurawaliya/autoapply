@@ -155,7 +155,6 @@ async function main() {
     }
     {
       // Saved during the fill, then "Missing entry" on Submit for the Yes/No (the Writer runs): picked again, Submit once more.
-      process.env.ASHBY_AUTO_SUBMIT = "1";
       const { page, saves } = await open(browser, MISSING_THEN_SENT);
       await ashbyAdapter.fill(page, VALUES);
       const before = saves.filter((s) => s.path === OFFICE).length;

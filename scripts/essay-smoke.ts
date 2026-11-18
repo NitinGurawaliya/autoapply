@@ -2,7 +2,6 @@
 // set and no saved answer, the required "Why this role?" is drafted (source "ai_draft", with its basis), the run
 // submits without asking, and the mock receives the draft. Without the permission, the run asks for it once.
 // The test profile's answers are restored. npx tsx scripts/essay-smoke.ts   (needs `npm run dev` for the mock form)
-process.env.DEMO_HEADED = "0";
 import { db } from "../src/lib/db";
 import { customQuestionKey } from "../src/modules/answers";
 import { runApplication } from "../src/modules/apply";
