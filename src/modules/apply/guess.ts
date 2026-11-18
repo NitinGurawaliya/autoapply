@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { joinChoices } from "@/lib/choices";
 import { callJson } from "@/lib/llm";
 import { certifiesFact } from "./acknowledgement";
 import type { FormField } from "./adapter";
@@ -145,7 +146,9 @@ export function fitGuess(field: Pick<FormField, "type" | "options" | "label">, a
   if (field.options?.length) {
     const wanted = field.type === "checkbox-group" ? text.split(/\s*[,\n]\s*/) : [text];
     const picked = wanted.map((want) => optionFor(field.options!, want)).filter((option): option is string => !!option);
-    return picked.length ? [...new Set(picked)].join(", ") : null;
+    // Several picks are stored one per line (lib/choices.ts), the way the resolver reads them: joined with commas they were
+    // one unknown option, and the question was asked instead (18 Nov, iion on Keka: "Which have you worked hands-on with?").
+    return picked.length ? joinChoices([...new Set(picked)]) : null;
   }
   if (EMPTY.test(text)) return null;
   if (field.type === "number") return /\d/.test(text) ? text.match(/\d+(?:\.\d+)?/)![0] : null;

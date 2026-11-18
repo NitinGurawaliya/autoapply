@@ -397,21 +397,52 @@ function nationalNumber(value: string) {
   return digits.replace(/^\+?91(?=\d{10}$)/, "").replace(/^0(?=\d{10}$)/, "");
 }
 
-/** A location search: typed key by key, then the first suggestion that starts with the city. */
+// Indian cities known by an old and a new name: the place list says one ("Bengaluru, Karnataka, India") when the profile
+// says the other ("Bangalore": 18 Nov, QAD, no place matched and the run failed).
+const CITY_NAMES: string[][] = [
+  ["Bengaluru", "Bangalore"],
+  ["Mumbai", "Bombay"],
+  ["Gurugram", "Gurgaon"],
+  ["Kolkata", "Calcutta"],
+  ["Chennai", "Madras"],
+  ["Pune", "Poona"],
+  ["Mysuru", "Mysore"],
+  ["Thiruvananthapuram", "Trivandrum"],
+  ["Vadodara", "Baroda"],
+  ["Kochi", "Cochin"],
+  ["Puducherry", "Pondicherry"],
+  ["Prayagraj", "Allahabad"],
+  ["Mangaluru", "Mangalore"],
+  ["Belagavi", "Belgaum"],
+];
+
+/** The city as written, then its other names (CITY_NAMES). */
+export function cityNames(city: string): string[] {
+  const row = CITY_NAMES.find((names) => names.some((name) => norm(name) === norm(city)));
+  return row ? [city, ...row.filter((name) => norm(name) !== norm(city))] : [city];
+}
+
+/** A location search: typed key by key, then the first suggestion that starts with the city or another name of it. */
 async function fillAutocomplete(page: Page, element: Locator, value: string) {
   const input = element.locator("input").first();
   await centre(input);
-  await input.fill("");
   const city = value.split(",")[0].trim();
-  await input.pressSequentially(city, { delay: 40 });
+  const names = cityNames(city);
+  const startsWithName = new RegExp(`^\\s*(${names.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "i");
   // The suggestions are spl-select-option components ("Mohali, Punjab, India"); their role=option wrappers have no text.
-  const option = page.locator(OPTIONS).filter({ hasText: new RegExp(`^\\s*${city.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i") }).first();
-  await option.waitFor({ timeout: 10000 }).catch(() => undefined);
-  if (!(await option.isVisible().catch(() => false))) throw new Error(`no place matching "${city}" in the location list`);
+  const option = page.locator(OPTIONS).filter({ hasText: startsWithName }).first();
+  for (const name of names) {
+    await input.fill("");
+    await input.pressSequentially(name, { delay: 40 });
+    await option.waitFor({ timeout: 10000 }).catch(() => undefined);
+    if (await option.isVisible().catch(() => false)) break;
+  }
+  if (!(await option.isVisible().catch(() => false))) throw new Error(`no place matching "${names.join('" or "')}" in the location list`);
   const picked = (await option.innerText()).replace(/\s+/g, " ").trim();
   await option.click({ timeout: 5000 });
   await page.waitForTimeout(400);
-  if (!norm(await input.inputValue().catch(() => "")).includes(norm(city))) throw new Error(`the location box kept "${(await input.inputValue().catch(() => "")).slice(0, 30)}"`);
+  const kept = norm(await input.inputValue().catch(() => ""));
+  if (!names.some((name) => kept.includes(norm(name)))) throw new Error(`the location box kept "${(await input.inputValue().catch(() => "")).slice(0, 30)}"`);
   return picked;
 }
 

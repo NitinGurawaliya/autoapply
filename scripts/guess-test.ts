@@ -38,7 +38,7 @@ const offices = ["Bengaluru - HSR", "Mumbai - BKC", "Pune"];
 check("an option is taken by its exact text", fitGuess(field("Office", "select", offices), "Bengaluru - HSR") === "Bengaluru - HSR");
 check("an option is matched ignoring case and spacing", fitGuess(field("Office", "select", offices), "  pune ") === "Pune");
 check("an answer that is no option is refused", fitGuess(field("Office", "select", offices), "Delhi") === null);
-check("a multi-select keeps the options it names", fitGuess(field("Tools", "checkbox-group", ["AWS", "GCP", "Azure"]), "AWS, GCP") === "AWS, GCP");
+check("a multi-select keeps the options it names, one per line", fitGuess(field("Tools", "checkbox-group", ["AWS", "GCP", "Azure"]), "AWS, GCP") === "AWS\nGCP");
 check("a number box takes the number", fitGuess(field("Years with Go", "number"), "about 2 years") === "2");
 check("a number box refuses words", fitGuess(field("Years with Go", "number"), "some") === null);
 check("'null' or 'unknown' is no answer for a text box", fitGuess(field("Reason for change"), "null") === null && fitGuess(field("Reason for change"), "unknown") === null);
@@ -71,6 +71,12 @@ check("the profile beats the guess", fromProfile.values[0]?.value === "Bengaluru
 const office = field("Preferred Location (smartcoin)", "select", offices);
 const badGuess = resolveValues([{ field: office, key: null }], profile, [], undefined, undefined, undefined, new Map([guess(office.label, "Delhi")]));
 check("a guess that fits no option is not filled: asked", badGuess.pending.length === 1 && badGuess.values.length === 0);
+{
+  // 18 Nov, iion on Keka: a guessed multi-select reaches the form, not the question list.
+  const tools = field("Which of the following have you worked hands-on with?", "checkbox-group", ["Python", "SQL", "Git", "MCP"]);
+  const picked = resolveValues([{ field: tools, key: null }], profile, [], undefined, undefined, undefined, new Map([guess(tools.label, fitGuess(tools, "Python, SQL, Git") ?? "")]));
+  check("a guessed multi-select is filled, every pick", picked.pending.length === 0 && picked.values[0]?.value === "Python\nSQL\nGit", JSON.stringify(picked.values.map((v) => v.value)));
+}
 const optional = { ...field("Anything else?"), required: false };
 const notRequired = resolveValues([{ field: optional, key: null }], profile, [], undefined, undefined, undefined, new Map([guess(optional.label, "No")]));
 check("an optional question is left empty, not guessed", notRequired.values.length === 0 && notRequired.pending.length === 0);
