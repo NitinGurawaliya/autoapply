@@ -301,7 +301,7 @@ Parked 17 Nov (owner: the boards add few jobs). Measured from one Common Crawl's
   Public lists that work: Breezy `/json`, Personio `/xml`, Teamtailor `/jobs.rss`, Rippling `api.rippling.com/platform/api/ats/v1/board/<slug>/jobs`, Gem `api.gem.com/job_board/v0/<slug>/job_posts/`, Recruitee `/api/offers/`, Pinpoint `/postings.json`; Jobvite and JazzHR are HTML only.
 
 <a id="m21"></a>
-### [ ] M21 — Discovery and ingest on a GitHub Actions schedule (owner, 18 Nov)
+### [~] M21 — Discovery and ingest on a GitHub Actions schedule (owner, 18 Nov)
 Why: finding companies and reading their jobs should run on time whether or not a worker is up (the laptop sleeps, dies, or is off). Both move to scheduled GitHub Actions; the worker with a screen keeps only applying (stealthy Chrome) and the pre-scan.
 
 Do:
@@ -309,7 +309,7 @@ Do:
   - `discovery`: daily `30 1 * * *` (as `DEFAULT_DISCOVER_CRON`), `npx tsx scripts/discover-now.ts` (boards and count as dispatch inputs), `timeout-minutes: 120`.
   - `ingest`: every 3 hours (the active tier's interval, cadence.ts), `npx tsx scripts/ingest-tick-now.ts --limit 3000` (companies already due only), `timeout-minutes: 60`. Then the daily board measurement (`board-day`, `30 23 * * *`) as a third small job.
 - `scripts/ingest-tick-now.ts`: after the reads, `warmFeeds()` as the worker's tick does (handlers/ingest-tick.ts), so feeds are warm and new-match pushes still go out; and the hourly delete of old closed jobs the tick does.
-- `src/worker/schedule.ts`: `INGEST_MODE=off` and `DISCOVER_CRON=off` stop the worker scheduling ingest, discovery and the board day (one switch each, read at start). The laptop and Docker workers run with both off once the Actions runs have passed twice; the Docker worker then has nothing to do and is stopped.
+- `src/worker/schedule.ts`: `INGEST_MODE=off`, `DISCOVER_CRON=off` and `BOARD_DAY_CRON=off` stop the worker scheduling ingest, discovery and the board day (one switch each, read at start; `schedulePlan`). The laptop and Docker workers run with both off once the Actions runs have passed twice; the Docker worker then has nothing to do and is stopped.
 - ARCHITECTURE §6.2 (discovery), §5b (ingest tick) and docs/DEPLOY.md: where each runs, the secrets, the two switches.
 
 Facts and limits to keep in mind:
@@ -322,8 +322,8 @@ Facts and limits to keep in mind:
 Design: ARCHITECTURE §6.2 (discovery), §5b (ingest tick); no TDD (a workflow and three small changes).
 **Done when:**
 - `workflow_dispatch` runs of `discovery` (`--boards greenhouse`) and `ingest` finish green; their logs show companies checked and added, and companies read, new jobs and feeds warmed.
-- Two days of scheduled runs finish green; the workers run with `INGEST_MODE=off` and `DISCOVER_CRON=off`, and the feed's newest India jobs are no older than the last ingest run.
-- `schedule-smoke` PASS with both switches off; typecheck and lint pass.
+- Two days of scheduled runs finish green; the workers run with the three switches off, and the feed's newest India jobs are no older than the last ingest run.
+- `schedule-plan-test` PASS (the switches, offline; `schedule-smoke` starts a real worker, which would take live applications); typecheck and lint pass.
 
 <a id="m16"></a>
 ### [ ] M16 — Board health: success rate, alert, pause

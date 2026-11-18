@@ -1,0 +1,120 @@
+# Finding companies and reading their jobs on a schedule, whether or not a worker is up (M21, docs/boards/TASKS.md#m21).
+# The worker with a screen keeps only applying; run it with INGEST_MODE=off, DISCOVER_CRON=off and BOARD_DAY_CRON=off
+# once these runs pass (docs/DEPLOY.md, "Scheduled jobs on GitHub Actions").
+#
+# Scheduled workflows run from the default branch only: these schedules start once this file is on main.
+# Repository secrets needed: DATABASE_URL, DIRECT_URL, OPENAI_API_KEY; for new-match pushes also VAPID_PUBLIC_KEY,
+# VAPID_PRIVATE_KEY, VAPID_SUBJECT and APP_URL (pushes are skipped while the VAPID keys are unset).
+name: Discovery and ingest
+
+on:
+  schedule:
+    - cron: "30 1 * * *" # discovery, daily (as DEFAULT_DISCOVER_CRON)
+    - cron: "15 */3 * * *" # ingest, every 3 hours (the active tier's interval, modules/jobs/cadence.ts)
+    - cron: "30 23 * * *" # board day, the UTC day's numbers per board (as DEFAULT_BOARD_DAY_CRON)
+  workflow_dispatch:
+    inputs:
+      task:
+        description: What to run
+        type: choice
+        options: [ingest, discovery, board-day]
+        default: ingest
+      boards:
+        description: "Discovery only: boards, comma-separated (empty: every board)"
+        type: string
+        default: ""
+      limit:
+        description: "Ingest only: at most this many due companies"
+        type: string
+        default: "3000"
+
+permissions:
+  contents: read
+
+env:
+  DATABASE_URL: ${{ secrets.DATABASE_URL }}
+  DIRECT_URL: ${{ secrets.DIRECT_URL }}
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+  VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+  VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+  APP_URL: ${{ secrets.APP_URL }}
+
+jobs:
+  discovery:
+    name: Discovery (${{ matrix.board }})
+    if: github.event.schedule == '30 1 * * *' || (github.event_name == 'workflow_dispatch' && inputs.task == 'discovery')
+    runs-on: ubuntu-latest
+    # Each board its own job, as the worker's discover queue does (handlers/discover.ts): Greenhouse alone took 52 minutes
+    # on 2 Nov, so one job for every board would run past its time and leave the later boards out.
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        board: [greenhouse, lever, ashby, workday, zohorecruit, keka, smartrecruiters, workable]
+    timeout-minutes: 150
+    concurrency:
+      group: discovery-${{ matrix.board }}
+      cancel-in-progress: false
+    steps:
+      - name: Skip boards not asked for
+        id: wanted
+        shell: bash
+        # Inputs reach the shell as variables, never pasted into the script (no injection through an input).
+        env:
+          BOARDS: ${{ inputs.boards }}
+          BOARD: ${{ matrix.board }}
+        run: |
+          boards="${BOARDS// /}"
+          if [ -z "$boards" ] || [[ ",$boards," == *",$BOARD,"* ]]; then echo "run=true" >> "$GITHUB_OUTPUT"; else echo "run=false" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/checkout@v4
+        if: steps.wanted.outputs.run == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.wanted.outputs.run == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        if: steps.wanted.outputs.run == 'true'
+      - run: npx tsx scripts/discover-now.ts --boards ${{ matrix.board }}
+        if: steps.wanted.outputs.run == 'true'
+
+  ingest:
+    name: Ingest (companies due)
+    if: github.event.schedule == '15 */3 * * *' || (github.event_name == 'workflow_dispatch' && inputs.task == 'ingest')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # A run still going when the next is due: the next waits, so two never read the same companies at once.
+    concurrency:
+      group: ingest
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Only companies whose next read is due (modules/jobs/cadence.ts), most overdue first; then embeds new jobs, warms
+      # the feeds, sends new-match pushes, deletes old closed jobs and looks for missing logos.
+      - shell: bash
+        env:
+          LIMIT: ${{ inputs.limit }}
+        run: |
+          limit="${LIMIT:-3000}"
+          [[ "$limit" =~ ^[0-9]+$ ]] || { echo "limit must be a number"; exit 1; }
+          npx tsx scripts/ingest-tick-now.ts --limit "$limit"
+
+  board-day:
+    name: Board day
+    if: github.event.schedule == '30 23 * * *' || (github.event_name == 'workflow_dispatch' && inputs.task == 'board-day')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsx scripts/board-day.ts
