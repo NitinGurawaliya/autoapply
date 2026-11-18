@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { joinChoices } from "@/lib/choices";
 import { callJson } from "@/lib/llm";
+import { detectConcept } from "@/modules/answers";
 import { certifiesFact } from "./acknowledgement";
 import type { FormField } from "./adapter";
 import type { MemoryAnswer } from "./recall";
@@ -119,6 +120,10 @@ const URL_IN = /\bhttps?:\/\/[^\s"'<>]+|\b(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*\
 export function guessable(field: Pick<FormField, "label" | "type" | "options">) {
   if (field.type === "file" || NEVER.test(field.label) || /\b(salutation|honorific)\b/i.test(field.label) || certifiesFact(field)) return false;
   if (!field.options?.length && RECORDING.test(field.label) && LINK_QUESTION.test(field.label)) return false;
+  // Pay is never guessed: it comes from the user's own answers (CLAUDE.md, sensitive keys). A pay question nothing answers is
+  // one in another currency or wording; asked, never made up (18 Nov, iion on Keka: "Current Gross base Salary - Annual
+  // (USD)" was guessed "6" from a 6 lakh CTC, filed under the question's own key, so the currency guard let it through).
+  if (detectConcept(field.label) === "compensation") return false;
   return (field.options ?? []).filter((option) => SALUTATION.test(option.trim())).length < 2 && !selfIdList(field.options);
 }
 

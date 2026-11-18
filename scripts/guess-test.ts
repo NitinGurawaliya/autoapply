@@ -24,6 +24,10 @@ for (const label of ["How many years of experience do you have with Kafka?", "Di
 }
 check("Indian disability wordings are the disability question (Decline to answer, never guessed)", ["Specially abled", "Differently-abled?", "Are you a PwD candidate?", "Physically challenged"].every((label) => matchKeyBySynonym(label) === "disability"));
 check("a file is never guessed", !guessable(field("Cover letter upload", "file")));
+// 18 Nov, iion on Keka: pay is never guessed, in any currency or wording; it is asked.
+for (const label of ["Current Gross base Salary - Annual (USD)", "Expected Gross base Salary - Annual (USD)", "Salary expectation in EUR per year", "What is your current CTC (in LPA)?"]) {
+  check(`pay is never guessed: "${label}"`, !guessable(field(label, "number")));
+}
 // 18 Nov, secfix: a link to a video the candidate records is asked, never guessed; a choice about video is still guessed.
 const video = "Video (1–1.5 minutes, link via Loom, YouTube or similar): What is one technical skill you learned in the past 6 months?";
 check("a video link to record is never guessed", !guessable(field(video, "text")) && !guessable(field("Loom recording URL", "text")));
