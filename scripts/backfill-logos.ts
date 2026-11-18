@@ -15,9 +15,11 @@ async function main() {
   const sources = arg("--boards")?.split(",");
   // --again: also the companies looked at in the last 30 days (18 Nov: misses stamped before a board had a reader).
   const again = process.argv.includes("--again");
+  // --pause <ms> between companies (default 300): slower beside an import reading the same board.
+  const pauseMs = Number(arg("--pause")) || undefined;
   console.log(`${write ? "WRITE" : "DRY RUN (nothing is written)"}: up to ${limit} companies${sources ? ` on ${sources.join(", ")}` : ""}${again ? ", recent misses too" : ""}`);
   const t = Date.now();
-  const { examples, ...counts } = await refreshLogos({ limit, write, sources, again });
+  const { examples, ...counts } = await refreshLogos({ limit, write, sources, again, pauseMs });
   console.log(`LOGOS ${JSON.stringify(counts)} ${Math.round((Date.now() - t) / 1000)} s`);
   for (const line of examples) console.log(`  ${line}`);
   await db.$disconnect();

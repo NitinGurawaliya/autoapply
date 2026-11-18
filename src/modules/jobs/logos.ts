@@ -3,8 +3,8 @@ import { db } from "@/lib/db";
 // Company logos for the cards (24 Oct, owner: show who is hiring, not initials). Kept in Company.logoUrl as an https
 // address; the image itself is never stored or proxied. A company without one is looked at again after RETRY_DAYS.
 // 18 Nov (owner: every company on every board has a logo): first the company's own logo from its public board page
-// (Greenhouse, Lever, Ashby, Keka, Workable, Zoho Recruit); else its website's icon, the website named by the board
-// (Ashby) or found by its name (Clearbit's free name-to-domain suggest, accepted only when the domain is the company's
+// (Greenhouse, Lever, Ashby, Keka, Workable, Zoho Recruit), a job's page (SmartRecruiters) or the career site's fixed
+// logo address (Workday); else its website's icon, the website named by the board (Ashby, Workable) or found by its name (Clearbit's free name-to-domain suggest, accepted only when the domain is the company's
 // own name or board slug), and the icon taken from Google's icon service, which answers 404 when a site has none.
 
 const BOARD_PAGE: Record<string, (slug: string) => string> = {
@@ -13,12 +13,21 @@ const BOARD_PAGE: Record<string, (slug: string) => string> = {
   ashby: (slug) => `https://jobs.ashbyhq.com/${encodeURIComponent(slug)}`,
   // Keka's careers page is an empty shell; its portal settings (JSON) name the logo (1 Nov).
   keka: (slug) => `https://${encodeURIComponent(slug)}.keka.com/careers/api/organization/default/careerportalinfo`,
-  // Workable and Zoho Recruit name the company logo as the page's og:image (18 Nov).
-  workable: (slug) => `https://apply.workable.com/${encodeURIComponent(slug)}/`,
+  // Workable's account API names the logo and the company website (18 Nov; its page's og:image is Workable's default
+  // for most accounts). The trailing slash matters: without it the API answers Not Found.
+  workable: (slug) => `https://apply.workable.com/api/v1/accounts/${encodeURIComponent(slug)}/`,
+  // Zoho Recruit names the company logo as the page's og:image (18 Nov).
   zohorecruit: (slug) => `https://${slug.replace(/[^a-z0-9.-]/gi, "")}/jobs/Careers`,
 };
-// Every board we read jobs from: those without a board page (SmartRecruiters, Workday) get the website icon.
+// SmartRecruiters and Workday have no board page here: SmartRecruiters' logo is on each job's page, Workday's at a fixed
+// address of the career site (fetchLogoUrl).
 export const LOGO_SOURCES = [...Object.keys(BOARD_PAGE), "smartrecruiters", "workday"];
+
+/** Workday's career-site logo ("cw.wd1/External" → https://cw.wd1.myworkdayjobs.com/External/assets/logo), its og:image. */
+export function workdayLogoUrl(slug: string): string | null {
+  const parts = slug.match(/^([a-z0-9-]+\.wd\d+)\/([A-Za-z0-9_-]+)$/i);
+  return parts ? `https://${parts[1].toLowerCase()}.myworkdayjobs.com/${parts[2]}/assets/logo` : null;
+}
 const RETRY_DAYS = 30;
 const PAUSE_MS = 300;
 
@@ -41,11 +50,16 @@ export function logoFromHtml(source: string, html: string): string | null {
     const host = html.match(/"careersPortalDomain"\s*:\s*"([a-z0-9.-]+)"/i)?.[1];
     return logoPath && tenant && host ? httpsOnly(`https://${host}/ats/documents/${tenant}/${logoPath.replace(/^\/+/, "")}`) : null;
   }
-  // Workable: the account's own logo ("workablehr.s3.amazonaws.com/uploads/account/..."), not Workable's default image.
+  // Workable: the account's own logo ("workablehr.s3.amazonaws.com/uploads/account/..."), named by the account API
+  // (`"logo"`) or a page's og:image, never Workable's default image. The API names an address whether or not a logo was
+  // uploaded, so fetchLogoUrl checks it answers an image.
   if (source === "workable") {
-    const image = httpsOnly(ogImage(html));
+    const image = httpsOnly(html.match(/"logo"\s*:\s*"([^"]+)"/)?.[1]) ?? httpsOnly(ogImage(html));
     return image && /\/uploads\/account\//i.test(image) ? image : null;
   }
+  // SmartRecruiters: the company logo on a job's page (`<img alt="Bosch Group logo">` from its logo folder), not the
+  // social image.
+  if (source === "smartrecruiters") return httpsOnly(html.match(/<img\b[^>]*\bsrc\s*=\s*"(https:\/\/c\.smartrecruiters\.com\/sr-company-logo-[^"]+)"/i)?.[1]);
   // Zoho Recruit: the career site's company logo ("/recruit/viewCareerImage.do?...company_logo...").
   if (source === "zohorecruit") {
     const image = httpsOnly(ogImage(html)) ?? httpsOnly(html.match(/https:\/\/[^"'\s<>]*viewCareerImage\.do\?[^"'\s<>]*type=meta[^"'\s<>]*/i)?.[0]);
@@ -68,9 +82,9 @@ export function logoFromHtml(source: string, html: string): string | null {
   return null;
 }
 
-/** The company's own website named in its board page (Ashby's `publicWebsite`), as a bare host, or null. */
+/** The company's own website named by its board (Ashby's `publicWebsite`, Workable's account `url`), as a bare host, or null. */
 export function websiteFromHtml(source: string, html: string): string | null {
-  const site = source === "ashby" ? html.match(/"publicWebsite"\s*:\s*"([^"]+)"/)?.[1] : undefined;
+  const site = source === "ashby" ? html.match(/"publicWebsite"\s*:\s*"([^"]+)"/)?.[1] : source === "workable" ? html.match(/"url"\s*:\s*"([^"]+)"/)?.[1] : undefined;
   return site ? hostOf(decode(site)) : null;
 }
 
@@ -203,8 +217,23 @@ async function mentionedInJobs(source: string, slug: string, host: string) {
 /** A website's icon (its apple-touch or favicon, 128 px) from Google's icon service; null when the site has none. */
 async function siteIcon(domain: string): Promise<string | null> {
   const url = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`;
+  return (await isImage(url)) ? url : null;
+}
+
+/** Whether the address answers an image (Google's icon service, Workday's and Workable's logo addresses). */
+async function isImage(url: string) {
+  return (await imageCheck(url)) === "image";
+}
+
+/**
+ * "image", "none" (a 404 or a page), or "refused": Workday answers this server 429 for every address while browsers and
+ * curl get the image (18 Nov), so a refused Workday logo is kept and the card's initials show if it does not load.
+ */
+async function imageCheck(url: string): Promise<"image" | "none" | "refused"> {
   const response = await fetch(url, { signal: AbortSignal.timeout(10000) }).catch(() => null);
-  return response?.ok && /^image\//.test(response.headers.get("content-type") ?? "") ? url : null;
+  await response?.body?.cancel().catch(() => undefined);
+  if (response && (response.status === 429 || response.status === 403)) return "refused";
+  return response?.ok && /^image\//.test(response.headers.get("content-type") ?? "") ? "image" : "none";
 }
 
 /**
@@ -214,11 +243,20 @@ async function siteIcon(domain: string): Promise<string | null> {
 export async function fetchLogoUrl(source: string, slug: string, name?: string): Promise<string | null> {
   const page = BOARD_PAGE[source];
   const read = (url: string) =>
-    fetch(url, { signal: AbortSignal.timeout(15000), headers: { accept: "text/html", "user-agent": "Mozilla/5.0" } })
+    fetch(url, { signal: AbortSignal.timeout(15000), headers: { accept: "text/html,application/json;q=0.9,*/*;q=0.8", "user-agent": "Mozilla/5.0" } })
       .then((response) => (response.ok ? response.text() : ""))
       .catch(() => "");
   let html = page ? await read(page(slug)) : "";
-  let logo = html ? logoFromHtml(source, html) : null;
+  // SmartRecruiters: the logo is on a job's page; the company's newest posting (public postings API) gives one.
+  if (source === "smartrecruiters") {
+    const posting = (await read(`https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(slug)}/postings?limit=1`)).match(/"content"\s*:\s*\[\s*\{\s*"id"\s*:\s*"(\d+)"/)?.[1];
+    if (posting) html = await read(`https://jobs.smartrecruiters.com/${encodeURIComponent(slug)}/${posting}`);
+  }
+  let logo = source === "workday" ? workdayLogoUrl(slug) : html ? logoFromHtml(source, html) : null;
+  // Workday's address and Workable's named logo exist whether or not the company set one: kept when an image (Workday:
+  // or when it refuses this server), dropped on a 404.
+  if (logo && source === "workable" && !(await isImage(logo))) logo = null;
+  if (logo && source === "workday" && (await imageCheck(logo)) === "none") logo = null;
   // A Keka portal with a logo but no background image names its documents folder only in the careers page.
   if (!logo && source === "keka" && /"logoPath"\s*:\s*"[^"]+"/.test(html)) {
     html += await read(`https://${encodeURIComponent(slug)}.keka.com/careers/`);
@@ -236,7 +274,7 @@ export type LogoRefresh = { checked: number; found: number; missing: number; exa
  * look), companies with India jobs first (they are on the cards), then oldest look first. A dry run reads and counts;
  * `write` saves each result (found or not, so it is not read again soon).
  */
-export async function refreshLogos(options: { limit: number; write: boolean; sources?: string[]; again?: boolean; log?: (line: string) => void }): Promise<LogoRefresh> {
+export async function refreshLogos(options: { limit: number; write: boolean; sources?: string[]; again?: boolean; pauseMs?: number; log?: (line: string) => void }): Promise<LogoRefresh> {
   const sources = (options.sources ?? LOGO_SOURCES).filter((source) => LOGO_SOURCES.includes(source));
   const retryDays = options.again ? 0 : RETRY_DAYS;
   const due = await db.$queryRaw<Array<{ id: string; source: string; slug: string; name: string }>>`
@@ -257,7 +295,7 @@ export async function refreshLogos(options: { limit: number; write: boolean; sou
       options.log?.(`logos: none for ${company.name} (${company.source}/${company.slug})`);
     }
     if (options.write) await db.$executeRaw`UPDATE "Company" SET "logoUrl" = ${logoUrl}, "logoCheckedAt" = now() WHERE id = ${company.id}`;
-    await new Promise((resolve) => setTimeout(resolve, PAUSE_MS));
+    await new Promise((resolve) => setTimeout(resolve, options.pauseMs ?? PAUSE_MS));
   }
   return result;
 }

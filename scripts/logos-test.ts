@@ -1,5 +1,5 @@
 // The logo found in each board's page (modules/jobs/logos.ts). Sample markup as the boards wrote it on 24 Oct; no network.
-import { logoFromHtml } from "../src/modules/jobs/logos";
+import { logoFromHtml, websiteFromHtml, workdayLogoUrl } from "../src/modules/jobs/logos";
 
 const greenhouse = `<meta property="og:image" content="https://s7-recruiting.cdn.greenhouse.io/x/og.jpg"/><img src="https://s7-recruiting.cdn.greenhouse.io/external_greenhouse_job_boards/logos/400/307/300/original/Logo-01_(1).jpg?1700670705" alt="Arcesium LLC Logo" class="logo"/>`;
 const lever = `<meta property="og:image" content="https://lever-client-logos.s3.us-west-2.amazonaws.com/banner.png" /><img alt="Saviynt logo" src="https://lever-client-logos.s3.us-west-2.amazonaws.com/ce99b770-1764798903876.png">`;
@@ -23,7 +23,13 @@ const checks: Array<[string, boolean]> = [
   ["workable: the account logo og:image", logoFromHtml("workable", `<meta property="og:image" content="https://workablehr.s3.amazonaws.com/uploads/account/open_graph_logo/491209/social?1779787723000">`) === "https://workablehr.s3.amazonaws.com/uploads/account/open_graph_logo/491209/social?1779787723000"],
   ["workable: Workable's own default image is not a logo", logoFromHtml("workable", `<meta property="og:image" content="https://www.workable.com/static/default-share.png">`) === null],
   ["zoho: the career site's company logo", logoFromHtml("zohorecruit", `<meta property="og:image" content="https://artingdigital.zohorecruit.in/recruit/viewCareerImage.do?type=meta&amp;page_id=1&amp;file_name=company_logo.jpg">`) === "https://artingdigital.zohorecruit.in/recruit/viewCareerImage.do?type=meta&page_id=1&file_name=company_logo.jpg"],
-  ["smartrecruiters: no board page logo (the website icon is used)", logoFromHtml("smartrecruiters", `<meta property="og:image" content="https://x/y.png">`) === null],
+  ["smartrecruiters: the social og:image is not the logo", logoFromHtml("smartrecruiters", `<meta property="og:image" content="https://c.smartrecruiters.com/sr-company-images-prod-aws-dc5/5865/default_social_logo/300x300">`) === null],
+  // 18 Nov: SmartRecruiters' logo from a job page, Workday's fixed address, Workable's account API.
+  ["smartrecruiters: the company logo on a job page", logoFromHtml("smartrecruiters", `<img src="https://c.smartrecruiters.com/sr-company-images-prod-aws-dc5/5865/default_social_logo/300x300?r=s3&amp;_1" /><img src="https://c.smartrecruiters.com/sr-company-logo-prod-aws-dc5/5865/huge?r=s3-eu-central-1&amp;_17" alt="Bosch Group logo">`) === "https://c.smartrecruiters.com/sr-company-logo-prod-aws-dc5/5865/huge?r=s3-eu-central-1&_17"],
+  ["workday: the career site's logo address", workdayLogoUrl("cw.wd1/External") === "https://cw.wd1.myworkdayjobs.com/External/assets/logo"],
+  ["workday: a slug that is not tenant.wdN/site gives none", workdayLogoUrl("cigna") === null],
+  ["workable: the account API's logo", logoFromHtml("workable", `{"id":691818,"logo":"https://workablehr.s3.amazonaws.com/uploads/account/logo/691818/logo","subdomain":"weekday-1","url":"https://www.weekday.works"}`) === "https://workablehr.s3.amazonaws.com/uploads/account/logo/691818/logo"],
+  ["workable: the account API's website", websiteFromHtml("workable", `{"id":1,"logo":null,"url":"https://www.angloeastern.com/"}`) === "angloeastern.com"],
 ];
 
 let failed = 0;
