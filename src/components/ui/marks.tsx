@@ -112,6 +112,27 @@ export function MatchBadge({ score, tier, size = "lg", className }: { score: num
   );
 }
 
+const FIT_WORD = { strong: "Strong fit", good: "Good fit", stretch: "Stretch" } as const;
+export type FitTier = keyof typeof FIT_WORD;
+export const tierFor = (score: number, tier?: FitTier | null): FitTier => tier ?? (score >= 75 ? "strong" : score >= 60 ? "good" : "stretch");
+
+/** The tier under the score (design/job-card.html): Strong fit lime, Good fit grey, Stretch a dashed outline. */
+export function TierPill({ tier, className }: { tier: FitTier; className?: string }) {
+  return (
+    <span
+      className={cn(
+        "box-border inline-flex h-[22px] items-center rounded-full px-[9px] text-xs font-bold whitespace-nowrap",
+        tier === "strong" && "border-[1.5px] border-ink bg-primary text-ink",
+        tier === "good" && "bg-muted text-foreground",
+        tier === "stretch" && "border-[1.5px] border-dashed border-line-strong text-muted-foreground",
+        className,
+      )}
+    >
+      {FIT_WORD[tier]}
+    </span>
+  );
+}
+
 /** Classes for the APPLY / SKIP stamps (the deck animates their opacity). */
 export function stampClass(kind: "apply" | "skip") {
   return cn(

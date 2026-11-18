@@ -11,6 +11,7 @@ export { ADJACENT as ADJACENT_TRACKS, classifyTitle, seniorityOf, TRACK_LABELS, 
 export type { Seniority, Track } from "./functions";
 export { clearCompanyResultsCache, companyResultsById, judge, loadCompanyResults } from "./results";
 export type { CompanyResult, Verdict } from "./results";
-export { embedPendingJobs, jobSimilarity, judgeJobs, profileVector } from "./semantic";
+export { embedPendingJobs, jobSimilarity, judgeJobs, labelPendingSkills, profileVector } from "./semantic";
+export { candidateSkills, compareSkills, jobSkills, TECH_VOCAB } from "./skills";
 export type { Judgement } from "./semantic";
 export { warmFeeds } from "./warm";

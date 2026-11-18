@@ -229,7 +229,10 @@ const JOB = {
   posted: "Posted 3h ago",
   why: "Your Go, Postgres and Kafka work lines up, and your 3 years fits their 2–4.",
   where: "Bengaluru · Hybrid",
-  asks: "Asks 2+ yrs",
+  experience: { label: "2+ yrs", over: false },
+  salary: "₹18L – ₹28L",
+  stage: "Startup",
+  skills: { have: ["Go", "PostgreSQL", "Kafka"], missing: ["Kubernetes"], split: true, total: 5 },
   score: 86,
   board: "Greenhouse",
 };

@@ -224,6 +224,16 @@ model Job {
   // in Postgres instead of downloading descriptions (modules/jobs/match.ts).
   // Left out of every Prisma read (omit in lib/db.ts) and never written by the app: the trigger owns it.
   terms              String[]
+  // Phase M (docs/job-match/TDD.md §4.3): the vocabulary tech terms the posting names (modules/jobs/skills.ts, at
+  // ingest), the subset the model labelled required (semantic.ts jobSkillLevels) and the contentHash it labelled.
+  skills             String[] @default([])
+  skillsRequired     String[] @default([])
+  skillsHash         String?
+  // Pay from the board's own structured fields only, never parsed from the description (modules/jobs/salary.ts).
+  salaryMin          Int?
+  salaryMax          Int?
+  salaryCurrency     String?
+  salaryPeriod       String? // year | month | hour
   raw           Json
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)

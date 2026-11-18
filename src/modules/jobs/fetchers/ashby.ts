@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { asDate, plainText, type FetchedJob } from "../normalize";
+import { ashbySalary } from "../salary";
 
 const jobSchema = z.object({
   id: z.string(),
@@ -11,10 +12,11 @@ const jobSchema = z.object({
   applyUrl: z.string().optional(),
   descriptionPlain: z.string().optional(),
   descriptionHtml: z.string().optional(),
+  compensation: z.unknown().optional(),
 });
 
 export async function fetchAshby(slug: string): Promise<FetchedJob[]> {
-  const response = await fetch(`https://api.ashbyhq.com/posting-api/job-board/${slug}`, { signal: AbortSignal.timeout(30000) });
+  const response = await fetch(`https://api.ashbyhq.com/posting-api/job-board/${slug}?includeCompensation=true`, { signal: AbortSignal.timeout(30000) });
   if (!response.ok) throw new Error(`ashby ${slug} ${response.status}`);
   const body = (await response.json()) as { jobs?: unknown[] };
   const jobs: FetchedJob[] = [];
@@ -32,6 +34,7 @@ export async function fetchAshby(slug: string): Promise<FetchedJob[]> {
       applyUrl,
       postedAt,
       isRemote: parsed.data.isRemote,
+      salary: ashbySalary(parsed.data.compensation),
       raw: {
         id: parsed.data.id,
         title: parsed.data.title,

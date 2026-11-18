@@ -2,7 +2,6 @@
 
 import { useImperativeHandle, useLayoutEffect, useRef, type DragEvent, type Ref } from "react";
 import { animate, motion, useMotionValue, useTransform } from "framer-motion";
-import { IconButton } from "@/components/ui/icon-button";
 import { Icon } from "@/components/ui/icons";
 import { stampClass } from "@/components/ui/marks";
 import { CARD_HEIGHT, JobCard, type JobCardData } from "@/components/patterns/job-card";
@@ -175,17 +174,26 @@ export function SwipeStage({
       </div>
       {/* Always above the tab bar, like the job page's action bar: on a short phone (375x667) the stack is taller
           than the space left, and the buttons stay on screen over its bottom edge. */}
-      <div className="sticky bottom-[calc(82px+max(0px,env(safe-area-inset-bottom)-24px))] z-10 mt-3 flex items-center justify-center gap-8 bg-background pt-3 pb-2">
-        <motion.div style={{ scale: skipScale }}>
-          <IconButton variant="skip" size="skip" aria-label="Skip" onClick={() => fling("left")}>
-            <Icon name="close" size={26} strokeWidth={2.25} />
-          </IconButton>
-        </motion.div>
-        <motion.div style={{ scale: applyScale }}>
-          <IconButton variant="apply" size="apply" aria-label="Apply" onClick={() => fling("right")}>
-            <Icon name="check" size={30} strokeWidth={2.5} />
-          </IconButton>
-        </motion.div>
+      {/* Labelled buttons (design/job-card.html, Phase M6): Skip quiet, Apply lime; swipes and ← → still work. */}
+      <div className="sticky bottom-[calc(82px+max(0px,env(safe-area-inset-bottom)-24px))] z-10 mt-3 flex items-center gap-2.5 bg-background pt-3 pb-2">
+        <motion.button
+          type="button"
+          style={{ scale: skipScale }}
+          onClick={() => fling("left")}
+          className="flex h-[50px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-control border-[1.5px] border-line-strong bg-surface text-[15px] font-semibold text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          <Icon name="close" size={18} strokeWidth={2.4} />
+          Skip
+        </motion.button>
+        <motion.button
+          type="button"
+          style={{ scale: applyScale }}
+          onClick={() => fling("right")}
+          className="flex h-[50px] flex-[1.4] cursor-pointer items-center justify-center gap-1.5 rounded-control border-2 border-ink bg-primary text-[15px] font-semibold text-ink shadow-hard outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          <Icon name="check" size={18} strokeWidth={2.4} />
+          Apply
+        </motion.button>
       </div>
     </>
   );

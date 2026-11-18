@@ -72,6 +72,11 @@
   --color-frame-line: var(--frame-line);
   --color-frame-dot: var(--frame-dot);
   --color-frame-text: var(--frame-text);
+  /* Phase M (docs/job-match/TDD.md 11 item 5): colour carries meaning only on the job card and job page. */
+  --color-ok-bg: var(--ok-bg);
+  --color-ok: var(--ok);
+  --color-gap-bg: var(--gap-bg);
+  --color-gap: var(--gap);
 
   --shadow-card: var(--shadow-card);
   --shadow-pop: var(--shadow-pop);
@@ -149,6 +154,11 @@
   --frame-line: #dcdce0;
   --frame-dot: #c4c5cb;
   --frame-text: #5f6269;
+  /* Job card and job page (Phase M): lime = you have it / good, rose = a gap. */
+  --ok-bg: #eefad0;
+  --ok: #16171a;
+  --gap-bg: #fdeaea;
+  --gap: #a83a3a;
   --ring: #16171a;
   --chart-1: #16171a;
   --chart-2: #6b6e75;
@@ -219,6 +229,10 @@
   --frame-line: #dcdce0;
   --frame-dot: #c4c5cb;
   --frame-text: #5f6269;
+  --ok-bg: #283212;
+  --ok: #d9f56e;
+  --gap-bg: #3a1f21;
+  --gap: #f0a6a6;
   --ring: #c6f432;
   --chart-1: #f2f2f3;
   --chart-2: #a1a4ab;

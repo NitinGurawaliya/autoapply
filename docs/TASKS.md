@@ -194,3 +194,15 @@ Design: [docs/resume-tailoring/TDD.md](resume-tailoring/TDD.md) (v1, 5 Nov; owne
 - [ ] [L4 — Tailor on every run: doc queue, cache, wait cap, event](resume-tailoring/TASKS.md#l4)
 - [ ] [L5 — "Resume sent" on the application page, switch on Account](resume-tailoring/TASKS.md#l5)
 - [ ] [L6 — Shadow, measure, switch on](resume-tailoring/TASKS.md#l6)
+
+## Phase M — A job card and job page that explain the match (owner, 18 Nov)
+
+Design: [docs/job-match/TDD.md](job-match/TDD.md) (v1, 18 Nov; owner decisions closed in its section 11). Tasks: [docs/job-match/TASKS.md](job-match/TASKS.md). Order M1 → M7.
+
+- [x] [M1 — Card and job page mockups](job-match/TASKS.md#m1)
+- [x] [M2 — Job skills from a fixed vocabulary](job-match/TASKS.md#m2)
+- [x] [M3 — Required or nice-to-have, labelled by the model](job-match/TASKS.md#m3)
+- [x] [M4 — Score breakdown and the skills comparison on FeedJob](job-match/TASKS.md#m4)
+- [x] [M5 — Pay from the board](job-match/TASKS.md#m5)
+- [x] [M6 — The card](job-match/TASKS.md#m6)
+- [x] [M7 — The job page](job-match/TASKS.md#m7)

@@ -5,7 +5,9 @@ import { cachedFeed, rememberFeed } from "@/lib/feed-cache";
 import { companyKey, feedHistory, loadRules, roleKey } from "@/modules/governance";
 import { classifyTitle, SENIORITIES, TRACK_LABELS, TRACKS, trackFit, type Track, tracksOf } from "./functions";
 import { companyResultsById, judge } from "./results";
+import { formatSalary } from "./salary";
 import { judgeJobs, type Judgement, profileVector } from "./semantic";
+import { candidateSkills, compareSkills } from "./skills";
 import { requiredYears } from "./tagging";
 
 export { daysAgoLabel };
@@ -66,7 +68,24 @@ export type FeedJob = {
   isNew: boolean;
   /** What past applications to this company taught us, when it is worth saying. */
   hint: string | null;
+  /** How the score was reached (Phase M4): its parts and any cap or floor; parts plus adjustments equal `score`. */
+  breakdown: Breakdown;
+  /** The job's tech skills against the candidate's (skills.ts compareSkills). `split`: missing lists required ones only. */
+  skills: { have: string[]; missing: string[]; split: boolean; total: number; mentioned: string[] };
+  /** The job's stated level (Job.seniority). */
+  seniority: string | null;
+  /** The candidate's own years (Profile.yearsExperience), for "2+ yrs · you have 1". */
+  yourYears: number | null;
+  /** Pay as the board published it, formatted ("₹15L – ₹30L"); null when the board gives none. */
+  salary: string | null;
 };
+
+/** One part of the match score, out of its maximum, with what it measured (Phase M4). */
+export type ScorePart = { key: "work" | "skills" | "experience" | "location"; label: string; points: number; max: number; note: string };
+/** A cap or floor applied after the parts were added: `effect` is the points it moved the score by. */
+export type ScoreAdjustment = { key: "years_cap" | "unstated_cap" | "verdict_floor" | "ceiling"; label: string; effect: number };
+export type Breakdown = { parts: ScorePart[]; adjustments: ScoreAdjustment[] };
+const NO_BREAKDOWN: Breakdown = { parts: [], adjustments: [] };
 
 const COUNTRY_ALIASES: Record<string, (typeof COUNTRIES)[number]> = {
   in: "IN",
@@ -267,9 +286,46 @@ export function scoreFeatures(
   // The hard gate before any score: years and level (bandMiss). The feed reads only jobs that pass it (feedRows); the
   // swipe check (lifecycle.ts) gets the same 0 for one that doesn't.
   const miss = bandMiss({ requiredYears: job.requiredYears, seniority: job.seniority ?? null }, candidate.yearsExperience);
-  if (miss) return { score: 0, reason: miss, requiredYears: job.requiredYears, skillHits: job.skillHits };
+  if (miss) return { score: 0, reason: miss, requiredYears: job.requiredYears, skillHits: job.skillHits, breakdown: NO_BREAKDOWN };
   const scored = scoreInBand(job, candidate);
-  return job.requiredYears == null && !job.seniority ? { ...scored, score: Math.min(UNSTATED_CAP, scored.score) } : scored;
+  if (job.requiredYears != null || job.seniority || scored.score <= UNSTATED_CAP) return scored;
+  const cap: ScoreAdjustment = { key: "unstated_cap", label: `States no years or level: capped at ${UNSTATED_CAP}`, effect: UNSTATED_CAP - scored.score };
+  return { ...scored, score: UNSTATED_CAP, breakdown: { ...scored.breakdown, adjustments: [...scored.breakdown.adjustments, cap] } };
+}
+
+/** "A fresher role; you have 1 year", "Asks 3+ years; you have 1", "The posting states no years". */
+function experienceNote(asks: number | null, have: number) {
+  const yours = `you have ${have === 1 ? "1 year" : `${have} years`}`;
+  if (asks == null) return "The posting states no years";
+  if (asks === 0) return `A fresher role; ${yours}`;
+  return `Asks ${asks}+ ${asks === 1 ? "year" : "years"}; ${yours}`;
+}
+
+function locationNote(job: { country: string; remoteType: string }, prefs: string[], points: number) {
+  if (job.country === "REMOTE" || job.remoteType === "remote") return "Remote";
+  if (prefs.length === 0) return "You set no place preference";
+  return points > 0 ? "In a place you asked for" : "Not in a place you picked";
+}
+
+/**
+ * The parts, plus the caps that applied after adding them: over 100 (the no-vector path can add to 110), the years
+ * ceiling, then the verdict floor. Adjustments are listed only when they moved the score, so parts plus adjustments
+ * always equal the score returned.
+ */
+function finish(parts: ScorePart[], ceiling: number, gap: number, floor = 0, floorLabel = ""): { score: number; breakdown: Breakdown } {
+  const adjustments: ScoreAdjustment[] = [];
+  const sum = parts.reduce((total, part) => total + part.points, 0);
+  let score = clamp(sum);
+  if (score < sum) adjustments.push({ key: "ceiling", label: "Capped at 100", effect: score - sum });
+  if (ceiling < score) {
+    adjustments.push({ key: "years_cap", label: `Asks ${gap} more ${gap === 1 ? "year" : "years"} than you have: capped at ${ceiling}`, effect: ceiling - score });
+    score = ceiling;
+  }
+  if (floor > score) {
+    adjustments.push({ key: "verdict_floor", label: floorLabel, effect: floor - score });
+    score = floor;
+  }
+  return { score, breakdown: { parts, adjustments } };
 }
 
 function scoreInBand(
@@ -283,7 +339,7 @@ function scoreInBand(
   // 18, plus skills named in the title; a job in no track of theirs (or not a tech job) is out.
   const fit = tracks.length > 0 ? trackFit(job.track ?? null, tracks) : null;
   if (fit === "none") {
-    return { score: 0, reason: job.track ? `Not your field (${TRACK_LABELS[job.track as Track] ?? job.track})` : "Not a tech role", requiredYears: job.requiredYears, skillHits: job.skillHits };
+    return { score: 0, reason: job.track ? `Not your field (${TRACK_LABELS[job.track as Track] ?? job.track})` : "Not a tech role", requiredYears: job.requiredYears, skillHits: job.skillHits, breakdown: NO_BREAKDOWN };
   }
   const skillHits = job.skillHits;
   const jobTitleTokens = new Set(titleTokens(job.title));
@@ -327,11 +383,25 @@ function scoreInBand(
   else if (asks != null) parts.push("Close to your experience level");
   if (locationScore === 10 && prefs.length > 0) parts.push("In a place you want");
 
+  const skillMax = fit ? 40 : 30;
+  const workNote =
+    fit === "same" && trackName ? `${trackName} work, like yours` : fit === "adjacent" && trackName ? `${trackName} work, close to your field` : titleHits.length > 0 ? "Similar to roles you've had" : "Not much like roles you've had";
+  const finished = finish(
+    [
+      { key: "work", label: "The work", points: titleScore, max: 40, note: skillsInTitle.length > 0 ? `${workNote}; the title names ${skillsInTitle.slice(0, 3).join(", ")}` : workNote },
+      { key: "skills", label: "Skills", points: skillScore, max: skillMax, note: skillHits.length > 0 ? `${skillHits.length} of your skills named in the posting` : "None of your listed skills named in the posting" },
+      { key: "experience", label: "Experience", points: experienceScore, max: 20, note: experienceNote(asks, have) },
+      { key: "location", label: "Location", points: locationScore, max: 10, note: locationNote(job, prefs, locationScore) },
+    ],
+    ceiling,
+    gap,
+  );
   return {
-    score: Math.min(ceiling, clamp(titleScore + skillScore + experienceScore + locationScore)),
+    score: finished.score,
     reason: parts.slice(0, fit ? 3 : 2).join(". ") || "A stretch for your profile",
     requiredYears: asks,
     skillHits,
+    breakdown: finished.breakdown,
   };
 }
 
@@ -346,12 +416,14 @@ function scoreByMeaning(
 ) {
   const trackName = job.track ? TRACK_LABELS[job.track as Track] ?? null : null;
   const verdict = job.judgement;
-  if (verdict?.fit === "no") return { score: 0, reason: sentence(verdict.why) || "Not your kind of role", requiredYears: job.requiredYears, skillHits: job.skillHits };
+  if (verdict?.fit === "no") return { score: 0, reason: sentence(verdict.why) || "Not your kind of role", requiredYears: job.requiredYears, skillHits: job.skillHits, breakdown: NO_BREAKDOWN };
   if (job.similarity < (verdict ? SIMILARITY_FLOOR : UNJUDGED_FLOOR)) {
-    return { score: 0, reason: "Not close to your experience", requiredYears: job.requiredYears, skillHits: job.skillHits };
+    return { score: 0, reason: "Not close to your experience", requiredYears: job.requiredYears, skillHits: job.skillHits, breakdown: NO_BREAKDOWN };
   }
   const closeness = Math.min(1, Math.max(0, (job.similarity - SIMILARITY_LOW) / (SIMILARITY_HIGH - SIMILARITY_LOW)));
-  const meaningScore = Math.round(30 * closeness) + (verdict ? FIT_POINTS[verdict.fit] : 12);
+  const closenessScore = Math.round(30 * closeness);
+  const verdictScore = verdict ? FIT_POINTS[verdict.fit] : 12;
+  const meaningScore = closenessScore + verdictScore;
   const skillTarget = Math.min(candidate.skills.length, SKILLS_FOR_FULL_SCORE);
   const skillScore = skillTarget === 0 ? 0 : Math.round(10 * Math.min(1, job.skillHits.length / skillTarget));
 
@@ -380,11 +452,33 @@ function scoreByMeaning(
   // fits): closeness by meaning only orders such jobs. A posting padded with the company's story scored 0.39 and showed
   // a good-verdict intern role to a 1-year developer as Stretch (CloudSEK, 19 Oct).
   const floor = verdict && gap <= 0 && locationScore === 10 ? VERDICT_FLOOR[verdict.fit] : 0;
+  const verdictWords = { strong: "your own field", good: "close to your field", stretch: "a stretch from your field" } as const;
+  const finished = finish(
+    [
+      {
+        key: "work",
+        label: "The work",
+        points: meaningScore,
+        max: 60,
+        note: verdict
+          ? `Your agent's verdict: ${verdictWords[verdict.fit as keyof typeof verdictWords]} (${verdictScore}), and how near the posting reads to your resume (${closenessScore} of 30)`
+          : `How near the posting reads to your resume (${closenessScore} of 30); your agent has not judged it yet (${verdictScore})`,
+      },
+      { key: "skills", label: "Skills", points: skillScore, max: 10, note: job.skillHits.length > 0 ? `${job.skillHits.length} of your skills named in the posting` : "None of your listed skills named in the posting" },
+      { key: "experience", label: "Experience", points: experienceScore, max: 20, note: experienceNote(asks, have) },
+      { key: "location", label: "Location", points: locationScore, max: 10, note: locationNote(job, prefs, locationScore) },
+    ],
+    ceiling,
+    gap,
+    floor,
+    verdict ? `Your agent rated it ${verdict.fit === "strong" ? "a strong" : "a good"} fit: raised to ${floor}` : "",
+  );
   return {
-    score: Math.max(floor, Math.min(ceiling, clamp(meaningScore + skillScore + experienceScore + locationScore))),
+    score: finished.score,
     reason: parts.slice(0, 3).join(". "),
     requiredYears: asks,
     skillHits: job.skillHits,
+    breakdown: finished.breakdown,
   };
 }
 
@@ -440,6 +534,13 @@ type FeedRow = {
   similarity: number | null;
   firstSeenAt: Date;
   hits: number[];
+  skills: string[];
+  skillsRequired: string[];
+  skillsHash: string | null;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  salaryCurrency: string | null;
+  salaryPeriod: string | null;
 };
 
 /** The SQL regex for mentions(): the skill as literal text between two non-word characters (or the text's ends). */
@@ -502,6 +603,7 @@ export async function feedRows(input: {
     candidates AS (
       SELECT j.id, j.title, j."contentHash", j.location, j.source, j.country, j."remoteType", j."experienceMin", j."applyUrl", j."postedAt",
              j."companyId", c.name AS company, c.stage, c."logoUrl", j.track, j.seniority, j."firstSeenAt", coalesce(h.hits, '{}') AS hits,
+             j.skills, j."skillsRequired", j."skillsHash", j."salaryMin", j."salaryMax", j."salaryCurrency", j."salaryPeriod",
              CASE WHEN ${input.vector}::text IS NULL OR j.embedding IS NULL THEN NULL
                   ELSE (1 - (j.embedding <=> ${input.vector}::halfvec))::float8 END AS similarity
       FROM "Job" j
@@ -548,6 +650,18 @@ function titleWordsFor(currentTitle: string | null) {
   return [...wanted, ...aliases];
 }
 
+/**
+ * The job's skills against what the candidate shows (Phase M4). The model's required labels count only while they
+ * belong to this version of the posting; `mentioned` is the rest the candidate does not show (nice to have, or every
+ * one when there are no labels, in which case they are all in `missing` and `mentioned` is empty).
+ */
+function jobSkillsFor(job: Pick<FeedRow, "skills" | "skillsRequired" | "skillsHash" | "contentHash">, shows: Set<string>) {
+  const labelled = job.skillsHash != null && job.skillsHash === (job.contentHash ?? "none");
+  const compared = compareSkills(job.skills, labelled ? job.skillsRequired : null, shows);
+  const mentioned = job.skills.filter((skill) => !compared.have.includes(skill) && !compared.missing.includes(skill));
+  return { ...compared, total: job.skills.length, mentioned };
+}
+
 /** "new": jobs the user has not swiped; "skipped": the ones they swiped left, to look at again once the feed runs out. */
 export type FeedView = "new" | "skipped";
 
@@ -581,6 +695,9 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView): 
   // plain software roles for developers (feedTracks), or exactly the tracks they pick in the Track filter. Closeness
   // by meaning and the model's verdict only rank what passes.
   const tracks = profile ? tracksOf(profile) : [];
+  // Every vocabulary skill the candidate shows, in their skills list or their resume (Phase M4): a job's skill is
+  // "missing" only when it is in neither.
+  const shows = profile ? candidateSkills(profile) : new Set<string>();
   const vector = profile ? await profileVector(profile) : null;
   const shown = filters.tracks.length > 0 ? filters.tracks : feedTracks(tracks);
   const years = profile?.yearsExperience ?? null;
@@ -653,6 +770,11 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView): 
         roleKey: roleKey(companyKey(job.company), job.title),
         verdict: judge(results.get(job.companyId)),
         mock: job.source === "mock",
+        breakdown: match.breakdown,
+        // The model's labels count only while they belong to this version of the posting.
+        skills: jobSkillsFor(job, shows),
+        seniority: job.seniority,
+        salary: formatSalary({ min: job.salaryMin, max: job.salaryMax, currency: job.salaryCurrency, period: job.salaryPeriod }),
       };
     })
     .filter((job) => job.mock || job.score >= minScore)
@@ -698,6 +820,11 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView): 
       track: job.track,
       isNew: job.isNew,
       hint: job.verdict.hint,
+      breakdown: job.breakdown,
+      skills: job.skills,
+      seniority: job.seniority,
+      yourYears: years,
+      salary: job.salary,
       // Ranking only: the number the user sees stays the honest match score.
       rank: job.score + job.verdict.nudge,
     }))
