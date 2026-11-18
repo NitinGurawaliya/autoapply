@@ -222,8 +222,11 @@ async function execute(applicationId: string, options: { person?: boolean }) {
   const upload: { cleanup: (() => Promise<void>) | null } = { cleanup: null };
   const jobInfo = { company: job.company.name, title: job.title, location: job.location, country: job.country, description: job.description };
   const resolveLog = async (message: string, data?: Record<string, unknown>) => {
-    // Nothing is added to a cancelled application's story after "Cancelled by you".
-    if (cancelSeen) return;
+    // The answer pass reports each of its steps here, so a cancel stops the pass at its next step and nothing is added
+    // to the story after "Cancelled by you" (second verify, 18 Nov: an essay was still drafted and four events written
+    // 6-9 s after a cancel, because only the heartbeat set the flag). resolveForm's own catch blocks log again, and that
+    // second call throws too, so the CancelledError always reaches the run.
+    await stopIfCancelled();
     await writeEvent(applicationId, "resolve", message, undefined, data as Prisma.InputJsonValue | undefined);
   };
   // A saved answer only proves a loop when the user gave it in reply to THIS application's own prompt and the form
