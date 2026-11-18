@@ -2,7 +2,7 @@
 // track, closeness by meaning and the model's verdict, plus the pool behind it. Flags cards that miss the user's
 // band, level, field or place by rules written here, apart from match.ts, so the check is not the code checking
 // itself. Reads only (the model's verdicts are cached per resume as the feed does). The feed cache is per process.
-// npx tsx scripts/feed-audit.ts [userId-suffix ...]   (default: every real profile)
+// npx tsx scripts/feed-audit.ts [--skipped] [userId-suffix ...]   (default: every real profile; --skipped: the cards they skipped)
 import { db } from "../src/lib/db";
 import { listFeed, parseFeedFilters, tracksOf } from "../src/modules/jobs";
 import { classifyTitle } from "../src/modules/jobs/functions";
@@ -31,14 +31,14 @@ export function offTarget(
   return why.length ? why.join(", ") : null;
 }
 
-async function audit(userId: string) {
+async function audit(userId: string, view: "new" | "skipped" = "new") {
   const profile = await db.profile.findUnique({ where: { userId }, include: { user: { select: { name: true } } } });
   if (!profile) return;
   const tracks = tracksOf(profile);
   const years = profile.yearsExperience ?? 0;
   console.log(`\n=== …${userId.slice(-6)} ${profile.user.name} | title ${profile.currentTitle ?? "-"} | years ${profile.yearsExperience ?? "unknown"} | tracks ${tracks.join(",") || "-"}`);
   const t0 = Date.now();
-  const feed = await listFeed(userId, parseFeedFilters({}));
+  const feed = await listFeed(userId, parseFeedFilters({}), view);
   const ms = Date.now() - t0;
   const ids = feed.map((job) => job.id);
   const vector = await profileVector(profile);
@@ -58,7 +58,7 @@ async function audit(userId: string) {
     if (flag) off += 1;
     tiers[job.tier ?? "-"] = (tiers[job.tier ?? "-"] ?? 0) + 1;
     console.log(
-      `${flag ? "OFF " : "    "}${String(job.score).padStart(3)} ${(job.tier ?? "-").padEnd(7)} ${job.title.slice(0, 58).padEnd(58)} | ${job.company.slice(0, 18).padEnd(18)} | yrs ${row?.experienceMin ?? "?"} lvl ${row?.seniority ?? "-"} trk ${row?.track ?? "-"} ${job.source} sim ${row?.sim?.toFixed(2) ?? "-"} llm ${verdicts.get(job.id) ?? "-"}${flag ? `  <- ${flag}` : ""}`,
+      `${flag ? "OFF " : "    "}${String(job.score).padStart(3)} ${(job.tier ?? "-").padEnd(7)} ${job.title.slice(0, 58).padEnd(58)} | ${job.company.slice(0, 18).padEnd(18)} | yrs ${row?.experienceMin ?? "?"} lvl ${row?.seniority ?? "-"} trk ${row?.track ?? "-"} ${job.breakdown.parts.map((part) => `${part.key[0]}${part.points}`).join(" ")} ${job.source} sim ${row?.sim?.toFixed(2) ?? "-"} llm ${verdicts.get(job.id) ?? "-"}${flag ? `  <- ${flag}` : ""}`,
     );
   }
   console.log(`cards ${feed.length} (${Object.entries(tiers).map(([tier, n]) => `${tier} ${n}`).join(", ")}), off-target ${off}, ${ms} ms`);
@@ -66,11 +66,12 @@ async function audit(userId: string) {
 }
 
 async function main() {
-  const wanted = process.argv.slice(2);
+  const skipped = process.argv.includes("--skipped");
+  const wanted = process.argv.slice(2).filter((arg) => arg !== "--skipped");
   const profiles = await db.profile.findMany({ where: { isTest: false }, select: { userId: true }, orderBy: { userId: "asc" } });
   const ids = profiles.map((p) => p.userId).filter((id) => wanted.length === 0 || wanted.some((suffix) => id.endsWith(suffix)));
   let off = 0;
-  for (const id of ids) off += (await audit(id))?.off ?? 0;
+  for (const id of ids) off += (await audit(id, skipped ? "skipped" : "new"))?.off ?? 0;
   console.log(`\n${off === 0 ? "PASS" : "FAIL"} feed-audit: ${off} off-target cards across ${ids.length} profiles`);
 }
 

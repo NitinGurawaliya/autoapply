@@ -74,16 +74,22 @@ export function matchesAndGaps(job: Pick<FeedJob, "breakdown" | "skills">) {
   const gaps: string[] = [];
   for (const part of job.breakdown.parts) {
     if (share(part) >= 0.7) {
-      if (part.key === "skills" && job.skills.have.length > 0) matches.push(`Names ${job.skills.have.length === 1 ? "1 of your skills" : `${job.skills.have.length} of your skills`}: ${some(job.skills.have)}.`);
+      if (part.key === "skills" && job.skills.have.length > 0) matches.push(`${sentence(part.note)}: ${some(job.skills.have)}.`);
       else if (part.key === "work") matches.push("The work is like your own.");
       else matches.push(sentence(part.note));
     } else if (share(part) < 0.5) {
+      // The missing skills get their own lines below; the part's note would say the same thing.
+      if (part.key === "skills" && job.skills.missing.length + job.skills.mentioned.length > 0) continue;
       gaps.push(part.key === "work" ? `The work is only partly like yours. ${sentence(part.note)}` : sentence(part.note));
     }
   }
   for (const adjustment of job.breakdown.adjustments) if (adjustment.effect < 0 && adjustment.key !== "ceiling") gaps.push(sentence(adjustment.label));
   if (job.skills.missing.length > 0) {
     gaps.push(`${job.skills.split ? "Requires" : "Names"} ${some(job.skills.missing)}, which ${job.skills.missing.length === 1 ? "isn't" : "aren't"} on your resume.`);
+  }
+  if (job.skills.mentioned.length > 0) {
+    const also = job.skills.missing.length > 0 ? "Also names" : "Names";
+    gaps.push(`${also} ${some(job.skills.mentioned)} as nice to have, which ${job.skills.mentioned.length === 1 ? "isn't" : "aren't"} on your resume.`);
   }
   return { matches, gaps };
 }
@@ -198,7 +204,7 @@ export function SkillsPanel({ skills }: { skills: FeedJob["skills"] }) {
         ) : null}
         {skills.mentioned.length > 0 ? (
           <>
-            <span className={eyebrow}>Mentioned, not on your resume · {skills.mentioned.length}</span>
+            <span className={eyebrow}>Nice to have, not on your resume · {skills.mentioned.length}</span>
             <SkillChips items={skills.mentioned} tone="mentioned" />
           </>
         ) : null}

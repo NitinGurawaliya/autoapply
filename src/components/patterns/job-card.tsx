@@ -21,8 +21,11 @@ export type JobCardData = {
   salary?: string | null;
   /** "Startup", "Mid-size", "MNC". */
   stage?: string | null;
-  /** The job's tech skills the candidate has, and the ones missing (required only when `split`). */
-  skills?: { have: string[]; missing: string[]; split: boolean; total: number };
+  /**
+   * The job's tech skills the candidate has, and the ones missing: `missing` is the required ones when `split`, every
+   * one otherwise; `mentioned` is the rest the candidate does not show (nice to have).
+   */
+  skills?: { have: string[]; missing: string[]; split: boolean; total: number; mentioned?: string[] };
   score: number;
   tier?: FitTier | null;
   /** The job board it came from: "Greenhouse", "Lever", "Ashby". */
@@ -77,7 +80,11 @@ export function JobCard({ job, stamps }: { job: JobCardData; stamps?: ReactNode 
   const skills = job.skills && job.skills.total > 0 ? job.skills : null;
   // A chip is its padding and gap, plus the check icon on the ones the candidate has.
   const have = skills ? fitRow(skills.have, 36) : null;
-  const missing = skills ? fitRow(skills.missing, 21) : null;
+  // Required gaps first (rose), then the nice-to-have ones (outlined): the card never says nothing is missing while the
+  // job names tech the candidate does not show.
+  const missing = skills ? fitRow([...skills.missing, ...(skills.mentioned ?? [])], 21) : null;
+  const required = new Set(skills?.missing ?? []);
+  const missingLabel = skills?.split && skills.missing.length > 0 ? "Missing" : "Not on resume";
   return (
     <div className="relative box-border flex h-full flex-col overflow-hidden rounded-card border-2 border-edge bg-surface px-[22px] pt-5 shadow-hard-lg">
       <div className="flex items-center gap-3 border-b-[1.5px] border-line pb-4">
@@ -143,15 +150,21 @@ export function JobCard({ job, stamps }: { job: JobCardData; stamps?: ReactNode 
               )}
               {have.more > 0 ? <span className="flex-none px-0.5 text-[12.5px] font-semibold text-muted-foreground">+{have.more}</span> : null}
             </SkillRow>
-            <SkillRow label={skills.split ? "Missing" : "Not on resume"}>
+            <SkillRow label={missingLabel}>
               {missing.shown.length > 0 ? (
                 missing.shown.map((skill) => (
-                  <span key={skill} className={cn(skillChip, "bg-gap-bg text-gap")}>
+                  <span
+                    key={skill}
+                    className={cn(
+                      skillChip,
+                      required.has(skill) ? "bg-gap-bg text-gap" : "text-muted-foreground shadow-[inset_0_0_0_1.5px_var(--line-strong)]",
+                    )}
+                  >
                     {skill}
                   </span>
                 ))
               ) : (
-                <span className="text-[12.5px] text-muted-foreground">{skills.split ? "Nothing it requires" : "Nothing"}</span>
+                <span className="text-[12.5px] text-muted-foreground">Nothing it names</span>
               )}
               {missing.more > 0 ? <span className="flex-none px-0.5 text-[12.5px] font-semibold text-muted-foreground">+{missing.more}</span> : null}
             </SkillRow>

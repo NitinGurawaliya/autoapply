@@ -128,7 +128,7 @@ export function classifyTitle(title: string): { function: JobFunction; track: Tr
 
 // Skills that point to a track on their own, for reading a candidate's tracks from their resume.
 const SKILL_TRACKS: Array<[Track, RegExp]> = [
-  ["ml_ai", /^(pytorch|tensorflow|keras|scikit-learn|sklearn|hugging ?face|transformers|langchain|llamaindex|llms?|nlp|computer vision|opencv|deep learning|machine learning|mlops|mlflow|xgboost|generative ai|rag)$/i],
+  ["ml_ai", /^(pytorch|tensorflow|keras|scikit-learn|sklearn|hugging ?face|transformers|langchain|langgraph|llamaindex|llms?|nlp|computer vision|opencv|deep learning|machine learning|mlops|mlflow|xgboost|generative ai|gen ?ai|rag|openai( api)?|anthropic( api)?|multi-agent systems|ai agents|agentic ai|prompt engineering|pgvector|vector databases?|pinecone|crewai|autogen)$/i],
   ["data_science", /^(pandas|numpy|statistics|r|tableau|power ?bi|looker|a\/b testing|excel|data analysis|data visualization|spss|stata)$/i],
   ["data_engineering", /^(spark|pyspark|airflow|kafka|dbt|snowflake|bigquery|redshift|hadoop|databricks|etl|flink)$/i],
   ["security", /^(siem|splunk|burp suite|metasploit|nmap|wireshark|penetration testing|owasp|iam|soc|incident response|kali linux|threat modeling|vulnerability assessment)$/i],
@@ -156,9 +156,11 @@ export function tracksFromProfile(input: { currentTitle: string | null; experien
   const counts = new Map<Track, number>();
   for (const skill of input.skills) for (const [track, pattern] of SKILL_TRACKS) if (pattern.test(skill.trim())) counts.set(track, (counts.get(track) ?? 0) + 1);
   if ((counts.get("frontend") ?? 0) >= 2 && (counts.get("backend") ?? 0) >= 2) add("fullstack");
-  // Developers list test runners and cloud tools too: QA and DevOps need more of them to count as a track.
-  const needed = (track: Track) => (track === "qa" || track === "devops" ? 3 : 2);
-  for (const [track, n] of [...counts.entries()].sort((a, b) => b[1] - a[1])) if (n >= needed(track)) add(track);
+  // Developers list test runners and cloud tools too: QA and DevOps come from skills only when no title and no other
+  // skills gave a track, and need three of them (Phase N1: five test tools made an AI engineer a QA candidate).
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  for (const [track, n] of ranked) if (track !== "qa" && track !== "devops" && n >= 2) add(track);
+  if (out.length === 0) for (const [track, n] of ranked) if ((track === "qa" || track === "devops") && n >= 3) add(track);
   if (out.length === 0) add(classifyTitle(input.currentTitle ?? "").track);
   if (out.length === 0) add("software");
   return out.slice(0, 4);

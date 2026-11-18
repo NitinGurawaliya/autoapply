@@ -204,7 +204,8 @@ export async function judgeBatch(candidate: { summary: string; years: number | n
     const { fit, note } = levelFit(field, jobs[result.n], candidate.years);
     // Raised by the title's track: the model's "why" argued the other way, so the reason says what the floor saw.
     const why = raised && floor.track
-      ? `${TRACK_LABELS[floor.track]} work, ${floor.field === "close" ? "like yours" : "near your own"}`
+      ? // The floor knows only the title's track, so it says so (Phase N1), not that the work is like the candidate's.
+        `${TRACK_LABELS[floor.track]} work, ${floor.field === "close" ? "one of your tracks" : "near your tracks"}`
       : result.why.trim().replace(/[.\s]+$/, "");
     // A job kept despite a gap already says so in its score's reason ("Asks for about 3+ years, you have 1"); one
     // left out says why instead of what the work is.

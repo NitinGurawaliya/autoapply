@@ -45,6 +45,8 @@ export default async function ConfirmPage() {
       <ConfirmForm
         next={next}
         trackOptions={TRACKS.map((id) => ({ id, label: TRACK_LABELS[id] }))}
+        // What the resume suggests today, offered when it differs from the saved fields (Phase N1).
+        suggestedTracks={tracksOf({ ...row, tracks: [] })}
         initial={{
           fullName: parsed.fullName,
           email: parsed.email,

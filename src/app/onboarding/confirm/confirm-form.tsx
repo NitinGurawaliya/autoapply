@@ -200,7 +200,17 @@ function ResumeChangesPanel() {
  * Only what was read from the resume, to check: saved answers are not here (the Answers page has them), and saving
  * sends the profile alone; a detail changed here updates its answer on the server (api/profile PUT).
  */
-export function ConfirmForm({ initial, next, trackOptions }: { initial: ConfirmValues; next: string; trackOptions: Array<{ id: string; label: string }> }) {
+export function ConfirmForm({
+  initial,
+  next,
+  trackOptions,
+  suggestedTracks = [],
+}: {
+  initial: ConfirmValues;
+  next: string;
+  trackOptions: Array<{ id: string; label: string }>;
+  suggestedTracks?: string[];
+}) {
   const router = useRouter();
   const [values, setValues] = useState(initial);
   const [editing, setEditing] = useState<string | null>(null);
@@ -378,6 +388,24 @@ export function ConfirmForm({ initial, next, trackOptions }: { initial: ConfirmV
               );
             })}
           </div>
+          {suggestedTracks.length > 0 &&
+          (suggestedTracks.length !== values.tracks.length || suggestedTracks.some((track) => !values.tracks.includes(track))) ? (
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-[14px] bg-background px-3 py-2.5">
+              <p className="m-0 text-[13px] text-muted-foreground">
+                Your resume suggests{" "}
+                <span className="font-semibold text-foreground">
+                  {suggestedTracks.map((id) => trackOptions.find((option) => option.id === id)?.label ?? id).join(", ")}
+                </span>
+              </p>
+              <button
+                type="button"
+                className="flex-none text-[13px] font-bold underline underline-offset-2"
+                onClick={() => setValues((current) => ({ ...current, tracks: [...suggestedTracks] }))}
+              >
+                Use these
+              </button>
+            </div>
+          ) : null}
         </SectionCard>
 
         <SectionCard title="Education">

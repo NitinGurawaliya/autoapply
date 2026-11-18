@@ -3,14 +3,14 @@ import { db } from "@/lib/db";
 import { cachedFeedScore, forgetFeed } from "@/lib/feed-cache";
 import { APPLY_QUEUES, enqueueApply } from "@/lib/queue";
 import { check, historyFor, loadRules, writeEvent } from "@/modules/governance";
-import { APPLY_BOARDS, jobSimilarity, judgeJobs, profileVector, scoreJob, tracksOf } from "@/modules/jobs";
+import { APPLY_BOARDS, candidateSkills, jobSimilarity, judgeJobs, profileVector, scoreJob, tracksOf } from "@/modules/jobs";
 import { lastRunMaySendTwice } from "./outcome";
 
 export const CANCELLABLE = ["queued", "inspecting", "filling", "needs_input"];
 export const RETRYABLE = ["failed", "cancelled"];
 
-type ScoredProfile = { id: string; currentTitle: string | null; skills: unknown; experience: unknown; education: unknown; tracks: string[]; yearsExperience: number | null; embeddedFrom: string | null };
-type ScoredJob = { id: string; title: string; description: string; contentHash: string | null; country: string; remoteType: string; experienceMin: number | null; track: string | null; seniority?: string | null };
+type ScoredProfile = { id: string; currentTitle: string | null; skills: unknown; experience: unknown; education: unknown; tracks: string[]; yearsExperience: number | null; embeddedFrom: string | null; resumeText?: string | null };
+type ScoredJob = { id: string; title: string; description: string; contentHash: string | null; country: string; remoteType: string; experienceMin: number | null; track: string | null; seniority?: string | null; skills?: string[]; skillsRequired?: string[]; skillsHash?: string | null };
 
 /**
  * The match score the swipe-time rules use: the score this user's feed showed on the card when the feed is still
@@ -31,6 +31,8 @@ export async function candidateScore(profile: ScoredProfile, job: ScoredJob) {
     yearsExperience: profile.yearsExperience,
     preferredLocations: [],
     tracks: tracksOf(profile),
+    // The skills the card counted (profile skills and resume), so the swipe scores the job as the feed did (Phase N).
+    shows: candidateSkills(profile),
   }).score;
 }
 

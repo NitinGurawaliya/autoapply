@@ -232,7 +232,7 @@ const JOB = {
   experience: { label: "2+ yrs", over: false },
   salary: "₹18L – ₹28L",
   stage: "Startup",
-  skills: { have: ["Go", "PostgreSQL", "Kafka"], missing: ["Kubernetes"], split: true, total: 5 },
+  skills: { have: ["Go", "PostgreSQL", "Kafka"], missing: ["Kubernetes"], split: true, total: 6, mentioned: ["Terraform", "Docker"] },
   score: 86,
   board: "Greenhouse",
 };
@@ -303,7 +303,7 @@ function Patterns() {
           </div>
           <div className="relative mt-[18px] grid grid-cols-[minmax(0,1fr)]">
             <article className="relative h-[460px]">
-              <JobCard job={{ ...JOB, company: "Anthropic", logoUrl: "https://s8-recruiting.cdn.greenhouse.io/external_greenhouse_job_boards/logos/400/040/300/original/2025-04-07-greenhouse.png?1744056137", score: 64, board: "Ashby" }} />
+              <JobCard job={{ ...JOB, company: "Anthropic", logoUrl: "https://s8-recruiting.cdn.greenhouse.io/external_greenhouse_job_boards/logos/400/040/300/original/2025-04-07-greenhouse.png?1744056137", score: 64, board: "Ashby", skills: { have: ["SQL", "REST", "Python"], missing: [], split: true, total: 12, mentioned: ["Wireshark", "Datadog", "Grafana", "Prometheus", "Jira", "AWS", "GCP", "Azure", "Bash"] } }} />
             </article>
           </div>
         </Section>

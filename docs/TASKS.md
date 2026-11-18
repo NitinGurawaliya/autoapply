@@ -206,3 +206,11 @@ Design: [docs/job-match/TDD.md](job-match/TDD.md) (v1, 18 Nov; owner decisions c
 - [x] [M5 — Pay from the board](job-match/TASKS.md#m5)
 - [x] [M6 — The card](job-match/TASKS.md#m6)
 - [x] [M7 — The job page](job-match/TASKS.md#m7)
+
+## Phase N — A match score the skills decide (owner, 18 Nov)
+
+Design: [docs/match-score/TDD.md](match-score/TDD.md). Tasks: [docs/match-score/TASKS.md](match-score/TASKS.md). Order N1 → N3.
+
+- [x] [N1 — Tracks: no QA or DevOps from tools alone, ML/AI from AI skills](match-score/TASKS.md#n1)
+- [x] [N2 — The score: work 50, skills 40, experience 10](match-score/TASKS.md#n2)
+- [x] [N3 — Measure on real feeds](match-score/TASKS.md#n3)
