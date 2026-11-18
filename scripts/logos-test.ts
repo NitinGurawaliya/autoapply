@@ -1,5 +1,7 @@
 // The logo found in each board's page (modules/jobs/logos.ts). Sample markup as the boards wrote it on 24 Oct; no network.
-import { logoFromHtml, websiteFromHtml, workdayLogoUrl } from "../src/modules/jobs/logos";
+import { domainCandidates, logoFromHtml, ownSiteOf, siteRoot, websiteFromHtml, workdayLogoUrl } from "../src/modules/jobs/logos";
+
+const sure = (list: Array<{ host: string; sure: boolean }>) => list.filter((item) => item.sure).map((item) => item.host);
 
 const greenhouse = `<meta property="og:image" content="https://s7-recruiting.cdn.greenhouse.io/x/og.jpg"/><img src="https://s7-recruiting.cdn.greenhouse.io/external_greenhouse_job_boards/logos/400/307/300/original/Logo-01_(1).jpg?1700670705" alt="Arcesium LLC Logo" class="logo"/>`;
 const lever = `<meta property="og:image" content="https://lever-client-logos.s3.us-west-2.amazonaws.com/banner.png" /><img alt="Saviynt logo" src="https://lever-client-logos.s3.us-west-2.amazonaws.com/ce99b770-1764798903876.png">`;
@@ -30,6 +32,19 @@ const checks: Array<[string, boolean]> = [
   ["workday: a slug that is not tenant.wdN/site gives none", workdayLogoUrl("cigna") === null],
   ["workable: the account API's logo", logoFromHtml("workable", `{"id":691818,"logo":"https://workablehr.s3.amazonaws.com/uploads/account/logo/691818/logo","subdomain":"weekday-1","url":"https://www.weekday.works"}`) === "https://workablehr.s3.amazonaws.com/uploads/account/logo/691818/logo"],
   ["workable: the account API's website", websiteFromHtml("workable", `{"id":1,"logo":null,"url":"https://www.angloeastern.com/"}`) === "angloeastern.com"],
+  // 18 Nov: the website from the company's own job links (Greenhouse boards on its careers page).
+  ["own site: GLG's job links on glginsights.com, not the board host", ownSiteOf(["boards.greenhouse.io", "glginsights.com"], "GLG", "gersonlehrmangroup") === "glginsights.com"],
+  ["own site: a subdomain gives the registrable domain", ownSiteOf(["cclfg.cclgroup.com"], "Connor, Clark & Lunn Financial Group Ltd.", "cclfg") === "cclgroup.com"],
+  ["own site: Axiom Talent Platform on axiomlaw.com", ownSiteOf(["www.axiomlaw.com"], "Axiom Talent Platform", "axiomtalentplatform") === "axiomlaw.com"],
+  ["own site: only board hosts gives none", ownSiteOf(["job-boards.greenhouse.io", "boards.greenhouse.io"], "Razorpay", "razorpaysoftwareprivatelimited") === null],
+  ["own site: a host named unlike the company gives none", ownSiteOf(["jobs.talentbridge.com"], "Acme Robotics", "acmerobotics") === null],
+  ["site root keeps a country's second level", siteRoot("careers.acme.co.uk") === "acme.co.uk" && siteRoot("www.c3.ai") === "c3.ai"],
+  // 18 Nov: legal-name slugs, a name two companies share, and a distinctive name Clearbit gives a tagline for.
+  ["a legal-name slug still matches (razorpaysoftwareprivatelimited → razorpay.com)", sure(domainCandidates([{ name: "Razorpay", domain: "razorpay.com" }, { name: "Razorpay", domain: "razorpaycurlec.com" }, { name: "Razorpay", domain: "razorpayx.site" }, { name: "Razorpay", domain: "payrollfixed.com" }], "Razorpay", "razorpaysoftwareprivatelimited"))[0] === "razorpay.com"],
+  ["two companies named Orion Innovation: neither domain is sure", sure(domainCandidates([{ name: "Orion Innovation", domain: "orioninc.com" }, { name: "Orion Innovations P.C", domain: "orioninnovations.gr" }, { name: "Orion Innovation", domain: "orioninnovation.nl" }], "Orion Innovation", "orioninnovation")).length === 0],
+  ["Anblicks: name, slug and domain the same distinctive word", sure(domainCandidates([{ name: "Unleash Your Data", domain: "anblicks.com" }], "Anblicks", "anblicks"))[0] === "anblicks.com"],
+  ["a plain guess is never sure on its own", sure(domainCandidates([{ domain: "anblicks.com" }], "Anblicks", "anblicks")).length === 0],
+  ["Gradient: two owners of one name stay unsure", sure(domainCandidates([{ name: "Gradient Ventures", domain: "gradient.com" }, { name: "Gradient", domain: "gradient.co.me" }], "Gradient", "gradient")).length === 0],
 ];
 
 let failed = 0;

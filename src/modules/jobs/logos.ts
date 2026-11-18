@@ -143,7 +143,17 @@ export function domainCandidates(suggestions: Suggestion[], name: string, slug: 
   // A Workday company sometimes has only its slug for a name ("dxctechnology.wd1/dxcjobs"): its slug is its name.
   const names = /\/|\.wd\d/.test(name) ? slugs : withStems([key(plainName(name)), key(name), key(leadWords(name))]);
   const spaced = plainName(name).toLowerCase().replace(/\s+/g, "-");
-  const out: Array<{ host: string; sure: boolean; owner: string }> = [];
+  const plain = key(plainName(name));
+  // Every domain Clearbit names under the company's own name (18 Nov): one that also looks like the name but is
+  // unrelated to a candidate ("orioninc.com" beside "orioninnovation.nl", both "Orion Innovation") means two companies
+  // share the name, so neither is sure. One that does not look like the name ("payrollfixed.com", also "Razorpay") is
+  // an alias of the same company.
+  const sameName = suggestions
+    .filter((suggestion) => suggestion.name && suggestion.domain && names.has(stem(key(suggestion.name))))
+    .map((suggestion) => key((hostOf(suggestion.domain ?? "") ?? "").split(".")[0]))
+    .filter((label) => label.length >= 3 && label.slice(0, 3) === plain.slice(0, 3));
+  const related = (a: string, b: string) => a.startsWith(b) || b.startsWith(a);
+  const out: Array<{ host: string; sure: boolean; owner: string; label: string }> = [];
   for (const suggestion of suggestions) {
     const host = suggestion.domain ? hostOf(suggestion.domain) : null;
     if (!host || out.some((item) => item.host === host)) continue;
@@ -157,22 +167,71 @@ export function domainCandidates(suggestions: Suggestion[], name: string, slug: 
     // or starts with it ("Eurofins Scientific" for eurofins.com).
     const owner = suggestion.name ? stem(key(suggestion.name)) : "";
     const named = owner !== "" && ([...withStems([key(suggestion.name ?? "")])].some((value) => names.has(value)) || owner.startsWith(label));
-    if (byName || bySlug) out.push({ host, sure: byName && bySlug && named, owner });
+    // Or a distinctive name (7+ letters) that is exactly the domain and the slug, a domain Clearbit knows, whatever
+    // tagline it gives as the owner ("Anblicks": anblicks.com, owner "Unleash Your Data"). A plain guess never is.
+    const distinct = !!suggestion.name && label.length >= 7 && label === plain && label === slug;
+    if (byName || bySlug) out.push({ host, sure: byName && bySlug && (named || distinct), owner, label });
   }
   // A name several unrelated owners answer to ("Gradient": gradient.com, gradient.co.me) is not sure of any of them.
   const owners = new Set(out.filter((item) => item.owner).map((item) => item.owner));
   const ambiguous = owners.size >= 2;
-  return out.map(({ host, sure }) => ({ host, sure: sure && !ambiguous })).sort((a, b) => Number(b.sure) - Number(a.sure));
+  return out
+    .map(({ host, sure, label }) => ({ host, sure: sure && !ambiguous && sameName.every((other) => related(other, label)) }))
+    .sort((a, b) => Number(b.sure) - Number(a.sure));
 }
 
 // Words that end company names and slugs without naming the company ("Bosch Group", "AccorHotel", "dxctechnology").
 // Not "works", "ai", "io": those are domains as often as words (weekday.works, nightfall.ai); they become guesses below.
-const GENERIC_TAIL = /(technologies|technology|tech|group|global|hotels|hotel|careers|jobs|labs|hq|solutions|software|systems|india|official|inc)$/;
+// Legal and trade words too, cut one after another (18 Nov): "razorpaysoftwareprivatelimited" → razorpay,
+// "proclinkconsulting" → proclink, "wizinc" → wiz.
+const GENERIC_TAIL = /(technologies|technology|tech|group|global|hotels|hotel|careers|jobs|labs|hq|solutions|software|systems|india|official|inc|private|limited|pvt|ltd|llc|llp|consulting|consultancy|services|international|industries)$/;
 const TLD_TAIL = /^(.{3,}?)(works|ai|io|app|co|tech|in)$/;
 const stem = (value: string) => {
-  const cut = value.replace(GENERIC_TAIL, "");
-  return cut.length >= 3 ? cut : value;
+  let cut = value;
+  for (;;) {
+    const next = cut.replace(GENERIC_TAIL, "");
+    if (next === cut || next.length < 3) return cut;
+    cut = next;
+  }
 };
+
+// Job boards, ATS and link hosts: a job link there says nothing about the company's own website.
+const NOT_OWN_SITE =
+  /(^|\.)(greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|keka\.com|smartrecruiters\.com|myworkdayjobs\.com|myworkdaysite\.com|zohorecruit\.(com|in|eu)|linkedin\.com|icims\.com|jobvite\.com|taleo\.net|successfactors\.(com|eu)|bamboohr\.com|recruitee\.com|breezy\.hr|applytojob\.com|rippling\.com|wellfound\.com|indeed\.com|naukri\.com|instahyre\.com|google\.com|bit\.ly|tinyurl\.com|forms\.gle|typeform\.com|notion\.site|teamtailor\.com|personio\.(de|com)|pinpointhq\.com|gem\.com|dover\.com|ycombinator\.com|freshteam\.com|darwinbox\.in|hirist\.tech|cutshort\.io)$/i;
+
+/** The registrable part of a host: "cclfg.cclgroup.com" → cclgroup.com, "careers.acme.co.uk" → acme.co.uk. */
+export function siteRoot(host: string) {
+  const labels = host.toLowerCase().replace(/^www\./, "").split(".");
+  const two = labels.slice(-2).join(".");
+  return /^(co|com|org|net|ac|gov)\.[a-z]{2}$/.test(two) && labels.length >= 3 ? labels.slice(-3).join(".") : two;
+}
+
+/**
+ * The company's own website from the hosts its job links point to, most used first (Greenhouse boards embedded in the
+ * company's careers page: "glginsights.com" for GLG, "c3.ai" for c3iot, "axiomlaw.com" for Axiom Talent Platform):
+ * not a job board, ATS or link host, and named like the company (one name holds the other, or the first three letters
+ * agree). Null when none is.
+ */
+export function ownSiteOf(hosts: string[], name: string, slug: string): string | null {
+  const words = [key(plainName(name)), key(name), slug, stem(slug)].filter((word) => word.length >= 2);
+  for (const host of hosts) {
+    if (!host || NOT_OWN_SITE.test(host)) continue;
+    const root = siteRoot(host);
+    if (!hostOf(root)) continue;
+    const label = key(root.split(".")[0]);
+    if (label.length < 2) continue;
+    if (words.some((word) => word.startsWith(label) || label.startsWith(word) || (label.length >= 3 && word.slice(0, 3) === label.slice(0, 3)))) return root;
+  }
+  return null;
+}
+
+/** The hosts of the company's job links, most used first. */
+async function jobHosts(source: string, slug: string) {
+  const rows = await db.$queryRaw<Array<{ host: string | null }>>`
+    SELECT lower(substring(j."applyUrl" from '^https?://([^/:?#]+)')) AS host FROM "Job" j JOIN "Company" c ON c.id = j."companyId"
+    WHERE c.source = ${source} AND c.slug = ${slug} GROUP BY 1 ORDER BY count(*) DESC LIMIT 3`.catch(() => []);
+  return rows.map((row) => row.host ?? "");
+}
 const withStems = (values: string[]) => new Set(values.filter((value) => value.length >= 2).flatMap((value) => [value, stem(value)]));
 
 /** Plain guesses at the company's domain from its name and slug ("capco.com"), used only with evidence. */
@@ -263,7 +322,11 @@ export async function fetchLogoUrl(source: string, slug: string, name?: string):
     logo = logoFromHtml(source, html);
   }
   if (logo) return logo;
-  const domain = (html && websiteFromHtml(source, html)) || (name ? await domainByName(name, slugKey(source, slug), (host) => mentionedInJobs(source, slug, host)) : null);
+  // The website: named by the board, else the company's own careers site its job links point to, else from its name.
+  const domain =
+    (html && websiteFromHtml(source, html)) ||
+    ownSiteOf(await jobHosts(source, slug), name ?? slug, slugKey(source, slug)) ||
+    (name ? await domainByName(name, slugKey(source, slug), (host) => mentionedInJobs(source, slug, host)) : null);
   return domain ? siteIcon(domain) : null;
 }
 
