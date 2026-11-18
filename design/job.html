@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job page v2</title>
+<!-- Phase M1 mockup (docs/job-match/TDD.md §5), v3: neutrals plus two meanings only, lime = you have it / good, rose = a gap (owner, 18 Nov). -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Geist:wght@400..700&display=swap">
+<style>
+  .light {
+    --bg:#f6f6f7; --surface:#ffffff; --muted:#eeeef1; --text:#16171a; --muted-text:#6b6e75; --edge:#16171a; --line:#e6e6ea; --line-strong:#d4d4da; --inv:#16171a; --on-inv:#ffffff; --shadow:#16171a; --track:#e4e4e7; --bar:#16171a;
+    --ok-bg:#eefad0; --ok:#16171a; --gap-bg:#fdeaea; --gap:#a83a3a;
+  }
+  .dark {
+    --bg:#0e0f11; --surface:#1a1b1f; --muted:#24252a; --text:#f2f2f3; --muted-text:#a1a4ab; --edge:#4a4b52; --line:#2a2b30; --line-strong:#3a3b41; --inv:#f2f2f3; --on-inv:#16171a; --shadow:#000000; --track:#2c2d33; --bar:#c6f432;
+    --ok-bg:#283212; --ok:#d9f56e; --gap-bg:#3a1f21; --gap:#f0a6a6;
+  }
+  :root { --lime:#c6f432; --ink:#16171a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Geist', system-ui, sans-serif; background: #d9dae0; color: #16171a; }
+  .page-head { padding: 24px 24px 0; }
+  .page-head h1 { font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 28px; margin: 0 0 6px; letter-spacing: -0.03em; }
+  .page-head p { margin: 0; font-size: 14px; color: #4a4b52; max-width: 820px; line-height: 1.5; }
+  .switch { margin-top: 14px; display: inline-flex; padding: 4px; border-radius: 999px; background: #fff; border: 1.5px solid #c9cad0; gap: 4px; }
+  .switch button { border: 0; background: none; padding: 8px 16px; border-radius: 999px; font: 600 14px 'Geist', system-ui, sans-serif; cursor: pointer; color: #16171a; }
+  .switch button[aria-pressed="true"] { background: #16171a; color: #fff; }
+  .row { display: flex; flex-wrap: wrap; gap: 32px; padding: 24px; align-items: flex-start; }
+  .phone { flex: none; width: 390px; background: var(--bg); color: var(--text); border-radius: 24px; overflow: hidden; position: relative; padding-bottom: 96px; }
+  .phone[hidden] { display: none; }
+
+  .hero { padding: 0 20px 4px; }
+  .topbar { height: 52px; display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; margin: 0 -8px; }
+  .topbar svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .head { display: flex; align-items: center; gap: 12px; }
+  .tile { width: 48px; height: 48px; flex: none; border-radius: 14px; background: var(--inv); color: var(--on-inv); display: flex; align-items: center; justify-content: center; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 17px; }
+  .co { flex: 1; min-width: 0; }
+  .co b { display: block; font-size: 16px; font-weight: 700; }
+  .co span { font-size: 13px; color: var(--muted-text); }
+  .ring { flex: none; width: 88px; height: 88px; position: relative; }
+  .ring svg { width: 88px; height: 88px; transform: rotate(-90deg); }
+  .ring .n { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 30px; letter-spacing: -0.05em; }
+  .tier { height: 22px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; background: var(--muted); }
+  h1.title { margin: 16px 0 0; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 34px; line-height: 1.04; letter-spacing: -0.04em; }
+  .posted { margin-top: 8px; font-size: 14px; color: var(--muted-text); display: flex; align-items: center; gap: 8px; }
+  .chips { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { height: 30px; padding: 0 10px; border-radius: 999px; background: var(--muted); display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .chip svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: .65; }
+  .chip.quiet { background: none; box-shadow: inset 0 0 0 1.5px var(--line-strong); color: var(--muted-text); font-weight: 500; }
+
+  .wrap { padding: 24px 20px 0; display: flex; flex-direction: column; gap: 28px; }
+  h2 { margin: 0 0 12px; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 24px; letter-spacing: -0.03em; display: flex; align-items: center; gap: 8px; }
+  h2 .count { font-family: 'Geist', system-ui, sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0; display: inline-flex; gap: 6px; margin-left: auto; }
+  h2 .count span { height: 24px; padding: 0 8px; border-radius: 999px; display: inline-flex; align-items: center; }
+  .k-ok { background: var(--ok-bg); color: var(--ok); } .k-gap { background: var(--gap-bg); color: var(--gap); }
+  .panel { background: var(--surface); border: 1.5px solid var(--line); border-radius: 20px; padding: 18px; }
+  .lead { margin: 0; font-size: 16px; line-height: 1.5; font-weight: 500; }
+  .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin: 18px 0 8px; display: block; color: var(--muted-text); }
+  ul.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  ul.list li { display: grid; grid-template-columns: 24px 1fr; gap: 8px; font-size: 15px; line-height: 1.45; }
+  .mk { width: 22px; height: 22px; margin-top: 1px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+  .mk svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  .mk.yes { background: var(--lime); color: var(--ink); border: 1.5px solid var(--ink); }
+  .mk.no { background: var(--gap-bg); color: var(--gap); }
+  .next { margin-top: 18px; padding: 12px 14px; border-radius: 14px; background: var(--bg); font-size: 14px; line-height: 1.45; }
+  .next a { color: var(--text); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+
+  .sk { display: flex; flex-wrap: wrap; gap: 6px; }
+  .s { height: 28px; padding: 0 10px; border-radius: 8px; display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; }
+  .s svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  .s.have { background: var(--ok-bg); color: var(--ok); }
+  .s.miss { background: var(--gap-bg); color: var(--gap); }
+  .s.opt { box-shadow: inset 0 0 0 1.5px var(--line-strong); color: var(--muted-text); }
+  .hint { margin: 14px 0 0; font-size: 13px; color: var(--muted-text); line-height: 1.45; }
+  .cover { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; color: var(--muted-text); }
+  .cover .track { flex: 1; height: 8px; border-radius: 99px; background: var(--track); overflow: hidden; }
+  .cover .track i { display: block; height: 100%; background: var(--bar); border-radius: 99px; }
+
+  .desc p { margin: 0 0 12px; font-size: 16px; line-height: 1.65; }
+  .desc h3 { margin: 16px 0 6px; font-size: 16px; font-weight: 700; }
+  .desc ul { margin: 0 0 12px; padding-left: 20px; font-size: 16px; line-height: 1.65; }
+  .more { font-size: 15px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+
+  .score-row { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 12px 0; border-bottom: 1.5px solid var(--line); }
+  .score-row b { font-size: 15px; font-weight: 600; }
+  .score-row .pts { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+  .score-row .pts small { color: var(--muted-text); font-weight: 500; }
+  .score-row .pts.low { color: var(--gap); }
+  .score-row p { grid-column: 1 / -1; margin: 0; font-size: 13px; color: var(--muted-text); line-height: 1.4; }
+  .meter { grid-column: 1 / -1; height: 6px; border-radius: 99px; background: var(--track); overflow: hidden; margin-top: 6px; }
+  .meter i { display: block; height: 100%; border-radius: 99px; background: var(--bar); }
+  .total { display: flex; justify-content: space-between; align-items: baseline; padding-top: 14px; }
+  .total b { font-size: 16px; }
+  .total span { font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 32px; letter-spacing: -0.04em; }
+  .held { margin-top: 12px; padding: 12px 14px; border-radius: 14px; background: var(--bg); font-size: 14px; line-height: 1.45; }
+  .held b { display: block; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--gap); margin-bottom: 4px; }
+
+  .bar { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 20px 20px; background: var(--surface); border-top: 1.5px solid var(--line); display: flex; gap: 12px; }
+  .bar button { flex: 1; height: 52px; border-radius: 16px; font: 600 16px 'Geist', system-ui, sans-serif; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--text); }
+  .bar .skip { background: var(--surface); border: 1.5px solid var(--line-strong); flex: 0 0 110px; }
+  .bar .apply { background: var(--lime); color: var(--ink); border: 2px solid var(--ink); box-shadow: 0 4px 0 var(--shadow); }
+
+  .notes { padding: 0 24px 40px; font-size: 14px; line-height: 1.55; color: #2a2b30; max-width: 900px; }
+  .notes li { margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<div class="page-head">
+  <h1>Job page v2: why this score</h1>
+  <p>Phase M1 mockup for <code>/jobs/[id]</code> (docs/job-match/TDD.md §5): the same Capco job as card 2 in design/job-card.html. Neutral by default; <b>lime</b> = you have it / it's good, <b>rose</b> = a gap. Nothing else is coloured.</p>
+  <div class="switch" role="group" aria-label="Theme">
+    <button data-show="both" aria-pressed="true">Both</button>
+    <button data-show="light" aria-pressed="false">Light</button>
+    <button data-show="dark" aria-pressed="false">Dark</button>
+  </div>
+</div>
+<div class="row" id="pages"></div>
+<ol class="notes">
+  <li><b>Header</b>: the score ring fills to the score (ink in light, lime in dark, like today's progress bars); the tier pill sits by the posted date. Facts as grey chips; "Pay not published" is a quiet outline.</li>
+  <li><b>Matches</b> (lime ticks) are the score's parts at 70 % or more of their maximum; <b>gaps</b> (rose crosses) are parts under 50 %, any cap that lowered the score, and the required skills you don't show.</li>
+  <li><b>Skills</b>: lime = on your resume, rose = required and not on it, outline = only mentioned. One ink bar for coverage.</li>
+  <li><b>How we got to 66</b>: one ink bar per part; only a part under half its maximum shows its points in rose. The rows add up to the card's number.</li>
+</ol>
+
+<template id="page">
+  <div class="phone">
+    <section class="hero">
+      <div class="topbar"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>Back</div>
+      <div class="head">
+        <div class="tile">CT</div>
+        <div class="co"><b>Capco Technologies</b><span>via Greenhouse</span></div>
+        <div class="ring">
+          <svg viewBox="0 0 88 88"><circle cx="44" cy="44" r="38" fill="none" stroke="var(--track)" stroke-width="8"/><circle cx="44" cy="44" r="38" fill="none" stroke="var(--bar)" stroke-width="8" stroke-linecap="round" stroke-dasharray="238.8" stroke-dashoffset="81.2"/></svg>
+          <div class="n">66</div>
+        </div>
+      </div>
+      <h1 class="title">Full Stack Developer</h1>
+      <div class="posted"><span class="tier">Good fit</span>Posted 11 days ago</div>
+      <div class="chips">
+        <span class="chip"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Bengaluru · On-site</span>
+        <span class="chip"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Fresher · you have 1 yr</span>
+        <span class="chip">MNC</span>
+        <span class="chip quiet">Pay not published</span>
+      </div>
+    </section>
+
+    <div class="wrap">
+      <section>
+        <h2>Why this is a match <span class="count"><span class="k-ok">3 ✓</span><span class="k-gap">2 ✕</span></span></h2>
+        <div class="panel">
+          <p class="lead">Full-stack work with LLM and RAG, close to yours. Fits your experience.</p>
+          <span class="eyebrow">Matches · 3</span>
+          <ul class="list">
+            <li><span class="mk yes"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>Names 3 of your skills: Python, React and REST.</li>
+            <li><span class="mk yes"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>A fresher role; you have 1 year.</li>
+            <li><span class="mk yes"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>In Bengaluru, where you want to work.</li>
+          </ul>
+          <span class="eyebrow">Gaps · 2</span>
+          <ul class="list">
+            <li><span class="mk no"><svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg></span>Close to your field, not your own: your agent rated the work "close", not "same".</li>
+            <li><span class="mk no"><svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg></span>Requires Java, Angular and Microservices, which aren't on your resume.</li>
+          </ul>
+          <div class="next">Used Java, Angular or Microservices? <a>Add them to your profile</a> so your agent can say so on the form.</div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Skills</h2>
+        <div class="panel">
+          <div class="cover"><span>You cover 4 of 8</span><span class="track"><i style="width:50%"></i></span></div>
+          <span class="eyebrow">On your resume · 4</span>
+          <div class="sk"><span class="s have"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Python</span><span class="s have"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>React</span><span class="s have"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>REST</span><span class="s have"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>LLM</span></div>
+          <span class="eyebrow">Required, not on your resume · 3</span>
+          <div class="sk"><span class="s miss">Java</span><span class="s miss">Angular</span><span class="s miss">Microservices</span></div>
+          <span class="eyebrow">Nice to have, not on your resume · 1</span>
+          <div class="sk"><span class="s opt">Prompt engineering</span></div>
+          <p class="hint">Only the tech the posting names. Your profile skills and resume both count as having it.</p>
+        </div>
+      </section>
+
+      <section>
+        <h2>About the role</h2>
+        <div class="desc">
+          <p>Capco, a Wipro company, is a global technology and management consultancy specializing in driving digital transformation in the financial services industry.</p>
+          <h3>What you'll need</h3>
+          <ul><li>Experience in backend application development</li><li>Strong experience with Angular or React</li><li>Good understanding of REST APIs and microservices</li></ul>
+          <a class="more">Read the full description</a>
+        </div>
+      </section>
+
+      <section>
+        <h2>How we got to 66</h2>
+        <div class="panel">
+          <div class="score-row"><b>The work</b><span class="pts">28 <small>/ 50</small></span><p>Your agent's verdict: close to your field (25 of 35), and how near the posting reads to your resume (3 of 15).</p><div class="meter"><i style="width:56%"></i></div></div>
+          <div class="score-row"><b>Skills</b><span class="pts">28 <small>/ 40</small></span><p>You have 3 of its 4 required skills and 1 of 4 nice to have.</p><div class="meter"><i style="width:70%"></i></div></div>
+          <div class="score-row"><b>Experience</b><span class="pts">10 <small>/ 10</small></span><p>A fresher role; you have 1 year.</p><div class="meter"><i style="width:100%"></i></div></div>
+          <div class="score-row" style="border-bottom:none"><b style="color:var(--muted-text);font-weight:500">Caps and floors</b><span class="pts"><small>none</small></span></div>
+          <div class="total"><b>Match score</b><span>66</span></div>
+          <div class="held"><b>What held it back</b>The work: 31 of 60 points missing. Your agent rated it close to your field rather than your own, and the posting reads only partly like your resume.</div>
+        </div>
+      </section>
+    </div>
+    <div class="bar"><button class="skip">Skip</button><button class="apply">Apply with your agent</button></div>
+  </div>
+</template>
+
+<script>
+  const tpl = document.getElementById("page");
+  const row = document.getElementById("pages");
+  const pages = {};
+  for (const theme of ["light", "dark"]) {
+    const page = tpl.content.firstElementChild.cloneNode(true);
+    page.classList.add(theme);
+    pages[theme] = page;
+    row.append(page);
+  }
+  for (const button of document.querySelectorAll(".switch button")) {
+    button.addEventListener("click", () => {
+      const show = button.dataset.show;
+      for (const b of document.querySelectorAll(".switch button")) b.setAttribute("aria-pressed", String(b === button));
+      pages.light.hidden = show === "dark";
+      pages.dark.hidden = show === "light";
+    });
+  }
+</script>
+</body>
+</html>

@@ -29,18 +29,18 @@ export function NeedsRow({
   actions?: ReactNode;
 }) {
   return (
-    <li data-row="needs" className="box-border flex flex-col gap-3 rounded-panel border-2 border-edge bg-surface p-3.5 shadow-hard">
+    <li data-row="needs" className="box-border flex flex-col gap-3 rounded-panel bg-surface p-4 shadow-lift">
       <Link href={href} prefetch={false} className="flex flex-col gap-3 text-foreground no-underline">
         <div className="flex items-center gap-3">
           <CompanyMark name={company} logoUrl={logoUrl} size={44} />
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="text-[15px] font-semibold">{role}</span>
-            <span className="text-[13px] text-muted-foreground">
+            <span className="type-body font-semibold">{role}</span>
+            <span className="type-meta text-muted-foreground">
               {company} · paused {when}
             </span>
           </div>
         </div>
-        <p className="m-0 text-[15px] leading-[1.4]">{ask}</p>
+        <p className="m-0 type-body leading-[1.4]">{ask}</p>
       </Link>
       <Link href={href} prefetch={false} className={buttonVariants({ variant: "primary", size: "row", className: "w-full shadow-none" })}>
         {cta}
@@ -69,18 +69,18 @@ export function ProgressRow({
   actions?: ReactNode;
 }) {
   return (
-    <li data-row="progress" className="box-border flex flex-col gap-2 rounded-[18px] border-[1.5px] border-line bg-surface p-3.5">
+    <li data-row="progress" className="box-border flex flex-col gap-2 rounded-card border border-line bg-surface p-3.5">
       <Link href={href} prefetch={false} className="flex flex-col gap-3 text-foreground no-underline">
         <div className="flex items-center gap-3">
           <CompanyMark name={company} logoUrl={logoUrl} size={40} tone="subtle" />
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="text-[15px] font-semibold">{role}</span>
-            <span className="text-[13px] text-muted-foreground">{company}</span>
+            <span className="type-body font-semibold">{role}</span>
+            <span className="type-meta text-muted-foreground">{company}</span>
           </div>
         </div>
       </Link>
       <div className="flex min-h-9 items-center justify-between gap-3">
-        <AgentStatus text={label} size={28} active={stage < 3} className="min-w-0 [&_span]:text-[13px]" />
+        <AgentStatus text={label} size={28} active={stage < 3} className="min-w-0 [&_span]:type-meta" />
         {actions ? <span className="-my-2 flex-none">{actions}</span> : null}
       </div>
     </li>
@@ -94,12 +94,12 @@ export function SentRow({ href, company, logoUrl, role, when }: { href: string; 
       <Link
         href={href}
         prefetch={false}
-        className="box-border flex min-h-16 items-center gap-3 rounded-[18px] border-[1.5px] border-line bg-surface py-2.5 pr-3 pl-3.5 text-foreground no-underline"
+        className="box-border flex min-h-16 items-center gap-3 rounded-card border border-line bg-surface py-2.5 pr-3 pl-3.5 text-foreground no-underline"
       >
         <CompanyMark name={company} logoUrl={logoUrl} size={40} tone="subtle" />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="text-[15px] font-semibold">{role}</span>
-          <span className="text-[13px] text-muted-foreground">
+          <span className="type-body font-semibold">{role}</span>
+          <span className="type-meta text-muted-foreground">
             {company} · {when}
           </span>
         </div>
@@ -129,21 +129,21 @@ export function FailedRow({
   return (
     <li
       data-row="failed"
-      className="box-border flex min-h-16 items-center gap-3 rounded-[18px] border-[1.5px] border-dashed border-dash py-3 pr-3 pl-3.5"
+      className="box-border flex min-h-16 items-center gap-3 rounded-card border border-dashed border-dash py-3 pr-3 pl-3.5"
     >
       <Link href={href} prefetch={false} className="flex min-w-0 flex-1 items-center gap-3 text-foreground no-underline">
         <CompanyMark name={company} logoUrl={logoUrl} size={40} tone="outline" />
-        <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
-          <span className="text-[15px] font-semibold">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.75">
+          <span className="type-body font-semibold">
             {role} · {company}
           </span>
-          <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
-            <Icon name="info" size={14} strokeWidth={2.25} className="flex-none" />
+          <span className="flex items-center gap-1.5 type-meta text-muted-foreground">
+            <Icon name="info" size={14} className="flex-none" />
             {reason}
           </span>
         </div>
       </Link>
-      <span className="flex-none">{action ?? <span className="text-[13px] font-semibold text-muted-foreground">Nothing to do</span>}</span>
+      <span className="flex-none">{action ?? <span className="type-meta font-semibold text-muted-foreground">Nothing to do</span>}</span>
     </li>
   );
 }

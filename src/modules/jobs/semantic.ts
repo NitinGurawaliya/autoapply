@@ -204,7 +204,8 @@ export async function judgeBatch(candidate: { summary: string; years: number | n
     const { fit, note } = levelFit(field, jobs[result.n], candidate.years);
     // Raised by the title's track: the model's "why" argued the other way, so the reason says what the floor saw.
     const why = raised && floor.track
-      ? `${TRACK_LABELS[floor.track]} work, ${floor.field === "close" ? "like yours" : "near your own"}`
+      ? // The floor knows only the title's track, so it says so (Phase N1), not that the work is like the candidate's.
+        `${TRACK_LABELS[floor.track]} work, ${floor.field === "close" ? "one of your tracks" : "near your tracks"}`
       : result.why.trim().replace(/[.\s]+$/, "");
     // A job kept despite a gap already says so in its score's reason ("Asks for about 3+ years, you have 1"); one
     // left out says why instead of what the work is.
@@ -271,4 +272,82 @@ export async function judgeJobs(
     ]);
   }
   return out;
+}
+
+// Phase M3 (docs/job-match/TDD.md §4.2, §4.5): which of a job's tech skills (Job.skills, found by the fixed vocabulary
+// in skills.ts) the posting requires. The model only labels terms it is given: anything else it returns is dropped, so
+// it can never add a skill. No profile data is sent; comparing with the candidate is code (skills.ts compareSkills).
+const LEVELS_BATCH = 10;
+const LEVELS_PARALLEL = 4;
+const LEVELS_DESCRIPTION_CHARS = 3000;
+const levelsSchema = z.object({ results: z.array(z.object({ n: z.number().int(), required: z.array(z.string()) })) });
+const LEVELS_SYSTEM = `You read job postings. Each job comes with its title, its description and "skills": tech skills found in its text. For each job, list which of those skills the job REQUIRES of the candidate.
+Required: named under requirements, qualifications, "must have", "you have", "you will need", "strong experience in", "proficiency in", or as the core of the work when the posting does not separate required from preferred.
+Not required: "nice to have", "preferred", "bonus", "a plus", "good to have", "exposure to", "familiarity with", or only part of the company's description, products or clients.
+Choose only from that job's "skills", spelled exactly as given. Never add a skill that is not in its list. An empty list is fine.
+Return {"results":[{"n","required":[...]}]} with one entry per job.`;
+
+type LevelJob = { title: string; description: string; skills: string[] };
+
+/** One call: the required subset of each job's skills, by index. Terms outside a job's own list are dropped. */
+export async function skillLevelsBatch(jobs: LevelJob[]): Promise<Map<number, string[]>> {
+  const payload = jobs.map((job, n) => ({ n, title: job.title, description: job.description.replace(/\s+/g, " ").slice(0, LEVELS_DESCRIPTION_CHARS), skills: job.skills }));
+  const answer = await callJson(levelsSchema, LEVELS_SYSTEM, JSON.stringify({ jobs: payload }));
+  const out = new Map<number, string[]>();
+  for (const result of answer.results) {
+    const job = jobs[result.n];
+    if (!job || out.has(result.n)) continue;
+    const own = new Map(job.skills.map((skill) => [skill.toLowerCase(), skill]));
+    const required = [...new Set(result.required.map((skill) => own.get(skill.trim().toLowerCase())).filter((skill): skill is string => Boolean(skill)))];
+    // Kept in the job's own order (first mention), whatever order the model used.
+    out.set(result.n, job.skills.filter((skill) => required.includes(skill)));
+  }
+  return out;
+}
+
+/**
+ * Labels open jobs whose skills have no current label (skillsHash ≠ contentHash), India-eligible and newest first, at
+ * most `max`. A failed batch stays unlabelled for the next run; the card then shows its skills unsplit. Returns how
+ * many were labelled.
+ */
+export async function labelPendingSkills(max = Number(process.env.SKILL_LEVELS_PER_RUN ?? 2000)) {
+  let done = 0;
+  let failed = 0;
+  // A job the model left out is not asked again in the same run.
+  const tried: string[] = [];
+  while (done + failed < max) {
+    const rows = await db.$queryRaw<Array<{ id: string; title: string; description: string; skills: string[]; hash: string }>>`
+      SELECT id, title, description, skills, COALESCE("contentHash", 'none') AS hash FROM "Job"
+      WHERE "closedAt" IS NULL AND source <> 'mock' AND cardinality(skills) > 0
+        AND "skillsHash" IS DISTINCT FROM COALESCE("contentHash", 'none') AND NOT (id = ANY(${tried}::text[]))
+      ORDER BY (eligibility IN ('india', 'remote_india')) DESC, "postedAt" DESC
+      LIMIT ${Math.min(LEVELS_BATCH * LEVELS_PARALLEL, max - done - failed)}`;
+    if (rows.length === 0) break;
+    tried.push(...rows.map((row) => row.id));
+    const batches: (typeof rows)[] = [];
+    for (let i = 0; i < rows.length; i += LEVELS_BATCH) batches.push(rows.slice(i, i + LEVELS_BATCH));
+    const labelled: Record<string, { required: string[]; hash: string }> = {};
+    await Promise.all(
+      batches.map(async (batch) => {
+        try {
+          const levels = await skillLevelsBatch(batch);
+          for (const [n, required] of levels) labelled[batch[n].id] = { required, hash: batch[n].hash };
+        } catch (error) {
+          console.error(`skill levels: ${error instanceof Error ? error.message.slice(0, 80) : "failed"}`);
+        }
+      }),
+    );
+    const count = Object.keys(labelled).length;
+    if (count > 0) {
+      await db.$executeRaw`
+        UPDATE "Job" AS j SET "skillsRequired" = ARRAY(SELECT jsonb_array_elements_text(v.l -> 'required')), "skillsHash" = v.l ->> 'hash'
+        FROM jsonb_each(${JSON.stringify(labelled)}::jsonb) AS v(id, l)
+        WHERE j.id = v.id`;
+    }
+    done += count;
+    failed += rows.length - count;
+    // A whole round failing (no API key, the API down) ends the run; the next run tries again.
+    if (count === 0) break;
+  }
+  return { labelled: done, failed };
 }

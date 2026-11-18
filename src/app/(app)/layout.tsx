@@ -18,7 +18,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <ApplicationsSummaryProvider>
       <ShellProvider value={{ name: user.name, email: user.email, signOut: <SignOutForm /> }}>
-        <main className="mx-auto flex min-h-dvh w-full max-w-[480px] flex-1 flex-col bg-background pt-[max(12px,env(safe-area-inset-top))] pb-[calc(82px+max(0px,env(safe-area-inset-bottom)-24px))]">
+        <main className="mx-auto flex min-h-dvh w-full max-w-120 flex-1 flex-col bg-background pt-[max(12px,env(safe-area-inset-top))] pb-[calc(82px+max(0px,env(safe-area-inset-bottom)-24px))]">
           {children}
         </main>
         <TabBar />

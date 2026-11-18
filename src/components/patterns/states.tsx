@@ -13,9 +13,9 @@ export function PageLoading({ label, rows = 3 }: { label: string; rows?: number 
         <Skeleton className="h-9 flex-1 rounded-tile" />
         <Skeleton className="size-11 rounded-full" />
       </div>
-      <Skeleton className="h-4 w-2/3 rounded-full" />
+      <Skeleton className="h-4 w-2/3" />
       {Array.from({ length: rows }, (_, index) => (
-        <Skeleton key={index} className="mt-2 h-24 rounded-[18px]" />
+        <Skeleton key={index} className="mt-2 h-24 rounded-card" />
       ))}
     </div>
   );

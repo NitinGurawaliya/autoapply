@@ -15,7 +15,7 @@ export default async function ApplicationsPage() {
   ]);
   const cap = loadRules().max_applications_per_day;
   // "19 sent today · Your agent is working on 3"; how many are left only as the daily limit comes near (24 Oct, owner).
-  const sub = [`${sent} sent today`, used >= cap ? "Done for today" : cap - used <= 5 ? `${cap - used} left` : null, working > 0 ? `Your agent is working on ${working}` : null]
+  const sub = [`${sent} sent today`, used >= cap ? "Done for today" : cap - used <= 5 ? `${cap - used} left` : null, working > 0 ? `${working} in progress` : null]
     .filter(Boolean)
     .join(" · ");
   return (

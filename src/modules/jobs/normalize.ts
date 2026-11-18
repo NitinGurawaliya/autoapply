@@ -1,3 +1,5 @@
+import type { Salary } from "./salary";
+
 export type FetchedJob = {
   externalId: string;
   title: string;
@@ -9,6 +11,8 @@ export type FetchedJob = {
   /** The board's office names and places ("India Locations", "Bengaluru @ Bengaluru, Karnataka, India"): where the job
    * can be done, used for eligibility when the location line says only "Remote" or names several places. */
   offices?: string[];
+  /** Pay from the board's own structured fields (salary.ts), when it publishes any. */
+  salary?: Salary | null;
   raw: Record<string, unknown>;
   /** Read from the board's list only, because ingest already holds this posting (Workday, M2): proves it is still listed,
    * carries no description, and never overwrites the stored row's content. */

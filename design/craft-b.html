@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Direction B · New identity</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* Direction B (Phase O1): a new identity. Warm paper and ink, one orange accent for the main action and the match
+     number. Meaning comes from form (solid, outlined, struck) rather than tints; sections are open, divided by rules,
+     not boxed. One family, Schibsted Grotesk. */
+  .t-light {
+    --bg:#f7f5f1; --surface:#ffffff; --sunk:#efebe5; --text:#1b1916; --muted:#6e6a64; --faint:#a29d95;
+    --line:#e7e3dc; --line-strong:#d3cec5; --accent:#e8590c; --on-accent:#ffffff; --accent-text:#c2470a;
+    --bar:#1b1916; --track:#ebe7e0; --lift: 0 1px 2px rgb(27 25 22 / 5%), 0 10px 28px rgb(27 25 22 / 7%);
+  }
+  .t-dark {
+    --bg:#12110f; --surface:#1c1a17; --sunk:#171512; --text:#eeebe6; --muted:#a39e96; --faint:#6f6a63;
+    --line:#2c2924; --line-strong:#3c3832; --accent:#f47a3d; --on-accent:#1b1916; --accent-text:#f7884f;
+    --bar:#eeebe6; --track:#2c2924; --lift: 0 1px 2px rgb(0 0 0 / 40%), 0 10px 28px rgb(0 0 0 / 40%);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #ebe8e2; font-family: 'Schibsted Grotesk', system-ui, sans-serif; color: #1b1916; -webkit-font-smoothing: antialiased; }
+  .intro { max-width: 1680px; margin: 0 auto; padding: 32px 32px 8px; }
+  .intro h1 { font-size: 24px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .intro p { margin: 0 0 14px; font-size: 15px; color: #57534d; max-width: 760px; line-height: 1.5; }
+  .intro ul { margin: 0; padding-left: 18px; font-size: 14px; color: #3d3a35; line-height: 1.6; columns: 2; max-width: 1100px; }
+  .row { display: flex; gap: 28px; padding: 24px 32px 40px; overflow-x: auto; max-width: 1680px; margin: 0 auto; }
+  .frame { flex: none; }
+  .frame > span { display: block; font-size: 13px; color: #6e6a64; margin: 0 0 8px 4px; }
+
+  .phone { width: 390px; height: 844px; border-radius: 36px; overflow: hidden; background: var(--bg); color: var(--text); position: relative;
+           box-shadow: 0 0 0 1px rgb(0 0 0 / 8%), 0 20px 50px rgb(0 0 0 / 12%); display: flex; flex-direction: column; }
+  .num { font-variant-numeric: tabular-nums; }
+  svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  svg.i.s { width: 14px; height: 14px; }
+  .meta { font-size: 13px; line-height: 1.45; color: var(--muted); }
+
+  /* Feed */
+  .bar-top { height: 56px; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; flex: none; margin-top: 12px; }
+  .bar-top b { font-size: 17px; font-weight: 600; }
+  .link { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--text); }
+  .deck { position: relative; height: 490px; flex: none; margin: 4px 16px 0; }
+  .card { position: absolute; inset: 0; background: var(--surface); border-radius: 16px; box-shadow: var(--lift); padding: 22px 22px 20px; display: flex; flex-direction: column; }
+  .card.back { transform: translateY(10px) scale(0.96); box-shadow: none; opacity: .6; }
+  .head { display: flex; align-items: flex-start; gap: 12px; }
+  .logo { width: 40px; height: 40px; border-radius: 10px; background: var(--text); color: var(--bg); display: grid; place-items: center; font-weight: 600; font-size: 15px; flex: none; }
+  .who { flex: 1; min-width: 0; padding-top: 2px; }
+  .who b { display: block; font-size: 15px; font-weight: 600; }
+  .big { text-align: right; }
+  .big b { display: block; font-size: 32px; line-height: 1; font-weight: 600; color: var(--accent-text); letter-spacing: -0.02em; }
+  .big span { font-size: 13px; color: var(--muted); }
+  /* The score's three parts as one bar: work, skills, experience, each filled to its points. */
+  .split { display: flex; gap: 3px; margin-top: 18px; height: 6px; }
+  .split i { position: relative; border-radius: 3px; background: var(--track); overflow: hidden; }
+  .split i::after { content: ""; position: absolute; inset: 0; width: var(--f); background: var(--bar); border-radius: 3px; }
+  .split-legend { display: flex; gap: 3px; margin-top: 6px; }
+  .split-legend span { font-size: 12px; color: var(--muted); }
+  h2.title { font-size: 24px; line-height: 1.2; font-weight: 600; letter-spacing: -0.015em; margin: 18px 0 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .posted { display: flex; align-items: center; gap: 8px; }
+  .new { font-size: 13px; font-weight: 600; color: var(--text); }
+  .facts { margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+  .facts span { display: flex; align-items: center; gap: 8px; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .facts svg { color: var(--muted); }
+  .rule { height: 1px; background: var(--line); margin: 16px 0 14px; }
+  .sk { font-size: 15px; line-height: 1.5; margin: 0 0 6px; display: flex; gap: 8px; }
+  .sk > em { font-style: normal; color: var(--muted); width: 66px; flex: none; }
+  .sk .gap { color: var(--muted); }
+  .sk .gap.req { color: var(--text); border-bottom: 1.5px dashed var(--text); }
+  .why { margin: auto 0 0; font-size: 15px; line-height: 1.5; color: var(--muted); }
+  .why a { color: var(--text); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; margin-left: 4px; }
+  .actions { display: flex; gap: 10px; padding: 18px 16px 0; flex: none; align-items: center; }
+  .tabs { margin-top: auto; height: 76px; border-top: 1px solid var(--line); display: flex; padding-top: 8px; }
+  .tabs span { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+  .tabs span.on { color: var(--text); font-weight: 500; }
+
+  /* Buttons: 48 px, radius 10. Skip is quiet text with an icon; Apply is the only filled button. */
+  .btn { height: 48px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font: 600 15px 'Schibsted Grotesk'; border: 1px solid transparent; cursor: pointer; }
+  .btn.quiet { flex: 1; background: transparent; border-color: var(--line-strong); color: var(--text); }
+  .btn.primary { flex: 2; background: var(--accent); color: var(--on-accent); }
+  .btn.pressed { transform: translateY(1px); filter: brightness(.92); }
+  .btn.quiet.pressed { filter: none; background: var(--line); }
+  .btn.focus { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--text); }
+  .btn.disabled { background: var(--sunk); color: var(--faint); border-color: transparent; }
+  .spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; }
+
+  /* Job page: open sections divided by rules, no boxes. */
+  .back { height: 52px; display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 500; margin-top: 12px; padding: 0 14px; flex: none; }
+  .scroll { flex: 1; overflow-y: auto; padding: 0 20px 120px; }
+  .hero { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; margin-top: 18px; }
+  .hero p { margin: 0; font-size: 15px; line-height: 1.5; color: var(--muted); max-width: 230px; }
+  .hero p b { color: var(--text); font-weight: 600; display: block; }
+  section { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 18px; }
+  section h3 { font-size: 17px; font-weight: 600; margin: 0 0 12px; display: flex; justify-content: space-between; align-items: baseline; }
+  section h3 small { font-size: 13px; font-weight: 400; color: var(--muted); }
+  .li { display: flex; gap: 12px; font-size: 15px; line-height: 1.5; padding: 6px 0; }
+  .li svg { margin-top: 3px; }
+  .li.no { color: var(--text); }
+  .li.no svg { color: var(--text); }
+  .li.yes svg { color: var(--text); }
+  .skillset { font-size: 15px; line-height: 1.7; }
+  .skillset div { padding: 6px 0; }
+  .skillset em { display: block; font-style: normal; color: var(--muted); font-size: 13px; line-height: 1.4; }
+  .desc p { margin: 0 0 10px; font-size: 15px; line-height: 1.6; }
+  .desc a { font-size: 15px; font-weight: 500; color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+  .part { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 10px 0; }
+  .part b { font-size: 15px; font-weight: 500; }
+  .part .num { font-size: 15px; text-align: right; }
+  .part .num em { font-style: normal; color: var(--muted); }
+  .part .meta { grid-column: 1 / -1; }
+  .part .meter { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--track); margin-top: 6px; overflow: hidden; }
+  .part .meter i { display: block; height: 100%; background: var(--bar); }
+  .total { display: flex; justify-content: space-between; align-items: baseline; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 12px; font-size: 15px; font-weight: 600; }
+  .total b { font-size: 24px; font-weight: 600; color: var(--accent-text); }
+  .sticky { position: absolute; left: 0; right: 0; bottom: 0; background: var(--bg); border-top: 1px solid var(--line); padding: 10px 16px 26px; }
+  .sticky .meta { margin: 0 0 8px 2px; }
+  .sticky .row-b { display: flex; gap: 10px; }
+
+  .states { max-width: 1680px; margin: 0 auto; padding: 0 32px 48px; display: flex; gap: 28px; }
+  .states .sheet { padding: 20px; border-radius: 20px; background: var(--bg); color: var(--text); }
+  .states .sheet > span { display: block; font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+  .states .grid { display: grid; grid-template-columns: repeat(5, 132px); gap: 10px; }
+  .states .grid .meta { text-align: center; }
+  .states .btn { width: 132px; flex: none; }
+</style>
+</head>
+<body>
+<div class="intro">
+  <h1>Direction B · New identity</h1>
+  <p>Warm paper and ink with one orange accent, used only for Apply and the match number. Meaning comes from form instead of colour tints, and the job page reads like a document rather than a stack of boxes.</p>
+  <ul>
+    <li>One family (Schibsted Grotesk) at five sizes: 13, 15, 17, 24, 32</li>
+    <li>Radii 10 for controls and logos, 16 for the card; no tags at all</li>
+    <li>The score shows its three parts as one split bar under the header</li>
+    <li>Facts as four icon lines; skills as plain text</li>
+    <li>Missing required skill: ink dashed underline; nice-to-have you lack: quiet grey</li>
+    <li>Job page sections are open, separated by rules; no panels</li>
+    <li>Skip is a quiet outline; Apply is the only filled button</li>
+    <li>Company logo on an ink tile; no stickers or stamps</li>
+  </ul>
+</div>
+
+<div class="row" id="row"></div>
+<div class="states" id="states"></div>
+
+<template id="feed">
+  <div class="bar-top">
+    <b>Your feed</b>
+    <span class="link"><svg class="i s" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Filters</span>
+  </div>
+  <div class="deck">
+    <div class="card back"></div>
+    <div class="card">
+      <div class="head">
+        <div class="logo">A</div>
+        <div class="who"><b>Aiprise</b><span class="meta">via Ashby</span></div>
+        <div class="big"><b class="num">86</b><span>match</span></div>
+      </div>
+      <h2 class="title">Software Engineer I, Frontend</h2>
+      <div class="posted"><span class="meta">Posted 6 days ago</span><span class="new">New</span></div>
+      <div class="facts">
+        <span><svg class="i s" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Bengaluru, on-site</span>
+        <span><svg class="i s" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="num">0–2 years</span></span>
+        <span><svg class="i s" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg><span class="num">₹15L – ₹30L</span></span>
+        <span><svg class="i s" viewBox="0 0 24 24"><path d="M4 20V8l8-4 8 4v12M9 20v-5h6v5"/></svg>Startup</span>
+      </div>
+      <div class="split" title="Work 40 of 50, skills 36 of 40, experience 10 of 10">
+        <i style="flex:50;--f:80%"></i><i style="flex:40;--f:90%"></i><i style="flex:10;--f:100%"></i>
+      </div>
+      <div class="split-legend"><span style="flex:50">Work</span><span style="flex:40">Skills</span><span style="flex:10">Years</span></div>
+      <div class="rule"></div>
+      <p class="sk"><em>You have</em><span>React, TypeScript, Next.js <span class="meta">+2</span></span></p>
+      <p class="sk"><em>Missing</em><span><span class="gap req">Jest</span>, <span class="gap">Storybook</span></span></p>
+      <p class="why">Frontend work in React and TypeScript, the stack on your resume.<a>Details</a></p>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn quiet">Skip</button>
+    <button class="btn primary">Apply</button>
+  </div>
+  <div class="tabs">
+    <span class="on"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="3.5" width="12" height="17" rx="2.5"/></svg>Discover</span>
+    <span><svg class="i" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>Applications</span>
+  </div>
+</template>
+
+<template id="job">
+  <div class="back"><svg class="i" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>Feed</div>
+  <div class="scroll">
+    <div class="head" style="margin-top:4px">
+      <div class="logo">A</div>
+      <div class="who"><b>Aiprise</b><span class="meta">via Ashby · posted 6 days ago</span></div>
+    </div>
+    <h2 class="title">Software Engineer I, Frontend</h2>
+    <div class="hero">
+      <p><b>Strong fit</b>Frontend work in React and TypeScript, the stack on your resume.</p>
+      <div class="big"><b class="num">86</b><span>match</span></div>
+    </div>
+    <div class="facts" style="margin-top:18px">
+      <span><svg class="i s" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Bengaluru, on-site</span>
+      <span><svg class="i s" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="num">0–2 years</span></span>
+      <span><svg class="i s" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg><span class="num">₹15L – ₹30L a year</span></span>
+      <span><svg class="i s" viewBox="0 0 24 24"><path d="M4 20V8l8-4 8 4v12M9 20v-5h6v5"/></svg>Startup</span>
+    </div>
+
+    <section>
+      <h3>Why it's a match</h3>
+      <div class="li yes"><svg class="i s" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Frontend work, close to what you do now</div>
+      <div class="li yes"><svg class="i s" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>You have 5 of its 6 required skills</div>
+      <div class="li yes"><svg class="i s" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Asks 0–2 years; you have 1</div>
+      <div class="li no"><svg class="i s" viewBox="0 0 24 24"><path d="M12 8v5M12 16.5h.01"/><circle cx="12" cy="12" r="9"/></svg>Requires Jest, which isn't on your resume</div>
+    </section>
+
+    <section>
+      <h3>Skills <small class="num">5 of 6 required</small></h3>
+      <div class="skillset">
+        <div><em>On your resume</em><span>React, TypeScript, Next.js, CSS, Git</span></div>
+        <div><em>Required, not on your resume</em><span><span class="sk"><span class="gap req">Jest</span></span></span></div>
+        <div><em>Nice to have, not on your resume</em><span class="sk" style="margin:0"><span class="gap">Storybook</span>, <span class="gap">GraphQL</span></span></div>
+      </div>
+    </section>
+
+    <section class="desc">
+      <h3>About the role</h3>
+      <p>You'll build the screens our customers use to verify identities: onboarding flows, review queues and the dashboard, in React and TypeScript.</p>
+      <p>You'll work with one designer and two backend engineers, ship every week, and own features from the first sketch to production.</p>
+      <a>Read the full description</a>
+    </section>
+
+    <section>
+      <h3>How we got to <span class="num">86</span></h3>
+      <div class="part"><b>The work</b><span class="num">40 <em>/ 50</em></span><span class="meta">Rated a strong fit for your field (35), close to your resume (5 of 15)</span><div class="meter"><i style="width:80%"></i></div></div>
+      <div class="part"><b>Skills</b><span class="num">36 <em>/ 40</em></span><span class="meta">5 of 6 required and 2 of 4 nice to have</span><div class="meter"><i style="width:90%"></i></div></div>
+      <div class="part"><b>Experience</b><span class="num">10 <em>/ 10</em></span><span class="meta">Asks 0–2 years; you have 1</span><div class="meter"><i style="width:100%"></i></div></div>
+      <div class="total"><span>Match</span><b class="num">86</b></div>
+    </section>
+  </div>
+  <div class="sticky">
+    <p class="meta">Up next: Razorpay, Frontend Engineer</p>
+    <div class="row-b">
+      <button class="btn quiet">Skip</button>
+      <button class="btn primary">Apply</button>
+    </div>
+  </div>
+</template>
+
+<template id="buttons">
+  <div class="grid">
+    <button class="btn primary">Apply</button>
+    <button class="btn primary pressed">Apply</button>
+    <button class="btn primary focus">Apply</button>
+    <button class="btn disabled">Apply</button>
+    <button class="btn primary"><span class="spin"></span>Sending</button>
+    <button class="btn quiet">Skip</button>
+    <button class="btn quiet pressed">Skip</button>
+    <button class="btn quiet focus">Skip</button>
+    <button class="btn disabled">Skip</button>
+    <button class="btn quiet"><span class="spin"></span>Skipping</button>
+    <span class="meta">Rest</span><span class="meta">Pressed</span><span class="meta">Focus</span><span class="meta">Disabled</span><span class="meta">Loading</span>
+  </div>
+</template>
+
+<script>
+  const add = (where, label, theme, template) => {
+    const frame = document.createElement("div");
+    frame.className = "frame";
+    frame.innerHTML = `<span>${label}</span>`;
+    const phone = document.createElement("div");
+    phone.className = `phone ${theme}`;
+    phone.append(document.getElementById(template).content.cloneNode(true));
+    frame.append(phone);
+    document.getElementById(where).append(frame);
+  };
+  add("row", "Feed card · light", "t-light", "feed");
+  add("row", "Feed card · dark", "t-dark", "feed");
+  add("row", "Job page · light", "t-light", "job");
+  add("row", "Job page · dark", "t-dark", "job");
+  for (const [theme, label] of [["t-light", "Button states · light"], ["t-dark", "Button states · dark"]]) {
+    const sheet = document.createElement("div");
+    sheet.className = `sheet ${theme}`;
+    sheet.innerHTML = `<span>${label}</span>`;
+    sheet.append(document.getElementById("buttons").content.cloneNode(true));
+    document.getElementById("states").append(sheet);
+  }
+</script>
+</body>
+</html>

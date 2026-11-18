@@ -10,7 +10,7 @@ import { SegmentedProgress } from "@/components/ui/segmented-progress";
  * (used only outside the signed-in shell, which has its own). */
 export function Screen({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <main className={cn("mx-auto box-border flex min-h-dvh w-full max-w-[480px] flex-col bg-background pt-[max(12px,env(safe-area-inset-top))] text-foreground", className)}>
+    <main className={cn("mx-auto box-border flex min-h-dvh w-full max-w-120 flex-col bg-background pt-[max(12px,env(safe-area-inset-top))] text-foreground", className)}>
       {children}
     </main>
   );
@@ -18,11 +18,11 @@ export function Screen({ children, className }: { children: ReactNode; className
 
 /** Back arrow, three segments and "1 of 3". */
 export function StepHeader({ step, onBack, backHref }: { step: 1 | 2 | 3; onBack?: () => void; backHref?: string }) {
-  const back = <Icon name="back" size={22} strokeWidth={2.25} />;
+  const back = <Icon name="back" size={22} />;
   return (
     <header className="flex h-11 flex-none items-center gap-3 pr-4 pl-3">
       {backHref ? (
-        <a href={backHref} aria-label="Back" className="flex size-11 flex-none items-center justify-center rounded-full text-foreground">
+        <a href={backHref} aria-label="Back" className="flex size-11 flex-none items-center justify-center rounded-control text-foreground active:bg-sunk">
           {back}
         </a>
       ) : onBack ? (
@@ -34,7 +34,7 @@ export function StepHeader({ step, onBack, backHref }: { step: 1 | 2 | 3; onBack
         <span aria-hidden="true" className="size-11 flex-none" />
       )}
       <SegmentedProgress count={3} done={step} thickness={6} className="flex-1" />
-      <span className="text-[13px] font-semibold text-muted-foreground tabular-nums">{step} of 3</span>
+      <span className="type-meta font-semibold text-muted-foreground tabular-nums">{step} of 3</span>
     </header>
   );
 }
@@ -43,8 +43,8 @@ export function StepHeader({ step, onBack, backHref }: { step: 1 | 2 | 3; onBack
 export function PageIntro({ title, sub, eyebrow, className }: { title: ReactNode; sub?: ReactNode; eyebrow?: ReactNode; className?: string }) {
   return (
     <div className={cn("flex flex-col", eyebrow ? "gap-2" : "gap-2.5", className)}>
-      {eyebrow ? <span className="text-[13px] font-semibold text-muted-foreground">{eyebrow}</span> : null}
-      <h1 className="m-0 type-display-lg">{title}</h1>
+      {eyebrow ? <span className="type-meta font-semibold text-muted-foreground">{eyebrow}</span> : null}
+      <h1 className="m-0 type-heading">{title}</h1>
       {sub ? <p className="m-0 text-base leading-normal text-muted-foreground">{sub}</p> : null}
     </div>
   );

@@ -15,20 +15,21 @@ export function initialsOf(text: string, split: RegExp = /[\s._-]+/) {
   return letters || "?";
 }
 
-const markVariants = cva("box-border inline-flex flex-none items-center justify-center font-display font-extrabold", {
+// Company tile (Direction B, Phase O3): one radius, the body face at 600, no outline but a hairline when quiet.
+const markVariants = cva("box-border inline-flex flex-none items-center justify-center font-semibold", {
   variants: {
     size: {
-      36: "size-9 rounded-[10px] text-[13px]",
-      40: "size-10 rounded-tile text-sm",
-      44: "size-11 rounded-[13px] text-[15px]",
-      48: "size-12 rounded-[14px] text-[17px]",
-      56: "size-14 rounded-control text-[19px]",
+      36: "size-9 rounded-tile type-meta",
+      40: "size-10 rounded-tile type-meta",
+      44: "size-11 rounded-tile type-body",
+      48: "size-12 rounded-tile type-body",
+      56: "size-14 rounded-control type-section",
     },
     tone: {
       inverse: "bg-inverse text-inverse-foreground",
       subtle: "bg-subtle text-foreground",
-      outline: "border-[1.5px] border-dash text-muted-foreground",
-      accent: "border-[1.5px] border-ink bg-primary text-ink",
+      outline: "border border-dash text-muted-foreground",
+      accent: "bg-primary text-primary-foreground",
     },
   },
   defaultVariants: { size: 48, tone: "inverse" },
@@ -67,74 +68,57 @@ const BOARD_LOGOS: Record<string, string> = {
 
 /**
  * The job board's mark beside "via Greenhouse": the board's own icon, or for a board without one here (Workday, Zoho
- * Recruit) its first letter in an ink outline. `board` is the label ("Greenhouse") or the id ("greenhouse").
+ * Recruit) its first letter in a hairline square. `board` is the label ("Greenhouse") or the id ("greenhouse").
  */
 export function BoardMark({ board, className, size = 20 }: { board: string; className?: string; size?: number }) {
   const logo = BOARD_LOGOS[board.toLowerCase().replace(/\s+/g, "")];
   if (logo) {
     return (
       // eslint-disable-next-line @next/next/no-img-element -- a tiny static icon; next/image adds nothing here
-      <img src={logo} alt="" aria-hidden="true" width={size} height={size} draggable={false} className={cn("flex-none rounded-[5px] select-none", className)} />
+      <img src={logo} alt="" aria-hidden="true" width={size} height={size} draggable={false} className={cn("flex-none rounded-tag select-none", className)} />
     );
   }
   return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "box-border inline-flex size-5 flex-none items-center justify-center rounded-md border-[1.5px] border-edge font-display text-[11px] font-extrabold leading-none",
-        className,
-      )}
-    >
+    <span aria-hidden="true" className={cn("box-border inline-flex size-5 flex-none items-center justify-center rounded-tag border border-line-strong type-meta leading-none font-semibold", className)}>
       {board[0]?.toUpperCase() ?? "?"}
     </span>
   );
 }
 
-/** The tilted lime "86 match" badge. */
 const TIER_WORD = { strong: "Strong", good: "Good", stretch: "Stretch" } as const;
 
-/** The lime badge: the tier's word ("Strong match"), worked out from the score when no tier is given; never a number. */
-export function MatchBadge({ score, tier, size = "lg", className }: { score: number; tier?: keyof typeof TIER_WORD | null; size?: "lg" | "md"; className?: string }) {
+/** The tier's word ("Strong match"), from the score when no tier is given; never a number. A flat label, not a sticker. */
+export function MatchBadge({ score, tier, className }: { score: number; tier?: keyof typeof TIER_WORD | null; size?: "lg" | "md"; className?: string }) {
   const word = TIER_WORD[tier ?? (score >= 75 ? "strong" : score >= 60 ? "good" : "stretch")];
+  return <span className={cn("inline-flex h-7 items-center rounded-tag bg-surface px-2.5 type-meta font-semibold shadow-lift", className)}>{word} match</span>;
+}
+
+const FIT_WORD = { strong: "Strong fit", good: "Good fit", stretch: "Stretch" } as const;
+export type FitTier = keyof typeof FIT_WORD;
+export const tierFor = (score: number, tier?: FitTier | null): FitTier => tier ?? (score >= 75 ? "strong" : score >= 60 ? "good" : "stretch");
+
+/** The tier as words beside the score (design/craft-b2.html): weight, not colour, tells them apart. */
+export function TierPill({ tier, className }: { tier: FitTier; className?: string }) {
   return (
-    <span
-      role="img"
-      aria-label={`${word} match`}
-      className={cn(
-        "box-border flex -rotate-8 flex-col items-center justify-center rounded-full border-2 border-ink bg-primary leading-none text-ink",
-        size === "lg" ? "size-21 shadow-hard" : "size-[66px] shadow-[0_4px_0_var(--ink)]",
-        className,
-      )}
-    >
-      <span className={cn("font-display font-extrabold tracking-[-0.03em]", size === "lg" ? "text-[19px]" : "text-[15px]")}>{word}</span>
-      <span className={cn("mt-0.5 font-bold tracking-[0.06em] uppercase", size === "lg" ? "text-[11px]" : "text-[9px]")}>match</span>
+    <span className={cn("type-meta whitespace-nowrap", tier === "strong" ? "font-semibold text-foreground" : "text-muted-foreground", className)}>
+      {FIT_WORD[tier]}
     </span>
   );
 }
 
-/** Classes for the APPLY / SKIP stamps (the deck animates their opacity). */
+/** Classes for the Apply / Skip labels that fade in while the card is dragged (the deck animates their opacity). */
 export function stampClass(kind: "apply" | "skip") {
   return cn(
-    "pointer-events-none absolute top-[92px] rounded-tile border-2 px-3.5 py-1 font-display text-[28px] font-extrabold",
-    kind === "apply" ? "left-[18px] -rotate-8 border-ink bg-primary text-ink" : "right-[18px] rotate-8 border-edge bg-surface text-foreground",
+    "pointer-events-none absolute top-24 rounded-control px-3 py-1.5 type-section",
+    kind === "apply" ? "left-5 bg-primary text-primary-foreground" : "right-5 bg-inverse text-inverse-foreground",
   );
 }
 
-/** Ink check or "!" in a circle: sent rows, the detail status pill. */
+/** Check or "!" in a circle: sent rows, the detail status line. */
 export function StatusMark({ kind, size = 26 }: { kind: "ok" | "stop"; size?: 22 | 26 }) {
   return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "inline-flex flex-none items-center justify-center rounded-full bg-inverse text-inverse-foreground",
-        size === 26 ? "size-[26px]" : "size-[22px]",
-      )}
-    >
-      {kind === "ok" ? (
-        <Icon name="check" size={size === 26 ? 14 : 12} strokeWidth={size === 26 ? 3 : 3.5} />
-      ) : (
-        <span className="text-[13px] font-extrabold">!</span>
-      )}
+    <span aria-hidden="true" className={cn("inline-flex flex-none items-center justify-center rounded-full bg-inverse text-inverse-foreground", size === 26 ? "size-6" : "size-5")}>
+      {kind === "ok" ? <Icon name="check" size={size === 26 ? 14 : 12} /> : <span className="type-meta leading-none font-semibold">!</span>}
     </span>
   );
 }
@@ -142,7 +126,7 @@ export function StatusMark({ kind, size = 26 }: { kind: "ok" | "stop"; size?: 22
 /** Status line under the detail title: "✓ Sent today, 10:42". */
 export function StatusPill({ kind, children }: { kind: "ok" | "stop"; children: React.ReactNode }) {
   return (
-    <span className="box-border inline-flex h-[34px] items-center gap-2 self-start rounded-full bg-subtle pr-3 pl-1.5 text-sm font-semibold">
+    <span className="box-border inline-flex h-8 items-center gap-2 self-start rounded-tag bg-sunk pr-3 pl-1.5 type-meta font-medium">
       <StatusMark kind={kind} size={22} />
       {children}
     </span>

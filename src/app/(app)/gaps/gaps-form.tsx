@@ -40,17 +40,17 @@ export function GapsForm({ gaps }: { gaps: Gap[] }) {
   return (
     <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
       {gaps.map((gap) => (
-        <li key={gap.key} className="box-border flex flex-col gap-3 rounded-panel border-2 border-edge bg-surface p-4 shadow-hard">
+        <li key={gap.key} className="box-border flex flex-col gap-3 rounded-panel bg-surface p-4 shadow-lift">
           <div className="flex flex-col gap-1">
-            <p className="m-0 type-lead font-semibold">{gap.label}</p>
-            <p className="m-0 text-[13px] text-muted-foreground">
+            <p className="m-0 type-section font-semibold">{gap.label}</p>
+            <p className="m-0 type-meta text-muted-foreground">
               Asked by {gap.jobs} {gap.jobs === 1 ? "job" : "jobs"} in your feed
             </p>
           </div>
           {saved[gap.key] ? (
-            <p className="m-0 flex items-center gap-2 text-[15px] font-semibold">
-              <span aria-hidden="true" className="flex size-[22px] items-center justify-center rounded-full bg-primary text-ink">
-                <Icon name="check" size={12} strokeWidth={3.5} />
+            <p className="m-0 flex items-center gap-2 type-body font-semibold">
+              <span aria-hidden="true" className="flex size-5.5 items-center justify-center rounded-full bg-inverse text-inverse-foreground">
+                <Icon name="check" size={12} />
               </span>
               Saved. We will use it from now on.
             </p>

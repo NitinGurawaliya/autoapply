@@ -16,8 +16,8 @@ export default async function SignInPage() {
             await signIn("google", { redirectTo: "/" });
           }}
         >
-          <Button type="submit" variant="strong" size="xl" className="w-full gap-3 text-base shadow-hard">
-            <span aria-hidden="true" className="flex size-6 items-center justify-center rounded-full border-[1.5px] border-muted-foreground text-xs font-bold">
+          <Button type="submit" variant="primary" size="xl" className="w-full gap-3">
+            <span aria-hidden="true" className="flex size-6 items-center justify-center rounded-full bg-primary-foreground text-xs font-bold text-primary">
               G
             </span>
             Continue with Google

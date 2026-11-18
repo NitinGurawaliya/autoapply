@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Direction A · Refined</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* Direction A (Phase O1): the same brand, refined. Lime stays as the one accent; the template patterns go:
+     no offset shadows, no 2 px ink borders, no stickers, no pills except toggles, no uppercase labels, one family. */
+  .t-light {
+    --bg:#f4f4f1; --surface:#ffffff; --sunk:#f0f0ec; --text:#17181a; --muted:#66686d; --faint:#9a9ca0;
+    --line:#e6e6e1; --line-strong:#d2d2cc; --lime:#c8f03c; --on-lime:#17181a;
+    --ok-bg:#eef6d6; --ok:#3b560a; --gap-bg:#fbeaea; --gap:#a3322f; --bar:#17181a; --track:#ececE7;
+    --lift: 0 1px 2px rgb(23 24 26 / 5%), 0 8px 24px rgb(23 24 26 / 6%);
+  }
+  .t-dark {
+    --bg:#0f1012; --surface:#18191c; --sunk:#141518; --text:#ededee; --muted:#9c9ea3; --faint:#6d6f74;
+    --line:#26272b; --line-strong:#36373c; --lime:#c8f03c; --on-lime:#17181a;
+    --ok-bg:#243010; --ok:#d2ec7c; --gap-bg:#3a1f21; --gap:#f0a6a6; --bar:#c8f03c; --track:#2a2b30;
+    --lift: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 35%);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e9e9e4; font-family: 'Instrument Sans', system-ui, sans-serif; color: #17181a; -webkit-font-smoothing: antialiased; }
+  .intro { max-width: 1680px; margin: 0 auto; padding: 32px 32px 8px; }
+  .intro h1 { font-size: 24px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .intro p { margin: 0 0 14px; font-size: 15px; color: #55575c; max-width: 760px; line-height: 1.5; }
+  .intro ul { margin: 0; padding-left: 18px; font-size: 14px; color: #3b3d41; line-height: 1.6; columns: 2; max-width: 1100px; }
+  .row { display: flex; gap: 28px; padding: 24px 32px 40px; overflow-x: auto; max-width: 1680px; margin: 0 auto; }
+  .frame { flex: none; }
+  .frame > span { display: block; font-size: 13px; color: #66686d; margin: 0 0 8px 4px; }
+
+  /* The phone */
+  .phone { width: 390px; height: 844px; border-radius: 36px; overflow: hidden; background: var(--bg); color: var(--text); position: relative;
+           box-shadow: 0 0 0 1px rgb(0 0 0 / 8%), 0 20px 50px rgb(0 0 0 / 12%); display: flex; flex-direction: column; }
+  .num { font-variant-numeric: tabular-nums; }
+  svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  svg.i.s { width: 14px; height: 14px; stroke-width: 2; }
+
+  /* Type scale: 13 meta, 15 body, 17 section, 24 title, 32 score. Weights 400, 500, 600. */
+  .meta { font-size: 13px; line-height: 1.45; color: var(--muted); }
+  .body { font-size: 15px; line-height: 1.5; }
+
+  /* Feed screen */
+  .bar-top { height: 56px; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; flex: none; margin-top: 12px; }
+  .bar-top b { font-size: 17px; font-weight: 600; }
+  .bar-top b small { font-size: 13px; font-weight: 400; color: var(--muted); margin-left: 6px; }
+  .ghost { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font: 500 13px 'Instrument Sans'; color: var(--text); }
+  /* The app's card height at this phone size: clamp(440px, 100dvh - 330px, 490px). */
+  .deck { position: relative; height: 490px; flex: none; margin: 4px 16px 0; }
+  .tabs { margin-top: auto; height: 76px; border-top: 1px solid var(--line); background: var(--surface); display: flex; padding-top: 8px; }
+  .tabs span { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+  .tabs span.on { color: var(--text); font-weight: 500; }
+  .card { position: absolute; inset: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--lift); padding: 20px; display: flex; flex-direction: column; }
+  .card.back { transform: translateY(10px) scale(0.96); box-shadow: none; opacity: .7; }
+  .head { display: flex; gap: 12px; align-items: center; }
+  .tile { width: 44px; height: 44px; border-radius: 12px; background: var(--sunk); border: 1px solid var(--line); display: grid; place-items: center; font-weight: 600; font-size: 15px; flex: none; }
+  .who { flex: 1; min-width: 0; }
+  .who b { display: block; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .score { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+  .score b { font-size: 32px; font-weight: 600; line-height: 1; letter-spacing: -0.02em; background: var(--lime); color: var(--on-lime); border-radius: 12px; padding: 6px 10px 5px; }
+  .score b small { font-size: 15px; font-weight: 500; margin-left: 1px; }
+  h2.title { font-size: 24px; line-height: 1.2; font-weight: 600; letter-spacing: -0.015em; margin: 18px 0 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .posted { display: flex; align-items: center; gap: 8px; }
+  .tag { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: 6px; font-size: 13px; font-weight: 500; white-space: nowrap; }
+  .tag.new { background: var(--ok-bg); color: var(--ok); height: 20px; font-size: 12px; padding: 0 6px; }
+  .tag.have { background: var(--ok-bg); color: var(--ok); }
+  .tag.miss { background: var(--gap-bg); color: var(--gap); }
+  .tag.nice { color: var(--muted); box-shadow: inset 0 0 0 1px var(--line-strong); }
+  .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; padding: 14px 0; margin-top: 16px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .facts div span { display: block; font-size: 13px; color: var(--muted); margin-bottom: 2px; }
+  .facts div b { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+  .skills { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+  .sk { display: flex; align-items: center; gap: 6px; overflow: hidden; }
+  .sk > span:first-child { width: 72px; flex: none; font-size: 13px; color: var(--muted); }
+  .sk .more { font-size: 13px; color: var(--muted); padding-left: 2px; }
+  .why { margin: auto 0 0; padding-top: 14px; font-size: 15px; line-height: 1.5; color: var(--text); }
+  .why a { color: var(--muted); font-size: 13px; font-weight: 500; text-decoration: underline; text-underline-offset: 3px; margin-left: 4px; }
+  .actions { display: flex; gap: 10px; padding: 18px 16px 0; flex: none; }
+
+  /* Buttons: 48 px, radius 12, one primary per screen. */
+  .btn { height: 48px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font: 600 15px 'Instrument Sans'; border: 1px solid transparent; cursor: pointer; }
+  .btn.secondary { flex: 1; background: var(--surface); border-color: var(--line-strong); color: var(--text); }
+  .btn.primary { flex: 1.4; background: var(--lime); color: var(--on-lime); }
+  .btn.pressed { transform: translateY(1px); filter: brightness(.94); }
+  .btn.secondary.pressed { filter: none; background: var(--line); }
+  .btn.focus { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--text); }
+  .btn.disabled { background: var(--sunk); color: var(--faint); border-color: var(--line); }
+  .spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; }
+
+  /* Job page */
+  .scroll { flex: 1; overflow-y: auto; padding: 0 20px 120px; }
+  .back { height: 52px; display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 500; margin-top: 12px; padding: 0 14px; flex: none; }
+  .match { display: flex; gap: 14px; align-items: center; margin-top: 18px; padding: 16px; border-radius: 20px; background: var(--surface); border: 1px solid var(--line); }
+  .match .score b { font-size: 32px; }
+  .match p { margin: 0; }
+  .match p b { display: block; font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+  section { margin-top: 28px; }
+  section h3 { font-size: 17px; font-weight: 600; margin: 0 0 10px; display: flex; justify-content: space-between; align-items: baseline; }
+  section h3 small { font-size: 13px; font-weight: 400; color: var(--muted); }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 6px 16px; }
+  .li { display: flex; gap: 10px; padding: 10px 0; font-size: 15px; line-height: 1.45; border-bottom: 1px solid var(--line); }
+  .li:last-child { border-bottom: none; }
+  .li .mk { width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; flex: none; margin-top: 1px; }
+  .mk.yes { background: var(--ok-bg); color: var(--ok); }
+  .mk.no { background: var(--gap-bg); color: var(--gap); }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 0; }
+  .tags + .meta { padding-bottom: 12px; }
+  .grp { font-size: 13px; color: var(--muted); padding-top: 12px; }
+  .desc p { margin: 0 0 10px; font-size: 15px; line-height: 1.6; color: var(--text); }
+  .desc a { font-size: 15px; font-weight: 500; color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+  .part { padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .part .top { display: flex; justify-content: space-between; font-size: 15px; font-weight: 500; }
+  .part .top em { font-style: normal; font-weight: 400; color: var(--muted); }
+  .part .meta { margin: 2px 0 8px; }
+  .meter { height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; }
+  .meter i { display: block; height: 100%; background: var(--bar); border-radius: 2px; }
+  .total { display: flex; justify-content: space-between; align-items: baseline; padding: 14px 0 10px; font-size: 15px; font-weight: 600; }
+  .total b { font-size: 24px; font-weight: 600; }
+  .sticky { position: absolute; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); padding: 10px 16px 26px; }
+  .sticky .meta { margin: 0 0 8px 2px; }
+  .sticky .row-b { display: flex; gap: 10px; }
+
+  .states { max-width: 1680px; margin: 0 auto; padding: 0 32px 48px; display: flex; gap: 28px; }
+  .states .sheet { padding: 20px; border-radius: 20px; background: var(--bg); color: var(--text); }
+  .states .sheet > span { display: block; font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+  .states .grid { display: grid; grid-template-columns: repeat(5, 132px); gap: 10px; }
+  .states .grid .meta { text-align: center; }
+  .states .btn { width: 132px; }
+</style>
+</head>
+<body>
+<div class="intro">
+  <h1>Direction A · Same brand, refined</h1>
+  <p>Lime stays the one accent, and only means "act here" or "good". Everything that made the old screens read as a template is gone; the content from Phase M is unchanged.</p>
+  <ul>
+    <li>One family (Instrument Sans) at five sizes: 13, 15, 17, 24, 32</li>
+    <li>Three radii: 6 tags, 12 controls, 20 cards</li>
+    <li>One soft lift on the card; no offset shadows, no 2 px ink borders</li>
+    <li>Facts as a labelled grid instead of a row of pills</li>
+    <li>Sentence-case labels; nothing in letter-spaced capitals</li>
+    <li>Buttons 48 px; lime only on Apply and the match number</li>
+    <li>Rose only for a required skill you lack; nice-to-have gaps are outlined</li>
+    <li>No stickers or rotated stamps; the deck shows one card behind</li>
+  </ul>
+</div>
+
+<div class="row" id="row"></div>
+<div class="states" id="states"></div>
+
+<template id="feed">
+  <div class="bar-top">
+    <b>Your feed <small class="num">27 jobs</small></b>
+    <span class="ghost"><svg class="i s" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Filters</span>
+  </div>
+  <div class="deck">
+    <div class="card back"></div>
+    <div class="card">
+      <div class="head">
+        <div class="tile">A</div>
+        <div class="who"><b>Aiprise</b><span class="meta">via Ashby</span></div>
+        <div class="score"><b class="num">86<small>%</small></b><span class="meta">Strong fit</span></div>
+      </div>
+      <h2 class="title">Software Engineer I, Frontend</h2>
+      <div class="posted"><span class="meta">Posted 6 days ago</span><span class="tag new">New</span></div>
+      <div class="facts">
+        <div><span>Location</span><b>Bengaluru, on-site</b></div>
+        <div><span>Experience</span><b class="num">0–2 years</b></div>
+        <div><span>Pay</span><b class="num">₹15L – ₹30L</b></div>
+        <div><span>Company</span><b>Startup</b></div>
+      </div>
+      <div class="skills">
+        <div class="sk"><span>You have</span>
+          <span class="tag have"><svg class="i s" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>React</span>
+          <span class="tag have"><svg class="i s" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>TypeScript</span>
+          <span class="more num">+3</span></div>
+        <div class="sk"><span>Missing</span><span class="tag miss">Jest</span><span class="tag nice">Storybook</span></div>
+      </div>
+      <p class="why">Frontend work in React and TypeScript, the stack on your resume, at a level that fits your year of experience.<a>Details</a></p>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn secondary"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>Skip</button>
+    <button class="btn primary"><svg class="i" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Apply</button>
+  </div>
+  <div class="tabs">
+    <span class="on"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="3.5" width="12" height="17" rx="2.5"/></svg>Discover</span>
+    <span><svg class="i" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>Applications</span>
+  </div>
+</template>
+
+<template id="job">
+  <div class="back"><svg class="i" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>Feed</div>
+  <div class="scroll">
+    <div class="head" style="margin-top:4px">
+      <div class="tile">A</div>
+      <div class="who"><b>Aiprise</b><span class="meta">via Ashby</span></div>
+    </div>
+    <h2 class="title" style="font-size:24px">Software Engineer I, Frontend</h2>
+    <div class="posted"><span class="meta">Posted 6 days ago</span><span class="tag new">New</span></div>
+
+    <div class="match">
+      <div class="score"><b class="num">86<small>%</small></b></div>
+      <p class="meta"><b style="color:var(--text)">Strong fit</b>Frontend work in React and TypeScript, the stack on your resume.</p>
+    </div>
+
+    <div class="facts" style="border-top:none;margin-top:4px">
+      <div><span>Location</span><b>Bengaluru, on-site</b></div>
+      <div><span>Experience</span><b class="num">0–2 years</b></div>
+      <div><span>Pay</span><b class="num">₹15L – ₹30L a year</b></div>
+      <div><span>Company</span><b>Startup</b></div>
+    </div>
+
+    <section>
+      <h3>Why it's a match</h3>
+      <div class="panel">
+        <div class="li"><span class="mk yes"><svg class="i s" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>Frontend work, close to what you do now</div>
+        <div class="li"><span class="mk yes"><svg class="i s" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>You have 5 of its 6 required skills</div>
+        <div class="li"><span class="mk yes"><svg class="i s" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>Asks 0–2 years; you have 1</div>
+        <div class="li"><span class="mk no"><svg class="i s" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg></span>Requires Jest, which isn't on your resume</div>
+      </div>
+    </section>
+
+    <section>
+      <h3>Skills <small class="num">5 of 6 required</small></h3>
+      <div class="panel">
+        <div class="grp">On your resume</div>
+        <div class="tags">
+          <span class="tag have">React</span><span class="tag have">TypeScript</span><span class="tag have">Next.js</span><span class="tag have">CSS</span><span class="tag have">Git</span>
+        </div>
+        <div class="grp" style="border-top:1px solid var(--line)">Required, not on your resume</div>
+        <div class="tags"><span class="tag miss">Jest</span></div>
+        <div class="grp" style="border-top:1px solid var(--line)">Nice to have, not on your resume</div>
+        <div class="tags"><span class="tag nice">Storybook</span><span class="tag nice">GraphQL</span></div>
+      </div>
+    </section>
+
+    <section class="desc">
+      <h3>About the role</h3>
+      <p>You'll build the screens our customers use to verify identities: onboarding flows, review queues and the dashboard, in React and TypeScript.</p>
+      <p>You'll work with one designer and two backend engineers, ship every week, and own features from the first sketch to production.</p>
+      <a>Read the full description</a>
+    </section>
+
+    <section>
+      <h3>How we got to <span class="num">86</span></h3>
+      <div class="panel">
+        <div class="part"><div class="top"><span>The work</span><span class="num">40 <em>/ 50</em></span></div><div class="meta">Rated a strong fit for your field (35), close to your resume (5 of 15)</div><div class="meter"><i style="width:80%"></i></div></div>
+        <div class="part"><div class="top"><span>Skills</span><span class="num">36 <em>/ 40</em></span></div><div class="meta">5 of 6 required and 2 of 4 nice to have</div><div class="meter"><i style="width:90%"></i></div></div>
+        <div class="part"><div class="top"><span>Experience</span><span class="num">10 <em>/ 10</em></span></div><div class="meta">Asks 0–2 years; you have 1</div><div class="meter"><i style="width:100%"></i></div></div>
+        <div class="total"><span>Match</span><b class="num">86</b></div>
+      </div>
+    </section>
+  </div>
+  <div class="sticky">
+    <p class="meta">Up next: Razorpay, Frontend Engineer</p>
+    <div class="row-b">
+      <button class="btn secondary">Skip</button>
+      <button class="btn primary">Apply</button>
+    </div>
+  </div>
+</template>
+
+<template id="buttons">
+  <div class="grid">
+    <button class="btn primary">Apply</button>
+    <button class="btn primary pressed">Apply</button>
+    <button class="btn primary focus">Apply</button>
+    <button class="btn disabled">Apply</button>
+    <button class="btn primary"><span class="spin"></span>Sending</button>
+    <button class="btn secondary">Skip</button>
+    <button class="btn secondary pressed">Skip</button>
+    <button class="btn secondary focus">Skip</button>
+    <button class="btn disabled">Skip</button>
+    <button class="btn secondary"><span class="spin"></span>Skipping</button>
+    <span class="meta">Rest</span><span class="meta">Pressed</span><span class="meta">Focus</span><span class="meta">Disabled</span><span class="meta">Loading</span>
+  </div>
+</template>
+
+<script>
+  const add = (where, label, theme, template) => {
+    const frame = document.createElement("div");
+    frame.className = "frame";
+    frame.innerHTML = `<span>${label}</span>`;
+    const phone = document.createElement("div");
+    phone.className = `phone ${theme}`;
+    phone.append(document.getElementById(template).content.cloneNode(true));
+    frame.append(phone);
+    document.getElementById(where).append(frame);
+  };
+  add("row", "Feed card · light", "t-light", "feed");
+  add("row", "Feed card · dark", "t-dark", "feed");
+  add("row", "Job page · light", "t-light", "job");
+  add("row", "Job page · dark", "t-dark", "job");
+  for (const [theme, label] of [["t-light", "Button states · light"], ["t-dark", "Button states · dark"]]) {
+    const sheet = document.createElement("div");
+    sheet.className = `sheet ${theme}`;
+    sheet.innerHTML = `<span>${label}</span>`;
+    sheet.append(document.getElementById("buttons").content.cloneNode(true));
+    document.getElementById("states").append(sheet);
+  }
+</script>
+</body>
+</html>

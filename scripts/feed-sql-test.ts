@@ -5,7 +5,7 @@
 // npx tsx scripts/feed-sql-test.ts
 import { db } from "../src/lib/db";
 import { companyKey, feedHistory, loadRules, roleKey } from "../src/modules/governance";
-import { companyResultsById, judge, judgeJobs, listFeed, parseFeedFilters, profileVector, scoreJob, tracksOf } from "../src/modules/jobs";
+import { candidateSkills, companyResultsById, judge, judgeJobs, listFeed, parseFeedFilters, profileVector, scoreJob, tracksOf } from "../src/modules/jobs";
 import { dedupeListings, feedRows, feedTracks, levelsFor, yearsBand } from "../src/modules/jobs/match";
 
 let failed = 0;
@@ -73,6 +73,7 @@ async function referenceFeed(userId: string) {
   const preferred = (answers[0]?.answer ?? "").split(",").map((item) => item.trim()).filter((item) => item === "India" || item === "US" || item === "Other");
   const sources = profile?.isTest ? [...new Set([...filters.boards, "mock"])] : filters.boards;
   const tracks = profile ? tracksOf(profile) : [];
+  const shows = profile ? candidateSkills(profile) : new Set<string>();
   // Strict matching (9 Nov): the user's own tracks (plus plain software roles for developers) and their years band are
   // hard filters; closeness by meaning and the model's verdict rank what passes.
   const shown = feedTracks(tracks);
@@ -117,7 +118,7 @@ async function referenceFeed(userId: string) {
     return jobs
     .filter((job) => !sims.has(job.id) || (sims.get(job.id)! >= 0.35 && kept.has(job.id)))
     .map((job) => {
-      const match = scoreJob({ ...job, similarity: sims.get(job.id) ?? null, judgement: verdicts.get(job.id) ?? null }, { currentTitle: profile?.currentTitle ?? null, skills, yearsExperience: profile?.yearsExperience ?? null, preferredLocations: preferred, tracks });
+      const match = scoreJob({ ...job, similarity: sims.get(job.id) ?? null, judgement: verdicts.get(job.id) ?? null }, { currentTitle: profile?.currentTitle ?? null, skills, yearsExperience: profile?.yearsExperience ?? null, preferredLocations: preferred, tracks, shows });
       const daysAgo = Math.max(0, Math.floor((Date.now() - job.postedAt.getTime()) / 864e5));
       return {
         id: job.id, company: job.company.name, location: job.location, source: job.source, daysAgo, score: match.score, reason: match.reason, skillHits: match.skillHits.slice(0, 4),

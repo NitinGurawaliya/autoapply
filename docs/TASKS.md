@@ -208,6 +208,7 @@ Order (owner, 9 Nov): measure and scale, seed every known company, then the boar
 - [x] [M12 — Workable](boards/TASKS.md#m12)
 - [x] [M13 — Zoho Recruit apply](boards/TASKS.md#m13)
 - [ ] [M4 — Continuous discovery and re-validation (supersedes T98)](boards/TASKS.md#m4)
+- [ ] [M21 — Discovery on a GitHub Actions schedule](boards/TASKS.md#m21)
 - [ ] [M16 — Board health: success rate, alert, pause](boards/TASKS.md#m16)
 - [ ] [M17 — The feed at 200,000 jobs](boards/TASKS.md#m17)
 - [ ] [M18 — Model cost: filter, cap, measure](boards/TASKS.md#m18)
@@ -227,3 +228,34 @@ Parked (owner, 9 Nov):
 - [-] [M11 — Oracle Recruiting](boards/TASKS.md#m11)
 - [-] [M20 — The user's own live view for bot checks](boards/TASKS.md#m20)
 - [-] [M14 — The long tail of public boards (parked by the owner, 17 Nov: few India jobs)](boards/TASKS.md#m14)
+
+## Phase M — A job card and job page that explain the match (owner, 18 Nov)
+
+Design: [docs/job-match/TDD.md](job-match/TDD.md) (v1, 18 Nov; owner decisions closed in its section 11). Tasks: [docs/job-match/TASKS.md](job-match/TASKS.md). Order M1 → M7.
+
+- [x] [M1 — Card and job page mockups](job-match/TASKS.md#m1)
+- [x] [M2 — Job skills from a fixed vocabulary](job-match/TASKS.md#m2)
+- [x] [M3 — Required or nice-to-have, labelled by the model](job-match/TASKS.md#m3)
+- [x] [M4 — Score breakdown and the skills comparison on FeedJob](job-match/TASKS.md#m4)
+- [x] [M5 — Pay from the board](job-match/TASKS.md#m5)
+- [x] [M6 — The card](job-match/TASKS.md#m6)
+- [x] [M7 — The job page](job-match/TASKS.md#m7)
+
+## Phase N — A match score the skills decide (owner, 18 Nov)
+
+Design: [docs/match-score/TDD.md](match-score/TDD.md). Tasks: [docs/match-score/TASKS.md](match-score/TASKS.md). Order N1 → N3.
+
+- [x] [N1 — Tracks: no QA or DevOps from tools alone, ML/AI from AI skills](match-score/TASKS.md#n1)
+- [x] [N2 — The score: work 50, skills 40, experience 10](match-score/TASKS.md#n2)
+- [x] [N3 — Measure on real feeds](match-score/TASKS.md#n3)
+
+## Phase O — UI craft: a designed UI, not an AI template (owner, 18 Nov)
+
+Audit and plan: [docs/ui-craft/AUDIT.md](ui-craft/AUDIT.md). Tasks: [docs/ui-craft/TASKS.md](ui-craft/TASKS.md). Skill: `.claude/skills/ui-craft/SKILL.md`. Order O1 → O6.
+
+- [x] [O1 — Direction mockups, owner picks one](ui-craft/TASKS.md#o1)
+- [x] [O2 — Foundations and ui-lint](ui-craft/TASKS.md#o2)
+- [x] [O3 — Components](ui-craft/TASKS.md#o3)
+- [x] [O4 — Screens, one at a time](ui-craft/TASKS.md#o4)
+- [x] [O5 — Copy and voice](ui-craft/TASKS.md#o5)
+- [x] [O6 — Motion and the small things](ui-craft/TASKS.md#o6)

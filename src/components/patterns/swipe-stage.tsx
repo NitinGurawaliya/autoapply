@@ -2,8 +2,6 @@
 
 import { useImperativeHandle, useLayoutEffect, useRef, type DragEvent, type Ref } from "react";
 import { animate, motion, useMotionValue, useTransform } from "framer-motion";
-import { IconButton } from "@/components/ui/icon-button";
-import { Icon } from "@/components/ui/icons";
 import { stampClass } from "@/components/ui/marks";
 import { CARD_HEIGHT, JobCard, type JobCardData } from "@/components/patterns/job-card";
 import { swipe as physics, transition } from "@/lib/motion";
@@ -17,14 +15,14 @@ const PEEK = physics.backOffsetY;
 /** Over the deck: how many jobs are in the user's feed, and nothing else (owner, 1 Nov: no per-board counts). */
 export function StackCount({ total, label = "in your feed" }: { total: number; label?: string }) {
   return (
-    <p className="m-0 flex h-6 items-center text-sm font-semibold" aria-live="polite">
+    <p className="m-0 flex h-6 items-center type-meta text-muted-foreground" aria-live="polite">
       <span className="tabular-nums">{total}</span>&nbsp;{total === 1 ? "job" : "jobs"} {label}
     </p>
   );
 }
 
 /**
- * The swipe deck's look and feel (design/feed.html): the top card follows the finger and tilts, APPLY or SKIP fades
+ * The swipe deck's look and feel (design/craft-b2.html): the top card follows the finger and tilts, Apply or Skip fades
  * in, the next card rises from behind, and the buttons grow toward the side being chosen. A release past the commit
  * distance, a button or `fling()` throws the card off screen and then calls `onCommit`; anything less springs back.
  * Two cards show their bottom edge under the top one; a tap (no drag) on the top card calls `onOpen`.
@@ -83,7 +81,7 @@ export function SwipeStage({
 
   return (
     <>
-      <div className="relative mt-[18px] grid grid-cols-[minmax(0,1fr)]" style={{ paddingBottom: 2 * PEEK }}>
+      <div className="relative mt-4 grid grid-cols-[minmax(0,1fr)]" style={{ paddingBottom: 2 * PEEK }}>
         {after ? (
           <motion.article
             key={after.id}
@@ -163,10 +161,10 @@ export function SwipeStage({
             stamps={
               <>
                 <motion.span aria-hidden="true" style={{ opacity: applyOpacity }} className={stampClass("apply")}>
-                  APPLY
+                  Apply
                 </motion.span>
                 <motion.span aria-hidden="true" style={{ opacity: skipOpacity }} className={stampClass("skip")}>
-                  SKIP
+                  Skip
                 </motion.span>
               </>
             }
@@ -175,17 +173,24 @@ export function SwipeStage({
       </div>
       {/* Always above the tab bar, like the job page's action bar: on a short phone (375x667) the stack is taller
           than the space left, and the buttons stay on screen over its bottom edge. */}
-      <div className="sticky bottom-[calc(82px+max(0px,env(safe-area-inset-bottom)-24px))] z-10 mt-3 flex items-center justify-center gap-8 bg-background pt-3 pb-2">
-        <motion.div style={{ scale: skipScale }}>
-          <IconButton variant="skip" size="skip" aria-label="Skip" onClick={() => fling("left")}>
-            <Icon name="close" size={26} strokeWidth={2.25} />
-          </IconButton>
-        </motion.div>
-        <motion.div style={{ scale: applyScale }}>
-          <IconButton variant="apply" size="apply" aria-label="Apply" onClick={() => fling("right")}>
-            <Icon name="check" size={30} strokeWidth={2.5} />
-          </IconButton>
-        </motion.div>
+      {/* Labelled buttons (design/craft-b2.html, Phase O4): Skip a quiet outline, Apply the one filled button; swipes and ← → still work. */}
+      <div className="sticky bottom-[calc(82px+max(0px,env(safe-area-inset-bottom)-24px))] z-10 mt-4 flex items-center gap-2 bg-background pt-2 pb-2">
+        <motion.button
+          type="button"
+          style={{ scale: skipScale }}
+          onClick={() => fling("left")}
+          className="flex h-12 flex-1 cursor-pointer items-center justify-center rounded-control border border-line-strong bg-surface type-body font-semibold text-foreground outline-none active:bg-sunk focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        >
+          Skip
+        </motion.button>
+        <motion.button
+          type="button"
+          style={{ scale: applyScale }}
+          onClick={() => fling("right")}
+          className="flex h-12 flex-[2] cursor-pointer items-center justify-center rounded-control bg-primary type-body font-semibold text-primary-foreground outline-none active:bg-brand-press focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        >
+          Apply
+        </motion.button>
       </div>
     </>
   );

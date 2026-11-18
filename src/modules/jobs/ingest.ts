@@ -5,7 +5,8 @@ import { boardOf } from "./boards";
 import { GENTLE_BOARDS, GENTLE_GROUP_TIER, GENTLE_PER_TICK, GENTLE_SCALE, nextFetchAt, REFUSED, tierOf, type Tier } from "./cadence";
 import { classifyTitle } from "./functions";
 import type { FetchedJob } from "./normalize";
-import { embedPendingJobs, forgetJobVectors } from "./semantic";
+import { embedPendingJobs, forgetJobVectors, labelPendingSkills } from "./semantic";
+import { jobSkills } from "./skills";
 import { tagPosting } from "./tagging";
 
 // Hundreds of companies (T79): a few boards at a time, a pause between requests, one retry, and only the jobs that
@@ -54,6 +55,11 @@ async function fetchCompany(source: string, slug: string, known?: ReadonlySet<st
 }
 
 /** What ingest stores and tags from: when none of it changed, the job is not written again. */
+/** The pay columns from the board's structured pay (Phase M5); all null when it publishes none. */
+function payOf(job: FetchedJob) {
+  return { salaryMin: job.salary?.min ?? null, salaryMax: job.salary?.max ?? null, salaryCurrency: job.salary?.currency ?? null, salaryPeriod: job.salary?.period ?? null };
+}
+
 export function contentHash(job: FetchedJob) {
   const parts = [job.title, job.location, (job.offices ?? []).join("|"), job.description, job.applyUrl, job.postedAt.toISOString(), job.isRemote ? "remote" : ""];
   return createHash("md5").update(parts.join("\u0000")).digest("hex");
@@ -105,7 +111,7 @@ export async function ingestCompany(company: IngestCompany, cutoff: number): Pro
   }
   const indiaListed = jobs.filter((job) => INDIA.has(tagPosting(job).eligibility)).length;
   const kept = jobs.filter((job) => job.postedAt.getTime() >= cutoff && storedFromBoard(company.source, job, company.keepAbroad));
-  const stored = await db.job.findMany({ where: { source: company.source, externalId: { in: kept.map((job) => job.externalId) } }, select: { id: true, externalId: true, contentHash: true, closedAt: true, companyId: true } });
+  const stored = await db.job.findMany({ where: { source: company.source, externalId: { in: kept.map((job) => job.externalId) } }, select: { id: true, externalId: true, contentHash: true, closedAt: true, companyId: true, salaryMin: true, salaryMax: true, salaryCurrency: true, salaryPeriod: true } });
   const byExternalId = new Map(stored.map((row) => [row.externalId, row]));
   const now = new Date();
   const fields = (job: FetchedJob) => {
@@ -122,6 +128,9 @@ export async function ingestCompany(company: IngestCompany, cutoff: number): Pro
       function: kind.function,
       track: kind.track,
       seniority: kind.seniority,
+      // The tech terms the posting names (Phase M2): the card and job page compare them with the candidate's.
+      skills: jobSkills(job.title, job.description),
+      ...payOf(job),
       description: job.description,
       applyUrl: job.applyUrl,
       postedAt: job.postedAt,
@@ -150,6 +159,18 @@ export async function ingestCompany(company: IngestCompany, cutoff: number): Pro
         }),
       ),
     );
+  }
+  // Pay moves without the posting changing (Ashby edits its compensation block): only the pay columns are written, so
+  // the job keeps its vector and the model's verdicts. A list-only posting carries no pay to compare: its stored pay stays.
+  const changedIds = new Set(changed.map((job) => job.externalId));
+  const repaid = kept.filter((job) => {
+    const row = byExternalId.get(job.externalId);
+    if (!row || job.listOnly || changedIds.has(job.externalId)) return false;
+    const pay = payOf(job);
+    return row.salaryMin !== pay.salaryMin || row.salaryMax !== pay.salaryMax || row.salaryCurrency !== pay.salaryCurrency || row.salaryPeriod !== pay.salaryPeriod;
+  });
+  for (let i = 0; i < repaid.length; i += 50) {
+    await db.$transaction(repaid.slice(i, i + 50).map((job) => db.job.update({ where: { source_externalId: { source: company.source, externalId: job.externalId } }, data: payOf(job) })));
   }
   // A changed posting is embedded again (semantic.ts); new ones have no vector yet. List-only ones keep theirs.
   await forgetJobVectors(changed.filter((job) => !job.listOnly).map((job) => byExternalId.get(job.externalId)!.id));
@@ -274,6 +295,12 @@ export async function ingestJobs(days: number) {
       return 0;
     });
     console.log(`ingest: embedded ${embedded} jobs`);
+    // Required or nice-to-have for the skills of new and changed jobs (Phase M3); unlabelled ones show unsplit.
+    const levels = await labelPendingSkills().catch((error) => {
+      console.error(`ingest: skill labels failed (${error instanceof Error ? error.message.slice(0, 80) : "error"}); the next run retries`);
+      return { labelled: 0, failed: 0 };
+    });
+    console.log(`ingest: skills labelled=${levels.labelled} failed=${levels.failed}`);
   } finally {
     const { switchedOff, ...recorded } = totals;
     void switchedOff;

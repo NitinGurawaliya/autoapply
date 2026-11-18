@@ -149,25 +149,25 @@ export function ResumeUploadForm({ signOut }: { signOut: React.ReactNode }) {
                 <li
                   key={label}
                   className={cn(
-                    "flex min-h-12 items-center gap-3 transition-[opacity,transform] duration-[420ms] ease-pop",
+                    "flex min-h-12 items-center gap-3 transition-[opacity,transform] duration-420 ease-calm",
                     find ? "translate-y-0 opacity-100" : "translate-y-1.5 opacity-40",
                   )}
                 >
                   <span
                     aria-hidden="true"
                     className={cn(
-                      "box-border flex size-7 flex-none items-center justify-center rounded-full border-2",
+                      "box-border flex size-7 flex-none items-center justify-center rounded-full border",
                       !find && "border-sketch-line bg-transparent",
-                      find && !find.missing && "border-primary-edge bg-primary text-ink",
+                      find && !find.missing && "border-inverse bg-inverse text-inverse-foreground",
                       find?.missing && "border-foreground bg-transparent text-foreground",
                     )}
                   >
-                    {find && !find.missing ? <Icon name="check" size={14} strokeWidth={3.5} /> : null}
-                    {find?.missing ? <span className="text-sm font-extrabold">!</span> : null}
+                    {find && !find.missing ? <Icon name="check" size={14} /> : null}
+                    {find?.missing ? <span className="text-sm font-semibold">!</span> : null}
                   </span>
                   <div className="flex flex-col gap-px">
-                    <span className="text-[13px] text-muted-foreground">{label}</span>
-                    <span className="text-[15px] font-semibold">{find ? find.value : "Looking…"}</span>
+                    <span className="type-meta text-muted-foreground">{label}</span>
+                    <span className="type-body font-semibold">{find ? find.value : "Looking…"}</span>
                   </div>
                 </li>
               );
@@ -211,13 +211,13 @@ export function ResumeUploadForm({ signOut }: { signOut: React.ReactNode }) {
           }}
         />
         {file ? (
-          <div className="mt-7 box-border flex items-center gap-3.5 rounded-panel border-2 border-edge bg-surface p-4 shadow-hard">
-            <span aria-hidden="true" className="flex size-12 flex-none items-center justify-center rounded-tile bg-inverse text-xs font-bold tracking-[0.04em] text-inverse-foreground">
+          <div className="mt-7 box-border flex items-center gap-3.5 rounded-panel bg-surface p-4 shadow-lift">
+            <span aria-hidden="true" className="flex size-12 flex-none items-center justify-center rounded-tile bg-inverse text-xs font-bold text-inverse-foreground">
               PDF
             </span>
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="truncate text-base font-semibold">{file.name}</span>
-              <span className="text-[13px] text-muted-foreground">{Math.max(1, Math.round(file.size / 1024))} KB · Ready to read</span>
+              <span className="type-meta text-muted-foreground">{Math.max(1, Math.round(file.size / 1024))} KB · Ready to read</span>
             </div>
             <Button variant="underline" size="text" className="text-sm" onClick={() => input.current?.click()}>
               Replace
@@ -227,16 +227,16 @@ export function ResumeUploadForm({ signOut }: { signOut: React.ReactNode }) {
           <button
             type="button"
             onClick={() => input.current?.click()}
-            className="mt-7 box-border flex h-[280px] cursor-pointer flex-col items-center justify-center gap-3 rounded-[24px] border-2 border-dashed border-edge bg-surface text-foreground"
+            className="mt-7 box-border flex h-70 cursor-pointer flex-col items-center justify-center gap-3 rounded-card border border-dashed border-line-strong bg-surface text-foreground"
           >
-            <span className="box-border flex size-18 items-center justify-center rounded-full border-2 border-primary-edge bg-primary text-ink">
+            <span className="box-border flex size-14 items-center justify-center rounded-control bg-primary text-primary-foreground">
               <Icon name="upload" size={30} />
             </span>
             <span className="mt-1 text-lg font-semibold">Upload your resume</span>
             <span className="text-sm text-muted-foreground">PDF, up to 5 MB</span>
           </button>
         )}
-        <InfoNote className="mt-[18px]">Private to you. Used only for jobs you swipe right on.</InfoNote>
+        <InfoNote className="mt-4.5">Private to you. Used only for jobs you swipe right on.</InfoNote>
         {error ? <FieldError className="mt-4">{error}</FieldError> : null}
       </ScreenBody>
       <StickyFooter>

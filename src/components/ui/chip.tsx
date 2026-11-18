@@ -3,31 +3,27 @@ import { cva } from "class-variance-authority";
 import { cn } from "cn";
 import { Icon } from "@/components/ui/icons";
 
-// Chips from the design. A selectable chip is lime when on; the applications tabs turn ink when on.
+// Chips (Direction B, Phase O3). Only things the user toggles are pills; a selected one turns ink, never the accent
+// (the accent means "act here"). Facts and tags are small rounded rectangles in the recessed fill.
 const chipVariants = cva(
-  "box-border inline-flex cursor-pointer items-center gap-1 border-2 font-semibold no-underline outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50",
+  "box-border inline-flex cursor-pointer items-center gap-1 border font-medium no-underline transition-[transform,background-color,color] duration-120 ease-calm outline-none select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-98",
   {
     variants: {
       shape: {
         // Filters, notice period, job type, places.
-        pill: "h-11 rounded-full px-4 text-[15px]",
+        pill: "h-10 rounded-full px-4 type-body",
         // Applications list: "Sent 18".
-        tab: "h-10 flex-none rounded-full px-3.5 text-sm whitespace-nowrap",
+        tab: "h-9 flex-none rounded-full px-3.5 type-meta whitespace-nowrap",
         // Two-up choices inside a card (visa sponsorship).
-        block: "h-11 justify-center rounded-tile text-[15px]",
-        // Big answer buttons in the needs-you sheet. 56px tall; a long option (24 Oct: Juniper Square's AI-use answers)
-        // wraps inside the button and the button grows, instead of spilling over its neighbours.
-        answer: "min-h-14 justify-center rounded-control px-4 py-3 text-center text-[17px] leading-snug text-balance",
+        block: "h-11 justify-center rounded-control type-body",
+        // Answer buttons in the needs-you sheet; a long option wraps and the button grows (24 Oct).
+        answer: "min-h-12 justify-center rounded-control px-4 py-3 text-center type-body text-balance",
       },
       selected: { true: "", false: "" },
     },
     compoundVariants: [
-      { shape: ["pill", "block"], selected: false, className: "border-input bg-surface text-foreground" },
-      { shape: "answer", selected: false, className: "border-edge bg-surface text-foreground" },
-      { shape: ["pill", "block", "answer"], selected: true, className: "border-primary-edge bg-primary text-primary-foreground" },
-      { shape: "answer", selected: true, className: "shadow-button" },
-      { shape: "tab", selected: false, className: "border-input bg-surface text-foreground" },
-      { shape: "tab", selected: true, className: "border-inverse bg-inverse text-inverse-foreground" },
+      { shape: ["pill", "block", "tab", "answer"], selected: false, className: "border-line-strong bg-surface text-foreground active:bg-sunk" },
+      { shape: ["pill", "block", "tab", "answer"], selected: true, className: "border-inverse bg-inverse text-inverse-foreground" },
     ],
     defaultVariants: { shape: "pill", selected: false },
   },
@@ -43,7 +39,7 @@ export function Chip(props: ChipBase & ({ href: string } & Omit<React.ComponentP
   const inner = (
     <>
       {children}
-      {count !== undefined ? <span className="tabular-nums opacity-75">{count}</span> : null}
+      {count !== undefined ? <span className="tabular-nums opacity-70">{count}</span> : null}
     </>
   );
   if ("href" in rest && rest.href !== undefined) {
@@ -60,70 +56,49 @@ export function Chip(props: ChipBase & ({ href: string } & Omit<React.ComponentP
   );
 }
 
-/** "×" chip that removes a filter (the "No matches" state). */
+/** A filter you can remove (the "No matches" state): a toggle, so a pill, with an ×. */
 export function RemovableChip({ children, className, ...props }: React.ComponentProps<"button">) {
   return (
     <button
       type="button"
       className={cn(
-        "inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-full border-2 border-edge bg-surface pr-2.5 pl-3.5 text-sm font-semibold text-foreground",
+        "inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full border border-line-strong bg-surface pr-2.5 pl-3.5 type-meta font-medium text-foreground transition-transform duration-120 ease-calm active:scale-98",
         className,
       )}
       {...props}
     >
       {children}
-      <Icon name="closeSmall" size={16} strokeWidth={2.5} />
+      <Icon name="closeSmall" size={14} />
     </button>
   );
 }
 
-/** Outlined fact on the swipe card: "Bengaluru · Hybrid", "Asks 2–4 yrs". */
+const tag = "inline-flex h-7 items-center gap-1 rounded-tag bg-sunk px-2.5 type-meta font-medium whitespace-nowrap";
+
+/** A fact: "Bengaluru · Hybrid", "Asks 2–4 yrs". */
 export function Tag({ className, ...props }: React.ComponentProps<"span">) {
-  return (
-    <span
-      className={cn("inline-flex h-[34px] items-center rounded-full border-2 border-edge px-3 text-sm font-semibold", className)}
-      {...props}
-    />
-  );
+  return <span className={cn(tag, className)} {...props} />;
 }
 
-/** Quiet filled fact: "19 sent today". */
+/** A quiet fact: "19 sent today". */
 export function SoftChip({ className, ...props }: React.ComponentProps<"span">) {
-  return (
-    <span className={cn("inline-flex h-[34px] items-center rounded-full bg-subtle px-3 text-sm font-semibold", className)} {...props} />
-  );
+  return <span className={cn(tag, "text-muted-foreground", className)} {...props} />;
 }
 
-/** Skill on the profile screen. */
+/** A skill on the profile screen. */
 export function SkillTag({ className, ...props }: React.ComponentProps<"span">) {
-  return (
-    <span className={cn("inline-flex h-[30px] items-center rounded-lg bg-subtle px-2.5 text-[13px] font-medium", className)} {...props} />
-  );
+  return <span className={cn(tag, className)} {...props} />;
 }
 
-/** Lime pill: "Needs you · 1 of 2". */
+/** "Needs you · 1 of 2": the one status that asks for the user, in ink (the accent is kept for the main action). */
 export function AccentPill({ className, ...props }: React.ComponentProps<"span">) {
-  return (
-    <span
-      className={cn(
-        "box-border inline-flex h-[30px] items-center rounded-full border-[1.5px] border-primary-edge bg-primary px-3 text-[13px] font-bold text-primary-foreground",
-        className,
-      )}
-      {...props}
-    />
-  );
+  return <span className={cn(tag, "bg-inverse font-semibold text-inverse-foreground", className)} {...props} />;
 }
 
 /** Count of answers per source on the detail page: "Resume 5". */
 export function CountChip({ label, count, dashed = false, className }: { label: string; count: number; dashed?: boolean; className?: string }) {
   return (
-    <span
-      className={cn(
-        "box-border inline-flex h-[30px] items-center gap-1.5 rounded-full border-[1.5px] border-badge-edge bg-surface px-2.5 text-[13px] font-semibold",
-        dashed && "border-dashed",
-        className,
-      )}
-    >
+    <span className={cn("box-border inline-flex h-7 items-center gap-1.5 rounded-tag border border-line-strong px-2.5 type-meta font-medium", dashed && "border-dashed", className)}>
       {label} <span className="text-muted-foreground tabular-nums">{count}</span>
     </span>
   );

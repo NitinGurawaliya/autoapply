@@ -1,91 +1,80 @@
 import { cn } from "cn";
 import { Icon } from "@/components/ui/icons";
-import { MatchBadge } from "@/components/ui/marks";
 
-// The design's small drawings, built from boxes like the rest of the UI. All decorative (aria-hidden).
+// Small drawings (Direction B, Phase O4; owner 18 Nov: a drawing only on onboarding and "all caught up", a quiet icon
+// everywhere else). Built from the same tokens as the UI, flat, no tilt, no stickers. All decorative (aria-hidden).
 
-const sketchCard = "absolute box-border h-[116px] w-24 rounded-panel border-2";
+const bone = "block rounded-xs bg-sunk";
 
-/** Stacked cards and a lime check: "You're all caught up". */
+/** Two quiet cards and an ink check: "You're all caught up". */
 export function DeckDoneArt() {
   return (
-    <div aria-hidden="true" className="relative size-[150px]">
-      <div className={cn(sketchCard, "top-[30px] left-[30px] border-edge bg-surface")} />
-      <div className={cn(sketchCard, "top-5 left-[22px] border-edge bg-surface")} />
-      <div className={cn(sketchCard, "top-2.5 left-3.5 flex flex-col gap-2 border-edge bg-surface p-3.5 shadow-[0_5px_0_var(--shadow-color)]")}>
-        <span className="block size-[26px] rounded-lg bg-inverse" />
-        <span className="block h-[7px] w-[90%] rounded-full bg-subtle" />
-        <span className="block h-[7px] w-[65%] rounded-full bg-subtle" />
+    <div aria-hidden="true" className="relative h-32 w-36">
+      <div className="absolute top-6 left-9 h-26 w-22 scale-95 rounded-panel bg-surface opacity-60 shadow-lift" />
+      <div className="absolute top-3 left-5 flex h-26 w-22 flex-col gap-2 rounded-panel bg-surface p-3 shadow-lift">
+        <span className="block size-6 rounded-tag bg-inverse" />
+        <span className={cn(bone, "mt-1 h-1.5 w-full")} />
+        <span className={cn(bone, "h-1.5 w-3/4")} />
+        <span className={cn(bone, "h-1.5 w-1/2")} />
       </div>
-      <span className="absolute top-0 right-1 box-border flex size-[52px] items-center justify-center rounded-full border-2 border-ink bg-primary text-ink shadow-[0_4px_0_var(--shadow-color)]">
-        <Icon name="check" size={26} strokeWidth={3} />
+      <span className="absolute top-0 right-4 flex size-10 items-center justify-center rounded-full bg-inverse text-inverse-foreground">
+        <Icon name="check" size={20} />
       </span>
     </div>
   );
 }
 
-/** A dashed empty card and a magnifier: "No jobs match these filters". */
-export function DeckEmptyArt() {
+/** The quiet mark for every other empty or error state: one icon in the recessed fill. */
+export function DeckEmptyArt({ icon = "search" }: { icon?: "search" | "info" | "file" }) {
   return (
-    <div aria-hidden="true" className="relative size-[150px]">
-      <div className={cn(sketchCard, "top-3.5 left-[22px] border-dashed border-edge bg-transparent")} />
-      <span className="absolute right-2 bottom-1.5 box-border flex size-16 items-center justify-center rounded-full border-2 border-edge bg-surface text-foreground shadow-[0_4px_0_var(--shadow-color)]">
-        <Icon name="search" size={28} strokeWidth={2.25} />
-      </span>
-    </div>
+    <span aria-hidden="true" className="flex size-12 items-center justify-center rounded-control bg-sunk text-muted-foreground">
+      <Icon name={icon} size={22} />
+    </span>
   );
 }
 
-const fanCard = "absolute box-border h-60 w-[210px] rounded-[24px] border-2 border-edge bg-surface shadow-[0_5px_0_var(--shadow-color)]";
-
-/** Three fanned job cards, the top one stamped APPLY with an 86 match (sign-in). */
+/** One job card as the feed draws it, with the next one behind (sign-in). */
 export function SignInArt() {
   return (
-    <div aria-hidden="true" className="relative h-[290px]">
-      <div className={cn(fanCard, "top-[26px] left-[70px] -rotate-11")} />
-      <div className={cn(fanCard, "top-[18px] left-20 rotate-6")} />
-      <div className={cn(fanCard, "top-[22px] left-[66px] flex -rotate-2 flex-col gap-3.5 p-[18px]")}>
-        <div className="flex items-center gap-2.5">
-          <span className="flex size-9 items-center justify-center rounded-[11px] bg-inverse font-display text-[13px] font-extrabold text-inverse-foreground">LP</span>
-          <span className="text-[13px] font-semibold">Lumen Pay</span>
+    <div aria-hidden="true" className="relative mx-auto h-52 w-64">
+      <div className="absolute inset-x-0 top-3 h-44 scale-95 rounded-card bg-surface opacity-60 shadow-lift" />
+      <div className="absolute inset-x-0 top-0 flex h-44 flex-col rounded-card bg-surface p-5 shadow-lift">
+        <div className="flex items-start gap-2.5">
+          <span className="flex size-8 items-center justify-center rounded-tile bg-inverse type-meta font-semibold text-inverse-foreground">LP</span>
+          <span className="flex flex-1 flex-col">
+            <span className="type-meta font-semibold">Lumen Pay</span>
+            <span className="text-xs text-muted-foreground">via Greenhouse</span>
+          </span>
+          <span className="type-heading font-medium text-brand-text tabular-nums">86</span>
         </div>
-        <span className="font-display text-[25px] leading-[1.02] font-extrabold tracking-[-0.035em]">Backend Engineer</span>
-        <div className="mt-1 flex flex-col gap-[7px]">
-          <span className="block h-2 w-full rounded-full bg-sketch-fill" />
-          <span className="block h-2 w-[82%] rounded-full bg-sketch-fill" />
-          <span className="block h-2 w-[64%] rounded-full bg-sketch-fill" />
+        <span className="mt-4 type-section">Backend Engineer</span>
+        <span className="mt-1 type-meta text-muted-foreground">Bengaluru · 0–2 years</span>
+        <div className="mt-auto flex h-1 gap-1">
+          <span className="relative flex-[5] overflow-hidden rounded-xs bg-track"><span className="absolute inset-y-0 left-0 w-4/5 bg-bar" /></span>
+          <span className="relative flex-[4] overflow-hidden rounded-xs bg-track"><span className="absolute inset-y-0 left-0 w-11/12 bg-bar" /></span>
+          <span className="relative flex-1 overflow-hidden rounded-xs bg-bar" />
         </div>
-        <span className="absolute bottom-[22px] left-3.5 -rotate-9 rounded-[10px] border-2 border-ink bg-primary px-3 py-0.5 font-display text-[22px] font-extrabold text-ink">
-          APPLY
-        </span>
-        <MatchBadge score={86} size="md" className="absolute -top-4 -right-3.5" />
       </div>
     </div>
   );
 }
 
-/** A page of a resume with a lime band sweeping down while it is read. `band` is the band's step (0-5). */
+/** A page of a resume with a soft band moving down while it is read (onboarding). `band` is the band's step (0-5). */
 export function ResumeSketch({ band }: { band: number }) {
-  const line = "block h-[5px] rounded-[3px] bg-sketch-line";
+  const line = "block h-1.25 rounded-xs bg-sketch-line";
   return (
-    <div
-      aria-hidden="true"
-      className="relative mx-auto mt-6 box-border flex h-[172px] w-[136px] flex-col gap-[7px] overflow-hidden rounded-tile border-2 border-edge bg-surface px-3 py-3.5 shadow-hard"
-    >
-      <span className="block h-[9px] w-[60%] rounded-[3px] bg-foreground" />
-      <span className={cn(line, "w-[80%]")} />
+    <div aria-hidden="true" className="relative mx-auto mt-6 flex h-43 w-34 flex-col gap-1.75 overflow-hidden rounded-tile bg-surface px-3 py-3.5 shadow-lift">
+      <span className="block h-2.25 w-3/5 rounded-xs bg-foreground" />
+      <span className={cn(line, "w-4/5")} />
       <span className={cn(line, "mt-1.5 w-full")} />
-      <span className={cn(line, "w-[92%]")} />
-      <span className={cn(line, "w-[70%]")} />
+      <span className={cn(line, "w-11/12")} />
+      <span className={cn(line, "w-7/10")} />
       <span className={cn(line, "mt-1.5 w-full")} />
-      <span className={cn(line, "w-[85%]")} />
-      <span className={cn(line, "w-[60%]")} />
-      <span className={cn(line, "mt-1.5 w-[95%]")} />
-      <span className={cn(line, "w-[75%]")} />
-      <span
-        className="absolute inset-x-0 h-[26px] bg-primary opacity-55 transition-[top] duration-[1100ms] ease-[cubic-bezier(.45,0,.55,1)]"
-        style={{ top: 8 + (band % 6) * 26 }}
-      />
+      <span className={cn(line, "w-5/6")} />
+      <span className={cn(line, "w-3/5")} />
+      <span className={cn(line, "mt-1.5 w-11/12")} />
+      <span className={cn(line, "w-3/4")} />
+      <span className="absolute inset-x-0 h-6.5 bg-bar opacity-8 transition-[top] duration-1100 ease-calm" style={{ top: 8 + (band % 6) * 26 }} />
     </div>
   );
 }

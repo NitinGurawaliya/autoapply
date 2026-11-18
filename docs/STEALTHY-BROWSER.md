@@ -41,9 +41,8 @@ path (`SB(uc=True)` + `activate_cdp_mode` on `--port`) stays as the fallback for
 | `STEALTHY_READY_MS` | `90000` | launch timeout |
 | `SELENIUM_CDP_PORT` | free port | fix the DevTools port (one run at a time only) |
 | `STEALTHY_LOG` | `./stealthy-browser.log` | the launch log |
-| `ASHBY_AUTO_SUBMIT` | off | `1`: the worker presses Ashby's Submit itself (passes in the stealthy Chrome) |
 
-Lever stays off (`ENABLE_LEVER` unset): its hCaptcha shows a puzzle whatever the browser, and the one run with the puzzle
+Since 18 Nov the worker always presses Ashby's Submit itself (the `ASHBY_AUTO_SUBMIT` switch is gone) and the boards applied on are one fixed list (`APPLY_BOARDS`). Lever stays out of it: its hCaptcha shows a puzzle whatever the browser, and the one run with the puzzle
 solved by hand still ended "not sent".
 
 ## Results, 17 Nov

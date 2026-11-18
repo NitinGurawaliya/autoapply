@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Geist, Geist_Mono } from "next/font/google";
+import { Bricolage_Grotesque, Geist, Geist_Mono, Schibsted_Grotesk } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
@@ -21,6 +21,23 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Direction B's one family (Phase O, design/craft-b2.html), used when the page runs in look "b".
+const schibsted = Schibsted_Grotesk({
+  variable: "--font-schibsted",
+  subsets: ["latin"],
+});
+
+// Which look the app runs in (Phase O): "b" (Direction B, the default since every screen was rebuilt, 18 Nov) or
+// "classic" (the old lime look, kept one release as a fallback). NEXT_PUBLIC_LOOK=classic sets the default back;
+// "?look=b" or "?look=classic" on any page saves a cookie that wins. The script runs before first paint (Next guide:
+// preventing flash).
+const LOOK = process.env.NEXT_PUBLIC_LOOK === "classic" ? "classic" : "b";
+const LOOK_SCRIPT =
+  '(function(){try{var q=new URLSearchParams(location.search).get("look");' +
+  'if(q==="b"||q==="classic")document.cookie="look="+q+";path=/;max-age=31536000;samesite=lax";' +
+  'var m=document.cookie.match(/(?:^|; )look=(b|classic)/);' +
+  'if(m)document.documentElement.setAttribute("data-look",m[1])}catch(e){}})()';
+
 export const metadata: Metadata = {
   title: "SwipeApply",
   description: "Swipe right. A governed agent applies for you.",
@@ -32,8 +49,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} ${bricolage.variable} h-full antialiased`}
+      data-look={LOOK}
+      className={`${geistSans.variable} ${geistMono.variable} ${bricolage.variable} ${schibsted.variable} h-full antialiased`}
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: LOOK_SCRIPT }} />
+      </head>
       <body className="min-h-full flex flex-col">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           {children}

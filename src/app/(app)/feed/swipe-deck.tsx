@@ -13,6 +13,7 @@ import { StackCount, SwipeStage, type Direction, type SwipeStageHandle } from "@
 import { AgentToast } from "@/components/patterns/agent-toast";
 import { useApplicationsSummary } from "@/components/applications-summary";
 import { boardLabel } from "@/lib/board-label";
+import { experienceChip, postedLabel, STAGE_LABEL, whereLabel } from "@/lib/job-facts";
 import { statusMeta } from "@/lib/status-meta";
 import type { FeedJob, FeedView } from "@/modules/jobs";
 import { markOpenedFromFeed } from "../jobs/[id]/feed-back-link";
@@ -26,19 +27,18 @@ const TOAST_LIVE_MAX_MS = 60_000;
 const TOAST_AFTER_SENT_MS = 1600;
 const TOAST_AFTER_STOP_MS = 4000;
 
-const REMOTE_LABEL: Record<string, string> = { remote: "Remote", hybrid: "Hybrid", onsite: "On-site" };
-
 function cardData(job: FeedJob, query: string): JobCardData {
-  const remote = REMOTE_LABEL[job.remoteType];
-  const where = [job.location, remote].filter(Boolean).join(" · ") || "Location not listed";
-  const asks = job.requiredYears == null ? null : job.requiredYears <= 0 ? "Entry level" : `Asks ${job.requiredYears}+ yrs`;
   return {
     company: job.company,
     role: job.title,
-    posted: job.daysAgo <= 0 ? "Posted today" : `Posted ${job.daysAgo}d ago`,
+    posted: postedLabel(job.daysAgo),
     why: job.reason,
-    where,
-    asks,
+    where: whereLabel(job),
+    experience: experienceChip(job),
+    salary: job.salary,
+    stage: job.stage ? (STAGE_LABEL[job.stage] ?? null) : null,
+    skills: job.skills,
+    parts: job.breakdown.parts,
     score: job.score,
     tier: job.tier,
     board: boardLabel(job.source),
@@ -299,7 +299,7 @@ export function SwipeDeck({
   const after = cards[2];
 
   const toastNode = agent ? (
-    <div className="fixed inset-x-0 top-[calc(max(12px,env(safe-area-inset-top))+52px)] z-40 mx-auto box-border w-full max-w-[480px] px-4">
+    <div className="fixed inset-x-0 top-[calc(max(12px,env(safe-area-inset-top))+52px)] z-40 mx-auto box-border w-full max-w-120 px-4">
       <AgentToast
         company={agent.company}
         stage={agent.stage}

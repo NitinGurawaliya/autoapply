@@ -87,7 +87,7 @@ export function AnswersManager({ initial }: { initial: Row[] }) {
   }
 
   return (
-    <div className="flex flex-col gap-[22px] px-5 pt-4 pb-6">
+    <div className="flex flex-col gap-5.5 px-5 pt-4 pb-6">
       {groups.length === 0 ? (
         <EmptyState
           art={<DeckEmptyArt />}
@@ -100,11 +100,11 @@ export function AnswersManager({ initial }: { initial: Row[] }) {
         groups.map((group) => (
           <section key={group.name} className="flex flex-col gap-2.5" aria-label={group.name}>
             <Eyebrow as="h2">{group.name}</Eyebrow>
-            <ul className="m-0 flex list-none flex-col rounded-panel border-[1.5px] border-line bg-surface px-4 py-1">
+            <ul className="m-0 flex list-none flex-col rounded-panel border border-line bg-surface px-4 py-1">
               {group.rows.map((row, index) => (
                 <li key={row.key} className={index > 0 ? "flex flex-col gap-2 border-t border-line py-3" : "flex flex-col gap-2 py-3"} data-answer-key={row.key}>
                   <div className="flex items-start justify-between gap-2.5">
-                    <span className="text-[13px] text-muted-foreground">{titleOf(row)}</span>
+                    <span className="type-meta text-muted-foreground">{titleOf(row)}</span>
                     <SourceBadge source={row.source} />
                   </div>
                   {editing === row.key ? (
@@ -129,7 +129,7 @@ export function AnswersManager({ initial }: { initial: Row[] }) {
                     <>
                       <p className="m-0 text-base font-semibold break-words whitespace-pre-wrap">{row.answer}</p>
                       {SENSITIVE_KEYS.has(row.key) ? (
-                        <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+                        <span className="flex items-center gap-1.5 type-meta text-muted-foreground">
                           <Icon name="lock" size={14} className="flex-none" />
                           Sensitive: only ever filled from what you typed, never written by AI.
                         </span>
@@ -186,7 +186,7 @@ export function AnswersManager({ initial }: { initial: Row[] }) {
       <section className="flex flex-col gap-3" aria-label="Add an answer">
         {adding ? (
           <form
-            className="box-border flex flex-col gap-3.5 rounded-panel border-2 border-edge bg-surface p-4 shadow-hard"
+            className="box-border flex flex-col gap-3.5 rounded-panel bg-surface p-4 shadow-lift"
             onSubmit={(event) => {
               event.preventDefault();
               void add();

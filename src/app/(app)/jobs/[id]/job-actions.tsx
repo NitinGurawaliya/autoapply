@@ -80,7 +80,7 @@ export function JobActions({ jobId, company, backHref, next }: { jobId: string; 
         <>
           {/* What Apply or Skip leads to. Shown, and loaded ahead in full (prefetch) so it opens at once, but not a
               way past this job: like a card in the deck, it is passed only by deciding. */}
-          <p className="m-0 flex min-w-0 items-baseline gap-1.5 type-caption text-muted-foreground">
+          <p className="m-0 flex min-w-0 items-baseline gap-1.5 type-meta text-muted-foreground">
             <span className="flex-none">Up next</span>
             <span className="truncate font-semibold text-foreground">
               {next.company} · {next.title}
@@ -91,15 +91,15 @@ export function JobActions({ jobId, company, backHref, next }: { jobId: string; 
           </Link>
         </>
       ) : (
-        <p className="m-0 type-caption text-muted-foreground">The last job in your feed for now</p>
+        <p className="m-0 type-meta text-muted-foreground">The last job in your feed for now</p>
       )}
       <div className="flex gap-3">
         <Button variant="line" size="xl" className="flex-1" disabled={busy !== null} onClick={() => void send("left")}>
-          <Icon name="close" size={20} strokeWidth={2.25} />
+          <Icon name="close" size={20} />
           Skip
         </Button>
         <Button variant="primary" size="xl" className="flex-[2]" disabled={busy !== null} onClick={() => void send("right")}>
-          <Icon name="check" size={22} strokeWidth={2.5} />
+          <Icon name="check" size={22} />
           {busy === "right" ? "Sending to your agent" : "Apply"}
         </Button>
       </div>
@@ -120,7 +120,7 @@ export function NextJobLink({ jobId, next, className }: { jobId: string; next: N
       }}
     >
       Next job
-      <Icon name="chevronRight" size={18} strokeWidth={2.5} />
+      <Icon name="chevronRight" size={18} />
     </Link>
   );
 }

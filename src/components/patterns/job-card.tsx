@@ -1,25 +1,34 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { Eyebrow } from "@/components/ui/eyebrow";
-import { Icon } from "@/components/ui/icons";
-import { AccentPill, Tag } from "@/components/ui/chip";
-import { BoardMark, CompanyMark, MatchBadge } from "@/components/ui/marks";
+import { cn } from "cn";
+import { CompanyMark, type FitTier } from "@/components/ui/marks";
 
-/** One height for every card, whatever the job says: the deck keeps its shape from card to card. */
-export const CARD_HEIGHT = "h-[clamp(400px,calc(100dvh-340px),470px)]";
+/** One height for every card, whatever the job says: the deck keeps its shape from card to card (Phase M6). */
+export const CARD_HEIGHT = "h-[clamp(440px,calc(100dvh-330px),490px)]";
 
 export type JobCardData = {
   company: string;
   role: string;
-  /** "Posted 3h ago", "Posted today". */
+  /** "Posted 3 days ago", "Posted today". */
   posted: string;
   why: string;
-  /** "Bengaluru · Hybrid". */
+  /** "Bengaluru · On-site". */
   where: string;
-  /** "Asks 2+ yrs", "Entry level"; null when the posting does not say. */
-  asks: string | null;
+  /** "Fresher", "2+ yrs", "2+ yrs · you have 1" (`over`: asks more than the candidate has), "Years not stated". */
+  experience: { label: string; over: boolean };
+  /** As the board published it ("₹15L – ₹30L"); null when it gives none. */
+  salary?: string | null;
+  /** "Startup", "Mid-size", "MNC" (shown on the job page; the card keeps three facts). */
+  stage?: string | null;
+  /**
+   * The job's tech skills the candidate has, and the ones missing: `missing` is the required ones when `split`, every
+   * one otherwise; `mentioned` is the rest the candidate does not show (nice to have).
+   */
+  skills?: { have: string[]; missing: string[]; split: boolean; total: number; mentioned?: string[] };
   score: number;
-  tier?: "strong" | "good" | "stretch" | null;
+  tier?: FitTier | null;
+  /** The score's parts (work, skills, experience), drawn as one split bar under the facts. */
+  parts?: Array<{ label: string; points: number; max: number }>;
   /** The job board it came from: "Greenhouse", "Lever", "Ashby". */
   board?: string | null;
   logoUrl?: string | null;
@@ -29,66 +38,169 @@ export type JobCardData = {
   detailHref?: string;
 };
 
+// A skill line's room at 390 px: the card's 310 px of content less the 72 px label and its gap (craft-b2, 18 Nov).
+const LINE_PX = 226;
+const CHAR_PX = 7.7; // 15 px Schibsted Grotesk, a little over its average glyph
+const SEP_PX = 8; // ", "
+const MORE_PX = 28; // " +n"
+
+/** As many names as fit one line (estimated, so nothing is cut mid-word), and how many are left for "+n". */
+function fitLine(items: string[], most = 4) {
+  const shown: string[] = [];
+  let used = 0;
+  for (const [i, item] of items.entries()) {
+    const width = CHAR_PX * item.length + (shown.length > 0 ? SEP_PX : 0);
+    const reserve = i < items.length - 1 ? MORE_PX : 0;
+    if (shown.length >= most || (shown.length > 0 && used + width + reserve > LINE_PX)) break;
+    shown.push(item);
+    used += width;
+  }
+  return { shown, more: items.length - shown.length };
+}
+
+function SkillLine({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <p className="m-0 flex min-w-0 gap-2 type-body whitespace-nowrap">
+      <span className="w-18 flex-none text-muted-foreground">{label}</span>
+      <span className="min-w-0 truncate">{children}</span>
+    </p>
+  );
+}
+
+/** The card while jobs load: its own shape in the recessed fill, a slow fade, no shimmer (design/craft-b2.html). */
+export function JobCardSkeleton({ className }: { className?: string }) {
+  const bone = "animate-pulse rounded-tag bg-sunk";
+  return (
+    <div aria-hidden="true" className={cn("box-border flex flex-col rounded-card bg-surface p-6 shadow-lift", CARD_HEIGHT, className)}>
+      <div className="flex items-start gap-3">
+        <span className={cn(bone, "size-10 rounded-tile")} />
+        <span className="flex flex-1 flex-col gap-2 pt-1">
+          <span className={cn(bone, "h-3.5 w-24")} />
+          <span className={cn(bone, "h-3 w-16")} />
+        </span>
+        <span className={cn(bone, "h-10 w-14")} />
+      </div>
+      <span className={cn(bone, "mt-7 h-6 w-11/12")} />
+      <span className={cn(bone, "mt-2 h-6 w-1/2")} />
+      <span className={cn(bone, "mt-4 h-3 w-28")} />
+      <span className={cn(bone, "mt-5 h-3.5 w-36")} />
+      <span className={cn(bone, "mt-2 h-3.5 w-48")} />
+      <span className={cn(bone, "mt-5 h-1 w-full")} />
+      <span className={cn(bone, "mt-auto h-3.5 w-4/5")} />
+      <span className={cn(bone, "mt-3 h-3.5 w-3/5")} />
+    </div>
+  );
+}
+
+/** "+2" after a cut list. */
+const More = ({ n }: { n: number }) => (n > 0 ? <span className="type-meta text-muted-foreground tabular-nums"> +{n}</span> : null);
+
 /**
- * The swipe card from design/feed.html. Every card has the same frame whatever the job: long names and titles are cut
- * with an ellipsis, and the facts and the board sit on the bottom edge, so the deck never changes shape between cards.
- * The title is two lines at most: at the card's minimum height (400 px, phones under 740 px tall) a three-line title
- * left the reason only two and a half lines, and the half line was cut through the glyphs (1 Nov, Smartsheet).
+ * The swipe card (design/craft-b2.html, Phase O4): the score large and light in the accent, the role, the place on its
+ * own line with years and pay under it, the score's parts as one split bar, the job's skills against the candidate's
+ * as plain text, and one reason. Meaning by form: a required skill the candidate lacks is underlined dashed, a
+ * nice-to-have one is grey. Every card keeps the same frame: names and titles are cut, a skill line ends in "+n".
  * Stamps come from the deck, which animates them.
  */
 export function JobCard({ job, stamps }: { job: JobCardData; stamps?: ReactNode }) {
   const why = /[.!?]$/.test(job.why) ? job.why : `${job.why}.`;
+  const skills = job.skills && job.skills.total > 0 ? job.skills : null;
+  const have = skills ? fitLine(skills.have) : null;
+  // Required gaps first, then the nice-to-have ones: the card never says nothing is missing while the job names tech
+  // the candidate does not show.
+  const missing = skills ? fitLine([...skills.missing, ...(skills.mentioned ?? [])], 3) : null;
+  const required = new Set(skills?.missing ?? []);
+  const missingLabel = skills?.split && skills.missing.length > 0 ? "Missing" : "Not on resume";
+  const second = [job.experience.label, job.salary].filter(Boolean);
   return (
-    <>
-      <div className="relative box-border flex h-full flex-col overflow-hidden rounded-card border-2 border-edge bg-surface p-[22px] shadow-hard-lg">
-        {/* The match badge overlaps the top right corner, so the header stops short of it. */}
-        <div className="flex items-center gap-3 pr-[90px]">
-          <CompanyMark name={job.company} logoUrl={job.logoUrl} size={48} />
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <span className="truncate text-base font-semibold">{job.company}</span>
-            <span className="truncate text-sm text-muted-foreground">{job.posted}</span>
-          </div>
+    <div className="relative box-border flex h-full flex-col overflow-hidden rounded-card bg-surface p-6 shadow-lift">
+      <div className="flex items-start gap-3">
+        <CompanyMark name={job.company} logoUrl={job.logoUrl} size={40} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate type-body font-semibold">{job.company}</span>
+          {job.board ? <span className="truncate type-meta text-muted-foreground">via {job.board}</span> : null}
         </div>
-        <h2 className="m-0 mt-5 line-clamp-2 type-display-lg break-words text-balance" title={job.role}>
-          {job.role}
-        </h2>
-        <div className="mt-[18px] flex min-h-0 flex-col gap-1.5">
-          <Eyebrow>Why your agent picked it</Eyebrow>
-          <p className="m-0 line-clamp-3 type-lead text-pretty">{why}</p>
+        <div className="flex flex-none flex-col items-end" aria-label={`${job.score} match`}>
+          <span className="type-score text-brand-text">{job.score}</span>
+          <span className="mt-1.5 type-meta text-muted-foreground">match</span>
         </div>
-        <div className="mt-auto flex flex-nowrap gap-2 overflow-hidden pt-4">
-          {job.isNew ? <AccentPill className="h-[34px] flex-none px-3 text-sm">New</AccentPill> : null}
-          <Tag className="min-w-0 shrink">
-            <span className="truncate">{job.where}</span>
-          </Tag>
-          {job.asks ? <Tag className="flex-none whitespace-nowrap">{job.asks}</Tag> : null}
-        </div>
-        <div className="mt-3.5 flex h-8 items-center justify-between gap-3 border-t-[1.5px] border-line pt-3.5">
-          {job.board ? (
-            <span className="flex min-w-0 items-center gap-2 text-sm font-semibold text-muted-foreground">
-              <BoardMark board={job.board} className="text-foreground" />
-              <span className="truncate">via {job.board}</span>
+      </div>
+
+      <h2 className="m-0 mt-6 line-clamp-2 type-heading break-words" title={job.role}>
+        {job.role}
+      </h2>
+      <p className="m-0 mt-2 flex items-center gap-2 type-meta text-muted-foreground">
+        {job.posted}
+        {job.isNew ? <span className="font-semibold text-foreground">New</span> : null}
+      </p>
+
+      <div className="mt-4 min-w-0">
+        <p className="m-0 truncate type-body font-medium" title={job.where}>{job.where}</p>
+        <p className="m-0 truncate type-body text-muted-foreground">
+          <span className={cn(job.experience.over && "text-foreground underline decoration-dashed decoration-1 underline-offset-4")}>{second[0]}</span>
+          {second[1] ? ` · ${second[1]}` : null}
+        </p>
+      </div>
+
+      {job.parts && job.parts.length > 0 ? (
+        <div className="mt-4 flex h-1 gap-1" title={job.parts.map((part) => `${part.label} ${part.points} of ${part.max}`).join(", ")}>
+          {job.parts.map((part) => (
+            <span key={part.label} className="relative overflow-hidden rounded-xs bg-track" style={{ flex: part.max }}>
+              <span className="absolute inset-y-0 left-0 rounded-xs bg-bar" style={{ width: `${Math.round((100 * part.points) / Math.max(1, part.max))}%` }} />
             </span>
-          ) : (
-            <span />
-          )}
-          {job.detailHref ? (
+          ))}
+        </div>
+      ) : null}
+
+      {skills && have && missing ? (
+        <div className="mt-6 flex flex-col gap-2 border-t border-line pt-4">
+          <SkillLine label="You have">
+            {have.shown.length > 0 ? (
+              <>
+                {have.shown.join(", ")}
+                <More n={have.more} />
+              </>
+            ) : (
+              <span className="text-muted-foreground">None of its {skills.total} skills</span>
+            )}
+          </SkillLine>
+          <SkillLine label={missingLabel}>
+            {missing.shown.length > 0 ? (
+              <>
+                {missing.shown.map((skill, i) => (
+                  <span key={skill}>
+                    {i > 0 ? <span className="text-muted-foreground">, </span> : null}
+                    <span className={required.has(skill) ? "underline decoration-dashed decoration-1 underline-offset-4" : "text-muted-foreground"}>{skill}</span>
+                  </span>
+                ))}
+                <More n={missing.more} />
+              </>
+            ) : (
+              <span className="text-muted-foreground">Nothing it names</span>
+            )}
+          </SkillLine>
+        </div>
+      ) : null}
+
+      <p className="m-0 mt-auto line-clamp-2 pt-4 type-body text-pretty text-muted-foreground [@media(max-height:790px)]:line-clamp-1">
+        {why}
+        {job.detailHref ? (
+          <>
+            {" "}
             <Link
               href={job.detailHref}
               draggable={false}
               onPointerDown={(event) => event.stopPropagation()}
               // The card itself opens the job on a tap: stop here so the page is not pushed twice.
               onClick={(event) => event.stopPropagation()}
-              className="inline-flex min-h-8 flex-none items-center gap-1 text-sm font-semibold text-foreground underline underline-offset-3"
+              className="font-medium text-foreground underline decoration-1 underline-offset-4"
             >
-              See details
-              <Icon name="chevronRight" size={14} strokeWidth={2.5} />
+              Details
             </Link>
-          ) : null}
-        </div>
-        {stamps}
-      </div>
-      <MatchBadge score={job.score} tier={job.tier} className="absolute -top-[18px] right-3.5" />
-    </>
+          </>
+        ) : null}
+      </p>
+      {stamps}
+    </div>
   );
 }

@@ -23,10 +23,10 @@ export function TitleTopBar({ title, sub }: { title: string; sub?: ReactNode }) 
   return (
     <header className="flex flex-none flex-col gap-1 px-5">
       <div className="flex h-11 items-center">
-        <h1 className="m-0 flex-1 type-display-lg">{title}</h1>
+        <h1 className="m-0 flex-1 type-heading">{title}</h1>
         <ProfileMenu align="right" />
       </div>
-      {sub ? <span className="text-sm text-muted-foreground">{sub}</span> : null}
+      {sub ? <span className="type-meta text-muted-foreground">{sub}</span> : null}
     </header>
   );
 }
@@ -35,10 +35,10 @@ export function TitleTopBar({ title, sub }: { title: string; sub?: ReactNode }) 
 export function BackTopBar({ href, label, backLabel }: { href: string; label: string; backLabel: string }) {
   return (
     <div className="flex h-11 flex-none items-center gap-1 px-3">
-      <Link href={href} aria-label={backLabel} className="flex size-11 items-center justify-center rounded-full text-foreground">
-        <Icon name="back" size={22} strokeWidth={2.25} />
+      <Link href={href} aria-label={backLabel} className="flex size-11 items-center justify-center rounded-control text-foreground active:bg-sunk">
+        <Icon name="back" size={22} />
       </Link>
-      <span className="text-base font-semibold">{label}</span>
+      <span className="type-body font-medium">{label}</span>
     </div>
   );
 }
@@ -55,17 +55,17 @@ export function UsagePill({ sent, used, cap }: { sent: number; used: number; cap
   return (
     <div
       data-daily-usage=""
-      className="box-border flex h-9 items-center gap-2 rounded-full border-[1.5px] border-line bg-surface px-3"
+      className="box-border flex h-8 items-center gap-2 rounded-control border border-line bg-surface px-2.5"
       title={used >= cap ? "Daily limit reached. It resets at midnight UTC." : undefined}
     >
-      <span className="text-sm font-semibold tabular-nums">
+      <span className="type-meta font-semibold tabular-nums">
         {sent}
         <span className="font-medium text-muted-foreground"> {near ? (used >= cap ? "sent · done for today" : `sent · ${cap - used} left`) : "sent today"}</span>
       </span>
       <span className="sr-only">{used >= cap ? ". Daily limit reached." : ""}</span>
       {near ? (
-        <span aria-hidden="true" className="block h-1 w-8 overflow-hidden rounded-full bg-track">
-          <span className="block h-full bg-bar transition-[width] duration-400 ease-settle" style={{ width: `${percent}%` }} />
+        <span aria-hidden="true" className="block h-1 w-8 overflow-hidden rounded-xs bg-track">
+          <span className="block h-full bg-bar transition-[width] duration-400 ease-calm" style={{ width: `${percent}%` }} />
         </span>
       ) : null}
     </div>

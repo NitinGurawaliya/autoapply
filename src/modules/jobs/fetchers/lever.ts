@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { asDate, plainText, type FetchedJob } from "../normalize";
+import { leverSalary } from "../salary";
 
 const jobSchema = z.object({
   id: z.string(),
@@ -16,6 +17,7 @@ const jobSchema = z.object({
     })
     .optional(),
   workplaceType: z.string().optional(),
+  salaryRange: z.unknown().optional(),
 });
 
 export async function fetchLever(slug: string): Promise<FetchedJob[]> {
@@ -38,6 +40,7 @@ export async function fetchLever(slug: string): Promise<FetchedJob[]> {
       applyUrl,
       postedAt,
       isRemote: /remote/i.test(parsed.data.workplaceType ?? "") || /remote/i.test(location),
+      salary: leverSalary(parsed.data.salaryRange),
       raw: {
         id: parsed.data.id,
         text: parsed.data.text,

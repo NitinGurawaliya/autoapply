@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Direction B · Premium pass</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* Direction B, premium pass (Phase O1, owner 18 Nov). Same identity as craft-b.html; restraint, an 8 px grid,
+     a lighter big number, a deeper accent, finer hairlines and longer softer depth. */
+  .t-light {
+    --bg:#f6f4ef; --surface:#fffefc; --sunk:#eeebe4; --text:#1a1814; --muted:#77726a; --faint:#a8a39a;
+    --line:rgb(26 24 20 / 10%); --line-strong:rgb(26 24 20 / 18%);
+    --accent:#c2410c; --accent-press:#a8380a; --on-accent:#fffaf5; --accent-text:#b23c0b;
+    --bar:#1a1814; --track:rgb(26 24 20 / 8%);
+    --lift: 0 0 0 0.5px rgb(26 24 20 / 8%), 0 1px 1px rgb(26 24 20 / 3%), 0 28px 56px -18px rgb(26 24 20 / 16%);
+    --edge: none;
+  }
+  .t-dark {
+    --bg:#11100e; --surface:#1b1916; --sunk:#161512; --text:#efebe5; --muted:#9d978e; --faint:#6a655e;
+    --line:rgb(239 235 229 / 9%); --line-strong:rgb(239 235 229 / 16%);
+    --accent:#e2733f; --accent-press:#cc6534; --on-accent:#1a1814; --accent-text:#ec8a5a;
+    --bar:#efebe5; --track:rgb(239 235 229 / 9%);
+    --lift: 0 0 0 0.5px rgb(255 255 255 / 6%), 0 28px 56px -18px rgb(0 0 0 / 60%);
+    --edge: inset 0 1px 0 rgb(255 255 255 / 6%);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e9e6df; font-family: 'Schibsted Grotesk', system-ui, sans-serif; color: #1a1814; -webkit-font-smoothing: antialiased; font-feature-settings: "tnum" 0; }
+  .intro { max-width: 1960px; margin: 0 auto; padding: 32px 32px 8px; }
+  .intro h1 { font-size: 24px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.02em; }
+  .intro p { margin: 0 0 14px; font-size: 15px; color: #5a564f; max-width: 780px; line-height: 1.5; }
+  .intro ul { margin: 0; padding-left: 18px; font-size: 14px; color: #3d3a35; line-height: 1.6; columns: 2; max-width: 1180px; }
+  .row { display: flex; gap: 32px; padding: 24px 32px 40px; overflow-x: auto; max-width: 1960px; margin: 0 auto; }
+  .frame { flex: none; }
+  .frame > span { display: block; font-size: 13px; color: #77726a; margin: 0 0 8px 4px; }
+
+  .phone { width: 390px; height: 844px; border-radius: 40px; overflow: hidden; background: var(--bg); color: var(--text); position: relative;
+           box-shadow: 0 0 0 1px rgb(0 0 0 / 7%), 0 24px 60px rgb(0 0 0 / 12%); display: flex; flex-direction: column; }
+  .num { font-variant-numeric: tabular-nums lining-nums; }
+  svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  svg.i.s { width: 16px; height: 16px; }
+  .meta { font-size: 13px; line-height: 1.5; color: var(--muted); }
+
+  /* Feed: 8 px grid, 24 inside the card. */
+  .bar-top { height: 56px; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; flex: none; margin-top: 16px; }
+  .bar-top b { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+  .link { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--text); }
+  .deck { position: relative; height: 490px; flex: none; margin: 8px 16px 0; }
+  .card { position: absolute; inset: 0; background: var(--surface); border-radius: 16px; box-shadow: var(--lift), var(--edge); padding: 24px; display: flex; flex-direction: column; }
+  .card.back { transform: translateY(12px) scale(0.95); opacity: .55; box-shadow: 0 0 0 0.5px var(--line); }
+  .head { display: flex; align-items: flex-start; gap: 12px; }
+  .logo { width: 40px; height: 40px; border-radius: 10px; background: var(--text); color: var(--bg); display: grid; place-items: center; font-weight: 600; font-size: 15px; flex: none; }
+  .who { flex: 1; min-width: 0; padding-top: 1px; }
+  .who b { display: block; font-size: 15px; font-weight: 600; letter-spacing: -0.005em; }
+  .big { text-align: right; line-height: 1; }
+  .big b { display: block; font-size: 40px; font-weight: 500; color: var(--accent-text); letter-spacing: -0.035em; }
+  .big span { display: block; font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .split { display: flex; gap: 4px; margin-top: 16px; height: 4px; }
+  .split i { position: relative; border-radius: 2px; background: var(--track); overflow: hidden; }
+  .split i::after { content: ""; position: absolute; inset: 0; width: var(--f); background: var(--bar); border-radius: 2px; }
+  h2.title { font-size: 24px; line-height: 1.2; font-weight: 600; letter-spacing: -0.025em; margin: 24px 0 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .posted { display: flex; align-items: center; gap: 8px; }
+  .new { font-size: 13px; font-weight: 600; color: var(--text); }
+  .where { margin-top: 16px; }
+  .where b { display: block; font-size: 15px; font-weight: 500; }
+  .where span { font-size: 15px; color: var(--muted); }
+  .rule { height: 0.5px; background: var(--line-strong); margin: 24px 0 16px; }
+  .sk { font-size: 15px; line-height: 1.5; margin: 0 0 8px; display: flex; gap: 8px; white-space: nowrap; overflow: hidden; }
+  .sk > em { font-style: normal; color: var(--muted); width: 72px; flex: none; }
+  .gap { color: var(--muted); }
+  .gap.req { color: var(--text); text-decoration: underline dashed; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+  .why { margin: auto 0 0; font-size: 15px; line-height: 1.5; color: var(--muted); }
+  .why a { color: var(--text); font-weight: 500; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; margin-left: 4px; }
+  .actions { display: flex; gap: 8px; padding: 24px 16px 0; flex: none; }
+  .tabs { margin-top: auto; height: 80px; box-shadow: inset 0 0.5px 0 var(--line-strong); display: flex; padding-top: 10px; }
+  .tabs span { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+  .tabs span.on { color: var(--text); font-weight: 500; }
+
+  /* Buttons: 48 px, radius 10; press shrinks to 98 % with a short ease-out, no bounce. */
+  .btn { height: 48px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font: 600 15px 'Schibsted Grotesk'; letter-spacing: -0.005em; border: none; cursor: pointer;
+         transition: transform 120ms cubic-bezier(.2,.8,.2,1), background-color 120ms; }
+  .btn:active, .btn.pressed { transform: scale(0.98); }
+  .btn.quiet { flex: 1; background: transparent; color: var(--text); box-shadow: inset 0 0 0 1px var(--line-strong); }
+  .btn.quiet.pressed { background: var(--line); }
+  .btn.primary { flex: 2; background: var(--accent); color: var(--on-accent); }
+  .btn.primary.pressed { background: var(--accent-press); }
+  .btn.focus { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--text); }
+  .btn.quiet.focus { box-shadow: inset 0 0 0 1px var(--line-strong), 0 0 0 2px var(--bg), 0 0 0 3.5px var(--text); }
+  .btn.disabled { background: var(--sunk); color: var(--faint); box-shadow: none; }
+  .spin { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid currentColor; border-right-color: transparent; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Loading: the card's own shape, no shimmer gradient; a slow fade. */
+  .bone { background: var(--sunk); border-radius: 6px; animation: breathe 1.6s ease-in-out infinite; }
+  @keyframes breathe { 50% { opacity: .55; } }
+
+  /* Job page */
+  .back { height: 52px; display: flex; align-items: center; gap: 4px; font-size: 15px; font-weight: 500; margin-top: 16px; padding: 0 16px; flex: none; }
+  .scroll { flex: 1; overflow-y: auto; padding: 8px 24px 128px; }
+  .hero { display: flex; justify-content: space-between; gap: 24px; align-items: flex-end; margin-top: 24px; }
+  .hero p { margin: 0; font-size: 15px; line-height: 1.5; color: var(--muted); }
+  .hero p b { color: var(--text); font-weight: 600; display: block; margin-bottom: 4px; }
+  .facts { margin-top: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .facts div span { display: block; font-size: 13px; color: var(--muted); margin-bottom: 2px; }
+  .facts div b { font-size: 15px; font-weight: 500; }
+  section { box-shadow: inset 0 0.5px 0 var(--line-strong); margin-top: 32px; padding-top: 24px; }
+  section h3 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 16px; display: flex; justify-content: space-between; align-items: baseline; }
+  section h3 small { font-size: 13px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
+  .li { display: flex; gap: 12px; font-size: 15px; line-height: 1.5; padding: 4px 0 12px; }
+  .li svg { margin-top: 3px; }
+  .li.no svg { color: var(--text); }
+  .group { padding-bottom: 16px; }
+  .group em { display: block; font-style: normal; color: var(--muted); font-size: 13px; margin-bottom: 4px; }
+  .group span { font-size: 15px; line-height: 1.6; }
+  .desc p { margin: 0 0 16px; font-size: 15px; line-height: 1.65; }
+  .desc a { font-size: 15px; font-weight: 500; color: var(--text); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+  .part { display: grid; grid-template-columns: 1fr auto; gap: 2px 16px; padding: 0 0 20px; }
+  .part b { font-size: 15px; font-weight: 500; }
+  .part .num { font-size: 15px; text-align: right; }
+  .part .num em { font-style: normal; color: var(--muted); }
+  .part .meta { grid-column: 1 / -1; }
+  .part .meter { grid-column: 1 / -1; height: 3px; border-radius: 2px; background: var(--track); margin-top: 8px; overflow: hidden; }
+  .part .meter i { display: block; height: 100%; background: var(--bar); }
+  .total { display: flex; justify-content: space-between; align-items: baseline; box-shadow: inset 0 0.5px 0 var(--line-strong); padding-top: 16px; font-size: 15px; font-weight: 600; }
+  .total b { font-size: 32px; font-weight: 500; letter-spacing: -0.03em; color: var(--accent-text); }
+  .sticky { position: absolute; left: 0; right: 0; bottom: 0; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(12px); box-shadow: inset 0 0.5px 0 var(--line-strong); padding: 12px 16px 28px; }
+  .sticky .meta { margin: 0 0 8px 4px; }
+  .sticky .row-b { display: flex; gap: 8px; }
+
+  .states { max-width: 1960px; margin: 0 auto; padding: 0 32px 48px; display: flex; gap: 32px; flex-wrap: wrap; }
+  .states .sheet { padding: 24px; border-radius: 20px; background: var(--bg); color: var(--text); }
+  .states .sheet > span { display: block; font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+  .states .grid { display: grid; grid-template-columns: repeat(5, 132px); gap: 8px; }
+  .states .grid .meta { text-align: center; }
+  .states .btn { width: 132px; flex: none; }
+</style>
+</head>
+<body>
+<div class="intro">
+  <h1>Direction B · Premium pass</h1>
+  <p>The same identity as craft-b.html, made quieter and more exact. Compare the two side by side; everything below is a change from craft-b.</p>
+  <ul>
+    <li>Fewer things on the card: three facts, no bar legend, one line of skills you have</li>
+    <li>An 8 px grid; 24 px inside the card, 32 between job-page sections</li>
+    <li>The score larger and lighter: 40 px at weight 500, counting up once</li>
+    <li>Tighter tracking on titles; even-width digits everywhere</li>
+    <li>A deeper burnt orange (#C2410C), softer in dark</li>
+    <li>Half-pixel hairlines; one long soft shadow; a faint top edge in dark</li>
+    <li>Buttons press to 98 % with a 120 ms ease-out; no bounce</li>
+    <li>Pay always "₹15–30L a year"; a loading card in the card's own shape</li>
+  </ul>
+</div>
+
+<div class="row" id="row"></div>
+<div class="states" id="states"></div>
+
+<template id="feed">
+  <div class="bar-top">
+    <b>Your feed</b>
+    <span class="link"><svg class="i s" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Filters</span>
+  </div>
+  <div class="deck">
+    <div class="card back"></div>
+    <div class="card">
+      <div class="head">
+        <div class="logo">A</div>
+        <div class="who"><b>Aiprise</b><span class="meta">via Ashby</span></div>
+        <div class="big"><b class="num count" data-to="86">86</b><span>match</span></div>
+      </div>
+      <h2 class="title">Software Engineer I, Frontend</h2>
+      <div class="posted"><span class="meta">Posted 6 days ago</span><span class="new">New</span></div>
+      <div class="where">
+        <b>Bengaluru, on-site</b>
+        <span class="num">0–2 years · ₹15–30L a year</span>
+      </div>
+      <div class="split" title="Work 40 of 50, skills 36 of 40, experience 10 of 10">
+        <i style="flex:50;--f:80%"></i><i style="flex:40;--f:90%"></i><i style="flex:10;--f:100%"></i>
+      </div>
+      <div class="rule"></div>
+      <p class="sk"><em>You have</em><span>React, TypeScript, Next.js <span class="meta num">+2</span></span></p>
+      <p class="sk"><em>Missing</em><span><span class="gap req">Jest</span><span class="gap">, Storybook</span></span></p>
+      <p class="why">React and TypeScript, the stack on your resume.<a>Details</a></p>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn quiet">Skip</button>
+    <button class="btn primary">Apply</button>
+  </div>
+  <div class="tabs">
+    <span class="on"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="3.5" width="12" height="17" rx="2.5"/></svg>Discover</span>
+    <span><svg class="i" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>Applications</span>
+  </div>
+</template>
+
+<template id="loading">
+  <div class="bar-top">
+    <b>Your feed</b>
+    <span class="link"><svg class="i s" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Filters</span>
+  </div>
+  <div class="deck">
+    <div class="card" aria-busy="true">
+      <div class="head">
+        <div class="logo bone" style="background:var(--sunk)"></div>
+        <div class="who"><div class="bone" style="width:96px;height:14px;margin-top:4px"></div><div class="bone" style="width:64px;height:12px;margin-top:8px"></div></div>
+        <div class="bone" style="width:56px;height:40px"></div>
+      </div>
+      <div class="bone" style="width:88%;height:24px;margin-top:28px"></div>
+      <div class="bone" style="width:52%;height:24px;margin-top:8px"></div>
+      <div class="bone" style="width:120px;height:12px;margin-top:16px"></div>
+      <div class="bone" style="width:150px;height:14px;margin-top:20px"></div>
+      <div class="bone" style="width:190px;height:14px;margin-top:8px"></div>
+      <div class="bone" style="width:100%;height:4px;margin-top:20px"></div>
+      <div class="bone" style="width:80%;height:14px;margin-top:40px"></div>
+      <div class="bone" style="width:60%;height:14px;margin-top:12px"></div>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn disabled" style="flex:1">Skip</button>
+    <button class="btn disabled" style="flex:2">Apply</button>
+  </div>
+  <div class="tabs">
+    <span class="on"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="3.5" width="12" height="17" rx="2.5"/></svg>Discover</span>
+    <span><svg class="i" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>Applications</span>
+  </div>
+</template>
+
+<template id="job">
+  <div class="back"><svg class="i" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>Feed</div>
+  <div class="scroll">
+    <div class="head">
+      <div class="logo">A</div>
+      <div class="who"><b>Aiprise</b><span class="meta">via Ashby · 6 days ago</span></div>
+    </div>
+    <h2 class="title">Software Engineer I, Frontend</h2>
+    <div class="hero">
+      <p><b>Strong fit</b>React and TypeScript, the stack on your resume.</p>
+      <div class="big"><b class="num count" data-to="86">86</b><span>match</span></div>
+    </div>
+    <div class="facts">
+      <div><span>Location</span><b>Bengaluru, on-site</b></div>
+      <div><span>Experience</span><b class="num">0–2 years</b></div>
+      <div><span>Pay</span><b class="num">₹15–30L a year</b></div>
+      <div><span>Company</span><b>Startup</b></div>
+    </div>
+
+    <section>
+      <h3>Why it's a match</h3>
+      <div class="li"><svg class="i s" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Frontend work, close to what you do now</div>
+      <div class="li"><svg class="i s" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>You have 5 of its 6 required skills</div>
+      <div class="li"><svg class="i s" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Asks 0–2 years; you have 1</div>
+      <div class="li no"><svg class="i s" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5h.01"/></svg>Requires Jest, which isn't on your resume</div>
+    </section>
+
+    <section>
+      <h3>Skills <small class="num">5 of 6 required</small></h3>
+      <div class="group"><em>On your resume</em><span>React, TypeScript, Next.js, CSS, Git</span></div>
+      <div class="group"><em>Required, not on your resume</em><span class="gap req">Jest</span></div>
+      <div class="group"><em>Nice to have, not on your resume</em><span class="gap">Storybook, GraphQL</span></div>
+    </section>
+
+    <section class="desc">
+      <h3>About the role</h3>
+      <p>You'll build the screens our customers use to verify identities: onboarding flows, review queues and the dashboard, in React and TypeScript.</p>
+      <p>You'll work with one designer and two backend engineers, ship every week, and own features from the first sketch to production.</p>
+      <a>Read the full description</a>
+    </section>
+
+    <section>
+      <h3>How we got to <span class="num">86</span></h3>
+      <div class="part"><b>The work</b><span class="num">40 <em>/ 50</em></span><span class="meta">A strong fit for your field (35); close to your resume (5 of 15)</span><div class="meter"><i style="width:80%"></i></div></div>
+      <div class="part"><b>Skills</b><span class="num">36 <em>/ 40</em></span><span class="meta">5 of 6 required; 2 of 4 nice to have</span><div class="meter"><i style="width:90%"></i></div></div>
+      <div class="part"><b>Experience</b><span class="num">10 <em>/ 10</em></span><span class="meta">Asks 0–2 years; you have 1</span><div class="meter"><i style="width:100%"></i></div></div>
+      <div class="total"><span>Match</span><b class="num">86</b></div>
+    </section>
+  </div>
+  <div class="sticky">
+    <p class="meta">Up next: Razorpay, Frontend Engineer</p>
+    <div class="row-b">
+      <button class="btn quiet">Skip</button>
+      <button class="btn primary">Apply</button>
+    </div>
+  </div>
+</template>
+
+<template id="buttons">
+  <div class="grid">
+    <button class="btn primary">Apply</button>
+    <button class="btn primary pressed">Apply</button>
+    <button class="btn primary focus">Apply</button>
+    <button class="btn disabled">Apply</button>
+    <button class="btn primary"><span class="spin"></span>Sending</button>
+    <button class="btn quiet">Skip</button>
+    <button class="btn quiet pressed">Skip</button>
+    <button class="btn quiet focus">Skip</button>
+    <button class="btn disabled">Skip</button>
+    <button class="btn quiet"><span class="spin"></span>Skipping</button>
+    <span class="meta">Rest</span><span class="meta">Pressed</span><span class="meta">Focus</span><span class="meta">Disabled</span><span class="meta">Loading</span>
+  </div>
+</template>
+
+<script>
+  const add = (where, label, theme, template) => {
+    const frame = document.createElement("div");
+    frame.className = "frame";
+    frame.innerHTML = `<span>${label}</span>`;
+    const phone = document.createElement("div");
+    phone.className = `phone ${theme}`;
+    phone.append(document.getElementById(template).content.cloneNode(true));
+    frame.append(phone);
+    document.getElementById(where).append(frame);
+  };
+  add("row", "Feed card · light", "t-light", "feed");
+  add("row", "Feed card · dark", "t-dark", "feed");
+  add("row", "Job page · light", "t-light", "job");
+  add("row", "Job page · dark", "t-dark", "job");
+  add("row", "Loading · light", "t-light", "loading");
+  for (const [theme, label] of [["t-light", "Button states · light"], ["t-dark", "Button states · dark"]]) {
+    const sheet = document.createElement("div");
+    sheet.className = `sheet ${theme}`;
+    sheet.innerHTML = `<span>${label}</span>`;
+    sheet.append(document.getElementById("buttons").content.cloneNode(true));
+    document.getElementById("states").append(sheet);
+  }
+  // The score counts up once when a card appears: 600 ms, ease-out, skipped under reduced motion.
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    for (const el of document.querySelectorAll(".count")) {
+      const to = Number(el.dataset.to), start = performance.now();
+      const step = (now) => {
+        const t = Math.min(1, (now - start) / 600);
+        el.textContent = String(Math.round(to * (1 - Math.pow(1 - t, 3))));
+        if (t < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    }
+  }
+</script>
+</body>
+</html>
