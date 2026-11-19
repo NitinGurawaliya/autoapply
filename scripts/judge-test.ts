@@ -1,7 +1,12 @@
 // The model's job verdicts (modules/jobs/semantic.ts judgeBatch) on labelled pairs: field (developer vs sales, ML vs
 // frontend, security vs data) and level (fresher vs senior, overqualified). Live: one model call per candidate, nothing
-// stored. Each case lists the verdicts that count as right. npx tsx scripts/judge-test.ts
-import { judgeBatch } from "../src/modules/jobs/semantic";
+// stored. Each case lists the verdicts that count as right. P6: the same cases through the fit path (fit.ts fitBatch,
+// the case's "needs" as its requirement lines, the brief from the candidate's title, years and skills line, the level on
+// top by code), so both paths are held to the same labels. npx tsx scripts/judge-test.ts [--old | --fit]
+import { candidateSkills, classifyTitle, jobSkills } from "../src/modules/jobs";
+import { fitBatch, fitInput } from "../src/modules/jobs/fit";
+import { judgeBatch, levelOn } from "../src/modules/jobs/semantic";
+import { requiredYears } from "../src/modules/jobs/tagging";
 
 type Fit = "strong" | "good" | "stretch" | "no";
 type Case = { title: string; needs: string; ok: Fit[] };
@@ -72,22 +77,50 @@ const candidates: Array<{ name: string; summary: string; years: number; cases: C
   },
 ];
 
-async function main() {
+type Verdicts = Map<number, { fit: Fit; why: string }>;
+
+/** The fit path on one candidate's cases: brief from the summary's first and skills lines, the level by code on top. */
+async function fitVerdicts(candidate: (typeof candidates)[number]): Promise<Verdicts> {
+  const [titleLine, skillsLine = ""] = candidate.summary.split("\n");
+  const title = titleLine.split(",")[0];
+  const skills = skillsLine.replace(/^Skills:\s*/, "").split(/,\s*/).filter(Boolean);
+  const shows = candidateSkills({ skills });
+  const track = classifyTitle(title).track;
+  const brief = { tracks: track ? [track] : [], nearby: false, years: candidate.years, title, skills: [...shows].slice(0, 12) };
+  const jobs = candidate.cases.map((c, i) => {
+    const names = jobSkills(c.title, c.needs);
+    const row = { id: String(i), title: c.title, experienceMin: requiredYears(c.title, c.needs), roleFamily: classifyTitle(c.title).track ?? "non_tech", kind: "employee", readingCurrent: true, reading: { summary: c.needs, requirements: c.needs.split(/(?<=[.;])\s+/).filter(Boolean) }, skills: names, skillsRequired: [], skillsHash: null, contentHash: null };
+    return { row, input: fitInput(row, shows)! };
+  });
+  const answer = await fitBatch(brief, jobs.map((job) => job.input), "interactive");
+  const out: Verdicts = new Map();
+  for (const [n, verdict] of answer) out.set(n, { fit: levelOn(verdict.fit, jobs[n].row.title, jobs[n].row.experienceMin, candidate.years).fit, why: verdict.why });
+  return out;
+}
+
+async function run(path: "old" | "fit") {
   let failed = 0;
   let total = 0;
   for (const candidate of candidates) {
-    const verdicts = await judgeBatch({ summary: candidate.summary, years: candidate.years }, candidate.cases.map((c) => ({ title: c.title, description: c.needs })));
+    const verdicts: Verdicts = path === "old" ? await judgeBatch({ summary: candidate.summary, years: candidate.years }, candidate.cases.map((c) => ({ title: c.title, description: c.needs }))) : await fitVerdicts(candidate);
     candidate.cases.forEach((c, i) => {
       total += 1;
       const got = verdicts.get(i);
       const ok = !!got && c.ok.includes(got.fit);
       if (!ok) failed += 1;
-      console.log(`${ok ? "ok  " : "FAIL"} ${candidate.name} · ${c.title} → ${got?.fit ?? "missing"} (want ${c.ok.join("/")})${got ? ` — ${got.why}` : ""}`);
+      console.log(`${ok ? "ok  " : "FAIL"} [${path}] ${candidate.name} · ${c.title} → ${got?.fit ?? "missing"} (want ${c.ok.join("/")})${got ? ` — ${got.why}` : ""}`);
     });
   }
-  console.log(`${total - failed}/${total} right`);
+  console.log(`[${path}] ${total - failed}/${total} right`);
   // The model is not perfectly repeatable; one miss in 30 is allowed, more means the prompt needs work.
-  console.log(failed <= 1 ? "PASS judge" : `FAIL judge (${failed})`);
-  process.exit(failed <= 1 ? 0 : 1);
+  console.log(failed <= 1 ? `PASS judge (${path})` : `FAIL judge (${path}, ${failed})`);
+  return failed <= 1;
+}
+
+async function main() {
+  const paths: Array<"old" | "fit"> = process.argv.includes("--old") ? ["old"] : process.argv.includes("--fit") ? ["fit"] : ["old", "fit"];
+  let ok = true;
+  for (const path of paths) ok = (await run(path)) && ok;
+  process.exit(ok ? 0 : 1);
 }
 main();

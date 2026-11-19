@@ -5,7 +5,7 @@
 // a task or a paid task is off-target. Reads only (the model's verdicts are cached per resume as the feed does). The feed cache is per process.
 // npx tsx scripts/feed-audit.ts [--skipped] [userId-suffix ...]   (default: every real profile; --skipped: the cards they skipped)
 import { db } from "../src/lib/db";
-import { listFeed, parseFeedFilters, tracksOf } from "../src/modules/jobs";
+import { fitOn, listFeed, parseFeedFilters, tracksOf } from "../src/modules/jobs";
 import { classifyTitle } from "../src/modules/jobs/functions";
 import { profileVector } from "../src/modules/jobs/semantic";
 import { requiredYears } from "../src/modules/jobs/tagging";
@@ -55,7 +55,11 @@ async function audit(userId: string, view: "new" | "skipped" = "new") {
         FROM "Job" WHERE id = ANY(${ids}::text[])`
     : [];
   const byId = new Map(rows.map((row) => [row.id, row]));
-  const verdicts = new Map((await db.jobJudgement.findMany({ where: { profileId: profile.id, jobId: { in: ids } }, select: { jobId: true, fit: true } })).map((row) => [row.jobId, row.fit]));
+  // The verdict cache of the path the feed used (P6: FitJudgement with RELEVANCE_FIT=1, the model's fit before the level).
+  const cache = fitOn()
+    ? db.fitJudgement.findMany({ where: { profileId: profile.id, jobId: { in: ids } }, select: { jobId: true, fit: true } })
+    : db.jobJudgement.findMany({ where: { profileId: profile.id, jobId: { in: ids } }, select: { jobId: true, fit: true } });
+  const verdicts = new Map((await cache).map((row) => [row.jobId, row.fit]));
   let off = 0;
   const tiers: Record<string, number> = {};
   for (const job of feed) {

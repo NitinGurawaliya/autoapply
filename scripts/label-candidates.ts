@@ -10,9 +10,17 @@
 //
 //   npx tsx scripts/label-candidates.ts [--owner <userId>] [--profile <id suffix>] [--rebuild]
 //   npx tsx scripts/label-candidates.ts --label [--profile <id suffix>]
+//
+// Round 2 (P6, TDD 7.1): `--round 2` marks, within each profile's round-1 pool, the fit path's top 20 not yet labelled
+// (rankWithFit, a dry run) and as many random unlabelled pool jobs, stored as EvalPool round 2 rows (the pool itself
+// stays round 1's). `--export <file>` writes a round's unlabelled candidates for blind labellers (shuffled, no source:
+// the brief and the posting's opening only); `--import <file>` stores their answers ([{profileId, jobId, relevant, by}]).
+//   npx tsx scripts/label-candidates.ts --round 2 [--profile <id suffix>]
+//   npx tsx scripts/label-candidates.ts --round 2 --export <file> | --import <file> | --label
+import { readFileSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { db } from "../src/lib/db";
-import { briefOf, currentPool, evalProfiles, rankByRule, readingsOf, ROUND, RULES, type Rule } from "../src/modules/jobs/eval";
+import { briefOf, currentPool, evalProfiles, rankByRule, rankWithFit, readingsOf, ROUND, RULES, type Rule } from "../src/modules/jobs/eval";
 import { decodeEntities } from "../src/modules/jobs/reading";
 
 const TOP = 20;
@@ -85,12 +93,63 @@ async function build(ownerUserId: string | undefined, only: string | undefined, 
   console.log(`JobJudgement rows ${judgedBefore} → ${judgedAfter} (the eval writes none)`);
 }
 
-async function label(only: string | undefined) {
+/** Round 2 (P6): the fit path's unlabelled top 20 and as many random unlabelled pool jobs, per profile. */
+async function buildRound2(ownerUserId: string | undefined, only: string | undefined) {
+  const profiles = (await evalProfiles(ownerUserId)).filter((p) => !only || p.profileId.endsWith(only));
+  for (const profile of profiles) {
+    const tag = `…${profile.profileId.slice(-6)}${profile.owner ? " (owner)" : ""}`;
+    const pool = (await db.evalPool.findMany({ where: { profileId: profile.profileId, round: ROUND }, select: { jobId: true } })).map((row) => row.jobId);
+    if (pool.length === 0) continue;
+    const labelled = new Set((await db.feedLabel.findMany({ where: { profileId: profile.profileId }, select: { jobId: true } })).map((row) => row.jobId));
+    const ranked = await rankWithFit(profile.userId, pool, await readingsOf(pool));
+    const picks = ranked.slice(0, TOP).map((job) => job.id).filter((id) => !labelled.has(id));
+    const random = shuffled(pool.filter((id) => !labelled.has(id) && !picks.includes(id)), `${profile.profileId}:2`).slice(0, picks.length);
+    await db.$transaction([
+      db.evalPool.deleteMany({ where: { profileId: profile.profileId, round: 2 } }),
+      db.evalPool.createMany({ data: [...picks.map((jobId) => ({ jobId, source: "fit" })), ...random.map((jobId) => ({ jobId, source: "random" }))].map((row) => ({ ...row, profileId: profile.profileId, round: 2 })) }),
+    ]);
+    console.log(`${tag}: fit ranks ${ranked.length} cards; ${picks.length} of its top ${TOP} unlabelled, plus ${random.length} random`);
+  }
+}
+
+/** The round's unlabelled candidates, shuffled per profile and without their source, for blind labellers. */
+async function exportRound(round: number, file: string, only: string | undefined) {
+  const pools = await db.evalPool.groupBy({ by: ["profileId"], where: { round, NOT: { source: "pool" }, ...(only ? { profileId: { endsWith: only } } : {}) } });
+  const out = [];
+  for (const { profileId } of pools) {
+    const candidates = await db.evalPool.findMany({ where: { profileId, round, NOT: { source: "pool" } }, select: { jobId: true } });
+    const labelled = new Set((await db.feedLabel.findMany({ where: { profileId }, select: { jobId: true } })).map((row) => row.jobId));
+    const brief = await briefOf(profileId);
+    for (const jobId of shuffled(candidates.map((row) => row.jobId).filter((id) => !labelled.has(id)), `${profileId}:label:${round}`)) {
+      const job = await db.job.findUnique({ where: { id: jobId }, select: { title: true, location: true, description: true, company: { select: { name: true } } } });
+      if (!job) continue;
+      const opening = decodeEntities(job.description).replace(/\s+/g, " ").trim().slice(0, OPENING_CHARS);
+      out.push({ profileId, jobId, brief, title: job.title, company: job.company.name, location: job.location, opening });
+    }
+  }
+  writeFileSync(file, JSON.stringify(out, null, 1));
+  console.log(`${out.length} candidates written to ${file}`);
+}
+
+/** Stores labellers' answers for a round: [{ profileId, jobId, relevant: true | false | null, by }]. */
+async function importRound(round: number, file: string) {
+  const rows = JSON.parse(readFileSync(file, "utf8")) as Array<{ profileId: string; jobId: string; relevant: boolean | null; by: string }>;
+  for (const row of rows) {
+    await db.feedLabel.upsert({
+      where: { profileId_jobId: { profileId: row.profileId, jobId: row.jobId } },
+      create: { profileId: row.profileId, jobId: row.jobId, relevant: row.relevant, by: row.by, round },
+      update: { relevant: row.relevant, by: row.by, round, at: new Date() },
+    });
+  }
+  console.log(`${rows.length} labels stored for round ${round}`);
+}
+
+async function label(only: string | undefined, round: number) {
   const terminal = createInterface({ input: process.stdin, output: process.stdout });
   try {
-    const pools = await db.evalPool.groupBy({ by: ["profileId"], where: { round: ROUND, ...(only ? { profileId: { endsWith: only } } : {}) } });
+    const pools = await db.evalPool.groupBy({ by: ["profileId"], where: { round, ...(only ? { profileId: { endsWith: only } } : {}) } });
     for (const { profileId } of pools) {
-      const candidates = await db.evalPool.findMany({ where: { profileId, round: ROUND, NOT: { source: "pool" } }, select: { jobId: true } });
+      const candidates = await db.evalPool.findMany({ where: { profileId, round, NOT: { source: "pool" } }, select: { jobId: true } });
       const labelled = new Set((await db.feedLabel.findMany({ where: { profileId }, select: { jobId: true } })).map((row) => row.jobId));
       const todo = shuffled(candidates.map((row) => row.jobId).filter((id) => !labelled.has(id)), `${profileId}:label`);
       if (todo.length === 0) continue;
@@ -110,8 +169,8 @@ async function label(only: string | undefined) {
         const relevant = answer === "y" ? true : answer === "n" ? false : null;
         await db.feedLabel.upsert({
           where: { profileId_jobId: { profileId, jobId } },
-          create: { profileId, jobId, relevant, by: "owner", round: ROUND },
-          update: { relevant, by: "owner", round: ROUND, at: new Date() },
+          create: { profileId, jobId, relevant, by: "owner", round },
+          update: { relevant, by: "owner", round, at: new Date() },
         });
       }
     }
@@ -123,7 +182,12 @@ async function label(only: string | undefined) {
 
 async function main() {
   const only = arg("--profile");
-  if (process.argv.includes("--label")) await label(only);
+  const round = Number(arg("--round") ?? ROUND);
+  const owner = arg("--owner") ?? process.env.EVAL_OWNER_USER_ID;
+  if (arg("--export")) await exportRound(round, arg("--export")!, only);
+  else if (arg("--import")) await importRound(round, arg("--import")!);
+  else if (process.argv.includes("--label")) await label(only, round);
+  else if (round === 2) await buildRound2(owner, only);
   else await build(arg("--owner") ?? process.env.EVAL_OWNER_USER_ID, only, process.argv.includes("--rebuild"));
 }
 

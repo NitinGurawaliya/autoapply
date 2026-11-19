@@ -20,3 +20,5 @@ export { embedPendingJobs, jobSimilarity, judgeJobs, labelPendingSkills, profile
 export { candidateSkills, compareSkills, jobSkills, TECH_VOCAB } from "./skills";
 export type { Judgement } from "./semantic";
 export { warmFeeds } from "./warm";
+export { fitJobs, fitOn, fitStats } from "./fit";
+export type { FitVerdict } from "./fit";

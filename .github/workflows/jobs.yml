@@ -41,6 +41,9 @@ env:
   # Phase P, P3: the one gate (title AND reading) in every feed these jobs build (warm, prescan); every process must carry
   # the same value (docs/relevance/TDD.md 4.9). "0" turns the reading part off.
   READING_GATE: "1"
+  # Phase P, P6: the fit verdict (fit.ts, FitJudgement) in place of the old judge when "1". Off until its gate in
+  # docs/relevance/TDD.md 7.1 passes; turned on here, on the worker and on the web app at once (4.9).
+  RELEVANCE_FIT: "0"
   APP_URL: ${{ secrets.APP_URL }}
 
 jobs:

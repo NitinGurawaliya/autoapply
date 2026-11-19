@@ -22,7 +22,8 @@ const PAUSE_MS = 300; // between board API calls, to stay polite to the public A
 export async function prescanFeed(userId: string) {
   // The candidate brief (P5) follows every profile change; a failure here never stops the scan.
   await buildBrief(userId).catch((error) => console.error(`brief …${userId.slice(-6)}: ${error instanceof Error ? error.message.slice(0, 80) : "failed"}`));
-  const feed = (await listFeed(userId, parseFeedFilters({}))).slice(0, SCAN_JOBS);
+  // Built as warm builds it: the fit path (P6) judges up to MAX_SHORTLIST here, so the first feed only reads verdicts.
+  const feed = (await listFeed(userId, parseFeedFilters({}), "new", { warm: true })).slice(0, SCAN_JOBS);
   return scanJobs(userId, feed.map((job) => job.id));
 }
 

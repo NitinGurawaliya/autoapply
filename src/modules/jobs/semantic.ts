@@ -110,7 +110,8 @@ export async function jobSimilarity(jobId: string, vector: string | null) {
 }
 
 export type Fit = "strong" | "good" | "stretch" | "no";
-export type Judgement = { fit: Fit; why: string };
+/** `quote`: the requirement line the fit path's verdict rests on (fit.ts, P6); the old path has none. */
+export type Judgement = { fit: Fit; why: string; quote?: string | null };
 
 const judgeSchema = z.object({
   results: z.array(z.object({ n: z.number().int(), field: z.enum(["same", "close", "related", "different"]), why: z.string() })),
@@ -174,12 +175,16 @@ const NAMED: Array<[Track, RegExp]> = [
  * (2 → stretch); intern and entry roles are not for 5+ years. Returns the fit and what to add to the reason.
  */
 export function levelFit(field: keyof typeof FROM_FIELD, job: JudgedJob, years: number | null): { fit: Fit; note: string | null } {
-  let fit = FROM_FIELD[field];
+  return levelOn(FROM_FIELD[field], job.title, requiredYears(job.title, job.description), years);
+}
+
+/** The level rules of levelFit on a verdict already made (the fit path, P6, passes the job's stored years asked). */
+export function levelOn(start: Fit, title: string, asks: number | null, years: number | null): { fit: Fit; note: string | null } {
+  let fit = start;
   if (fit === "no") return { fit, note: null };
   const have = years ?? 0;
-  const asks = requiredYears(job.title, job.description);
   const more = asks == null ? 0 : Math.round(asks - have);
-  const level = seniorityOf(job.title);
+  const level = seniorityOf(title);
   let note: string | null = null;
   if (more >= 3) return { fit: "no", note: `asks ${more} more years than you have` };
   if (more === 2) fit = atMost(fit, "stretch");

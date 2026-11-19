@@ -4,6 +4,9 @@ import { db } from "@/lib/db";
 import { daysAgoLabel } from "@/lib/days";
 import { cachedFeed, rememberFeed } from "@/lib/feed-cache";
 import { companyKey, feedHistory, loadRules, roleKey } from "@/modules/governance";
+// The brief file itself, not the profile index (which pulls in resume parsing).
+import { briefOf } from "@/modules/profile/brief";
+import { fitJobs, fitOn, type FitStore, type FitWho } from "./fit";
 import { ADJACENT, classifyTitle, SENIORITIES, TRACK_LABELS, TRACKS, trackFit, type Track, tracksOf } from "./functions";
 import { gateReason, gateSql, type GateJob, jobGate, readingGateOn } from "./gate";
 import { companyResultsById, judge } from "./results";
@@ -74,6 +77,8 @@ export type FeedJob = {
   yourYears: number | null;
   /** Pay as the board published it, formatted ("₹15L – ₹30L"); null when the board gives none. */
   salary: string | null;
+  /** The requirement line the fit verdict rests on (fit.ts, RELEVANCE_FIT, P6), shown on the job page; null otherwise. */
+  quote: string | null;
 };
 
 /** One part of the match score, out of its maximum, with what it measured (Phase M4). */
@@ -755,12 +760,15 @@ function jobSkillsFor(job: Pick<FeedRow, "skills" | "skillsRequired" | "skillsHa
 /** "new": jobs the user has not swiped; "skipped": the ones they swiped left, to look at again once the feed runs out. */
 export type FeedView = "new" | "skipped";
 
-export async function listFeed(userId: string, filters: FeedFilters, view: FeedView = "new"): Promise<FeedJob[]> {
+/** `warm`: built by warm or prescan (P6: the fit path then judges up to MAX_SHORTLIST in the background lane). */
+export type FeedBuild = { warm?: boolean };
+
+export async function listFeed(userId: string, filters: FeedFilters, view: FeedView = "new", build: FeedBuild = {}): Promise<FeedJob[]> {
   // A visit within a minute of the last one, with nothing changed since, reuses its result (lib/feed-cache.ts).
   const filtersKey = view === "new" ? JSON.stringify(filters) : `${JSON.stringify(filters)}|skipped`;
   const cached = cachedFeed<FeedJob[]>(userId, filtersKey);
   if (cached) return cached;
-  const feed = await scoreFeed(userId, filters, view);
+  const feed = await scoreFeed(userId, filters, view, undefined, build);
   rememberFeed(userId, filtersKey, feed);
   return feed;
 }
@@ -778,6 +786,8 @@ export type EvalRanking = {
   rowsOnly?: (rows: FeedRow[]) => void;
   gate?: { keep: (job: FeedRow, tracks: string[] | null) => boolean; trackOf: (job: FeedRow) => string | null };
   store: JudgementStore;
+  /** The fit path's dry run (P6): rank with fit verdicts read from and written to this store (never FitJudgement). */
+  fit?: FitStore;
   limit?: number;
 };
 
@@ -786,7 +796,7 @@ export function rankForEval(userId: string, options: EvalRanking): Promise<FeedJ
   return scoreFeed(userId, parseFeedFilters({}), "new", options);
 }
 
-async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, evaluation?: EvalRanking): Promise<FeedJob[]> {
+async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, evaluation?: EvalRanking, build: FeedBuild = {}): Promise<FeedJob[]> {
   // Independent reads run together: every database round trip is ~250 ms from India to the database.
   const [profile, answers] = await Promise.all([
     db.profile.findUnique({ where: { userId } }),
@@ -855,6 +865,9 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
     .filter((job) => job.similarity != null && job.source !== "mock" && open(job))
     .sort((a, b) => b.similarity! - a.similarity! || (a.id < b.id ? -1 : 1));
   const judgements = new Map<string, Judgement>();
+  // The fit path (P6, RELEVANCE_FIT; the eval's dry run when it passes a fit store): verdicts from the job's reading and
+  // the candidate brief, in FitJudgement. Off, the old judge (JobJudgement, trackFloor) runs unchanged.
+  const fitWho: FitWho | null = profile && (evaluation ? Boolean(evaluation.fit) : fitOn()) ? { userId, profileId: profile.id, brief: briefOf(profile), shows, years } : null;
 
   const scoreAll = (kept: Set<string>) => jobs
     .filter((job) => job.similarity == null || kept.has(job.id))
@@ -902,6 +915,7 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
         skills: jobSkillsFor(job, shows),
         seniority: job.seniority,
         salary: formatSalary({ min: job.salaryMin, max: job.salaryMax, currency: job.salaryCurrency, period: job.salaryPeriod }),
+        quote: judgements.get(job.id)?.quote ?? null,
       };
     })
     .filter((job) => job.mock || job.score >= minScore)
@@ -916,7 +930,13 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
   for (let limit = SHORTLIST; ; limit += SHORTLIST) {
     const shortlist = closest.slice(0, limit);
     const missing = shortlist.filter((job) => !judgements.has(job.id)).map((job) => job.id);
-    if (profile && missing.length > 0) {
+    if (fitWho && missing.length > 0) {
+      // The request path judges the closest SHORTLIST at most (a cold feed stays fast), warm and prescan up to
+      // MAX_SHORTLIST; past that only cached verdicts are read. The eval's dry run judges what it ranks.
+      const judge = Boolean(evaluation) || limit <= (build.warm ? MAX_SHORTLIST : SHORTLIST);
+      const lane = build.warm || evaluation ? "background" : "interactive";
+      for (const [id, verdict] of await fitJobs(fitWho, missing, { store: evaluation?.fit, judge, lease: !evaluation, lane })) judgements.set(id, verdict);
+    } else if (profile && missing.length > 0) {
       // Title and fingerprint come with the feed rows; judgeJobs reads descriptions only for jobs not judged yet.
       const missingSet = new Set(missing);
       const texts = jobs.filter((job) => missingSet.has(job.id)).map((job) => ({ id: job.id, title: job.title, contentHash: job.contentHash }));
@@ -952,6 +972,7 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
       seniority: job.seniority,
       yourYears: years,
       salary: job.salary,
+      quote: job.quote,
       // Ranking only: the number the user sees stays the honest match score.
       rank: job.score + job.verdict.nudge,
     }))

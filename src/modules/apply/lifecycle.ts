@@ -3,13 +3,14 @@ import { db } from "@/lib/db";
 import { cachedFeedScore, dropFromFeed } from "@/lib/feed-cache";
 import { APPLY_QUEUES, enqueueApply } from "@/lib/queue";
 import { check, historyFor, loadRules, writeEvent } from "@/modules/governance";
-import { APPLY_BOARDS, candidateSkills, jobSimilarity, judgeJobs, profileVector, readingGateOn, scoreJob, tracksOf } from "@/modules/jobs";
+import { APPLY_BOARDS, candidateSkills, fitJobs, fitOn, jobSimilarity, judgeJobs, profileVector, readingGateOn, scoreJob, tracksOf } from "@/modules/jobs";
+import { briefOf } from "@/modules/profile/brief";
 import { lastRunMaySendTwice } from "./outcome";
 
 export const CANCELLABLE = ["queued", "inspecting", "filling", "needs_input"];
 export const RETRYABLE = ["failed", "cancelled"];
 
-type ScoredProfile = { id: string; currentTitle: string | null; skills: unknown; experience: unknown; education: unknown; tracks: string[]; yearsExperience: number | null; embeddedFrom: string | null; resumeText?: string | null; avoid?: string[] };
+type ScoredProfile = { id: string; userId: string; currentTitle: string | null; skills: unknown; experience: unknown; education: unknown; tracks: string[]; yearsExperience: number | null; embeddedFrom: string | null; resumeText?: string | null; avoid?: string[]; showNearby?: boolean };
 type ScoredJob = { id: string; title: string; description: string; contentHash: string | null; country: string; remoteType: string; experienceMin: number | null; track: string | null; seniority?: string | null; skills?: string[]; skillsRequired?: string[]; skillsHash?: string | null; source: string; roleFamily?: string | null; kind?: string | null; flags?: string[]; readingCurrent?: boolean };
 
 /**
@@ -23,8 +24,9 @@ async function swipeScore(userId: string, profile: ScoredProfile, job: ScoredJob
 /** The match score worked out for one job: the same for a first swipe and for a retry, from the feed's stored features. */
 export async function candidateScore(profile: ScoredProfile, job: ScoredJob) {
   const similarity = await jobSimilarity(job.id, await profileVector(profile));
-  // The verdict the feed got for this job (cached), so a card the feed showed passes the same check.
-  const judgement = similarity == null ? null : (await judgeJobs(profile, [job])).get(job.id) ?? null;
+  // The verdict the feed got for this job (cached), so a card the feed showed passes the same check. The fit path (P6)
+  // judges a job the feed never judged alone, without the user's build lease.
+  const judgement = similarity == null ? null : fitOn() ? await fitOf(profile, job.id) : (await judgeJobs(profile, [job])).get(job.id) ?? null;
   return scoreJob({ ...job, similarity, judgement }, {
     currentTitle: profile.currentTitle,
     skills: Array.isArray(profile.skills) ? profile.skills.filter((item): item is string => typeof item === "string") : [],
@@ -36,6 +38,12 @@ export async function candidateScore(profile: ScoredProfile, job: ScoredJob) {
     // The one gate without its field part (Phase P, P3): this check cannot know the Track filter the card was shown
     // under, so it enforces non-tech, gig, task, paid task and the profile's "Never show me" (P4) only.
   }, readingGateOn() ? { job, tracks: null, avoid: profile.avoid ?? [], field: false } : undefined).score;
+}
+
+async function fitOf(profile: ScoredProfile, jobId: string) {
+  const brief = briefOf({ ...profile, showNearby: profile.showNearby ?? false });
+  const verdicts = await fitJobs({ userId: profile.userId, profileId: profile.id, brief, shows: candidateSkills(profile), years: profile.yearsExperience }, [jobId], { lease: false });
+  return verdicts.get(jobId) ?? null;
 }
 
 export function boardSupported(source: string) {
