@@ -101,7 +101,11 @@ async function main() {
     const push1 = await pushDailySets(Date.now() + 60_000, [user.id]);
     const push2 = await pushDailySets(Date.now() + 60_000, [user.id]);
     const pushedAt = (await db.dailySet.findFirst({ where: { userId: user.id } }))?.pushedAt;
-    check("one set push per user per day", push1.pushed === 1 && push2.pushed === 0 && pushedAt != null, `${push1.pushed} ${push2.pushed}`);
+    // The push hour is at least 01:00 IST (DAILY_PUSH_HOUR_IST takes 1 or more), so between 00:00 and 01:00 IST nothing
+    // may be pushed yet: the check is then that none is (it failed at 00:15 IST on 20 Nov while the code was right).
+    const [{ hour }] = await db.$queryRaw<Array<{ hour: number }>>`SELECT extract(hour FROM now() AT TIME ZONE 'Asia/Kolkata')::int AS hour`;
+    if (hour < 1) check("no set push before the push hour (00:00-01:00 IST)", push1.pushed === 0 && push2.pushed === 0 && pushedAt == null, `${push1.pushed} ${push2.pushed}`);
+    else check("one set push per user per day", push1.pushed === 1 && push2.pushed === 0 && pushedAt != null, `${push1.pushed} ${push2.pushed}`);
   } finally {
     await db.job.deleteMany({ where: { companyId: company.id } });
     await db.company.delete({ where: { id: company.id } });
