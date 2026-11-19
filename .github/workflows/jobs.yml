@@ -10,7 +10,11 @@ name: Discovery and ingest
 on:
   schedule:
     - cron: "30 1 * * *" # discovery, daily (as DEFAULT_DISCOVER_CRON)
-    - cron: "15 */3 * * *" # ingest, every 3 hours (the active tier's interval, modules/jobs/cadence.ts)
+    # ingest, every hour at :47. Each run reads only companies already due (modules/jobs/cadence.ts), so more triggers do
+    # not mean more reads; they make GitHub's dropped and late schedules cheap. On 18-19 Nov "15 */3 * * *" got a run
+    # for 2 of 7 slots and discovery and the board day started 5-8 hours late (GitHub drops scheduled runs under load,
+    # most near the top of the hour).
+    - cron: "47 * * * *"
     - cron: "30 23 * * *" # board day, the UTC day's numbers per board (as DEFAULT_BOARD_DAY_CRON)
   workflow_dispatch:
     inputs:
@@ -84,11 +88,13 @@ jobs:
 
   ingest:
     name: Ingest (companies due)
-    if: github.event.schedule == '15 */3 * * *' || (github.event_name == 'workflow_dispatch' && inputs.task == 'ingest')
+    if: github.event.schedule == '47 * * * *' || (github.event_name == 'workflow_dispatch' && inputs.task == 'ingest')
     runs-on: ubuntu-latest
-    # ~30,800 companies at their tiers' pace need ~39,000 reads a day (18 Nov): 8 runs of up to 6,000 cover that.
+    # ~30,800 companies at their tiers' pace need ~39,000 reads a day (18 Nov): a run of up to 6,000 an hour covers that
+    # with room for the runs GitHub drops.
     timeout-minutes: 120
-    # A run still going when the next is due: the next waits, so two never read the same companies at once.
+    # A run still going when the next is due: the next waits, so two never read the same companies at once (a third
+    # arriving while one waits replaces it; GitHub shows the replaced one as cancelled).
     concurrency:
       group: ingest
       cancel-in-progress: false
@@ -113,7 +119,7 @@ jobs:
     # Its own job (Phase P, docs/relevance/TDD.md 4.1.1), so the company read's 2 hours never starve it; it runs even when
     # the read failed or ran out of time, for what that read did write.
     needs: ingest
-    if: ${{ always() && (github.event.schedule == '15 */3 * * *' || (github.event_name == 'workflow_dispatch' && inputs.task == 'ingest')) }}
+    if: ${{ always() && (github.event.schedule == '47 * * * *' || (github.event_name == 'workflow_dispatch' && inputs.task == 'ingest')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     concurrency:

@@ -95,7 +95,7 @@ The Docker image has no Python, so the stealthy Chrome cannot start in it: run D
 
 ### Scheduled jobs on GitHub Actions (discovery and ingest)
 
-`.github/workflows/jobs.yml` (M21) runs ingest every 3 hours, discovery daily at 01:30 UTC (one job per board) and the board day at 23:30 UTC, whether or not a worker is up. GitHub runs scheduled workflows from the default branch only, so they start once the file is on `main`; each can also be run by hand (Actions → Discovery and ingest → Run workflow: ingest, discovery with boards, or board-day).
+`.github/workflows/jobs.yml` (M21) runs ingest every hour at :47 (only companies already due; GitHub dropped 5 of 7 three-hourly slots on 18–19 Nov, so hourly makes a dropped run cheap), discovery daily at 01:30 UTC (one job per board) and the board day at 23:30 UTC, whether or not a worker is up. GitHub runs scheduled workflows from the default branch only, so they start once the file is on `main`; each can also be run by hand (Actions → Discovery and ingest → Run workflow: ingest, discovery with boards, or board-day).
 
 1. Repository → Settings → Secrets and variables → Actions → New repository secret: `DATABASE_URL`, `DIRECT_URL`, `OPENAI_API_KEY`; for new-match pushes also `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `APP_URL`. The same values as the worker's.
 2. Run `ingest` by hand once and read its log: companies read per board, jobs embedded, feeds warmed.
