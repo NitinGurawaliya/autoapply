@@ -7,17 +7,21 @@ import { candidateSkills } from "@/modules/jobs/skills";
 
 /**
  * The candidate brief (Phase P, P5; docs/relevance/TDD.md 4.1 item 6): what the agent knows about the candidate when it
- * judges fit (P6): tracks, nearby, years, current title and top skills. Built by code from the profile, never by a
- * model, and never holding contact data: no name, email, phone or links (the title is dropped if it looks like one;
- * skills are vocabulary terms only). Stored in CandidateBrief, its own table, so a rebuild leaves Profile.updatedAt
+ * judges fit (P6): tracks, nearby, years, current title, top skills and, since P6's option A (owner, 19 Nov: "give it
+ * more about me"), the roles the profile lists (title and what they did, as the old judge reads them). Built by code
+ * from the profile, never by a model, and never holding contact data: no name, email, phone or links (the title is
+ * dropped if it looks like one; skills are vocabulary terms only; role text has emails, links, phone numbers and the
+ * user's own name blanked; no company names, no raw resume text). Stored in CandidateBrief, its own table, so a rebuild leaves Profile.updatedAt
  * alone. `fitHash = md5(FIT_VERSION + briefJson(brief))`: the fit model is sent exactly `briefJson(brief)`, so any
  * change to what it reads, or to FIT_VERSION, re-judges; learned lines (P8) sit beside the brief, outside the hash.
  */
 
 /** Bump when the fit prompt or what it reads changes: every stored verdict then re-judges. */
-export const FIT_VERSION = "5";
+export const FIT_VERSION = "6";
 const TOP_SKILLS = 12;
 const TITLE_CHARS = 80;
+const ROLES = 4;
+const ROLE_CHARS = 300;
 
 export const briefSchema = z.object({
   tracks: z.array(z.string()),
@@ -25,6 +29,8 @@ export const briefSchema = z.object({
   years: z.number().nullable(),
   title: z.string().nullable(),
   skills: z.array(z.string()),
+  // What the candidate did in each listed role, newest first (P6 option A); briefs stored before it read as none.
+  roles: z.array(z.object({ title: z.string(), did: z.string() })).default([]),
 });
 export type Brief = z.infer<typeof briefSchema>;
 
@@ -48,7 +54,36 @@ type BriefSource = {
   skills: unknown;
   experience: unknown;
   resumeText?: string | null;
+  /** The user's own name, blanked wherever role text repeats it. */
+  fullName?: string | null;
 };
+
+// A phone number anywhere in a text (the same shape CONTACT refuses in a title).
+const PHONES = /\+?\d[\d\s().-]{6,}\d/g;
+
+/** Role text without contact data: emails, links, phone numbers and the user's own name (each part of it) blanked. */
+function withoutContact(text: string, fullName: string | null | undefined) {
+  let out = text.replace(CONTACT_TOKENS, " ").replace(PHONES, " ");
+  for (const part of (fullName ?? "").split(/\s+/).filter((word) => word.length >= 3)) {
+    out = out.replace(new RegExp(`\\b${part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi"), " ");
+  }
+  return out.replace(/\s+/g, " ").trim();
+}
+
+type Role = { title?: unknown; summary?: unknown; description?: unknown };
+const text = (value: unknown) => (typeof value === "string" ? value : "");
+
+/** The listed roles as the fit reads them: title and what they did (summary), contact data blanked, company left out. */
+function rolesOf(experience: unknown, fullName: string | null | undefined) {
+  const roles = Array.isArray(experience) ? (experience as Role[]) : [];
+  return roles
+    .map((role) => ({
+      title: withoutContact(text(role.title), fullName).slice(0, TITLE_CHARS),
+      did: withoutContact(text(role.summary) || text(role.description), fullName).slice(0, ROLE_CHARS),
+    }))
+    .filter((role) => (role.title || role.did) && !CONTACT.test(role.title))
+    .slice(0, ROLES);
+}
 
 /** The brief of a profile: pure, the same profile always gives the same brief in the same order. */
 export function briefOf(profile: BriefSource): Brief {
@@ -65,12 +100,13 @@ export function briefOf(profile: BriefSource): Brief {
     years: profile.yearsExperience ?? null,
     title: title && !CONTACT.test(title) ? title : null,
     skills,
+    roles: rolesOf(profile.experience, profile.fullName),
   };
 }
 
 /** The exact JSON the fit model is sent: fixed key order, so a brief read back from jsonb serialises the same. */
 export function briefJson(brief: Brief): string {
-  return JSON.stringify({ tracks: brief.tracks, nearby: brief.nearby, years: brief.years, title: brief.title, skills: brief.skills });
+  return JSON.stringify({ tracks: brief.tracks, nearby: brief.nearby, years: brief.years, title: brief.title, skills: brief.skills, roles: (brief.roles ?? []).map((role) => ({ title: role.title, did: role.did })) });
 }
 
 export function fitHashOf(brief: Brief, version: string = FIT_VERSION): string {
@@ -84,7 +120,7 @@ export function fitHashOf(brief: Brief, version: string = FIT_VERSION): string {
 export async function buildBrief(userId: string) {
   const profile = await db.profile.findUnique({
     where: { userId },
-    select: { tracks: true, showNearby: true, yearsExperience: true, currentTitle: true, skills: true, experience: true, resumeText: true },
+    select: { tracks: true, showNearby: true, yearsExperience: true, currentTitle: true, skills: true, experience: true, resumeText: true, fullName: true },
   });
   if (!profile) return null;
   const brief = briefOf(profile);

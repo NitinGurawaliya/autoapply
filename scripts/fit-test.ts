@@ -10,7 +10,7 @@ import { randomBytes } from "node:crypto";
 import { db } from "../src/lib/db";
 import { deleteAccount } from "../src/modules/account";
 import { candidateSkills } from "../src/modules/jobs";
-import { capWords, checkFitAnswer, fitFloor, fitInput, fitJobs, fitMessage, fitStats, lineSent, releaseLease, takeLease } from "../src/modules/jobs/fit";
+import { capWords, checkFitAnswer, fitInput, fitJobs, fitMessage, fitStats, lineSent, releaseLease, takeLease } from "../src/modules/jobs/fit";
 import { poolSql } from "../src/modules/jobs/pool";
 import { levelFit, levelOn } from "../src/modules/jobs/semantic";
 import { briefJson, briefOf } from "../src/modules/profile/brief";
@@ -30,7 +30,7 @@ const profileBase = {
   yearsExperience: 3,
   currentTitle: "Backend Engineer",
   skills: ["Node.js", "TypeScript", "PostgreSQL", "AWS", "Docker", EMAIL, PHONE],
-  experience: [{ title: "Backend Engineer", summary: RESUME_PHRASE }],
+  experience: [{ title: "Backend Engineer", summary: "Built billing APIs in Node.js and PostgreSQL" }],
   resumeText: `Fit Test\n${EMAIL}\n${PHONE}\n${RESUME_PHRASE}. Node.js, TypeScript, PostgreSQL, Redis, AWS, Docker, Kafka.`,
 };
 
@@ -68,7 +68,8 @@ function pure() {
   const message = fitMessage(brief, [input, input]);
   check("the message sends the brief exactly", message.startsWith(`{"candidate":${briefJson(brief)},"jobs":[{"n":0,"title"`) && message.includes(`{"n":1,"title"`));
   check("the message parses as JSON", (() => { try { return JSON.parse(message).jobs.length === 2; } catch { return false; } })());
-  check("no contact data or resume text in the message", ![EMAIL, "example.com", "91234", "56780", RESUME_PHRASE, "Fit Test"].some((s) => message.includes(s)));
+  check("no contact data or raw resume text in the message", ![EMAIL, "example.com", "91234", "56780", RESUME_PHRASE, "Fit Test"].some((s) => message.includes(s)));
+  check("the roles are in the message (what they did)", message.includes("Built billing APIs in Node.js and PostgreSQL"));
 
   const answer = checkFitAnswer(
     {
@@ -89,11 +90,6 @@ function pure() {
   check("an unknown index is dropped", answer.size === 3);
   check("why is at most 12 words", (answer.get(0)?.why.split(/\s+/).length ?? 99) <= 12 && capWords("a b c d e f g h i j k l m n.").split(" ").length === 12);
 
-  const own = ["backend"];
-  check("floor: own track is at least good", fitFloor({ title: "Backend Engineer", roleFamily: "backend", readingCurrent: true }, own).fit === "good");
-  check("floor: a neighbouring track is at least stretch", fitFloor({ title: "Full Stack Engineer", roleFamily: "fullstack", readingCurrent: true }, own).fit === "stretch");
-  check("floor: the lower of title and reading counts", fitFloor({ title: "Backend Engineer", roleFamily: "qa", readingCurrent: true }, own).fit === "no" && fitFloor({ title: "Backend Engineer", roleFamily: "qa", readingCurrent: false }, own).fit === "good");
-  check("floor: another field gets none", fitFloor({ title: "iOS Engineer", roleFamily: "mobile", readingCurrent: true }, own).fit === "no");
   check("levelOn: a senior role for 1 year is no", JSON.stringify(levelOn("strong", "Senior Backend Engineer", null, 1)) === JSON.stringify({ fit: "no", note: "a senior role" }));
   check("levelOn: 2 more years caps at stretch", levelOn("strong", "Backend Engineer", 3, 1).fit === "stretch");
   check("levelOn: no stays no", levelOn("no", "Backend Engineer", null, 3).fit === "no");

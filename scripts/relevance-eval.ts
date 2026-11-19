@@ -6,8 +6,8 @@
 // but left out of the averages. Then the ml_ai mislabel count on the feed's pool. Writes nothing but EvalJudgement
 // (verdicts the rankings need); JobJudgement counts are printed before and after.
 // P6: the fit path (fit.ts, a dry run into EvalJudgement path "fit") is ranked under the shipped gate (title AND reading)
-// and compared with title AND reading on the old judge, paired per profile, against TDD 7.1's P6 gate: p@10 up 0.10 on
-// average, no profile losing more than one relevant card from its top 10, cards kept >= 30 (or >= the old count), the
+// and compared with title AND reading on the old judge, paired per profile, against TDD 7.1's P6 gate (owner, 19 Nov): p@10 not below today's on
+// average, paired, no profile losing more than one relevant card from its top 10, cards kept >= 30 (or >= the old count), the
 // fit's "no" rate <= 0.6 of the judged shortlist. FitJudgement counts are printed before and after too.
 //   npx tsx scripts/relevance-eval.ts [--owner <userId>] [--profile <id suffix>] [--top 10] [--no-fit]
 import { db } from "../src/lib/db";
@@ -137,7 +137,7 @@ async function main() {
       const values = paired.map(pick).filter((v): v is number => v != null);
       return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
     };
-    console.log(`  average p@10 ${pct(mean((r) => r.old.p10))} → ${pct(mean((r) => r.fit.p10))} (paired delta ${delta == null ? "-" : (delta >= 0 ? "+" : "") + delta.toFixed(3)}, gate +0.10: ${delta != null && delta >= 0.1 ? "PASS" : "FAIL"}); p@20 ${pct(mean((r) => r.old.p20))} → ${pct(mean((r) => r.fit.p20))}; ${paired.length} profiles`);
+    console.log(`  average p@10 ${pct(mean((r) => r.old.p10))} → ${pct(mean((r) => r.fit.p10))} (paired delta ${delta == null ? "-" : (delta >= 0 ? "+" : "") + delta.toFixed(3)}, gate, not below today (owner, 19 Nov): ${delta != null && delta >= 0 ? "PASS" : "FAIL"}); p@20 ${pct(mean((r) => r.old.p20))} → ${pct(mean((r) => r.fit.p20))}; ${paired.length} profiles`);
     const cost = (llmUsage.input * 0.15 + llmUsage.output * 0.6) / 1e6;
     console.log(`  fit judged ${fitStats.judged} (cached ${fitStats.cached}, unread ${fitStats.unread}, evidence missed ${fitStats.evidenceMissed}, failed ${fitStats.failed}); this run's model use ${llmUsage.calls} calls, ${llmUsage.input} in / ${llmUsage.output} out, $${cost.toFixed(4)}`);
   }

@@ -4,9 +4,7 @@
 // the case's "needs" as its requirement lines, the brief from the candidate's title, years and skills line, the level on
 // top by code), so both paths are held to the same labels. npx tsx scripts/judge-test.ts [--old | --fit]
 import { candidateSkills, classifyTitle, jobSkills } from "../src/modules/jobs";
-import { fitBatch, fitFloor, fitInput } from "../src/modules/jobs/fit";
-
-const ORDER: Fit[] = ["no", "stretch", "good", "strong"];
+import { fitBatch, fitInput } from "../src/modules/jobs/fit";
 import { judgeBatch, levelOn } from "../src/modules/jobs/semantic";
 import { requiredYears } from "../src/modules/jobs/tagging";
 
@@ -88,7 +86,9 @@ async function fitVerdicts(candidate: (typeof candidates)[number]): Promise<Verd
   const skills = skillsLine.replace(/^Skills:\s*/, "").split(/,\s*/).filter(Boolean);
   const shows = candidateSkills({ skills });
   const track = classifyTitle(title).track;
-  const brief = { tracks: track ? [track] : [], nearby: false, years: candidate.years, title, skills: [...shows].slice(0, 12) };
+  // The roles as the brief carries them (P6 option A): the summary's "Title: what they did" lines.
+  const roles = candidate.summary.split("\n").slice(2).filter((line) => line.includes(":")).map((line) => ({ title: line.split(":")[0].trim(), did: line.split(":").slice(1).join(":").trim() }));
+  const brief = { tracks: track ? [track] : [], nearby: false, years: candidate.years, title, skills: [...shows].slice(0, 12), roles };
   const jobs = candidate.cases.map((c, i) => {
     const names = jobSkills(c.title, c.needs);
     const row = { id: String(i), title: c.title, experienceMin: requiredYears(c.title, c.needs), roleFamily: classifyTitle(c.title).track ?? "non_tech", kind: "employee", readingCurrent: true, reading: { summary: c.needs, requirements: c.needs.split(/(?<=[.;])\s+/).filter(Boolean) }, skills: names, skillsRequired: [], skillsHash: null, contentHash: null };
@@ -96,12 +96,8 @@ async function fitVerdicts(candidate: (typeof candidates)[number]): Promise<Verd
   });
   const answer = await fitBatch(brief, jobs.map((job) => job.input), "interactive");
   const out: Verdicts = new Map();
-  // As the feed reads a verdict: the track floor (fitFloor), then the level (levelOn).
-  for (const [n, verdict] of answer) {
-    const floor = fitFloor(jobs[n].row, brief.tracks).fit;
-    const start = ORDER.indexOf(floor) > ORDER.indexOf(verdict.fit) ? floor : verdict.fit;
-    out.set(n, { fit: levelOn(start, jobs[n].row.title, jobs[n].row.experienceMin, candidate.years).fit, why: verdict.why });
-  }
+  // As the feed reads a verdict: the level (levelOn) on top.
+  for (const [n, verdict] of answer) out.set(n, { fit: levelOn(verdict.fit, jobs[n].row.title, jobs[n].row.experienceMin, candidate.years).fit, why: verdict.why });
   return out;
 }
 

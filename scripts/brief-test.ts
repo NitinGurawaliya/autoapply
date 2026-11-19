@@ -46,7 +46,12 @@ function noContact(json: string) {
 async function pure() {
   const brief = briefOf(base);
   const json = briefJson(brief);
-  check("brief has the five parts", JSON.stringify(Object.keys(JSON.parse(json))) === JSON.stringify(["tracks", "nearby", "years", "title", "skills"]), json);
+  check("brief has the six parts", JSON.stringify(Object.keys(JSON.parse(json))) === JSON.stringify(["tracks", "nearby", "years", "title", "skills", "roles"]), json);
+  // P6 option A: the roles the profile lists, what they did, never contact data or the company.
+  const planted = briefOf({ ...base, fullName: NAME, experience: [{ title: "Backend Engineer", company: "Acme Secret Co", summary: `${NAME} built Go services; call ${PHONE} or mail ${EMAIL}, see ${LINKS[1]}` }] } as typeof base);
+  check("roles say what they did", planted.roles.length === 1 && planted.roles[0].title === "Backend Engineer" && planted.roles[0].did.includes("built Go services"), JSON.stringify(planted.roles));
+  check("no contact data, name or company in the roles", noContact(JSON.stringify(planted.roles)).length === 0 && !JSON.stringify(planted.roles).includes("Acme"), JSON.stringify(planted.roles));
+  check("fitHash changes with the roles", fitHashOf(briefOf({ ...base, experience: [{ title: "Backend Engineer", summary: "Built Rust services" }] })) !== fitHashOf(brief));
   check("no contact data in the brief", noContact(json).length === 0, noContact(json).join(", "));
   check("skills are vocabulary terms only", brief.skills.every((skill) => VOCAB.has(skill)), brief.skills.join(", "));
   check("a link in the resume is not read as a skill", !brief.skills.includes("GitHub"), brief.skills.join(", "));
@@ -68,7 +73,7 @@ async function pure() {
   // Contact fields are not inputs at all: changing them leaves the hash alone.
   check("fitHash ignores contact-only changes", fitHashOf(briefOf({ ...base, resumeText: RESUME.replace(EMAIL, "other@example.com") })) === hash);
   // jsonb reorders keys: the JSON must not depend on the order an object was built in.
-  const shuffled = { skills: brief.skills, title: brief.title, years: brief.years, nearby: brief.nearby, tracks: brief.tracks };
+  const shuffled = { roles: brief.roles.map((role) => ({ did: role.did, title: role.title })), skills: brief.skills, title: brief.title, years: brief.years, nearby: brief.nearby, tracks: brief.tracks };
   check("briefJson is independent of key order", briefJson(shuffled) === json);
 }
 
