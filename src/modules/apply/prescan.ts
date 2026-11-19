@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { listFeed, parseFeedFilters } from "@/modules/jobs";
 import { customQuestionKey, detectConcept, RISKY } from "@/modules/answers";
+import { buildBrief } from "@/modules/profile";
 import type { PendingQuestion } from "./adapter";
 import { jobQuestions } from "./questions";
 import { resolveForm } from "./resolveForm";
@@ -19,6 +20,8 @@ const SCAN_JOBS = 20;
 const PAUSE_MS = 300; // between board API calls, to stay polite to the public API
 
 export async function prescanFeed(userId: string) {
+  // The candidate brief (P5) follows every profile change; a failure here never stops the scan.
+  await buildBrief(userId).catch((error) => console.error(`brief …${userId.slice(-6)}: ${error instanceof Error ? error.message.slice(0, 80) : "failed"}`));
   const feed = (await listFeed(userId, parseFeedFilters({}))).slice(0, SCAN_JOBS);
   return scanJobs(userId, feed.map((job) => job.id));
 }

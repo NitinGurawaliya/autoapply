@@ -100,7 +100,7 @@ Auth.js adds `Account`, `Session`, `VerificationToken` via its Prisma adapter; k
 model User { id String @id @default(cuid()); email String @unique; emailVerified DateTime?; name String?; image String?
   createdAt DateTime @default(now())
   profile Profile?; answers Answer[]; swipes Swipe[]; applications Application[]
-  accounts Account[]; sessions Session[] }
+  accounts Account[]; sessions Session[]; brief CandidateBrief? }
 
 model Profile { id String @id @default(cuid()); userId String @unique
   isTest Boolean @default(false)      // true → runner only allowed on mock form
@@ -148,6 +148,17 @@ model EvalPool { profileId; round Int; jobId; source String  // the profile's po
   @@id([profileId, round, jobId]) }
 model FeedLabel { profileId; jobId; relevant Boolean?; by String; at DateTime; round Int  @@id([profileId, jobId]) }  // a relevance label, by "owner", or "agents" / "agents-2of3" (round 1: two blind model labellers, a third on their disputes); null = can't tell
 model EvalJudgement { profileId; jobId; path String; fromHash; jobHash; fit; why; evidence Int?  @@id([profileId, jobId, path]) }  // verdicts the eval needed (path old: judgeJobs with this store; never JobJudgement)
+
+// Phase P, P5: the candidate brief (modules/profile/brief.ts; docs/relevance/TDD.md 4.1 item 6), what the fit model (P6) is
+// told about the candidate. Built by code from the profile (tracksOf, showNearby, yearsExperience, currentTitle, the top 12
+// vocabulary skills: the user's own list first, then the resume text with emails and links blanked), never by a model and
+// never holding contact data (a title that looks like an email, link or phone is dropped). Rebuilt by prescanFeed (every
+// profile change queues one), by warmFeeds for each active user, and on /account and GET /api/brief; one INSERT … ON
+// CONFLICT that writes only when fitHash changed. Its own table, so a rebuild never moves Profile.updatedAt (which
+// warmFeeds reads as activity). The fit model is sent exactly briefJson(brief) (fixed key order: jsonb reorders keys).
+model CandidateBrief { userId String @id; brief Json; fitHash String  // md5(FIT_VERSION + briefJson(brief)); FIT_VERSION bumps re-judge every fit
+  learned Json @default("[]"); fitBuildUntil DateTime?; updatedAt DateTime @updatedAt  // learned lines and dismissals (P8), outside the hash; fitBuildUntil = P6's one-build lease
+  user User @relation(onDelete: Cascade) }
 
 model Swipe { id String @id @default(cuid()); userId String; jobId String; direction String
   createdAt DateTime @default(now()); user User @relation(fields:[userId], references:[id])

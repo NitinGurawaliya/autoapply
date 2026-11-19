@@ -26,6 +26,23 @@ model User {
   accounts     Account[]
   sessions     Session[]
   pushSubscriptions PushSubscription[]
+  brief        CandidateBrief?
+}
+
+// Phase P, P5 (modules/profile/brief.ts): what the agent knows about the candidate for judging fit: tracks, nearby,
+// years, title, top skills; never contact data. Its own table, so a rebuild leaves Profile.updatedAt alone.
+model CandidateBrief {
+  userId        String    @id
+  brief         Json
+  // md5(FIT_VERSION + the exact brief JSON sent to the fit model, P6); learned lines are outside it.
+  fitHash       String
+  // Learned lines and their dismissals (P8), shown on /account.
+  learned       Json      @default("[]")
+  // One fit build per user at a time (P6): a lease set by compare-and-set.
+  fitBuildUntil DateTime?
+  updatedAt     DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 // A browser's Web Push subscription (lib/push.ts): one per browser the user turned notifications on in.

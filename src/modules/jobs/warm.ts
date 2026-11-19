@@ -1,5 +1,7 @@
 import { db } from "@/lib/db";
 import { sendPush } from "@/lib/push";
+// The brief file itself, not the profile index (which pulls in resume parsing).
+import { buildBrief } from "@/modules/profile/brief";
 import { listFeed, parseFeedFilters } from "./match";
 
 const ACTIVE_DAYS = 14;
@@ -10,7 +12,7 @@ const DAY = 24 * 60 * 60 * 1000;
  * application or a profile change) and of every user with browser push on, so the model's verdicts on the new jobs are
  * cached (semantic.ts judgeJobs) and the next feed only reads them. Then the retention hook: a user with push on gets
  * one message when their feed has Strong or Good matches first seen since their last one ("3 new jobs for you").
- * One user at a time; a failure for one user does not stop the others.
+ * Each user's candidate brief (P5) is rebuilt first. One user at a time; a failure for one user does not stop the others.
  */
 export async function warmFeeds() {
   const since = new Date(Date.now() - ACTIVE_DAYS * DAY);
@@ -22,6 +24,11 @@ export async function warmFeeds() {
   let warmed = 0;
   let alerted = 0;
   for (const { userId } of rows) {
+    try {
+      await buildBrief(userId);
+    } catch (error) {
+      console.error(`brief …${userId.slice(-6)}: ${error instanceof Error ? error.message.slice(0, 80) : "failed"}`);
+    }
     try {
       const feed = await listFeed(userId, parseFeedFilters({}));
       warmed += 1;

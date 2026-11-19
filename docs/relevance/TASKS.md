@@ -33,10 +33,12 @@ Done 19 Nov: a test data scientist (`scripts/feed-prefs-test.ts`, through the de
 Paths: migration `20261119110000_profile_nearby_avoid`, `api/profile` PUT, `onboarding/confirm` page and form, `match.ts` (`feedTracks(tracks, nearby)`, `scoreFeed` passes `avoid`), `apply/lifecycle.ts`; ARCHITECTURE 4, 6.3; DESIGN.md confirm row.
 
 <a id="p5"></a>
-### [ ] P5 — The candidate brief
+### [x] P5 — The candidate brief
 Do: migration: `CandidateBrief`; `modules/profile/brief.ts` (tracks, nearby, years, title, top skills; `fitHash = md5(FIT_VERSION + exact JSON)`; `learned` beside it); built in prescan and warm; `GET /api/brief`; "What I know about you" on `/account`; `scripts/brief-test.ts`; ARCHITECTURE 4.
 Design: [4.1 item 6](TDD.md#41-components).
 **Done when:** `brief-test` PASS (no contact data; `fitHash` changes with `FIT_VERSION` and the JSON, not with learned lines); the brief shows on `/account`; a rebuild leaves `Profile.updatedAt` unchanged (read before and after); typecheck and lint pass.
+Done 19 Nov: `brief-test` PASS (36 checks incl. GET /api/brief on the dev server; planted name, email, phone and links never reach the brief, a link in the resume is not read as "GitHub", ASP.NET and Node.js stay); Profile.updatedAt identical before and after a build and a rebuild, and around a real `prescanFeed` (112 s, brief built); a no-change rebuild writes nothing; learned lines survive rebuilds and never move `fitHash`. `/account` checked at 390 px, light and dark. `FIT_VERSION` "1"; the fit model is sent exactly `briefJson` (fixed key order, jsonb reorders).
+Paths: migration `20261119120000_candidate_brief`, `modules/profile/brief.ts`, `apply/prescan.ts`, `jobs/warm.ts`, `api/brief`, `account/brief-section.tsx`, `scripts/brief-test.ts`; ARCHITECTURE 4; DESIGN.md account row.
 
 <a id="p6"></a>
 ### [ ] P6 — Fit with evidence, in its own table

@@ -268,7 +268,7 @@ Design: [docs/relevance/TDD.md](relevance/TDD.md) (v5, 19 Nov, after four indepe
 - [x] [P2 — Evaluation harness and round-1 labels](relevance/TASKS.md#p2)
 - [x] [P3 — One gate in the feed, the score and the swipe check](relevance/TASKS.md#p3)
 - [x] [P4 — Fields and avoids on the confirm screen](relevance/TASKS.md#p4)
-- [ ] [P5 — The candidate brief](relevance/TASKS.md#p5)
+- [x] [P5 — The candidate brief](relevance/TASKS.md#p5)
 - [ ] [P6 — Fit with evidence, in its own table](relevance/TASKS.md#p6)
 - [ ] [P7 — The daily set](relevance/TASKS.md#p7)
 - [ ] [P8 — Learning from skips](relevance/TASKS.md#p8)

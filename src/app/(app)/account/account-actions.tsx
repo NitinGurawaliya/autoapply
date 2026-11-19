@@ -7,7 +7,7 @@ import { FieldError, FieldLabel, InputBox } from "@/components/ui/field";
 
 const PHRASE = "DELETE MY ACCOUNT";
 
-export function AccountActions({ hasResume }: { hasResume: boolean }) {
+export function AccountActions({ hasResume, children }: { hasResume: boolean; children?: React.ReactNode }) {
   const router = useRouter();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -33,6 +33,7 @@ export function AccountActions({ hasResume }: { hasResume: boolean }) {
 
   return (
     <div className="flex flex-col gap-5 px-5 pt-4 pb-6">
+      {children}
       {/* The only way back to the upload once onboarding is done (16 Oct QA: a missing resume had no place to fix it). */}
       <section className="box-border flex flex-col gap-2.5 rounded-panel border border-line bg-surface p-4">
         <h2 className="m-0 text-lg font-semibold ">Your resume</h2>

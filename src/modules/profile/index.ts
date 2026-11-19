@@ -2,3 +2,5 @@ export { profileSchema, experienceItemSchema, educationItemSchema, invalidLinks 
 export type { ParsedProfile } from "./profileSchema";
 export { sampleProfile } from "./sampleProfile";
 export { ingestResume, parseResumePdf, resumeAnswers } from "./parseResume";
+export { briefJson, briefOf, buildBrief, currentBrief, FIT_VERSION, fitHashOf } from "./brief";
+export type { Brief, LearnedLine } from "./brief";
