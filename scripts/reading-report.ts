@@ -1,7 +1,10 @@
 // Phase P, P1: what the job readings say (modules/jobs/reading.ts). Prints the pool's totals (families, kinds, flags, the
 // share with at least 2 requirement lines, the share whose family differs from the title's track), then --sample N
 // random current readings with the posting's opening text, numbered for a hand check. No model calls, no writes.
+// --skipped (P8): the last 30 days' "not my field" skips instead, with the family counted at the swipe against the
+// title's track and today's reading, so a reading that put a job in the wrong field shows up. No user is named.
 //   npx tsx scripts/reading-report.ts [--sample 20] [--seed 0.42]
+//   npx tsx scripts/reading-report.ts --skipped [--limit 40]
 import { db } from "../src/lib/db";
 import { trackOf } from "../src/modules/jobs/gate";
 import { poolSql } from "../src/modules/jobs/pool";
@@ -24,7 +27,29 @@ type Row = {
   reading: { summary?: string; evidence?: Array<{ for: string; line: string }>; requirements?: string[] } | null;
 };
 
+/** P8: the "not my field" skips, newest first, and how often the family they were counted in came from the reading. */
+async function skipped() {
+  const limit = Number(arg("--limit") ?? 40);
+  const rows = await db.$queryRaw<Array<{ family: string | null; title: string; track: string | null; roleFamily: string | null; readingCurrent: boolean; source: string; kind: string | null; days: number }>>`
+    SELECT s.family, j.title, j.track, j."roleFamily", j."readingCurrent", j.source, j.kind,
+           floor(extract(epoch FROM now() - s."createdAt") / 86400)::int AS days
+    FROM "Swipe" s JOIN "Job" j ON j.id = s."jobId"
+    WHERE s.direction = 'left' AND s.reason = 'not_my_field' AND s."createdAt" > now() - interval '30 days'
+    ORDER BY s."createdAt" DESC`;
+  const byReading = rows.filter((row) => row.readingCurrent && row.roleFamily && row.roleFamily !== row.track).length;
+  const moved = rows.filter((row) => row.family !== trackOf(row)).length;
+  console.log(`"not my field" skips in 30 days: ${rows.length}; family from the reading, not the title: ${byReading}; family changed since the swipe: ${moved}`);
+  const families = new Map<string, number>();
+  for (const row of rows) families.set(row.family ?? "null", (families.get(row.family ?? "null") ?? 0) + 1);
+  console.log(`  by family: ${[...families].sort((a, b) => b[1] - a[1]).map(([family, n]) => `${family} ${n}`).join(", ") || "none"}`);
+  rows.slice(0, limit).forEach((row, i) => {
+    const reading = row.readingCurrent ? `read ${row.roleFamily ?? "no family"}${row.kind ? `, ${row.kind}` : ""}` : "unread";
+    console.log(`${String(i + 1).padStart(3)}. ${row.title.slice(0, 70)} · counted ${row.family ?? "none"} · title ${row.track ?? "none"} · ${reading} · ${row.days}d ago`);
+  });
+}
+
 async function main() {
+  if (process.argv.includes("--skipped")) return skipped();
   const sample = Number(arg("--sample") ?? 20);
   const [totals] = await db.$queryRaw<Array<Record<string, number>>>`
     SELECT count(*)::int AS pool,

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { Tag } from "@/components/ui/chip";
 import { TRACK_LABELS, type Track } from "@/modules/jobs";
-import type { Brief } from "@/modules/profile";
+import type { Brief, LearnedLine } from "@/modules/profile";
+import { LearnedLines } from "./learned-lines";
 
 // The confirm screen's own words for the "Never show me" chips (onboarding/confirm/confirm-form.tsx).
 const AVOID_LABELS: Record<string, string> = { contract: "Contract roles", intern: "Internships", commission_only: "Commission only" };
@@ -13,7 +14,7 @@ function yearsLine(years: number | null) {
 }
 
 /** "What I know about you" (P5): the candidate brief jobs are matched on, read-only; changed on the confirm screen. */
-export function BriefSection({ brief, avoid, failed = false }: { brief: Brief | null; avoid: string[]; failed?: boolean }) {
+export function BriefSection({ brief, avoid, learned = [], failed = false }: { brief: Brief | null; avoid: string[]; learned?: LearnedLine[]; failed?: boolean }) {
   return (
     <section aria-labelledby="brief-heading" className="box-border flex flex-col gap-3 rounded-panel border border-line bg-surface p-4">
       <div className="flex items-baseline justify-between gap-3">
@@ -47,6 +48,10 @@ export function BriefSection({ brief, avoid, failed = false }: { brief: Brief | 
             </Row>
             <Row inline label="Nearby fields">{brief.nearby ? "Shown too" : "Not shown"}</Row>
             <Row inline label="Never show me">{avoid.length > 0 ? avoid.map((id) => AVOID_LABELS[id] ?? id).join(", ") : "Nothing hidden"}</Row>
+            {/* Learned from skips (P8): lowers a field's rank; × takes it back. */}
+            <Row inline={learned.length === 0} label="Learned from your skips">
+              <LearnedLines lines={learned.map((line) => ({ id: line.id, note: line.note }))} />
+            </Row>
             <Row inline label="Experience">{yearsLine(brief.years)}</Row>
             <Row inline label="Current title">
               {brief.title ? (

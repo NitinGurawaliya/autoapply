@@ -55,10 +55,12 @@ Done 19 Nov: `daily-set-test` PASS (21 checks: first-request build, two at once 
 Paths: migration `20261119150000_daily_set`, `modules/jobs/daily.ts`, `match.ts rankedFeed`, `semantic.ts judgeFromHash`, `lib/feed-cache.ts`, `api/daily-set`, `api/jobs`, `feed/page.tsx`, `feed/swipe-deck.tsx`, `warm.ts`, `after-ingest.ts`, `prescan.ts`, `scripts/daily-set-test.ts`; ARCHITECTURE 4, 6.3, 11; PRD §10.
 
 <a id="p8"></a>
-### [ ] P8 — Learning from skips
+### [x] P8 — Learning from skips
 Do: migration: `Swipe.reason`; `PATCH /api/swipes/:jobId { reason }` (upserts the left swipe, no `forgetFeed`); the 4-second "Why?" row; `modules/profile/learning.ts` (three `not_my_field` in one family in 30 days after its last dismissal: own track → "Stop showing {family} roles?"; other family → a learned line, rank −10, `FeedJob.learnedNote`); `DELETE /api/brief/learned/:id` (dismissal date, `forgetFeed`); "What I've learned" on `/account`; `reading-report --skipped`; `scripts/learning-test.ts`; ARCHITECTURE 4, 6.3.
 Design: [4.1 item 9](TDD.md#41-components).
 **Done when:** `learning-test` PASS; a test user gives a reason without a 409 (including before the swipe POST lands) and without a feed rebuild (timed); the own-track prompt and a learned line both appear in a test run; a learned line lowers rank only (`score-breakdown-test` PASS); deleting it restores rank and is not undone by the next skip; typecheck and lint pass.
+Done 19 Nov: `learning-test` PASS (57 checks; offline rules incl. the owner's contract/internship asks and one ask a day; a test user: reason before the POST a 200, feed after it a cache hit 282 ms vs 4,217 ms cold; own-track ask and a learned line; 9 of 9 learned-family cards moved below equal-score cards, scores unchanged; delete restores 88 cards in order; the next 2 skips don't bring it back, 3 do). `score-breakdown-test`, `feed-sql-test`, `brief-test` PASS; `feed-audit` on the 10 real profiles identical to main card for card (303); /feed and /account at 390 px light and dark.
+Paths: migration `20261119180000_swipe_reason`, `modules/profile/learning.ts`, `brief.ts`, `match.ts` (rank −10, `learnedNote`), `api/swipes/[jobId]`, `api/brief/ask`, `api/brief/learned/[id]`, `patterns/skip-reason-toast.tsx`, `feed/swipe-deck.tsx`, `job-card.tsx`, `account/learned-lines.tsx`, `scripts/learning-test.ts`, `reading-report.ts --skipped`; ARCHITECTURE 4, 6.3; DESIGN.md.
 
 <a id="p9"></a>
 ### [ ] P9 — Cleanup

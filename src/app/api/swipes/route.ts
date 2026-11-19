@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { dropFromFeed } from "@/lib/feed-cache";
 import { swipeRight } from "@/modules/apply/lifecycle";
+import { trackOf } from "@/modules/jobs/gate";
 
 const bodySchema = z.object({
   jobId: z.string().min(1),
@@ -19,10 +20,11 @@ export async function POST(req: Request) {
   const { jobId, direction } = parsed.data;
 
   if (direction === "left") {
-    const job = await db.job.findUnique({ where: { id: jobId }, select: { id: true } });
+    const job = await db.job.findUnique({ where: { id: jobId }, select: { source: true, title: true, track: true, roleFamily: true, readingCurrent: true } });
     if (!job) return NextResponse.json({ error: "not_found" }, { status: 404 });
     try {
-      await db.swipe.create({ data: { userId: user.id, jobId, direction: "left" } });
+      // The job's family at this moment (P8): a reason given later counts toward it, whatever a re-reading says.
+      await db.swipe.create({ data: { userId: user.id, jobId, direction: "left", family: trackOf(job) } });
       dropFromFeed(user.id, jobId);
     } catch {
       return NextResponse.json({ error: "already_swiped" }, { status: 409 });

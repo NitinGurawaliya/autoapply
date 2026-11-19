@@ -271,5 +271,5 @@ Design: [docs/relevance/TDD.md](relevance/TDD.md) (v5, 19 Nov, after four indepe
 - [x] [P5 — The candidate brief](relevance/TASKS.md#p5)
 - [ ] [P6 — Fit with evidence, in its own table](relevance/TASKS.md#p6)
 - [x] [P7 — The daily set](relevance/TASKS.md#p7)
-- [ ] [P8 — Learning from skips](relevance/TASKS.md#p8)
+- [x] [P8 — Learning from skips](relevance/TASKS.md#p8)
 - [ ] [P9 — Cleanup](relevance/TASKS.md#p9)

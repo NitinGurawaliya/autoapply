@@ -28,9 +28,19 @@ export const briefSchema = z.object({
 });
 export type Brief = z.infer<typeof briefSchema>;
 
-/** A learned line and its dismissal (P8 writes them; shown on /account). */
+/**
+ * A learned line and its dismissal (P8, learning.ts writes them). `kind` "rank" (the default): a line that lowers the
+ * rank of a family's jobs, shown on /account; "ask": a question the feed asked (`at`), closed when answered.
+ */
 export const learnedSchema = z.array(
-  z.object({ id: z.string(), family: z.string(), note: z.string(), at: z.string(), dismissedAt: z.string().nullable().optional() }),
+  z.object({
+    id: z.string(),
+    kind: z.enum(["rank", "ask"]).optional(),
+    family: z.string(),
+    note: z.string(),
+    at: z.string(),
+    dismissedAt: z.string().nullable().optional(),
+  }),
 );
 export type LearnedLine = z.infer<typeof learnedSchema>[number];
 
@@ -105,7 +115,7 @@ export async function currentBrief(userId: string) {
   const learned = learnedSchema.safeParse(row?.learned ?? []);
   return {
     brief: built.brief,
-    learned: (learned.success ? learned.data : []).filter((line) => !line.dismissedAt),
+    learned: (learned.success ? learned.data : []).filter((line) => (line.kind ?? "rank") === "rank" && !line.dismissedAt),
     updatedAt: row?.updatedAt ?? new Date(),
   };
 }

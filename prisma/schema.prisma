@@ -321,6 +321,10 @@ model Swipe {
   userId    String
   jobId     String
   direction String
+  // Why a left swipe was made (P8): not_my_field, too_senior, place, company or other; null when not said.
+  reason    String?
+  // The job's family (trackOf) when the swipe was made, so a later re-reading never moves an old skip (P8).
+  family    String?
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

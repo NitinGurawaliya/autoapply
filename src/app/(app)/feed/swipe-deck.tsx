@@ -11,6 +11,7 @@ import { DeckDoneArt } from "@/components/patterns/drawings";
 import type { JobCardData } from "@/components/patterns/job-card";
 import { StackCount, SwipeStage, type Direction, type SwipeStageHandle } from "@/components/patterns/swipe-stage";
 import { AgentToast } from "@/components/patterns/agent-toast";
+import { SkipReasonToast, type SkipAsk, type SkipReasonValue, type SkipToastStep } from "@/components/patterns/skip-reason-toast";
 import { useApplicationsSummary } from "@/components/applications-summary";
 import { boardLabel } from "@/lib/board-label";
 import { experienceChip, postedLabel, STAGE_LABEL, whereLabel } from "@/lib/job-facts";
@@ -26,6 +27,14 @@ const TOAST_POLL_MS = 1500;
 const TOAST_LIVE_MAX_MS = 60_000;
 const TOAST_AFTER_SENT_MS = 1600;
 const TOAST_AFTER_STOP_MS = 4000;
+// The "Why?" card after a left swipe (P8): 4 s to tap a reason, then "Noted" briefly; a question from the skips stays
+// until it is answered or the next swipe replaces it.
+const WHY_MS = 4000;
+const NOTED_MS = 1400;
+// After a "Not my field" was saved with nothing to ask: "Noted" has been up while it saved.
+const NOTED_AFTER_MS = 500;
+const DONE_MS = 2600;
+const WHY_AFTER_HOLD_MS = 1500;
 
 function cardData(job: FeedJob, query: string): JobCardData {
   return {
@@ -45,6 +54,7 @@ function cardData(job: FeedJob, query: string): JobCardData {
     logoUrl: job.logoUrl,
     isNew: job.isNew,
     detailHref: jobHref(job.id, query),
+    learned: job.learnedNote,
   };
 }
 
@@ -86,6 +96,9 @@ function withStatus(current: Toast, status: string, error: string | null, detail
 }
 
 let toastKeys = 0;
+
+/** The "Why?" card (P8): one per left swipe (`key`), the job it asks about, its step, and when it hides (null: stays). */
+type Why = { key: number; jobId: string; company: string; state: SkipToastStep; visible: boolean; hideAt: number | null };
 
 // Jobs swiped since this tab opened. It outlives the deck: a feed page kept in the browser for a minute (staleTimes)
 // still lists cards swiped since it was built, and they must not come back.
@@ -144,6 +157,9 @@ export function SwipeDeck({
   // Where the deck is in today's set; null outside it (a filter, the skipped jobs, "Keep going", or no set today).
   const [set, setSet] = useState(daily ? { total: daily.total, released: daily.released, more: daily.more, next: daily.next } : null);
   const [releasing, setReleasing] = useState(false);
+  const [why, setWhy] = useState<Why | null>(null);
+  // A pointer or keyboard focus on the "Why?" card holds its timer.
+  const [whyHeld, setWhyHeld] = useState(false);
 
   function setDeck(next: FeedJob[]) {
     deck.current = next;
@@ -204,7 +220,72 @@ export function SwipeDeck({
     setAgent((current) => (current && current.key === key ? change(current) : current));
   }
 
+  /** Changes this left swipe's "Why?" card only; a newer swipe has replaced it otherwise. */
+  function updateWhy(key: number, change: (current: Why) => Why) {
+    setWhy((current) => (current && current.key === key ? change(current) : current));
+  }
+
+  /** A reason tapped: saved on the left swipe (it may land before the swipe itself); the skips may answer with a question. */
+  async function giveReason(reason: SkipReasonValue) {
+    if (!why || why.state.step !== "why") return;
+    const { key, jobId } = why;
+    // "Not my field" may bring a question back (the server counts the skips first): "Noted" stays until it answers, so
+    // the card never fades out and back in. Other reasons rarely do: "Noted" goes after a moment.
+    const waits = reason === "not_my_field";
+    updateWhy(key, (current) => ({ ...current, state: { step: "noted", text: "Noted" }, hideAt: waits ? null : Date.now() + NOTED_MS }));
+    try {
+      const response = await fetch(`/api/swipes/${encodeURIComponent(jobId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { ask?: SkipAsk | null };
+      const ask = response.ok ? body.ask : null;
+      if (ask) updateWhy(key, (current) => ({ ...current, visible: true, state: { step: "ask", ask, busy: false }, hideAt: null }));
+      else if (waits) updateWhy(key, (current) => ({ ...current, hideAt: Date.now() + NOTED_AFTER_MS }));
+    } catch {
+      // A reason is a hint, not a step: the swipe itself is saved by its own request.
+      if (waits) updateWhy(key, (current) => ({ ...current, visible: false }));
+    }
+  }
+
+  /** Yes or No to the question from the skips. Yes on "Change your fields?" opens the confirm screen. */
+  async function answerAsk(yes: boolean) {
+    if (!why || why.state.step !== "ask") return;
+    const { key } = why;
+    const ask = why.state.ask;
+    updateWhy(key, (current) => ({ ...current, state: { step: "ask", ask, busy: true } }));
+    try {
+      const response = await fetch("/api/brief/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ family: ask.family, yes }),
+      });
+      if (!response.ok && response.status !== 404) throw new Error("save failed");
+      if (yes && ask.type === "change_fields") {
+        updateWhy(key, (current) => ({ ...current, visible: false }));
+        router.push("/onboarding/confirm");
+        return;
+      }
+      if (yes && ask.done) {
+        updateWhy(key, (current) => ({ ...current, state: { step: "noted", text: ask.done }, hideAt: Date.now() + DONE_MS }));
+        // The cards of that field still in the deck go now; the feed is rebuilt without them.
+        if (ask.type === "stop_track") {
+          setDeck(deck.current.filter((card) => card.track !== ask.family));
+          if (!set && deck.current.length <= REFILL_BELOW) void refill();
+        }
+        return;
+      }
+      updateWhy(key, (current) => ({ ...current, visible: false }));
+    } catch {
+      updateWhy(key, (current) => ({ ...current, state: { step: "ask", ask, busy: false } }));
+      toast.error("Couldn't save that", { description: "Check your connection and try again." });
+    }
+  }
+
   function putBack(job: FeedJob) {
+    // The card is back on top: nothing to ask about it.
+    setWhy((current) => (current && current.jobId === job.id ? { ...current, visible: false } : current));
     seen.current.delete(job.id);
     unmarkSwiped(job.id);
     setDeck([job, ...deck.current.filter((card) => card.id !== job.id)]);
@@ -271,6 +352,12 @@ export function SwipeDeck({
     }
     // In the skipped view a left swipe keeps the job skipped: there is nothing new to save.
     if (!(view === "skipped" && direction === "left")) void send(job, direction, toastKey);
+    if (direction === "left" && view !== "skipped") {
+      setWhyHeld(false);
+      setWhy({ key: ++toastKeys, jobId: job.id, company: job.company, state: { step: "why" }, visible: true, hideAt: Date.now() + WHY_MS });
+    } else {
+      setWhy((current) => (current ? { ...current, visible: false } : current));
+    }
     // Inside today's set the deck holds just the release: nothing is fetched until "4 more".
     if (!set && deck.current.length <= REFILL_BELOW) void refill();
   }
@@ -332,21 +419,55 @@ export function SwipeDeck({
     return () => clearTimeout(timer);
   }, [agentKey, hideAt]);
 
+  // Hides the "Why?" card at its hide time, unless a pointer or focus holds it.
+  const whyKey = why?.key ?? null;
+  const whyHideAt = why?.visible && !whyHeld ? why.hideAt : null;
+  useEffect(() => {
+    if (whyHideAt === null || whyKey === null) return;
+    const key = whyKey;
+    const timer = setTimeout(() => {
+      setWhy((current) => (current && current.key === key ? { ...current, visible: false } : current));
+    }, Math.max(0, whyHideAt - Date.now()));
+    return () => clearTimeout(timer);
+  }, [whyKey, whyHideAt]);
+
+  function holdWhy(held: boolean) {
+    setWhyHeld(held);
+    // Let go after the time ran out: a moment more to read it, never an instant vanish.
+    if (!held) setWhy((current) => (current && current.hideAt !== null ? { ...current, hideAt: Math.max(current.hideAt, Date.now() + WHY_AFTER_HOLD_MS) } : current));
+  }
+
   const top = cards[0];
   const next = cards[1];
   const after = cards[2];
 
-  const toastNode = agent ? (
-    <div className="fixed inset-x-0 top-[calc(max(12px,env(safe-area-inset-top))+52px)] z-40 mx-auto box-border w-full max-w-120 px-4">
-      <AgentToast
-        company={agent.company}
-        stage={agent.stage}
-        status={agent.status}
-        error={agent.error}
-        detail={agent.detail}
-        href={agent.id ? `/applications/${agent.id}` : null}
-        visible={agent.visible}
-      />
+  // The after-swipe cards share the slot under the top bar: the agent's on top, the "Why?" card under it. A hidden one
+  // leaves the flow (absolute) as it fades, so the other never sits below an empty space.
+  const toastNode = agent || why ? (
+    <div className="fixed inset-x-0 top-[calc(max(12px,env(safe-area-inset-top))+52px)] z-40 mx-auto box-border flex w-full max-w-120 flex-col gap-2 px-4">
+      {agent ? (
+        <AgentToast
+          company={agent.company}
+          stage={agent.stage}
+          status={agent.status}
+          error={agent.error}
+          detail={agent.detail}
+          href={agent.id ? `/applications/${agent.id}` : null}
+          visible={agent.visible}
+          className={agent.visible ? undefined : "absolute inset-x-4 top-0"}
+        />
+      ) : null}
+      {why ? (
+        <SkipReasonToast
+          company={why.company}
+          state={why.state}
+          visible={why.visible}
+          onReason={(reason) => void giveReason(reason)}
+          onAnswer={(yes) => void answerAsk(yes)}
+          onHold={holdWhy}
+          className={why.visible ? undefined : "absolute inset-x-4 top-0"}
+        />
+      ) : null}
     </div>
   ) : null;
 

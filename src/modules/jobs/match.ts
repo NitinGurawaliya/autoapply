@@ -5,7 +5,9 @@ import { daysAgoLabel } from "@/lib/days";
 import { cachedFeed, cachedFeedDegraded, rememberFeed } from "@/lib/feed-cache";
 import { companyKey, feedHistory, loadRules, roleKey } from "@/modules/governance";
 import { ADJACENT, classifyTitle, SENIORITIES, TRACK_LABELS, TRACKS, trackFit, type Track, tracksOf } from "./functions";
-import { gateReason, gateSql, type GateJob, jobGate, readingGateOn } from "./gate";
+import { gateReason, gateSql, type GateJob, jobGate, readingGateOn, trackOf } from "./gate";
+// The leaf file, not the profile index: brief.ts and learning.ts read jobs files, never match.ts.
+import { activeLearned, LEARNED_RANK } from "@/modules/profile/learning";
 import { companyResultsById, judge } from "./results";
 import { APPLY_BOARDS } from "./pool";
 import { formatSalary } from "./salary";
@@ -74,6 +76,8 @@ export type FeedJob = {
   yourYears: number | null;
   /** Pay as the board published it, formatted ("₹15L – ₹30L"); null when the board gives none. */
   salary: string | null;
+  /** A learned line on this job's family (P8, "You skip most Data engineering roles"): the rank was lowered, never the score. */
+  learnedNote: string | null;
 };
 
 /** One part of the match score, out of its maximum, with what it measured (Phase M4). */
@@ -799,10 +803,13 @@ export function rankForEval(userId: string, options: EvalRanking): Promise<FeedJ
 /** `run` (the feed only): the list comes back uncut, and `degraded` says whether verdicts were missing. */
 async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, evaluation?: EvalRanking, run?: { degraded: boolean }): Promise<FeedJob[]> {
   // Independent reads run together: every database round trip is ~250 ms from India to the database.
-  const [profile, answers] = await Promise.all([
+  const [profile, answers, brief] = await Promise.all([
     db.profile.findUnique({ where: { userId } }),
     db.answer.findMany({ where: { userId, key: "preferred_location" }, select: { answer: true } }),
+    // Learned lines (P8) act on rank only; the evaluation ranks without them.
+    evaluation ? null : db.candidateBrief.findUnique({ where: { userId }, select: { learned: true } }),
   ]);
+  const learnedNotes = activeLearned(brief?.learned);
   const skills = skillsSchema.safeParse(profile?.skills).success ? skillsSchema.parse(profile?.skills) : [];
   const preferred = (answers[0]?.answer ?? "")
     .split(",")
@@ -913,6 +920,8 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
         skills: jobSkillsFor(job, shows),
         seniority: job.seniority,
         salary: formatSalary({ min: job.salaryMin, max: job.salaryMax, currency: job.salaryCurrency, period: job.salaryPeriod }),
+        // The family a skip is counted in (trackOf, the swipe's own Swipe.family), so a line acts on the jobs it learned from.
+        learnedNote: learnedNotes.size > 0 ? (learnedNotes.get(trackOf(job) ?? "") ?? null) : null,
       };
     })
     .filter((job) => job.mock || job.score >= minScore)
@@ -965,8 +974,9 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
       seniority: job.seniority,
       yourYears: years,
       salary: job.salary,
-      // Ranking only: the number the user sees stays the honest match score.
-      rank: job.score + job.verdict.nudge,
+      learnedNote: job.learnedNote,
+      // Ranking only: the number the user sees stays the honest match score. A learned line (P8) lowers the rank too.
+      rank: job.score + job.verdict.nudge - (job.learnedNote ? LEARNED_RANK : 0),
     }))
     // Rows arrive ordered by id, so equal-ranked cards (and duplicate listings) always come out the same way.
     .sort((a, b) => b.rank - a.rank || b.score - a.score || a.daysAgo - b.daysAgo)

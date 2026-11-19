@@ -36,6 +36,8 @@ export type JobCardData = {
   isNew?: boolean;
   /** The job's own page in the app (/jobs/[id]). */
   detailHref?: string;
+  /** What the feed learned from the user's skips about this job's family (P8): "You skip most Data engineering roles". */
+  learned?: string | null;
 };
 
 // A skill line's room at 390 px: the card's 310 px of content less the widest label ("Not on resume", 102 px) and its
@@ -187,7 +189,15 @@ export function JobCard({ job, stamps }: { job: JobCardData; stamps?: ReactNode 
 
       {/* The link sits beside the reason, not inside it: in the clamped paragraph it fell on a hidden third line (e2e 18 Nov). */}
       <div className="mt-auto flex items-end gap-3 pt-4">
-        <p className="m-0 line-clamp-2 min-w-0 flex-1 type-body text-pretty text-muted-foreground [@media(max-height:790px)]:line-clamp-1">{why}</p>
+        {job.learned ? (
+          // The learned note under the reason (P8); the reason keeps one line so the card keeps its height.
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <p className="m-0 truncate type-body text-muted-foreground" title={why}>{why}</p>
+            <p className="m-0 truncate type-meta text-muted-foreground" title={job.learned}>{job.learned}</p>
+          </div>
+        ) : (
+          <p className="m-0 line-clamp-2 min-w-0 flex-1 type-body text-pretty text-muted-foreground [@media(max-height:790px)]:line-clamp-1">{why}</p>
+        )}
         {job.detailHref ? (
           <Link
             href={job.detailHref}

@@ -11,12 +11,13 @@ export default async function AccountPage() {
   if (!user) redirect("/sign-in");
   const profile = await db.profile.findUnique({ where: { userId: user.id }, select: { resumeKey: true, avoid: true } });
   // The brief is rebuilt from the profile on the way (a write only when it changed); a failure shows in its own card.
-  const brief = profile ? await currentBrief(user.id).then((result) => ({ brief: result?.brief ?? null, failed: false }), () => ({ brief: null, failed: true })) : { brief: null, failed: false };
+  const brief = profile ? await currentBrief(user.id).then((result) => ({ brief: result?.brief ?? null, learned: result?.learned ?? [], failed: false }), () => ({ brief: null, learned: [], failed: true }))
+    : { brief: null, learned: [], failed: false };
   return (
     <>
       <TitleTopBar title="Account and data" sub={`Signed in as ${user.email}. Your data is yours: take a copy or remove it.`} />
       <AccountActions hasResume={Boolean(profile?.resumeKey)}>
-        <BriefSection brief={brief.brief} avoid={profile?.avoid ?? []} failed={brief.failed} />
+        <BriefSection brief={brief.brief} avoid={profile?.avoid ?? []} learned={brief.learned} failed={brief.failed} />
       </AccountActions>
     </>
   );
