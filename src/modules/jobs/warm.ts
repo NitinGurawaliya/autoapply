@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { sendPush } from "@/lib/push";
 // The brief file itself, not the profile index (which pulls in resume parsing).
 import { buildBrief } from "@/modules/profile/brief";
+import { dailySetOn, ensureDailySet } from "./daily";
 import { listFeed, parseFeedFilters } from "./match";
 
 const ACTIVE_DAYS = 14;
@@ -32,7 +33,10 @@ export async function warmFeeds() {
     try {
       const feed = await listFeed(userId, parseFeedFilters({}));
       warmed += 1;
-      if (await alertNewMatches(userId, feed)) alerted += 1;
+      // The daily set (P7) from the feed just built (cached), when the day turned or its basis changed. While the set is
+      // on, its one morning push (daily.ts pushDailySets) replaces the "new matches" alert.
+      if (dailySetOn()) await ensureDailySet(userId);
+      else if (await alertNewMatches(userId, feed)) alerted += 1;
     } catch (error) {
       console.error(`warm feed …${userId.slice(-6)}: ${error instanceof Error ? error.message.slice(0, 80) : "failed"}`);
     }

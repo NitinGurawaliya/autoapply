@@ -7,7 +7,7 @@ import { boardLabel } from "@/lib/board-label";
 import { db } from "@/lib/db";
 import { feedHref, feedQuery } from "@/lib/feed-url";
 import { dailySent } from "@/modules/governance";
-import { APPLY_BOARDS, DEFAULT_FEED_DAYS, DEFAULT_PLACES, listFeed, parseFeedFilters, TRACK_LABELS, tracksOf } from "@/modules/jobs";
+import { APPLY_BOARDS, dailyView, DEFAULT_FEED_DAYS, DEFAULT_PLACES, isDefaultFeed, listFeed, parseFeedFilters, TRACK_LABELS, tracksOf } from "@/modules/jobs";
 import type { Track } from "@/modules/jobs";
 import type { FeedFilters, FeedView } from "@/modules/jobs";
 import { DailyUsage } from "@/components/daily-usage";
@@ -133,7 +133,9 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
   const view: FeedView = one(params.view) === "skipped" ? "skipped" : "new";
   // The same minimal query as the feed's own URL, so a job page's Back returns to exactly this address.
   const filterQuery = feedQuery(filters, FEED_DEFAULTS);
-  const deckQuery = view === "skipped" ? [filterQuery, "view=skipped"].filter(Boolean).join("&") : filterQuery;
+  // "Keep going" after today's set (P7): the ranked list, carried in the deck's refills and job links.
+  const rest = view === "new" && one(params.rest) === "1";
+  const deckQuery = view === "skipped" ? [filterQuery, "view=skipped"].filter(Boolean).join("&") : rest ? [filterQuery, "rest=1"].filter(Boolean).join("&") : filterQuery;
   const mainHref = filterQuery ? `/feed?${filterQuery}` : "/feed";
   const skippedHref = `/feed?${[filterQuery, "view=skipped"].filter(Boolean).join("&")}`;
 
@@ -264,6 +266,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
           userId={user.id}
           filters={filters}
           view={view}
+          rest={rest}
           active={active}
           query={deckQuery}
           mainHref={mainHref}
@@ -298,6 +301,7 @@ async function FeedDeck({
   userId,
   filters,
   view,
+  rest,
   active,
   query,
   mainHref,
@@ -308,6 +312,7 @@ async function FeedDeck({
   userId: string;
   filters: FeedFilters;
   view: FeedView;
+  rest: boolean;
   active: ActiveFilter[];
   query: string;
   mainHref: string;
@@ -315,13 +320,17 @@ async function FeedDeck({
   editFilters: React.ReactNode;
   widenFilters: React.ReactNode;
 }) {
+  // Today's set (P7) serves the default view only: no filter, not the skipped jobs, not "Keep going". No set (the switch
+  // off, too few jobs to pick 12) means the ranked list as before.
+  const daily = view === "new" && !rest && isDefaultFeed(filters) ? await dailyView(userId) : null;
   const [jobs, sentToday, inProgress] = await Promise.all([
-    listFeed(userId, filters, view),
+    daily ? daily.jobs : listFeed(userId, filters, view),
     dailySent(userId),
     db.application.count({ where: { userId, status: { in: ["queued", "inspecting", "filling"] } } }),
   ]);
-  if (jobs.length > 0) {
-    return <SwipeDeck jobs={jobs} query={query} view={view} mainHref={mainHref} skippedHref={skippedHref} stats={{ sentToday, inProgress }} widenFilters={widenFilters} />;
+  // Inside the set the deck renders even with no card left: it offers the next batch or the end of the set.
+  if (jobs.length > 0 || daily) {
+    return <SwipeDeck jobs={jobs} query={query} view={view} mainHref={mainHref} skippedHref={skippedHref} stats={{ sentToday, inProgress }} widenFilters={widenFilters} daily={daily} />;
   }
 
   if (view === "skipped") {

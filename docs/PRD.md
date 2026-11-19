@@ -78,7 +78,7 @@ Payments, mobile app, push notifications, WhatsApp / extension / MCP, Workday ap
 ## 10. Demo success criteria
 
 - [ ] Google sign-in → upload resume → confirm → 5 questions in under 3 minutes.
-- [ ] Feed shows ≥ 30 jobs from all 3 boards with working filters.
+- [ ] Feed shows ≥ 30 jobs from all 3 boards with working filters. With the daily set on (Phase P, P7, `DAILY_SET=1`): a daily set of 12, released four at a time, then the full ranked feed ("Keep going"); a filter shows the ranked list at once. A profile with fewer than 12 jobs to pick gets no set, only the ranked list.
 - [ ] Right-swipe on a real Greenhouse job → worker fills live on the laptop → submits → `submitted` with screenshot and field list in the app.
 - [ ] One job triggers a needs-input question → user answers → worker resumes → the same question is not asked again.
 - [ ] Governance tab shows rules and the audit log; one rule block demonstrated live (match threshold or a sensitive question pausing the run).

@@ -45,6 +45,9 @@ env:
   # Phase P, P3: the one gate (title AND reading) in every feed these jobs build (warm, prescan); every process must carry
   # the same value (docs/relevance/TDD.md 4.9). "0" turns the reading part off.
   READING_GATE: "1"
+  # Phase P, P7: the daily set (warm builds it; after-ingest sends its one morning push). "1" on, anything else off; the
+  # web app and the worker must carry the same value. Off until the 7.1 gate passes and the owner turns it on.
+  DAILY_SET: "0"
   APP_URL: ${{ secrets.APP_URL }}
 
 jobs:

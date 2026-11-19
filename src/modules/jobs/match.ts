@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { daysAgoLabel } from "@/lib/days";
-import { cachedFeed, rememberFeed } from "@/lib/feed-cache";
+import { cachedFeed, cachedFeedDegraded, rememberFeed } from "@/lib/feed-cache";
 import { companyKey, feedHistory, loadRules, roleKey } from "@/modules/governance";
 import { ADJACENT, classifyTitle, SENIORITIES, TRACK_LABELS, TRACKS, trackFit, type Track, tracksOf } from "./functions";
 import { gateReason, gateSql, type GateJob, jobGate, readingGateOn } from "./gate";
@@ -756,13 +756,23 @@ function jobSkillsFor(job: Pick<FeedRow, "skills" | "skillsRequired" | "skillsHa
 export type FeedView = "new" | "skipped";
 
 export async function listFeed(userId: string, filters: FeedFilters, view: FeedView = "new"): Promise<FeedJob[]> {
+  return (await rankedFeed(userId, filters, view)).jobs.slice(0, FEED_SIZE);
+}
+
+/**
+ * The whole ranked list behind the feed, uncut (listFeed shows its first FEED_SIZE). The daily set (daily.ts) checks its
+ * jobs against this list, so a busy day's arrivals never push set jobs out of a 40-card slice. `degraded`: the model's
+ * verdict is missing for part of the judged shortlist (a failed call), so a set is not built from it.
+ */
+export async function rankedFeed(userId: string, filters: FeedFilters = parseFeedFilters({}), view: FeedView = "new"): Promise<{ jobs: FeedJob[]; degraded: boolean }> {
   // A visit within a minute of the last one, with nothing changed since, reuses its result (lib/feed-cache.ts).
   const filtersKey = view === "new" ? JSON.stringify(filters) : `${JSON.stringify(filters)}|skipped`;
   const cached = cachedFeed<FeedJob[]>(userId, filtersKey);
-  if (cached) return cached;
-  const feed = await scoreFeed(userId, filters, view);
-  rememberFeed(userId, filtersKey, feed);
-  return feed;
+  if (cached) return { jobs: cached, degraded: cachedFeedDegraded(userId, filtersKey) };
+  const run = { degraded: false };
+  const jobs = await scoreFeed(userId, filters, view, undefined, run);
+  rememberFeed(userId, filtersKey, jobs, run.degraded);
+  return { jobs, degraded: run.degraded };
 }
 
 /**
@@ -786,7 +796,8 @@ export function rankForEval(userId: string, options: EvalRanking): Promise<FeedJ
   return scoreFeed(userId, parseFeedFilters({}), "new", options);
 }
 
-async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, evaluation?: EvalRanking): Promise<FeedJob[]> {
+/** `run` (the feed only): the list comes back uncut, and `degraded` says whether verdicts were missing. */
+async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, evaluation?: EvalRanking, run?: { degraded: boolean }): Promise<FeedJob[]> {
   // Independent reads run together: every database round trip is ~250 ms from India to the database.
   const [profile, answers] = await Promise.all([
     db.profile.findUnique({ where: { userId } }),
@@ -913,8 +924,9 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
   // The closest SHORTLIST are judged; when that leaves fewer than a deck of cards (the user swiped most of them), the
   // next closest are judged too, up to MAX_SHORTLIST. Verdicts are cached, so each job is judged once per resume.
   let scored: ReturnType<typeof scoreAll> = [];
+  let shortlist: FeedRow[] = [];
   for (let limit = SHORTLIST; ; limit += SHORTLIST) {
-    const shortlist = closest.slice(0, limit);
+    shortlist = closest.slice(0, limit);
     const missing = shortlist.filter((job) => !judgements.has(job.id)).map((job) => job.id);
     if (profile && missing.length > 0) {
       // Title and fingerprint come with the feed rows; judgeJobs reads descriptions only for jobs not judged yet.
@@ -925,6 +937,7 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
     scored = scoreAll(new Set(shortlist.map((job) => job.id)));
     if (scored.length >= FEED_SIZE || limit >= closest.length || limit >= MAX_SHORTLIST) break;
   }
+  if (run) run.degraded = profile != null && shortlist.some((job) => !judgements.has(job.id));
 
   return dedupeListings(scored)
     .map((job) => ({
@@ -961,5 +974,5 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
       void rank;
       return job;
     })
-    .slice(0, evaluation?.limit ?? FEED_SIZE);
+    .slice(0, run ? undefined : (evaluation?.limit ?? FEED_SIZE));
 }

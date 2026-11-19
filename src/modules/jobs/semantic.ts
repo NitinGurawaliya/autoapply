@@ -237,6 +237,12 @@ const jobJudgementStore: JudgementStore = {
  * posting changes. Jobs the model leaves out, or a failed call, are missing from the result (the caller scores them by
  * closeness alone, more strictly).
  */
+/** What a cached verdict was judged from: the prompt version, the years, the tracks and the resume summary. A change
+ * re-judges every job; the daily set (daily.ts) keeps it in its basis, so the set is rebuilt from the new verdicts. */
+export function judgeFromHash(profile: Parameters<typeof profileText>[0] & { tracks?: string[] | null }) {
+  return createHash("md5").update(`${JUDGE_VERSION}\n${profile.yearsExperience ?? ""}\n${tracksOf(profile).join(",")}\n${profileText(profile)}`).digest("hex");
+}
+
 export async function judgeJobs(
   profile: { id: string; embeddedFrom?: string | null } & Parameters<typeof profileText>[0],
   /** Without a description, a job's text is read only when it has no valid cached verdict (16 Oct: a new user's feed
@@ -248,7 +254,7 @@ export async function judgeJobs(
   if (jobs.length === 0) return out;
   const summary = profileText(profile);
   const tracks = tracksOf(profile);
-  const fromHash = createHash("md5").update(`${JUDGE_VERSION}\n${profile.yearsExperience ?? ""}\n${tracks.join(",")}\n${summary}`).digest("hex");
+  const fromHash = judgeFromHash(profile);
   const hashOf = (job: { contentHash: string | null }) => job.contentHash ?? "none";
   const cached = await store.read(profile.id, jobs.map((job) => job.id));
   const valid = new Map(cached.map((row) => [row.jobId, row]));

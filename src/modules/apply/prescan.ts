@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { listFeed, parseFeedFilters } from "@/modules/jobs";
+import { ensureDailySet, listFeed, parseFeedFilters } from "@/modules/jobs";
 import { customQuestionKey, detectConcept, RISKY } from "@/modules/answers";
 import { buildBrief } from "@/modules/profile";
 import type { PendingQuestion } from "./adapter";
@@ -23,6 +23,8 @@ export async function prescanFeed(userId: string) {
   // The candidate brief (P5) follows every profile change; a failure here never stops the scan.
   await buildBrief(userId).catch((error) => console.error(`brief …${userId.slice(-6)}: ${error instanceof Error ? error.message.slice(0, 80) : "failed"}`));
   const feed = (await listFeed(userId, parseFeedFilters({}))).slice(0, SCAN_JOBS);
+  // The daily set (P7) from the same feed (cached): built or, after a change of fields, rebuilt.
+  await ensureDailySet(userId).catch((error) => console.error(`daily-set …${userId.slice(-6)}: ${error instanceof Error ? error.message.slice(0, 80) : "failed"}`));
   return scanJobs(userId, feed.map((job) => job.id));
 }
 

@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { pushDailySets } from "./daily";
 import { readPendingJobs } from "./reading";
 import { embedPendingJobs, labelPendingSkills } from "./semantic";
 import { warmFeeds } from "./warm";
@@ -31,6 +32,7 @@ export type AfterIngestResult = {
   readFailed: number;
   budgetLeft: number;
   warmed: number | null;
+  pushed: number | null;
   deleted: number | null;
   ms: number;
 };
@@ -42,14 +44,14 @@ function note(step: string, error: unknown) {
 /**
  * What every ingest path does once its reads are in (Phase P, docs/relevance/TDD.md 4.1.1), one place for all of them:
  * embed new jobs → label the skills of the feed's pool → read pool jobs (reading.ts) → warm the feeds when anything was
- * embedded, labelled or read → delete old closed jobs (at most hourly per process). Each step fails alone and stops at
+ * embedded, labelled or read → the daily set's morning push (daily.ts, every call) → delete old closed jobs (at most hourly per process). Each step fails alone and stops at
  * the deadline; the next call resumes where this one stopped. Callers: the worker's tick (in the background after its
  * sends, AFTER_INGEST_TICK_MS), scripts/after-ingest-now.ts in the workflow (AFTER_INGEST_RUN_MS) and ingestJobs.
  */
 export async function afterIngest(options: { deadlineMs: number; label?: string }): Promise<AfterIngestResult> {
   const started = Date.now();
   const deadline = started + options.deadlineMs;
-  const out: AfterIngestResult = { embedded: 0, labelled: 0, read: 0, readFailed: 0, budgetLeft: 0, warmed: null, deleted: null, ms: 0 };
+  const out: AfterIngestResult = { embedded: 0, labelled: 0, read: 0, readFailed: 0, budgetLeft: 0, warmed: null, pushed: null, deleted: null, ms: 0 };
   out.embedded = await embedPendingJobs(20000, deadline).catch((error) => (note("embedding", error), 0));
   if (Date.now() < deadline) {
     const levels = await labelPendingSkills(undefined, deadline).catch((error) => (note("skill labels", error), { labelled: 0, failed: 0 }));
@@ -66,13 +68,16 @@ export async function afterIngest(options: { deadlineMs: number; label?: string 
     const warm = await warmFeeds().catch((error) => (note("warm", error), null));
     out.warmed = warm?.warmed ?? null;
   }
+  // The daily set's push (P7) on every call, not only after a warm: the morning hour passes whether or not jobs arrived.
+  const push = await pushDailySets(deadline).catch((error) => (note("daily-set push", error), null));
+  out.pushed = push?.pushed ?? null;
   if (Date.now() - lastCleanup > CLEANUP_EVERY_MS) {
     lastCleanup = Date.now();
     out.deleted = await deleteOldClosedJobs().catch((error) => (note("cleanup", error), null));
   }
   out.ms = Date.now() - started;
   console.log(
-    `after-ingest${options.label ? ` (${options.label})` : ""} embedded=${out.embedded} labelled=${out.labelled} read=${out.read} read_failed=${out.readFailed} budget_left=${out.budgetLeft} warmed=${out.warmed ?? "-"} deleted=${out.deleted ?? "-"} ms=${out.ms}`,
+    `after-ingest${options.label ? ` (${options.label})` : ""} embedded=${out.embedded} labelled=${out.labelled} read=${out.read} read_failed=${out.readFailed} budget_left=${out.budgetLeft} warmed=${out.warmed ?? "-"} pushed=${out.pushed ?? "-"} deleted=${out.deleted ?? "-"} ms=${out.ms}`,
   );
   return out;
 }

@@ -9,7 +9,8 @@ const TTL_MS = 60_000;
 
 // On globalThis, like the Prisma client: Next.js bundles route handlers and pages separately, and a plain module-level
 // Map would give each bundle its own copy (a swipe saved by /api/swipes would not clear the copy the feed page reads).
-const holder = globalThis as unknown as { swipeApplyFeedCache?: Map<string, { at: number; value: unknown }> };
+// `degraded`: the model's verdict is missing for part of the shortlist (a failed call); the daily set is not built from it.
+const holder = globalThis as unknown as { swipeApplyFeedCache?: Map<string, { at: number; value: unknown; degraded?: boolean }> };
 const cache = (holder.swipeApplyFeedCache ??= new Map());
 
 export function cachedFeed<T>(userId: string, filtersKey: string): T | undefined {
@@ -18,10 +19,15 @@ export function cachedFeed<T>(userId: string, filtersKey: string): T | undefined
   return hit.value as T;
 }
 
-export function rememberFeed(userId: string, filtersKey: string, value: unknown) {
+/** Whether the cached feed (cachedFeed) was scored with verdicts missing; false when none is cached. */
+export function cachedFeedDegraded(userId: string, filtersKey: string): boolean {
+  return cache.get(`${userId}\u0000${filtersKey}`)?.degraded === true;
+}
+
+export function rememberFeed(userId: string, filtersKey: string, value: unknown, degraded = false) {
   // Old entries go when they are next read; this keeps the map from growing with users who never come back.
   if (cache.size > 2000) for (const [key, entry] of cache) if (Date.now() - entry.at > TTL_MS) cache.delete(key);
-  cache.set(`${userId}\u0000${filtersKey}`, { at: Date.now(), value });
+  cache.set(`${userId}\u0000${filtersKey}`, { at: Date.now(), value, degraded });
 }
 
 /**

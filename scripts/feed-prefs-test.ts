@@ -76,7 +76,8 @@ async function main() {
     }
     type Shown = FeedJob & { track: string | null; roleFamily: string | null; kind: string | null; flags: string[]; readingCurrent: boolean };
     async function feed(): Promise<Shown[]> {
-      const response = await fetch(`${BASE}/api/jobs`, { headers });
+      // The ranked list, also when the daily set (P7, DAILY_SET=1) serves the default view.
+      const response = await fetch(`${BASE}/api/jobs?rest=1`, { headers });
       if (!response.ok) throw new Error(`GET /api/jobs ${response.status}`);
       const jobs = ((await response.json()) as { jobs: FeedJob[] }).jobs;
       const rows = new Map((await db.job.findMany({ where: { id: { in: jobs.map((job) => job.id) } }, select: { id: true, title: true, track: true, roleFamily: true, kind: true, flags: true, readingCurrent: true } })).map((row) => [row.id, row]));

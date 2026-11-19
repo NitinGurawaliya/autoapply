@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { SoftChip } from "@/components/ui/chip";
 import { EmptyState } from "@/components/patterns/content";
 import { DeckDoneArt } from "@/components/patterns/drawings";
@@ -15,7 +15,7 @@ import { useApplicationsSummary } from "@/components/applications-summary";
 import { boardLabel } from "@/lib/board-label";
 import { experienceChip, postedLabel, STAGE_LABEL, whereLabel } from "@/lib/job-facts";
 import { statusMeta } from "@/lib/status-meta";
-import type { FeedJob, FeedView } from "@/modules/jobs";
+import type { DailyView, FeedJob, FeedView } from "@/modules/jobs";
 import { markOpenedFromFeed } from "../jobs/[id]/feed-back-link";
 
 const REFILL_BELOW = 5;
@@ -113,6 +113,7 @@ export function SwipeDeck({
   skippedHref = "/feed?view=skipped",
   stats,
   widenFilters,
+  daily = null,
 }: {
   jobs: FeedJob[];
   query: string;
@@ -122,6 +123,8 @@ export function SwipeDeck({
   skippedHref?: string;
   stats: { sentToday: number; inProgress: number };
   widenFilters: ReactNode;
+  /** Today's set (P7): the deck shows its release, offers the next batch, then the end state. Its refill is off. */
+  daily?: DailyView | null;
 }) {
   // Cards decided this visit stay gone; in the skipped view only the applied ones (a skipped one belongs there).
   const [initial] = useState(() => jobs.filter((job) => !(view === "skipped" ? appliedThisVisit : swipedThisVisit).has(job.id)));
@@ -138,6 +141,9 @@ export function SwipeDeck({
   const { refresh: refreshSummary } = useApplicationsSummary();
 
   const [agent, setAgent] = useState<Toast | null>(null);
+  // Where the deck is in today's set; null outside it (a filter, the skipped jobs, "Keep going", or no set today).
+  const [set, setSet] = useState(daily ? { total: daily.total, released: daily.released, more: daily.more, next: daily.next } : null);
+  const [releasing, setReleasing] = useState(false);
 
   function setDeck(next: FeedJob[]) {
     deck.current = next;
@@ -158,6 +164,37 @@ export function SwipeDeck({
       // The deck still works with what it has; try again on the next swipe.
     } finally {
       refilling.current = false;
+    }
+  }
+
+  /**
+   * "4 more": asks for the next batch from where this deck stands. Another tab or a refresh may have released it
+   * already; the server then answers with the current release (409), shown the same way, so no batch is skipped.
+   */
+  async function releaseNext() {
+    if (!set || releasing) return;
+    setReleasing(true);
+    try {
+      const response = await fetch("/api/daily-set", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from: set.released }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { set?: DailyView };
+      if (body.set) {
+        const next = body.set;
+        setSet({ total: next.total, released: next.released, more: next.more, next: next.next });
+        setDeck(next.jobs.filter((job) => !seen.current.has(job.id)));
+      } else if (response.status === 404) {
+        // No set any more (the fields changed and too few jobs fit): the ranked list instead.
+        window.location.reload();
+      } else {
+        toast.error("Couldn't get the next jobs", { description: "Check your connection and try again." });
+      }
+    } catch {
+      toast.error("Couldn't get the next jobs", { description: "Check your connection and try again." });
+    } finally {
+      setReleasing(false);
     }
   }
 
@@ -234,7 +271,8 @@ export function SwipeDeck({
     }
     // In the skipped view a left swipe keeps the job skipped: there is nothing new to save.
     if (!(view === "skipped" && direction === "left")) void send(job, direction, toastKey);
-    if (deck.current.length <= REFILL_BELOW) void refill();
+    // Inside today's set the deck holds just the release: nothing is fetched until "4 more".
+    if (!set && deck.current.length <= REFILL_BELOW) void refill();
   }
 
   useEffect(() => {
@@ -330,6 +368,55 @@ export function SwipeDeck({
     );
   }
 
+  if (!top && set?.more) {
+    const count = set.next > 0 ? set.next : 4;
+    return (
+      <>
+        <EmptyState
+          art={<DeckDoneArt />}
+          title={`${set.released} of ${set.total} done`}
+          text={`${set.total - set.released} more ${set.total - set.released === 1 ? "job is" : "jobs are"} waiting in today's set.`}
+          actions={
+            <Button variant="primary" size="xl" className="w-full" disabled={releasing} onClick={() => void releaseNext()}>
+              {releasing ? "Loading…" : `${count} more`}
+            </Button>
+          }
+        />
+        {toastNode}
+      </>
+    );
+  }
+
+  if (!top && set) {
+    return (
+      <>
+        <EmptyState
+          art={<DeckDoneArt />}
+          title="That's today's set"
+          text="A new set comes tomorrow morning. Until then, the rest of your matches are a tap away."
+          extra={
+            <>
+              <SoftChip>{stats.sentToday} sent today</SoftChip>
+              <SoftChip>{stats.inProgress} in progress</SoftChip>
+            </>
+          }
+          actions={
+            <>
+              <Link href="/applications" className={buttonVariants({ variant: "primary", size: "xl", className: "w-full" })}>
+                Done for today
+              </Link>
+              {/* The ranked list after the set, with the deck's refill on (/feed?rest=1). */}
+              <Link href="/feed?rest=1" className={buttonVariants({ variant: "line", size: "lg", className: "w-full" })}>
+                Keep going
+              </Link>
+            </>
+          }
+        />
+        {toastNode}
+      </>
+    );
+  }
+
   if (!top) {
     return (
       <>
@@ -370,7 +457,13 @@ export function SwipeDeck({
           if ((event.target as Element).closest('a[href^="/jobs/"]')) markOpenedFromFeed(top.id);
         }}
       >
-        <StackCount total={cards.length} label={view === "skipped" ? "you skipped" : "in your feed"} />
+        {set ? (
+          <p className="m-0 flex h-6 items-center type-meta text-muted-foreground" aria-live="polite">
+            Today&apos;s set · {set.released} of {set.total}
+          </p>
+        ) : (
+          <StackCount total={cards.length} label={view === "skipped" ? "you skipped" : "in your feed"} />
+        )}
         <SwipeStage
           ref={stage}
           top={{ id: top.id, source: top.source, card: cardData(top, query) }}
