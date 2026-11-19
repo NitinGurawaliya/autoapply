@@ -10,7 +10,7 @@ import { randomBytes } from "node:crypto";
 import { db } from "../src/lib/db";
 import { deleteAccount } from "../src/modules/account";
 import { candidateSkills } from "../src/modules/jobs";
-import { capWords, checkFitAnswer, fitInput, fitJobs, fitMessage, fitStats, releaseLease, takeLease } from "../src/modules/jobs/fit";
+import { capWords, checkFitAnswer, fitFloor, fitInput, fitJobs, fitMessage, fitStats, lineSent, releaseLease, takeLease } from "../src/modules/jobs/fit";
 import { poolSql } from "../src/modules/jobs/pool";
 import { levelFit, levelOn } from "../src/modules/jobs/semantic";
 import { briefJson, briefOf } from "../src/modules/profile/brief";
@@ -54,12 +54,14 @@ function pure() {
   check("a current reading gives a fit input", input != null);
   check("no fit input without a current reading", fitInput({ ...job, readingCurrent: false }, shows) === null && fitInput({ ...job, reading: null }, shows) === null);
   check("keys in a fixed order", JSON.stringify(Object.keys(JSON.parse(input.json))) === JSON.stringify(["title", "family", "kind", "summary", "requirements", "skills"]));
-  check("requirement lines numbered from 1", input.sent.requirements[0] === "1. 2+ years of experience" && input.requirements.length === 3);
+  check("requirement lines numbered from 1, a years-only line not sent", input.sent.requirements[0] === "1. Strong Node.js and PostgreSQL" && input.sent.requirements.length === 2 && input.requirements.length === 3);
+  check("sent lines map back to the posting's lines", JSON.stringify(input.sentIndex) === "[1,2]");
+  check("a years phrase is taken out of a line, the rest kept", lineSent("A minimum of five years of professional experience developing software in Python.") === "developing software in Python." && lineSent("3+ years of experience") === null && lineSent("Strong Node.js") === null && lineSent("Bachelor's degree in Computer Science") === "Bachelor's degree in Computer Science");
   check("no batch index in the job's JSON", !("n" in JSON.parse(input.json)));
   check("skills split by code (labels current)", JSON.stringify(input.sent.skills) === JSON.stringify({ have: ["Node.js", "PostgreSQL"], missing: ["Go"] }), JSON.stringify(input.sent.skills));
   check("same job, same jobHash", fitInput({ ...job }, shows)!.jobHash === input.jobHash);
   check("a stale skills label moves jobHash", fitInput({ ...job, skillsHash: "old" }, shows)!.jobHash !== input.jobHash);
-  check("a new reading moves jobHash", fitInput({ ...job, reading: { ...job.reading, requirements: [...job.reading.requirements, "Kafka"] } }, shows)!.jobHash !== input.jobHash);
+  check("a new reading moves jobHash", fitInput({ ...job, reading: { ...job.reading, requirements: [...job.reading.requirements, "Experience with Kafka streams"] } }, shows)!.jobHash !== input.jobHash);
   check("a column the model never sees does not move jobHash", fitInput({ ...job, experienceMin: 5 }, shows)!.jobHash === input.jobHash);
 
   const brief = briefOf(profileBase);
@@ -78,15 +80,20 @@ function pure() {
         { n: 7, fit: "strong", evidence: 1, why: "unknown index" },
       ],
     },
-    [input, input, { json: "{}", requirements: [] }],
+    [input, input, { json: "{}", sentIndex: [] }],
   );
-  check("evidence kept as a 0-based line", answer.get(0)?.evidenceIndex === 1 && answer.get(0)?.missed === false);
+  check("evidence kept as the posting's own 0-based line", answer.get(0)?.evidenceIndex === 2 && answer.get(0)?.missed === false);
   check("a repeated index is dropped", answer.get(0)?.fit === "good");
   check("evidence out of range is dropped and counted missed", answer.get(1)?.evidenceIndex === null && answer.get(1)?.missed === true);
   check("no lines, no evidence: not counted missed", answer.get(2)?.evidenceIndex === null && answer.get(2)?.missed === false);
   check("an unknown index is dropped", answer.size === 3);
   check("why is at most 12 words", (answer.get(0)?.why.split(/\s+/).length ?? 99) <= 12 && capWords("a b c d e f g h i j k l m n.").split(" ").length === 12);
 
+  const own = ["backend"];
+  check("floor: own track is at least good", fitFloor({ title: "Backend Engineer", roleFamily: "backend", readingCurrent: true }, own).fit === "good");
+  check("floor: a neighbouring track is at least stretch", fitFloor({ title: "Full Stack Engineer", roleFamily: "fullstack", readingCurrent: true }, own).fit === "stretch");
+  check("floor: the lower of title and reading counts", fitFloor({ title: "Backend Engineer", roleFamily: "qa", readingCurrent: true }, own).fit === "no" && fitFloor({ title: "Backend Engineer", roleFamily: "qa", readingCurrent: false }, own).fit === "good");
+  check("floor: another field gets none", fitFloor({ title: "iOS Engineer", roleFamily: "mobile", readingCurrent: true }, own).fit === "no");
   check("levelOn: a senior role for 1 year is no", JSON.stringify(levelOn("strong", "Senior Backend Engineer", null, 1)) === JSON.stringify({ fit: "no", note: "a senior role" }));
   check("levelOn: 2 more years caps at stretch", levelOn("strong", "Backend Engineer", 3, 1).fit === "stretch");
   check("levelOn: no stays no", levelOn("no", "Backend Engineer", null, 3).fit === "no");

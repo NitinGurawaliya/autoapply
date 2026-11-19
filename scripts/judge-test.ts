@@ -4,7 +4,9 @@
 // the case's "needs" as its requirement lines, the brief from the candidate's title, years and skills line, the level on
 // top by code), so both paths are held to the same labels. npx tsx scripts/judge-test.ts [--old | --fit]
 import { candidateSkills, classifyTitle, jobSkills } from "../src/modules/jobs";
-import { fitBatch, fitInput } from "../src/modules/jobs/fit";
+import { fitBatch, fitFloor, fitInput } from "../src/modules/jobs/fit";
+
+const ORDER: Fit[] = ["no", "stretch", "good", "strong"];
 import { judgeBatch, levelOn } from "../src/modules/jobs/semantic";
 import { requiredYears } from "../src/modules/jobs/tagging";
 
@@ -94,7 +96,12 @@ async function fitVerdicts(candidate: (typeof candidates)[number]): Promise<Verd
   });
   const answer = await fitBatch(brief, jobs.map((job) => job.input), "interactive");
   const out: Verdicts = new Map();
-  for (const [n, verdict] of answer) out.set(n, { fit: levelOn(verdict.fit, jobs[n].row.title, jobs[n].row.experienceMin, candidate.years).fit, why: verdict.why });
+  // As the feed reads a verdict: the track floor (fitFloor), then the level (levelOn).
+  for (const [n, verdict] of answer) {
+    const floor = fitFloor(jobs[n].row, brief.tracks).fit;
+    const start = ORDER.indexOf(floor) > ORDER.indexOf(verdict.fit) ? floor : verdict.fit;
+    out.set(n, { fit: levelOn(start, jobs[n].row.title, jobs[n].row.experienceMin, candidate.years).fit, why: verdict.why });
+  }
   return out;
 }
 

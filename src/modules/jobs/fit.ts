@@ -4,8 +4,9 @@ import { db } from "@/lib/db";
 import { callJson, type LlmLane } from "@/lib/llm";
 // The brief file itself, not the profile index (which pulls in resume parsing).
 import { type Brief, briefJson, fitHashOf } from "@/modules/profile/brief";
+import { ADJACENT, TRACK_LABELS, type Track } from "./functions";
 import { compareSkills } from "./skills";
-import { type Fit, type Judgement, levelOn } from "./semantic";
+import { type Fit, type Judgement, levelOn, trackFloor } from "./semantic";
 
 /**
  * The fit verdict (Phase P, P6; docs/relevance/TDD.md 4.1 item 7), behind RELEVANCE_FIT. Per job the model gets the
@@ -14,6 +15,11 @@ import { type Fit, type Judgement, levelOn } from "./semantic";
  * candidate brief (P5), never resume text or the raw posting. It returns `fit`, `why` (at most 12 words) and `evidence`,
  * the number of the requirement line the verdict rests on, checked here. The level (levelOn: years asked, staff or
  * senior titles) is code, applied on top each time a verdict is read, so the cache holds only what the model said.
+ * So is the track floor (fitFloor, the diagnosis of 19 Nov): a job in one of the candidate's own tracks is at least
+ * good, one in a neighbouring track at least stretch, whatever the model said: it anchored on the brief's one title
+ * and called the candidate's other specialties a stretch or no (17 relevant cards lost from top 10s; the old judge's
+ * trackFloor exists for the same failure). Years phrases are taken out of the lines sent (levelOn checks years; the
+ * model counted them twice and cited years lines that say nothing about fit); indexes map back to the posting's lines.
  *
  * Cached in FitJudgement (or the eval's dry-run store), valid while `fitHash` (the brief) and `jobHash` (md5 of the exact
  * per-job JSON sent, without its batch index) are unchanged: a new reading, skills split or label re-judges that job
@@ -44,12 +50,12 @@ export const fitSchema = z.object({
 });
 
 export const FIT_SYSTEM = `You judge how well one job seeker fits job postings. You get the candidate (their tracks, years, current title and top skills) and numbered jobs. Each job comes with its title, its family, a one-line summary, its requirement lines numbered from 1 (copied from the posting), and a skills check done by code: "have" = the posting's tech skills the candidate shows, "missing" = skills the posting asks for that the candidate does not show.
-For each job say how close the WORK is to the candidate's own work, ignoring seniority and years (code checks those). Their title and tracks say what work they do; their skills list is short, so a skill it does not list is unknown, not missing.
+For each job say how close the WORK is to the candidate's own work, ignoring seniority and years (code checks those). Their tracks list every kind of work they do (the title is only their latest role), so a job in any of their tracks is their own work; their skills list is short, so a skill it does not list is unknown, not missing.
 - strong: the candidate's own field and specialty (a full-stack developer and a full-stack or web role; a data scientist and a data scientist or analytics role; a security engineer and a security engineering or SOC role).
 - good: the same field, a neighbouring specialty or another main stack (data science and ML engineering; backend and full-stack; SOC / detection and application or cloud security; a Node.js backend engineer and a Java backend role).
 - stretch: a different specialty they could move into with their skills (a developer and DevOps or QA automation; a data scientist and data engineering).
 - no: another kind of work (for a developer: sales, recruiting, product or program management, design, writing, finance, operations; for a data scientist: frontend or mobile engineering; for a web developer: iOS or embedded).
-evidence: the number of the ONE requirement line that best shows what the work is (its main skill, stack or duty); a years-of-experience line only when there is no other. null only when the job has no requirement lines.
+evidence: the number of the ONE requirement line that best shows what the work is (its main skill, stack or duty), for every verdict, "no" included (for "no", the line that shows the other kind of work). null only when the job has no requirement lines.
 why: at most 12 words, to the candidate as "you", about the work in that line (e.g. "Java and Spring backend services, close to your backend work", "Detection engineering, next to your SOC work", "An iOS role, not web work"). No years.
 Return {"results":[{"n","fit","evidence","why"}]} with one entry per job.`;
 
@@ -70,12 +76,29 @@ type FitRowIn = {
 
 const readingSchema = z.object({ summary: z.string().optional(), requirements: z.array(z.string()).optional() });
 
+// A years-of-experience phrase ("3+ years of experience", "a minimum of five years of professional experience", "0-2
+// yrs"): taken out of the lines sent, since the level is code (levelOn).
+const NUMBER = String.raw`(?:\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)`;
+const YEARS = new RegExp(
+  String.raw`(?:\b(?:a\s+)?(?:minimum\s+(?:of\s+)?|at\s+least\s+|min\.?\s*)?)?\b${NUMBER}\s*\+?\s*(?:(?:-|–|to)\s*${NUMBER}\s*\+?\s*)?(?:years?|yrs?)\b(?:\s+of)?(?:\s+(?:professional|relevant|hands-on|industry|work))?(?:\s+experience)?`,
+  "gi",
+);
+const MIN_WORDS = 3;
+
+/** A requirement line as sent: its years phrase removed; null when too little is left to say what the work is. */
+export function lineSent(line: string): string | null {
+  const left = line.replace(YEARS, " ").replace(/\s+([,.;:)])/g, "$1").replace(/\(\s*\)/g, "").replace(/\s+/g, " ").trim();
+  return (left.match(/[A-Za-z][A-Za-z+#.]*/g) ?? []).length >= MIN_WORDS ? left : null;
+}
+
 /** What the model is sent about one job (without `n`), or null when the job has no current reading. */
 export function fitInput(job: FitRowIn, shows: Set<string>) {
   if (!job.readingCurrent || job.reading == null) return null;
   const reading = readingSchema.safeParse(job.reading);
   if (!reading.success) return null;
   const requirements = reading.data.requirements ?? [];
+  // The lines sent, numbered from 1; sentIndex maps each back to its place in the posting's own lines (the quote).
+  const kept = requirements.map((line, i) => ({ line: lineSent(line), i })).filter((row): row is { line: string; i: number } => row.line != null);
   // The model's required labels count only while they belong to this version of the posting (match.ts labelledSkills).
   const labelled = job.skillsHash != null && job.skillsHash === (job.contentHash ?? "none");
   const compared = compareSkills(job.skills, labelled ? job.skillsRequired : null, shows);
@@ -85,11 +108,11 @@ export function fitInput(job: FitRowIn, shows: Set<string>) {
     family: job.roleFamily,
     kind: job.kind,
     summary: reading.data.summary ?? "",
-    requirements: requirements.map((line, i) => `${i + 1}. ${line}`),
+    requirements: kept.map((row, n) => `${n + 1}. ${row.line}`),
     skills: { have: compared.have, missing: compared.missing },
   };
   const json = JSON.stringify(sent);
-  return { sent, json, jobHash: createHash("md5").update(json).digest("hex"), requirements };
+  return { sent, json, jobHash: createHash("md5").update(json).digest("hex"), requirements, sentIndex: kept.map((row) => row.i) };
 }
 
 export type FitVerdict = Judgement & { quote: string | null };
@@ -120,16 +143,40 @@ export const fitStats = { judged: 0, cached: 0, evidenceMissed: 0, no: 0, failed
 
 export const capWords = (text: string) => text.trim().replace(/[.\s]+$/, "").split(/\s+/).slice(0, WHY_WORDS).join(" ");
 
-/** The model's row for one job, with the level (code) on top: what the feed scores with. */
-function verdictOf(row: { fit: string; why: string; evidenceIndex: number | null }, job: FitRowIn, requirements: string[], years: number | null): FitVerdict {
-  const { fit, note } = levelOn(row.fit as Fit, job.title, job.experienceMin, years);
+const ORDER: Fit[] = ["no", "stretch", "good", "strong"];
+
+/**
+ * The least the verdict can be from the job's tracks and the candidate's: own track good, a neighbouring one (or plain
+ * software for a developer) stretch, else none. The title's track (trackFloor, as the old judge) and a current
+ * reading's family must both agree: the lower of the two counts. Returns the floor and the track that gave it.
+ */
+export function fitFloor(job: { title: string; roleFamily: string | null; readingCurrent: boolean }, tracks: string[]): { fit: Fit; track: Track | null } {
+  const title = trackFloor(job.title, tracks);
+  const of = (field: string): Fit => (field === "close" ? "good" : field === "related" ? "stretch" : "no");
+  let fit = of(title.field);
+  if (job.readingCurrent && job.roleFamily) {
+    const family = job.roleFamily as Track;
+    const read: Fit = tracks.includes(family) ? "good" : tracks.some((own) => (ADJACENT[own as Track] ?? []).includes(family)) ? "stretch" : "no";
+    if (ORDER.indexOf(read) < ORDER.indexOf(fit)) fit = read;
+  }
+  return { fit, track: fit === "no" ? null : title.track };
+}
+
+/** The model's row for one job, with the track floor and then the level (code) on top: what the feed scores with. */
+function verdictOf(row: { fit: string; why: string; evidenceIndex: number | null }, job: FitRowIn, requirements: string[], who: { tracks: string[]; years: number | null }): FitVerdict {
+  const floor = fitFloor(job, who.tracks);
+  const raised = ORDER.indexOf(floor.fit) > ORDER.indexOf(row.fit as Fit);
+  const start = raised ? floor.fit : (row.fit as Fit);
+  const { fit, note } = levelOn(start, job.title, job.experienceMin, who.years);
+  // Raised by the floor: the model's "why" argued the other way, so the reason says what the floor saw (as the old path).
+  const floorWhy = raised && floor.track ? `${TRACK_LABELS[floor.track]} work, ${floor.fit === "good" ? "one of your tracks" : "near your tracks"}` : null;
   // Left out by the level although the work fits: the reason says why, as the old path does.
-  const why = fit === "no" && note && row.fit !== "no" ? `${note[0].toUpperCase()}${note.slice(1)}` : row.why;
+  const why = fit === "no" && note && start !== "no" ? `${note[0].toUpperCase()}${note.slice(1)}` : (floorWhy ?? row.why);
   const quote = row.evidenceIndex != null ? (requirements[row.evidenceIndex] ?? null) : null;
   return { fit, why: why.slice(0, 140), quote };
 }
 
-type BatchJob = { json: string; requirements: string[] };
+type BatchJob = { json: string; sentIndex: number[] };
 
 /** The user message: the brief exactly as briefJson sends it, then each job's JSON with its batch index first. */
 export function fitMessage(brief: Brief, jobs: BatchJob[]) {
@@ -143,8 +190,8 @@ export function checkFitAnswer(answer: z.output<typeof fitSchema>, jobs: BatchJo
     const job = jobs[result.n];
     if (!job || out.has(result.n)) continue;
     const line = result.evidence ?? null;
-    const valid = line != null && line >= 1 && line <= job.requirements.length;
-    out.set(result.n, { fit: result.fit, why: capWords(result.why), evidenceIndex: valid ? line - 1 : null, missed: job.requirements.length > 0 && !valid });
+    const valid = line != null && line >= 1 && line <= job.sentIndex.length;
+    out.set(result.n, { fit: result.fit, why: capWords(result.why), evidenceIndex: valid ? job.sentIndex[line - 1] : null, missed: job.sentIndex.length > 0 && !valid });
   }
   return out;
 }
@@ -195,7 +242,7 @@ export async function fitJobs(who: FitWho, jobIds: string[], options: FitOptions
     store.read(who.profileId, jobIds),
   ]);
   const valid = new Map(cached.filter((row) => row.fitHash === fitHash).map((row) => [row.jobId, row]));
-  const missing: Array<{ job: FitRowIn; json: string; jobHash: string; requirements: string[] }> = [];
+  const missing: Array<{ job: FitRowIn; json: string; jobHash: string; requirements: string[]; sentIndex: number[] }> = [];
   for (const job of rows) {
     const input = fitInput(job, who.shows);
     if (!input) {
@@ -205,8 +252,8 @@ export async function fitJobs(who: FitWho, jobIds: string[], options: FitOptions
     const row = valid.get(job.id);
     if (row && row.jobHash === input.jobHash) {
       fitStats.cached += 1;
-      out.set(job.id, verdictOf(row, job, input.requirements, who.years));
-    } else missing.push({ job, json: input.json, jobHash: input.jobHash, requirements: input.requirements });
+      out.set(job.id, verdictOf(row, job, input.requirements, { tracks: who.brief.tracks, years: who.years }));
+    } else missing.push({ job, json: input.json, jobHash: input.jobHash, requirements: input.requirements, sentIndex: input.sentIndex });
   }
   if (missing.length === 0 || options.judge === false) return out;
   if (options.lease && !(await takeLease(who.userId, who.brief))) {
@@ -228,7 +275,7 @@ export async function fitJobs(who: FitWho, jobIds: string[], options: FitOptions
               if (verdict.missed) fitStats.evidenceMissed += 1;
               if (verdict.fit === "no") fitStats.no += 1;
               fresh.push({ jobId: job.id, jobHash, fit: verdict.fit, why: verdict.why, evidenceIndex: verdict.evidenceIndex });
-              out.set(job.id, verdictOf(verdict, job, requirements, who.years));
+              out.set(job.id, verdictOf(verdict, job, requirements, { tracks: who.brief.tracks, years: who.years }));
             }
             // Per batch, so a second caller (or a build after a crash) reads what is done.
             await store.write(who.profileId, fitHash, fresh);

@@ -15,7 +15,7 @@ import { candidateSkills } from "@/modules/jobs/skills";
  */
 
 /** Bump when the fit prompt or what it reads changes: every stored verdict then re-judges. */
-export const FIT_VERSION = "4";
+export const FIT_VERSION = "5";
 const TOP_SKILLS = 12;
 const TITLE_CHARS = 80;
 
