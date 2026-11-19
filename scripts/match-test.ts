@@ -2,7 +2,7 @@
 import { scoreJob, tierOf } from "../src/modules/jobs";
 import { classifyTitle } from "../src/modules/jobs/functions";
 import { bandMiss, feedTracks, levelsFor, scoreFeatures, yearsBand } from "../src/modules/jobs/match";
-import { trackFloor } from "../src/modules/jobs/semantic";
+import { levelOn, trackFloor } from "../src/modules/jobs/semantic";
 import { requiredYears, titleYears } from "../src/modules/jobs/tagging";
 
 let failed = 0;
@@ -136,5 +136,13 @@ check("gate: a gig is out", gated("Frontend Engineer", "frontend", { kind: "gig"
 check("gate: the swipe check ignores the field (any track filter)", gated("Data Engineer", "data_engineering", { roleFamily: "data_engineering" }, false).score > 0);
 check("gate: a contract role stays with no avoid", gated("Frontend Engineer", "frontend", { kind: "contract" }, true).score > 0);
 check("gate: mock jobs always pass", scoreJob({ ...base, title: "Account Executive", description: stack, similarity: 0.6, judgement: { fit: "good", why: "t" } }, nitin, { job: { source: "mock", title: "Account Executive", roleFamily: "non_tech", readingCurrent: true }, tracks: webTracks, field: true }).score > 0);
+// P6: both verdict paths score through the same code. A fit verdict (fit.ts) carries the requirement line it rests on;
+// the score and reason are those of the same verdict from the old judge, and the level rules apply on top (levelOn).
+const withQuote = (fit: "strong" | "good" | "stretch") =>
+  scoreJob({ ...base, title: "Software Engineer", description: `${stack} 0-2 years of experience.`, similarity: 0.55, judgement: { fit, why: "React and Node work, like yours", quote: "Strong React and Node.js" } }, dev);
+const withoutQuote = (fit: "strong" | "good" | "stretch") =>
+  scoreJob({ ...base, title: "Software Engineer", description: `${stack} 0-2 years of experience.`, similarity: 0.55, judgement: { fit, why: "React and Node work, like yours" } }, dev);
+check("fit path: a verdict with its quote scores as the old path's same verdict", (["strong", "good", "stretch"] as const).every((fit) => withQuote(fit).score === withoutQuote(fit).score && withQuote(fit).reason === withoutQuote(fit).reason));
+check("fit path: the level on top (a senior title for 1 year is no)", levelOn("strong", "Senior Software Engineer", null, 1).fit === "no" && levelOn("good", "Software Engineer", 2, 1).fit === "good");
 console.log(failed === 0 ? "PASS match logic" : `FAIL match logic (${failed})`);
 process.exit(failed === 0 ? 0 : 1);

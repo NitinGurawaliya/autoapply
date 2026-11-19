@@ -3,6 +3,7 @@ import { sendPush } from "@/lib/push";
 // The brief file itself, not the profile index (which pulls in resume parsing).
 import { buildBrief } from "@/modules/profile/brief";
 import { dailySetOn, ensureDailySet } from "./daily";
+import { fitOn, fitStats } from "./fit";
 import { listFeed, parseFeedFilters } from "./match";
 
 const ACTIVE_DAYS = 14;
@@ -11,7 +12,7 @@ const DAY = 24 * 60 * 60 * 1000;
 /**
  * After each ingest the worker builds the default feed of every user active in the last ACTIVE_DAYS (a swipe, an
  * application or a profile change) and of every user with browser push on, so the model's verdicts on the new jobs are
- * cached (semantic.ts judgeJobs) and the next feed only reads them. Then the retention hook: a user with push on gets
+ * cached (semantic.ts judgeJobs, or fit.ts with RELEVANCE_FIT) and the next feed only reads them. Then the retention hook: a user with push on gets
  * one message when their feed has Strong or Good matches first seen since their last one ("3 new jobs for you").
  * Each user's candidate brief (P5) is rebuilt first. One user at a time; a failure for one user does not stop the others.
  */
@@ -24,6 +25,7 @@ export async function warmFeeds() {
     UNION SELECT "userId" FROM "PushSubscription"`;
   let warmed = 0;
   let alerted = 0;
+  const before = { ...fitStats };
   for (const { userId } of rows) {
     try {
       await buildBrief(userId);
@@ -31,7 +33,7 @@ export async function warmFeeds() {
       console.error(`brief …${userId.slice(-6)}: ${error instanceof Error ? error.message.slice(0, 80) : "failed"}`);
     }
     try {
-      const feed = await listFeed(userId, parseFeedFilters({}));
+      const feed = await listFeed(userId, parseFeedFilters({}), "new", { warm: true });
       warmed += 1;
       // The daily set (P7) from the feed just built (cached), when the day turned or its basis changed. While the set is
       // on, its one morning push (daily.ts pushDailySets) replaces the "new matches" alert.
@@ -40,6 +42,11 @@ export async function warmFeeds() {
     } catch (error) {
       console.error(`warm feed …${userId.slice(-6)}: ${error instanceof Error ? error.message.slice(0, 80) : "failed"}`);
     }
+  }
+  // The fit path's line (TDD 4.7): verdicts made and read this run, the ones without a checked requirement line, the "no"s.
+  if (fitOn()) {
+    const d = (key: keyof typeof fitStats) => fitStats[key] - before[key];
+    console.log(`fit judged=${d("judged")} cached=${d("cached")} evidence_missed=${d("evidenceMissed")} no=${d("no")} failed=${d("failed")} unread=${d("unread")}`);
   }
   return { active: rows.length, warmed, alerted };
 }

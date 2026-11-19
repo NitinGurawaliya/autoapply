@@ -114,6 +114,13 @@ export function WhyMatch({ job }: { job: FeedJob }) {
           </li>
         ))}
       </ul>
+      {job.quote ? (
+        // The requirement line the fit verdict rests on (P6), copied from the posting.
+        <figure className="m-0 mt-4">
+          <blockquote className="m-0 border-l border-line pl-3 type-body text-pretty">{job.quote}</blockquote>
+          <figcaption className="mt-1 pl-3 type-meta text-muted-foreground">From the posting</figcaption>
+        </figure>
+      ) : null}
       {missing.length > 0 ? (
         <p className="m-0 mt-4 type-meta text-pretty text-muted-foreground">
           Used {list(missing).replace(/ and /, " or ")}?{" "}

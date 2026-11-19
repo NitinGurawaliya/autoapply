@@ -67,6 +67,17 @@ async function swipedAmong(userId: string, jobIds: string[]) {
 
 const short = (userId: string) => `…${userId.slice(-6)}`;
 
+/** How long a request waits for another build's set while that build holds the user's fit lease (P6). */
+const BUILD_WAIT_MS = 30_000;
+const AFTER_LEASE_MS = 8_000;
+
+/** Whether a fit build of this user holds its lease now (fit.ts takeLease, on CandidateBrief.fitBuildUntil). */
+async function fitBuildRunning(userId: string) {
+  const [row] = await db.$queryRaw<Array<{ running: boolean }>>`
+    SELECT EXISTS (SELECT 1 FROM "CandidateBrief" WHERE "userId" = ${userId} AND "fitBuildUntil" > now()) AS running`;
+  return row?.running === true;
+}
+
 /**
  * Today's set, built when missing (INSERT … ON CONFLICT DO NOTHING, then read: two requests at once get the same row)
  * or rebuilt when its basis changed (compare-and-set on the old basis). Not stored: fewer than DAILY_SET_SIZE jobs to
@@ -80,6 +91,21 @@ export async function ensureDailySet(userId: string, ranked?: { jobs: FeedJob[];
   if (existing && existing.basis === basis) return existing;
   const feed = ranked ?? (await rankedFeed(userId));
   if (feed.degraded) {
+    // With RELEVANCE_FIT on, a second request while another build of this user holds the fit lease reads only what is
+    // judged so far, so its feed is degraded: it waits for that build's set instead of giving up (two tabs at once get
+    // the same set). A failed call (no build running) returns at once, as before.
+    if (!existing && (await fitBuildRunning(userId))) {
+      // The other build releases the lease just before it ranks and writes its set: after the lease is free, keep
+      // reading for a short grace (AFTER_LEASE_MS) before giving up.
+      let freeSince: number | null = null;
+      for (let waited = 0; waited < BUILD_WAIT_MS; waited += 500) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        const row = await readSet(userId);
+        if (row && row.basis === basis) return row;
+        if (freeSince == null && !(await fitBuildRunning(userId))) freeSince = Date.now();
+        if (freeSince != null && Date.now() - freeSince > AFTER_LEASE_MS) break;
+      }
+    }
     console.log(`daily-set ${short(userId)}: not built, verdicts missing (the next build tries again)`);
     return existing;
   }

@@ -149,6 +149,8 @@ model Profile {
   evalPools      EvalPool[]
   feedLabels     FeedLabel[]
   evalJudgements EvalJudgement[]
+  jobJudgements  JobJudgement[]
+  fitJudgements  FitJudgement[]
 }
 
 model Answer {
@@ -306,6 +308,8 @@ model Job {
   evalPools      EvalPool[]
   feedLabels     FeedLabel[]
   evalJudgements EvalJudgement[]
+  jobJudgements  JobJudgement[]
+  fitJudgements  FitJudgement[]
 
   @@unique([source, externalId])
   @@index([postedAt])
@@ -493,7 +497,32 @@ model JobJudgement {
   why       String
   createdAt DateTime @default(now())
 
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  job     Job     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
   @@id([profileId, jobId])
+  @@index([jobId])
+}
+
+// Phase P, P6 (docs/relevance/TDD.md 4.1 item 7): the fit verdict (modules/jobs/fit.ts, behind RELEVANCE_FIT) on one job
+// for one candidate brief: strong | good | stretch | no, why (at most 12 words) and the requirement line it rests on
+// (an index into Job.reading.requirements). Valid while the brief (fitHash) and the exact per-job JSON sent (jobHash)
+// are unchanged. Its own table: the old path keeps JobJudgement, so flipping the switch re-judges nothing.
+model FitJudgement {
+  profileId     String
+  jobId         String
+  fitHash       String
+  jobHash       String
+  fit           String
+  why           String
+  evidenceIndex Int?
+  createdAt     DateTime @default(now())
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  job     Job     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@id([profileId, jobId])
+  @@index([jobId])
 }
 
 // Phase P, P2 (docs/relevance/TDD.md 7.1): the evaluation's stored pools, the owner's relevance labels and the verdicts

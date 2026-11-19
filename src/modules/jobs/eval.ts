@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import type { FitStore } from "./fit";
 import { tracksOf } from "./functions";
 import { jobGate, titleTrack, trackOf, type GateJob } from "./gate";
 import { type FeedJob, type FeedRow, rankForEval } from "./match";
@@ -60,6 +61,29 @@ export const evalStore: JudgementStore = {
     await db.$transaction([
       db.evalJudgement.deleteMany({ where: { profileId, path: "old", jobId: { in: rows.map((row) => row.jobId) } } }),
       db.evalJudgement.createMany({ data: rows.map((row) => ({ profileId, path: "old", fromHash, jobId: row.jobId, jobHash: row.jobHash, fit: row.fit as Fit, why: row.why })), skipDuplicates: true }),
+    ]);
+  },
+};
+
+/**
+ * The fit path's dry run (P6): its own EvalJudgement rows (path "fit", fromHash = the brief's fitHash) first, then the
+ * feed's FitJudgement (read only); new verdicts go to EvalJudgement alone.
+ */
+export const fitEvalStore: FitStore = {
+  async read(profileId, jobIds) {
+    const own = await db.evalJudgement.findMany({ where: { profileId, path: "fit", jobId: { in: jobIds } } });
+    const have = new Set(own.map((row) => row.jobId));
+    const rest = jobIds.filter((id) => !have.has(id));
+    const feed = rest.length > 0 ? await db.fitJudgement.findMany({ where: { profileId, jobId: { in: rest } } }) : [];
+    return [
+      ...own.map((row) => ({ jobId: row.jobId, fitHash: row.fromHash, jobHash: row.jobHash, fit: row.fit, why: row.why, evidenceIndex: row.evidence })),
+      ...feed.map((row) => ({ jobId: row.jobId, fitHash: row.fitHash, jobHash: row.jobHash, fit: row.fit, why: row.why, evidenceIndex: row.evidenceIndex })),
+    ];
+  },
+  async write(profileId, fitHash, rows) {
+    await db.$transaction([
+      db.evalJudgement.deleteMany({ where: { profileId, path: "fit", jobId: { in: rows.map((row) => row.jobId) } } }),
+      db.evalJudgement.createMany({ data: rows.map((row) => ({ profileId, path: "fit", fromHash: fitHash, jobId: row.jobId, jobHash: row.jobHash, fit: row.fit, why: row.why, evidence: row.evidenceIndex })), skipDuplicates: true }),
     ]);
   },
 };
@@ -135,6 +159,12 @@ export function gateFor(rule: Exclude<Rule, "old">, readings: Map<string, Readin
 /** The profile's ranked list under one rule, within its stored pool, uncut. */
 export async function rankByRule(userId: string, rule: Rule, poolIds: string[], readings: Map<string, ReadingCols>): Promise<FeedJob[]> {
   return rankForEval(userId, { onlyIds: poolIds, store: evalStore, limit: Infinity, gate: rule === "old" ? undefined : gateFor(rule, readings) });
+}
+
+/** The fit path (P6) under the shipped gate (title AND reading), within the stored pool, uncut: a dry run, the
+ * verdicts in EvalJudgement only. */
+export async function rankWithFit(userId: string, poolIds: string[], readings: Map<string, ReadingCols>): Promise<FeedJob[]> {
+  return rankForEval(userId, { onlyIds: poolIds, store: evalStore, fit: fitEvalStore, limit: Infinity, gate: gateFor("title_and", readings) });
 }
 
 /** Today's pool for this user: the feed's open, recent, unswiped rows that pass the hard gates, with no field gate. */

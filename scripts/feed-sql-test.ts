@@ -2,10 +2,14 @@
 // This checks it gives exactly what scoreJob gives on the full text: (1) tricky skill spellings on a throwaway job,
 // (2) for every real profile, the same 40 cards, in the same order, with the same scores and reasons, as the old
 // download-everything feed. Read-only on real data; the throwaway user, company and job are removed at the end.
-// npx tsx scripts/feed-sql-test.ts
+// P6: with RELEVANCE_FIT=1 the reference judges with fit.ts (the closest 150 judged on a request, cached beyond), as the
+// feed does; run it once each way to cover both paths.
+// npx tsx scripts/feed-sql-test.ts            (old judge)
+// RELEVANCE_FIT=1 npx tsx scripts/feed-sql-test.ts   (fit path)
 import { db } from "../src/lib/db";
 import { companyKey, feedHistory, loadRules, roleKey } from "../src/modules/governance";
-import { candidateSkills, companyResultsById, judge, judgeJobs, listFeed, parseFeedFilters, profileVector, scoreJob, tracksOf } from "../src/modules/jobs";
+import { candidateSkills, companyResultsById, fitJobs, fitOn, judge, judgeJobs, listFeed, parseFeedFilters, profileVector, scoreJob, tracksOf } from "../src/modules/jobs";
+import { briefOf } from "../src/modules/profile/brief";
 import { jobGate, readingGateOn } from "../src/modules/jobs/gate";
 import { dedupeListings, feedRows, feedTracks, levelsFor, yearsBand } from "../src/modules/jobs/match";
 
@@ -115,7 +119,11 @@ async function referenceFeed(userId: string) {
   for (let limit = 150; ; limit += 150) {
     const shortlist = closest.slice(0, limit);
     kept = new Set(shortlist.map((job) => job.id));
-    verdicts = profile && shortlist.length ? await judgeJobs(profile, shortlist) : new Map();
+    verdicts = !profile || shortlist.length === 0
+      ? new Map()
+      : fitOn()
+        ? await fitJobs({ userId, profileId: profile.id, brief: briefOf(profile), shows, years }, shortlist.map((job) => job.id), { judge: limit <= 150, lane: "interactive" })
+        : await judgeJobs(profile, shortlist);
     scored = scoreAll();
     if (scored.length >= 40 || limit >= closest.length || limit >= 450) break;
   }
@@ -166,7 +174,8 @@ async function realProfiles() {
 async function main() {
   await trickySkills();
   await realProfiles();
-  console.log(failed ? `FAIL feed-sql (${failed})` : "PASS feed-sql");
+  const path = fitOn() ? "fit path" : "old judge";
+  console.log(failed ? `FAIL feed-sql, ${path} (${failed})` : `PASS feed-sql, ${path}`);
   process.exit(failed ? 1 : 0);
 }
 

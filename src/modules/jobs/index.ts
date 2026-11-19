@@ -22,3 +22,5 @@ export type { Judgement } from "./semantic";
 export { warmFeeds } from "./warm";
 export { dailySetOn, dailyView, ensureDailySet, isDefaultFeed, releaseMore } from "./daily";
 export type { DailyView } from "./daily";
+export { fitJobs, fitOn, fitStats } from "./fit";
+export type { FitVerdict } from "./fit";

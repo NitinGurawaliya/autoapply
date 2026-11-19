@@ -5,9 +5,15 @@
 // matcher, relevant cards it drops from the old top 10, and the top 10 of each rule. The owner's account is printed
 // but left out of the averages. Then the ml_ai mislabel count on the feed's pool. Writes nothing but EvalJudgement
 // (verdicts the rankings need); JobJudgement counts are printed before and after.
-//   npx tsx scripts/relevance-eval.ts [--owner <userId>] [--profile <id suffix>] [--top 10]
+// P6: the fit path (fit.ts, a dry run into EvalJudgement path "fit") is ranked under the shipped gate (title AND reading)
+// and compared with title AND reading on the old judge, paired per profile, against TDD 7.1's P6 gate (owner, 19 Nov): p@10 not below today's on
+// average, paired, no profile losing more than one relevant card from its top 10, cards kept >= 30 (or >= the old count), the
+// fit's "no" rate <= 0.6 of the judged shortlist. FitJudgement counts are printed before and after too.
+//   npx tsx scripts/relevance-eval.ts [--owner <userId>] [--profile <id suffix>] [--top 10] [--no-fit]
 import { db } from "../src/lib/db";
-import { evalProfiles, rankByRule, readingsOf, ROUND, RULE_LABELS, RULES, type Rule } from "../src/modules/jobs/eval";
+import { llmUsage } from "../src/lib/llm";
+import { fitStats } from "../src/modules/jobs/fit";
+import { evalProfiles, rankByRule, rankWithFit, readingsOf, ROUND, RULE_LABELS, RULES, type Rule } from "../src/modules/jobs/eval";
 import type { FeedJob } from "../src/modules/jobs/match";
 import { poolSql } from "../src/modules/jobs/pool";
 
@@ -62,6 +68,9 @@ async function main() {
   const top = Number(arg("--top") ?? 10);
   const only = arg("--profile");
   const judgedBefore = await db.jobJudgement.count();
+  const fitBefore = await db.fitJudgement.count();
+  const withFit = !process.argv.includes("--no-fit");
+  const fitRows: Array<{ tag: string; owner: boolean; old: Metrics; fit: Metrics; oldCards: number; noRate: number | null; judged: number }> = [];
   const profiles = (await evalProfiles(arg("--owner") ?? process.env.EVAL_OWNER_USER_ID)).filter((p) => !only || p.profileId.endsWith(only));
   const averages: Record<Rule, Array<{ p10: number | null; p20: number | null }>> = { old: [], reading: [], title_or: [], title_and: [], title_nontech: [] };
   for (const profile of profiles) {
@@ -82,6 +91,22 @@ async function main() {
         `${RULE_LABELS[rule].padEnd(26)} ${String(m.cards).padStart(5)} ${pct(m.p10)} ${pct(m.p20)}  ${String(m.labelled10).padStart(5)}/10${m.labelled10 < 8 ? " (label more)" : "             "}  ${removed.padStart(9)}             ${rule === "old" ? "-" : String(m.lostRelevant10).padStart(2)}             ${rule === "old" ? "-" : m.gained20}`,
       );
     }
+    if (withFit) {
+      const fitRanked = await rankWithFit(profile.userId, pool, readings);
+      const base = ranked.title_and;
+      const m = measure(fitRanked, base, labels);
+      const verdicts = await db.evalJudgement.findMany({ where: { profileId: profile.profileId, path: "fit", jobId: { in: pool } }, select: { fit: true } });
+      const noRate = verdicts.length === 0 ? null : verdicts.filter((v) => v.fit === "no").length / verdicts.length;
+      fitRows.push({ tag, owner: profile.owner, old: measure(base, base, labels), fit: m, oldCards: base.length, noRate, judged: verdicts.length });
+      console.log(
+        `${"title AND reading + fit".padEnd(26)} ${String(m.cards).padStart(5)} ${pct(m.p10)} ${pct(m.p20)}  ${String(m.labelled10).padStart(5)}/10${m.labelled10 < 8 ? " (label more)" : "             "}  vs title AND: lost relevant@10 ${m.lostRelevant10}, new in top 20 ${m.gained20}, "no" ${pct(noRate)} of ${verdicts.length} judged`,
+      );
+      console.log(`  top ${top}, title AND reading + fit:`);
+      fitRanked.slice(0, top).forEach((job, i) => {
+        const label = labels.get(job.id);
+        console.log(`   ${String(i + 1).padStart(2)}. ${label === true ? "+" : label === false ? "-" : label === null ? "?" : " "} ${job.score} ${job.title} — ${job.company} | ${job.reason.slice(0, 90)}`);
+      });
+    }
     for (const rule of RULES) {
       console.log(`  top ${top}, ${RULE_LABELS[rule]}:`);
       ranked[rule].slice(0, top).forEach((job, i) => {
@@ -98,8 +123,26 @@ async function main() {
     };
     console.log(`  ${RULE_LABELS[rule].padEnd(26)} p@10 ${pct(mean("p10"))}  p@20 ${pct(mean("p20"))}  (${averages[rule].length} profiles)`);
   }
+  if (withFit && fitRows.length > 0) {
+    console.log("\nP6 gate (TDD 7.1), fit vs title AND reading on the old judge, paired; the owner apart:");
+    const paired = fitRows.filter((row) => !row.owner && row.old.p10 != null && row.fit.p10 != null);
+    for (const row of fitRows) {
+      const keptOk = row.fit.cards >= 30 || row.fit.cards >= row.oldCards;
+      console.log(
+        `  ${row.tag.padEnd(28)} p@10 ${pct(row.old.p10)} → ${pct(row.fit.p10)}  p@20 ${pct(row.old.p20)} → ${pct(row.fit.p20)}  lost relevant@10 ${row.fit.lostRelevant10}${row.fit.lostRelevant10 > 1 ? " FAIL" : ""}  cards ${row.oldCards} → ${row.fit.cards}${keptOk ? "" : " FAIL"}  "no" ${pct(row.noRate)} of ${row.judged}${(row.noRate ?? 0) > 0.6 ? " FAIL" : ""}`,
+      );
+    }
+    const delta = paired.length === 0 ? null : paired.reduce((sum, row) => sum + (row.fit.p10! - row.old.p10!), 0) / paired.length;
+    const mean = (pick: (row: (typeof fitRows)[number]) => number | null) => {
+      const values = paired.map(pick).filter((v): v is number => v != null);
+      return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+    };
+    console.log(`  average p@10 ${pct(mean((r) => r.old.p10))} → ${pct(mean((r) => r.fit.p10))} (paired delta ${delta == null ? "-" : (delta >= 0 ? "+" : "") + delta.toFixed(3)}, gate, not below today (owner, 19 Nov): ${delta != null && delta >= 0 ? "PASS" : "FAIL"}); p@20 ${pct(mean((r) => r.old.p20))} → ${pct(mean((r) => r.fit.p20))}; ${paired.length} profiles`);
+    const cost = (llmUsage.input * 0.15 + llmUsage.output * 0.6) / 1e6;
+    console.log(`  fit judged ${fitStats.judged} (cached ${fitStats.cached}, unread ${fitStats.unread}, evidence missed ${fitStats.evidenceMissed}, failed ${fitStats.failed}); this run's model use ${llmUsage.calls} calls, ${llmUsage.input} in / ${llmUsage.output} out, $${cost.toFixed(4)}`);
+  }
   await mlAiMislabels();
-  console.log(`\nJobJudgement rows ${judgedBefore} → ${await db.jobJudgement.count()} (the eval writes none)`);
+  console.log(`\nJobJudgement rows ${judgedBefore} → ${await db.jobJudgement.count()}, FitJudgement rows ${fitBefore} → ${await db.fitJudgement.count()} (the eval writes none)`);
 }
 
 main()
