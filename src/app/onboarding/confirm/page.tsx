@@ -4,7 +4,7 @@ import { getAll } from "@/modules/answers";
 import { CITIZENSHIP_KEY, RELOCATE_ABROAD_KEY } from "@/modules/apply/abroad";
 import { SPONSORSHIP_ABROAD_KEY } from "@/modules/apply/sponsorship";
 import { ACKNOWLEDGEMENT_KEY } from "@/modules/apply/acknowledgement";
-import { TRACK_LABELS, TRACKS, tracksOf } from "@/modules/jobs";
+import { ADJACENT_TRACKS, feedTracks, TRACK_LABELS, TRACKS, tracksOf } from "@/modules/jobs";
 import { profileSchema } from "@/modules/profile";
 import { redirect } from "next/navigation";
 import { Screen } from "@/components/patterns/layout";
@@ -47,6 +47,8 @@ export default async function ConfirmPage() {
         trackOptions={TRACKS.map((id) => ({ id, label: TRACK_LABELS[id] }))}
         // What the resume suggests today, offered when it differs from the saved fields (Phase N1).
         suggestedTracks={tracksOf({ ...row, tracks: [] })}
+        // What "Also show nearby fields" adds to each field: its adjacent tracks the feed does not already show.
+        nearbyTracks={Object.fromEntries(TRACKS.map((id) => [id, ADJACENT_TRACKS[id].filter((track) => !feedTracks([id])?.includes(track))]))}
         initial={{
           fullName: parsed.fullName,
           email: parsed.email,
@@ -63,6 +65,8 @@ export default async function ConfirmPage() {
           experience: parsed.experience,
           education: parsed.education,
           tracks: tracksOf(row),
+          showNearby: row.showNearby,
+          avoid: row.avoid,
         }}
       />
     </Screen>

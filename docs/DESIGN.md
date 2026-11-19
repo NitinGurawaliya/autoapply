@@ -56,7 +56,7 @@ One meaning, one place: every status's design label, group and stage come from `
 |---|---|---|
 | `/sign-in` | 01, 02 | OpeningSplash once per session (cookie), LogoMark, SignInArt, the Google server action |
 | `/onboarding/resume` | 03, 04 | StepHeader 1 of 3, drop zone and file card, ResumeSketch and the five findings (from GET /api/profile after the upload) |
-| `/onboarding/confirm` | 05 | StepHeader 2, missing-phone card, SectionCards with pencil rows, Skills, Education, "Looks right" (same two PUTs) |
+| `/onboarding/confirm` | 05 | StepHeader 2, missing-phone card, SectionCards with pencil rows, Skills, "Your fields" (track Chips, "Your resume suggests … Use these"; under them, P4: a CheckRow "Also show nearby fields" whose hint names what it adds, "Adds ML / AI, Data engineering", and "Never show me" toggle pills Contract roles · Internships · Commission only, each section split by a hairline), Education, "Looks right" (same two PUTs) |
 | `/onboarding/questions` | 06, 07 | StepHeader 3, two screens in one page, one PUT at the end |
 | `/feed` (Discover) | 08–12 | FeedTopBar, JobCard in SwipeStage, AgentToast following the real status, FilterSheet, EmptyState (caught up, no matches) |
 | Any unknown address | none | `app/not-found.tsx`: Screen, EmptyState with DeckEmptyArt, "This page doesn't exist", a primary "Go to your feed"; no session read, no tab bar |

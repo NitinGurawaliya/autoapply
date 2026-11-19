@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { forgetFeed } from "@/lib/feed-cache";
 import { enqueuePrescan } from "@/lib/queue";
-import { TRACKS } from "@/modules/jobs";
+import { AVOIDS, TRACKS } from "@/modules/jobs";
 import { remove, upsert } from "@/modules/answers";
 import { invalidLinks, profileSchema, resumeAnswers } from "@/modules/profile";
 
@@ -71,6 +71,9 @@ export async function PUT(req: Request) {
   const profile = parsed.data;
   // The fields the user confirmed (onboarding); only known tracks, and only when the form sent them.
   const tracks = Array.isArray(raw?.tracks) ? [...new Set((raw.tracks as unknown[]).filter((t): t is string => typeof t === "string" && (TRACKS as readonly string[]).includes(t)))] : null;
+  // "Also show nearby fields" and "Never show me" (Phase P, P4): profile settings, never answers; only when sent.
+  const showNearby = typeof raw?.showNearby === "boolean" ? raw.showNearby : null;
+  const avoid = Array.isArray(raw?.avoid) ? [...new Set((raw.avoid as unknown[]).filter((a): a is string => typeof a === "string" && (AVOIDS as readonly string[]).includes(a)))] : null;
   const updated = await db.profile.update({
     where: { userId: user.id },
     data: {
@@ -89,6 +92,8 @@ export async function PUT(req: Request) {
       experience: profile.experience as Prisma.InputJsonValue,
       education: profile.education as Prisma.InputJsonValue,
       ...(tracks ? { tracks } : {}),
+      ...(showNearby !== null ? { showNearby } : {}),
+      ...(avoid ? { avoid } : {}),
     },
   });
   // A detail the user changed on the review screen is their answer now (forms read answers, not the profile). Only

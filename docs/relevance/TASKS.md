@@ -25,10 +25,12 @@ Done 19 Nov: JS and SQL agree on 500 pool jobs (463 read) under 5 track/avoid se
 Paths: `modules/jobs/gate.ts` (title AND reading, `titleTrack`, `gateSql`, `readingGateOn`), `match.ts` (`feedRows`, `scoreFeatures`/`scoreJob` gate), `apply/lifecycle.ts`, `eval.ts`, `gate-test`, `match-test`, `feed-sql-test`, `feed-audit`, `jobs.yml`; ARCHITECTURE 6.2 5d, 6.3, 11.
 
 <a id="p4"></a>
-### [ ] P4 — Fields and avoids on the confirm screen
+### [x] P4 — Fields and avoids on the confirm screen
 Do: migration: `Profile.showNearby`, `Profile.avoid`; `confirm-form.tsx` "Also show nearby fields" and "Never show me" (Contract roles · Internships · Commission only), ui-craft; `PUT /api/profile` accepts them and queues prescan as today; `feedTracks` adds adjacent tracks when `showNearby`; `jobGate` applies `avoid`; nothing stored as an `Answer`; DESIGN.md row; ARCHITECTURE 4, 6.3.
 Design: [4.1 item 5](TDD.md#41-components) · [5](TDD.md#5-ui-direction-b-ui-craft-skill).
 **Done when:** a test user sets both; they persist and change the feed (nearby on shows an adjacent track's job; each chip removes its kind or flag); no `Answer` row is written (count); resume → feed stays under 3 minutes; `ui-lint --check` PASS; typecheck and lint pass.
+Done 19 Nov: a test data scientist (`scripts/feed-prefs-test.ts`, through the dev server): resume → first feed 43 s (21 cards); nearby on 21 → 40 cards, 20 from ML/AI and data engineering; Contract and Internships each removed their 4 and nothing else; commission-only is on no tech job in the pool (2 non-tech only), so checked on the gate; both persist, 11 → 11 Answer rows (the browser save: 0). Checked in the browser at 390 px, light and dark.
+Paths: migration `20261119110000_profile_nearby_avoid`, `api/profile` PUT, `onboarding/confirm` page and form, `match.ts` (`feedTracks(tracks, nearby)`, `scoreFeed` passes `avoid`), `apply/lifecycle.ts`; ARCHITECTURE 4, 6.3; DESIGN.md confirm row.
 
 <a id="p5"></a>
 ### [ ] P5 — The candidate brief

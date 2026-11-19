@@ -107,6 +107,9 @@ check("strict: a web developer's feed tracks are their own plus plain software",
 check("strict: data engineering, DevOps, mobile and solutions are not in a web developer's feed", !["data_engineering", "devops", "mobile", "solutions"].some((t) => feedTracks(["fullstack", "backend", "frontend"])!.includes(t)));
 check("strict: a data scientist's feed has no plain software roles", feedTracks(["data_science"])?.join() === "data_science");
 check("strict: a profile without tracks has no track gate", feedTracks([]) === null);
+check("nearby (P4): a data scientist's feed with nearby on adds ML/AI and data engineering", feedTracks(["data_science"], true)?.join() === "data_science,ml_ai,data_engineering");
+check("nearby (P4): off by default, so adjacent tracks stay out", !feedTracks(["data_science"])!.includes("ml_ai"));
+check("nearby (P4): a profile without tracks still has no track gate", feedTracks([], true) === null);
 check("titles: SDE1-Java is software", classifyTitle("SDE1-Java").track === "software");
 check("titles: a mechanical engineering internship is not software", classifyTitle("Mechanical Engineer - Internship").track === null);
 check("titles: trainers and tool admins are not tech", classifyTitle("Intern - Tech Trainer (Jan 2027 Batch)").track === null && classifyTitle("AI Tool Admin").track === null);

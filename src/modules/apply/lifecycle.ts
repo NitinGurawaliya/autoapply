@@ -9,7 +9,7 @@ import { lastRunMaySendTwice } from "./outcome";
 export const CANCELLABLE = ["queued", "inspecting", "filling", "needs_input"];
 export const RETRYABLE = ["failed", "cancelled"];
 
-type ScoredProfile = { id: string; currentTitle: string | null; skills: unknown; experience: unknown; education: unknown; tracks: string[]; yearsExperience: number | null; embeddedFrom: string | null; resumeText?: string | null };
+type ScoredProfile = { id: string; currentTitle: string | null; skills: unknown; experience: unknown; education: unknown; tracks: string[]; yearsExperience: number | null; embeddedFrom: string | null; resumeText?: string | null; avoid?: string[] };
 type ScoredJob = { id: string; title: string; description: string; contentHash: string | null; country: string; remoteType: string; experienceMin: number | null; track: string | null; seniority?: string | null; skills?: string[]; skillsRequired?: string[]; skillsHash?: string | null; source: string; roleFamily?: string | null; kind?: string | null; flags?: string[]; readingCurrent?: boolean };
 
 /**
@@ -34,8 +34,8 @@ export async function candidateScore(profile: ScoredProfile, job: ScoredJob) {
     // The skills the card counted (profile skills and resume), so the swipe scores the job as the feed did (Phase N).
     shows: candidateSkills(profile),
     // The one gate without its field part (Phase P, P3): this check cannot know the Track filter the card was shown
-    // under, so it enforces non-tech, gig, task, paid task and the profile's avoid (P4; none yet) only.
-  }, readingGateOn() ? { job, tracks: null, avoid: [], field: false } : undefined).score;
+    // under, so it enforces non-tech, gig, task, paid task and the profile's "Never show me" (P4) only.
+  }, readingGateOn() ? { job, tracks: null, avoid: profile.avoid ?? [], field: false } : undefined).score;
 }
 
 export function boardSupported(source: string) {

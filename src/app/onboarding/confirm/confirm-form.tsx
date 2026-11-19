@@ -2,6 +2,7 @@
 
 import { useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
+import { CheckRow } from "@/components/ui/check-row";
 import { Chip, SkillTag } from "@/components/ui/chip";
 import { FieldError, FieldLabel, InputBox, TextAreaBox } from "@/components/ui/field";
 import { IconButton } from "@/components/ui/icon-button";
@@ -29,7 +30,18 @@ export type ConfirmValues = {
   education: Education[];
   /** Tech tracks suggested from the resume (modules/jobs/functions.ts), confirmed here. */
   tracks: string[];
+  /** "Also show nearby fields" (Profile.showNearby, P4): adjacent tracks join the feed's. */
+  showNearby: boolean;
+  /** "Never show me" (Profile.avoid, P4): contract, intern, commission_only. */
+  avoid: string[];
 };
+
+/** "Never show me" choices (modules/jobs/gate.ts AVOIDS). */
+const AVOID_OPTIONS = [
+  { id: "contract", label: "Contract roles" },
+  { id: "intern", label: "Internships" },
+  { id: "commission_only", label: "Commission only" },
+];
 
 type TextKey = "fullName" | "email" | "phone" | "city" | "country" | "linkedin" | "github" | "portfolio" | "yearsExperience" | "currentTitle" | "currentCompany";
 
@@ -203,11 +215,14 @@ export function ConfirmForm({
   next,
   trackOptions,
   suggestedTracks = [],
+  nearbyTracks = {},
 }: {
   initial: ConfirmValues;
   next: string;
   trackOptions: Array<{ id: string; label: string }>;
   suggestedTracks?: string[];
+  /** Each track's adjacent tracks (modules/jobs/functions.ts ADJACENT), to name what "nearby" adds. */
+  nearbyTracks?: Record<string, string[]>;
 }) {
   const [values, setValues] = useState(initial);
   const [editing, setEditing] = useState<string | null>(null);
@@ -216,6 +231,14 @@ export function ConfirmForm({
   const [badLinks, setBadLinks] = useState<string[]>([]);
   // The phone card shows when the resume had no number, and stays while it is being typed.
   const [askPhone] = useState(!initial.phone.trim());
+  // What "Also show nearby fields" adds for the fields picked now, by name.
+  const nearby = [...new Set(values.tracks.flatMap((track) => nearbyTracks[track] ?? []))].filter((track) => !values.tracks.includes(track));
+  const nearbyHint =
+    values.tracks.length === 0
+      ? "Pick a field above first"
+      : nearby.length === 0
+        ? "No fields next to yours"
+        : `Adds ${nearby.map((id) => trackOptions.find((option) => option.id === id)?.label ?? id).join(", ")}`;
 
   function setField(key: keyof ConfirmValues, value: string) {
     setValues((current) => ({ ...current, [key]: value }));
@@ -244,6 +267,8 @@ export function ConfirmForm({
       experience: values.experience,
       education: values.education,
       tracks: values.tracks,
+      showNearby: values.showNearby,
+      avoid: values.avoid,
     };
     const response = await fetch("/api/profile", {
       method: "PUT",
@@ -410,6 +435,39 @@ export function ConfirmForm({
               </button>
             </div>
           ) : null}
+          <CheckRow
+            className="mt-3 border-t border-line pt-2"
+            title="Also show nearby fields"
+            hint={nearbyHint}
+            checked={values.showNearby}
+            onChange={(event) => setValues((current) => ({ ...current, showNearby: event.target.checked }))}
+          />
+          <div className="mt-2 border-t border-line pt-3">
+            <p id="never-show" className="m-0 mb-2 type-meta font-medium">
+              Never show me
+            </p>
+            <div role="group" aria-labelledby="never-show" className="flex flex-wrap gap-1.5">
+              {AVOID_OPTIONS.map((option) => {
+                const selected = values.avoid.includes(option.id);
+                return (
+                  <Chip
+                    key={option.id}
+                    type="button"
+                    selected={selected}
+                    aria-pressed={selected}
+                    onClick={() =>
+                      setValues((current) => ({
+                        ...current,
+                        avoid: selected ? current.avoid.filter((item) => item !== option.id) : [...current.avoid, option.id],
+                      }))
+                    }
+                  >
+                    {option.label}
+                  </Chip>
+                );
+              })}
+            </div>
+          </div>
         </SectionCard>
 
         <SectionCard title="Education">

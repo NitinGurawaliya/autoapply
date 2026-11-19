@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { daysAgoLabel } from "@/lib/days";
 import { cachedFeed, rememberFeed } from "@/lib/feed-cache";
 import { companyKey, feedHistory, loadRules, roleKey } from "@/modules/governance";
-import { classifyTitle, SENIORITIES, TRACK_LABELS, TRACKS, trackFit, type Track, tracksOf } from "./functions";
+import { ADJACENT, classifyTitle, SENIORITIES, TRACK_LABELS, TRACKS, trackFit, type Track, tracksOf } from "./functions";
 import { gateReason, gateSql, type GateJob, jobGate, readingGateOn } from "./gate";
 import { companyResultsById, judge } from "./results";
 import { APPLY_BOARDS } from "./pool";
@@ -269,11 +269,13 @@ export function levelsFor(years: number | null | undefined) {
 // security or DevOps candidate cannot.
 const GENERIC_SOFTWARE_OK: readonly string[] = ["frontend", "backend", "fullstack", "mobile", "ml_ai", "software"];
 
-/** The tracks a candidate's feed shows by default: their own, plus plain software roles for developers. Adjacent
- * tracks show only when the user picks them in the Track filter. Null = no gate (a profile without tracks). */
-export function feedTracks(tracks: string[]): string[] | null {
+/** The tracks a candidate's feed shows by default: their own, plus plain software roles for developers, plus the
+ * adjacent tracks when they turned on "Also show nearby fields" (Profile.showNearby, P4); otherwise adjacent tracks
+ * show only when picked in the Track filter. Null = no gate (a profile without tracks). */
+export function feedTracks(tracks: string[], nearby = false): string[] | null {
   if (tracks.length === 0) return null;
-  return [...new Set([...tracks, ...(tracks.some((track) => GENERIC_SOFTWARE_OK.includes(track)) ? ["software"] : [])])];
+  const adjacent = nearby ? tracks.flatMap((track) => ADJACENT[track as Track] ?? []) : [];
+  return [...new Set([...tracks, ...(tracks.some((track) => GENERIC_SOFTWARE_OK.includes(track)) ? ["software"] : []), ...adjacent])];
 }
 
 /** Why a job fails the years or level gate for this candidate, or null when it passes. */
@@ -808,7 +810,8 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
   // "missing" only when it is in neither.
   const shows = profile ? candidateSkills(profile) : new Set<string>();
   const vector = profile ? await profileVector(profile) : null;
-  const shown = filters.tracks.length > 0 ? filters.tracks : feedTracks(tracks);
+  // "Also show nearby fields" (P4) widens the default tracks; the evaluation keeps the old path.
+  const shown = filters.tracks.length > 0 ? filters.tracks : feedTracks(tracks, !evaluation && profile?.showNearby === true);
   const years = profile?.yearsExperience ?? null;
   // The one gate (Phase P, P3): in SQL and again in the score, so the card and the swipe check agree. The evaluation
   // keeps the old path and applies its own rule (EvalRanking.gate).
@@ -833,7 +836,8 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
       skippedOnly: view === "skipped",
       onlyIds: evaluation?.onlyIds ?? null,
       readingGate: gateOn,
-      avoid: [],
+      // "Never show me" (P4): contract, intern, commission-only.
+      avoid: gateOn ? (profile?.avoid ?? []) : [],
     }).then((rows) => (evaluation?.gate ? rows.filter((row) => row.source === "mock" || evaluation.gate!.keep(row, shown)) : rows)),
     feedHistory(userId, loadRules().max_per_company_per_week),
     companyResultsById().catch(() => new Map<string, never>()),
@@ -868,7 +872,7 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
           tracks: [...new Set([...tracks, ...filters.tracks])],
           shows,
         },
-        gateOn ? { job: { source: job.source, title: job.title, track: job.track, roleFamily: job.roleFamily, kind: job.kind, flags: job.flags, readingCurrent: job.readingCurrent }, tracks: shown, field: true } : undefined,
+        gateOn ? { job: { source: job.source, title: job.title, track: job.track, roleFamily: job.roleFamily, kind: job.kind, flags: job.flags, readingCurrent: job.readingCurrent }, tracks: shown, avoid: profile?.avoid ?? [], field: true } : undefined,
       );
       return {
         id: job.id,
