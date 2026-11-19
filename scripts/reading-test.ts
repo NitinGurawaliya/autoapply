@@ -78,12 +78,40 @@ function pureChecks() {
   check("a field whose line fails and the title does not say stays null", notByTitle.roleFamily === null);
   const tiny = checkReading(BACKEND, { ...answer, roleFamily: "frontend", kind: "employee", flags: [], evidence: [{ for: "roleFamily", line: "the" }], requirements: [] });
   check("a line too short to show anything is dropped", tiny.roleFamily === null);
+  const soft = checkReading(
+    {
+      title: "Java Developer",
+      description:
+        "Excellent communication and interpersonal skills. 5+ years of Java and strong communication skills. Willing to work in rotational shifts. Bachelor's degree in Computer Science. Must be a team player.",
+    },
+    {
+      ...answer,
+      roleFamily: "backend",
+      kind: "employee",
+      flags: [],
+      evidence: [],
+      requirements: ["Excellent communication and interpersonal skills.", "5+ years of Java and strong communication skills.", "Willing to work in rotational shifts.", "Bachelor's degree in Computer Science.", "Must be a team player."],
+    },
+  );
+  check(
+    "soft-skill-only and logistics requirement lines are dropped; a line with years or a degree is kept",
+    JSON.stringify(soft.requirements) === JSON.stringify(["5+ years of Java and strong communication skills.", "Bachelor's degree in Computer Science."]),
+    JSON.stringify(soft.requirements),
+  );
   const stray = answerSchema.safeParse({
     results: [
       { n: 0, roleFamily: "product", kind: "full_time", flags: ["remote", "paid_task"], summary: "x", evidence: [{ for: "summary", line: "abc" }], requirements: [] },
       { n: 1, roleFamily: "backend", kind: "employee", flags: [], summary: "y", evidence: [], requirements: [] },
     ],
   });
+  const shaped = answerSchema.safeParse({
+    results: [{ n: 0, roleFamily: "backend", kind: "employee", flags: [], summary: "x", evidence: [], requirements: [{ line: "2+ years of Node.js" }, "A degree in CS", 7, { text: "x" }] }],
+  });
+  check(
+    "requirement items given as {line} objects are read as lines; other junk drops alone",
+    shaped.success && JSON.stringify(shaped.data.results[0].requirements) === JSON.stringify(["2+ years of Node.js", "A degree in CS"]),
+    shaped.success ? JSON.stringify(shaped.data.results[0].requirements) : "parse failed",
+  );
   const strayFirst = stray.success ? stray.data.results[0] : null;
   check(
     "a value outside the enums is read as null, not a failed batch",

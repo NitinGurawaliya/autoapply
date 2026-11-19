@@ -13,13 +13,14 @@ import type { Fit, JudgementStore } from "./semantic";
 
 export const ROUND = 1;
 export const MIN_SWIPES = 20;
-export const RULES = ["old", "reading", "title_or", "title_and"] as const;
+export const RULES = ["old", "reading", "title_or", "title_and", "title_nontech"] as const;
 export type Rule = (typeof RULES)[number];
 export const RULE_LABELS: Record<Rule, string> = {
   old: "old matcher (title track)",
   reading: "reading decides",
   title_or: "title OR reading",
   title_and: "title AND reading",
+  title_nontech: "title; reading cuts non-tech",
 };
 
 export type EvalProfile = { profileId: string; userId: string; swipes: number; owner: boolean };
@@ -79,6 +80,20 @@ export function gateFor(rule: Exclude<Rule, "old">, readings: Map<string, Readin
     return {
       keep: (job: FeedRow, tracks: string[] | null) => jobGate(asGateJob(job, readings.get(job.id)), { tracks }, { field: true }).pass,
       trackOf: (job: FeedRow) => trackOf(asGateJob(job, readings.get(job.id))),
+    };
+  }
+  if (rule === "title_nontech") {
+    // "title; reading cuts non-tech" (P1 hand check, 19 Nov: the reading's non_tech calls were right 5 of 5 where it
+    // contradicted the title, its choice between two tech fields right 7 of 15): the title's track decides the field;
+    // the reading only removes a job it reads as non_tech, a gig, a task or a paid task (jobGate without the field part).
+    const titleFamily = (job: FeedRow) => trackOf({ source: job.source, title: job.title, track: job.track });
+    return {
+      keep: (job: FeedRow, tracks: string[] | null) => {
+        const family = titleFamily(job);
+        if (tracks && (!family || !tracks.includes(family))) return false;
+        return jobGate(asGateJob(job, readings.get(job.id)), { tracks }, { field: false }).pass;
+      },
+      trackOf: titleFamily,
     };
   }
   if (rule === "title_and") {

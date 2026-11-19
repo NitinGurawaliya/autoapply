@@ -32,7 +32,7 @@ const MIN_LINE_CHARS = 8;
 const MAX_ATTEMPTS = 3;
 const CLAIM_MINUTES = 10;
 const RETRY_AFTER_HOURS = 24;
-export const READING_VERSION = 3;
+export const READING_VERSION = 4;
 
 const NOW = Prisma.sql`(now() AT TIME ZONE 'UTC')`;
 /** Midnight of today in India, as a UTC timestamp (the daily budget's day). */
@@ -50,7 +50,17 @@ const resultSchema = z.object({
   flags: z.array(oneOf(FLAGS)).max(6).catch([]),
   summary: z.string().max(600).catch(""),
   evidence: z.array(z.object({ for: oneOf(EVIDENCE_FOR), line: lineSchema })).max(16).catch([]),
-  requirements: z.array(lineSchema).max(16).catch([]),
+  // A requirement may come back as {"line": "..."} (v4 test, 19 Nov: whole batches did); an item that is neither is
+  // dropped alone, never the whole list.
+  requirements: z
+    .array(z.unknown())
+    .max(16)
+    .catch([])
+    .transform((items) =>
+      items
+        .map((item) => (typeof item === "string" ? item : item && typeof item === "object" && typeof (item as { line?: unknown }).line === "string" ? (item as { line: string }).line : null))
+        .filter((line): line is string => line !== null && line.length <= 2000),
+    ),
 });
 export const answerSchema = z.object({ results: z.array(resultSchema) });
 
@@ -68,7 +78,7 @@ kind: employee (a salaried job, full time or part time, the default) | intern (a
 flags: paid_task (the "job" is to do paid tasks, e.g. train or evaluate AI models per task or per hour, on a platform) | commission_only (pay is only commission or revenue share, no salary). Usually none.
 
 evidence: lines copied word for word from the posting that show the roleFamily, the kind when it is not employee, and each flag: [{"for":"roleFamily"|"kind"|"paid_task"|"commission_only","line":"..."}]. Copy exactly, one short sentence or phrase each, at most 240 characters. The title counts as part of the posting.
-requirements: up to 4 lines copied word for word from the posting that say what the candidate must have or will do (skills, years, degree, main duties), most important first. Never company boilerplate.
+requirements: an array of plain strings, 4 to 6 lines (fewer only when the posting states fewer) copied word for word from the posting, the ones a candidate checks first to see whether they qualify, in this order: (1) the line stating the years of experience, when the posting states one; (2) the line stating the required degree or qualification, when it states one; (3) the must-have skills, tools or domain the role is defined by, those named in the title first; (4) the main duty, only if a slot is left. Prefer lines from the requirements or qualifications section over duty lines. Never working hours, shifts, location, pay, benefits, how to apply, generic soft skills (communication, teamwork, attitude) or company boilerplate.
 summary: one plain sentence saying what the job is.
 
 Never invent a line: a line not found in the posting is thrown away, and a field, kind or flag without a line is thrown away with it.
@@ -128,6 +138,21 @@ function verifiedLine(line: string, haystack: string) {
   return haystack.includes(needle) ? trimmed.slice(0, MAX_LINE_CHARS) : null;
 }
 
+// Requirement lines that tell a candidate nothing about whether they qualify (P1 hand check, 19 Nov: v4's prompt
+// forbids them, yet 3 of 20 readings still led with "communication" lines). A soft-skill line goes unless it also
+// names something checkable (years, a degree, knowledge or experience of something); a logistics line always goes.
+// The model gives up to 6 lines in priority order and the first MAX_REQUIREMENTS (4) that survive are kept.
+const SOFT_SKILL =
+  /\b(communication|communicator|interpersonal|team player|teamwork|attitude|self[- ]?(motivated|starter|driven)|problem[- ]solving|attention to detail|detail[- ]oriented|fast learner|quick learner|willing(ness)? to learn|work independently|time management|presentation skills|analytical skills|proactive|positive|go-getter|stakeholder management|multi-?task\w*)\b/i;
+const CHECKABLE = /\d|\b(degree|bachelor\w*|master\w*|b\.\s?tech|btech|b\.\s?e\.|m\.\s?tech|mtech|mba|diploma|graduate|certif\w*|knowledge|experience|proficien\w*|hands-on|expertise|stack|protocols?)\b/i;
+const LOGISTICS =
+  /\b(shifts?|working hours|work hours|night|weekends?|immediate joiners?|notice period|salary|ctc|compensation|benefits|perks|work from office|work from home|wfh|hybrid|on-?site|office location|relocat\w*)\b/i;
+
+export function isUselessRequirement(line: string) {
+  if (LOGISTICS.test(line) && !/\b(experience|degree|years?)\b/i.test(line)) return true;
+  return SOFT_SKILL.test(line) && !CHECKABLE.test(line);
+}
+
 /** The checks of 4.1.2 on one answer: quoted lines must be in the posting; a claim without a line is dropped. */
 export function checkReading(job: ReadingInput, answer: z.output<typeof resultSchema>): Reading {
   const sent = postingText(job);
@@ -147,6 +172,7 @@ export function checkReading(job: ReadingInput, answer: z.output<typeof resultSc
       dropped += 1;
       continue;
     }
+    if (isUselessRequirement(line)) continue;
     if (requirements.length < MAX_REQUIREMENTS && !requirements.includes(line)) requirements.push(line);
   }
   const shown = (target: string) => evidence.some((item) => item.for === target);
@@ -164,8 +190,7 @@ export function checkReading(job: ReadingInput, answer: z.output<typeof resultSc
   return { roleFamily, kind, flags, summary: answer.summary.trim().slice(0, 300), evidence: kept, requirements, dropped };
 }
 
-/** One model call for up to BATCH jobs; a job the model left out is missing from the map. */
-export async function readBatch(jobs: ReadingInput[]): Promise<Map<number, Reading>> {
+async function askModel(jobs: ReadingInput[]) {
   const payload = jobs.map((job, n) => ({ n, ...postingText(job) }));
   const answer = await callJson(answerSchema, READING_SYSTEM, JSON.stringify({ jobs: payload }), { lane: "background", timeoutMs: 90_000 });
   const out = new Map<number, Reading>();
@@ -174,6 +199,30 @@ export async function readBatch(jobs: ReadingInput[]): Promise<Map<number, Readi
     if (!job || out.has(result.n)) continue;
     out.set(result.n, checkReading(job, result));
   }
+  return out;
+}
+
+/**
+ * One model call for up to BATCH jobs; a job the model left out is missing from the map. A job that comes back with no
+ * requirement line is asked again alone and takes that answer's lines (P1 hand check, 19 Nov: in a batch the model
+ * sometimes returns none for a posting that states them, and gives good ones when asked alone; about 4 % of jobs).
+ * The batch's field, kind and flags stay. A failed retry keeps the batch reading.
+ */
+export async function readBatch(jobs: ReadingInput[]): Promise<Map<number, Reading>> {
+  const out = await askModel(jobs);
+  if (jobs.length < 2) return out;
+  const empty = [...out].filter(([, reading]) => reading.requirements.length === 0).map(([n]) => n);
+  await Promise.all(
+    empty.map(async (n) => {
+      try {
+        const alone = (await askModel([jobs[n]])).get(0);
+        const reading = out.get(n)!;
+        if (alone && alone.requirements.length > 0) out.set(n, { ...reading, requirements: alone.requirements });
+      } catch {
+        // The batch reading stands; its lines are empty, which the card already handles.
+      }
+    }),
+  );
   return out;
 }
 

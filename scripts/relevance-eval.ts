@@ -63,7 +63,7 @@ async function main() {
   const only = arg("--profile");
   const judgedBefore = await db.jobJudgement.count();
   const profiles = (await evalProfiles(arg("--owner") ?? process.env.EVAL_OWNER_USER_ID)).filter((p) => !only || p.profileId.endsWith(only));
-  const averages: Record<Rule, Array<{ p10: number | null; p20: number | null }>> = { old: [], reading: [], title_or: [], title_and: [] };
+  const averages: Record<Rule, Array<{ p10: number | null; p20: number | null }>> = { old: [], reading: [], title_or: [], title_and: [], title_nontech: [] };
   for (const profile of profiles) {
     const pool = (await db.evalPool.findMany({ where: { profileId: profile.profileId, round: ROUND }, select: { jobId: true } })).map((row) => row.jobId);
     if (pool.length === 0) continue;
