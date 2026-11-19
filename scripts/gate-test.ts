@@ -1,7 +1,11 @@
-// Phase P, P1: the pure part of the one gate (modules/jobs/gate.ts): trackOf and jobGate on hand-made jobs. No DB, no
-// model. P3 adds the SQL mirror's agreement on 500 real jobs.
-//   npx tsx scripts/gate-test.ts
-import { jobGate, trackOf, type GateJob } from "../src/modules/jobs/gate";
+// Phase P: the one gate (modules/jobs/gate.ts). (1) P1: trackOf and jobGate on hand-made jobs, with P3's field rule
+// (title AND reading). (2) P3: the SQL mirror (gateSql, what feedRows filters with) gives jobGate's answer on 500 real
+// jobs under several track and avoid sets. Reads only; no model.
+//   npx tsx scripts/gate-test.ts [--no-db]
+import { Prisma } from "@prisma/client";
+import { db } from "../src/lib/db";
+import { gateSql, jobGate, titleTrack, trackOf, type GateJob } from "../src/modules/jobs/gate";
+import { APPLY_BOARDS } from "../src/modules/jobs/pool";
 
 let failed = 0;
 function check(name: string, ok: boolean, detail = "") {
@@ -26,7 +30,12 @@ check("a reading can say a tech-sounding title is non_tech", trackOf(read({ titl
 // the field part
 check("own track passes", rule(pass(read({}), ["backend"])) === "pass");
 check("another track fails the field", rule(pass(read({ roleFamily: "frontend" }), ["backend"])) === "field");
-check("the reading decides the field, not the title", rule(pass(read({ title: "Backend Engineer", roleFamily: "data_engineering" }), ["backend"])) === "field");
+check("title AND reading: a reading outside the tracks takes the job out", rule(pass(read({ title: "Backend Engineer", roleFamily: "data_engineering" }), ["backend"])) === "field");
+check("title AND reading: a reading in the tracks cannot put a job in", rule(pass(read({ title: "Frontend Engineer", track: "frontend", roleFamily: "backend" }), ["backend"])) === "field");
+check("title AND reading: title and reading both in the tracks pass", rule(pass(read({ title: "Software Engineer", track: "software", roleFamily: "ml_ai" }), ["ml_ai", "software"])) === "pass");
+check("title AND reading: a stale reading leaves the title alone deciding", rule(pass(job({ readingCurrent: false, roleFamily: "data_engineering" }), ["backend"])) === "pass");
+check("title AND reading: a current reading without a family leaves the title deciding", rule(pass(read({ roleFamily: null }), ["backend"])) === "pass");
+check("titleTrack ignores the reading", titleTrack(read({ roleFamily: "ml_ai" })) === "backend");
 check("no tracks skips the field part", rule(pass(read({ roleFamily: "frontend" }), null)) === "pass");
 check("field: false skips the field part (swipe check)", rule(pass(read({ roleFamily: "frontend" }), ["backend"], [], false)) === "pass");
 check("a title with no track fails the field", rule(pass(job({ track: null, title: "Technician" }), ["backend"])) !== "pass");
@@ -48,5 +57,50 @@ check("avoid intern leaves an employee job", rule(pass(read({}), ["backend"], ["
 // mock
 check("mock jobs always pass", rule(pass(read({ source: "mock", roleFamily: "non_tech", kind: "gig" }), ["backend"])) === "pass");
 
-console.log(failed === 0 ? "PASS gate-test" : `FAIL gate-test (${failed} failed)`);
-process.exitCode = failed === 0 ? 0 : 1;
+// (2) The SQL mirror on real jobs: the feed's pool (open, on an apply board, India-eligible), 350 at random plus up to
+// 150 whose current reading removes or limits them (non_tech, gig, task, a flag, a kind other than employee), so every
+// rule is exercised. The same ids, through jobGate in JS and gateSql in Postgres, must agree under each set.
+type Row = GateJob & { id: string; function: string | null };
+const SETS: Array<{ name: string; tracks: string[] | null; avoid: string[] }> = [
+  { name: "no tracks", tracks: null, avoid: [] },
+  { name: "web developer", tracks: ["fullstack", "frontend", "backend", "software"], avoid: [] },
+  { name: "data and ML", tracks: ["ml_ai", "data_science", "data_engineering"], avoid: [] },
+  { name: "devops, every avoid", tracks: ["devops", "security", "software"], avoid: ["contract", "intern", "commission_only"] },
+  { name: "web developer, every avoid", tracks: ["fullstack", "frontend", "backend", "software"], avoid: ["contract", "intern", "commission_only"] },
+];
+
+async function mirror() {
+  const pool = (a: string) => Prisma.sql`${Prisma.raw(a)}."closedAt" IS NULL AND ${Prisma.raw(a)}.source = ANY(${[...APPLY_BOARDS]}::text[]) AND ${Prisma.raw(a)}.eligibility IN ('india', 'remote_india')`;
+  const sampled = await db.$queryRaw<Row[]>`
+    (SELECT j.id, j.source, j.title, j.track, j.function, j."roleFamily", j.kind, j.flags, j."readingCurrent" FROM "Job" j
+     WHERE ${pool("j")} ORDER BY md5(j.id || 'p3') LIMIT 350)
+    UNION
+    (SELECT j.id, j.source, j.title, j.track, j.function, j."roleFamily", j.kind, j.flags, j."readingCurrent" FROM "Job" j
+     WHERE ${pool("j")} AND j."readingCurrent" AND (j."roleFamily" = 'non_tech' OR coalesce(j.kind, 'employee') <> 'employee' OR cardinality(j.flags) > 0)
+       AND j.id <> ALL(SELECT r.id FROM "Job" r WHERE ${pool("r")} ORDER BY md5(r.id || 'p3') LIMIT 350)
+     ORDER BY md5(j.id || 'p3b') LIMIT 150)`;
+  const ids = sampled.map((row) => row.id);
+  const read = sampled.filter((row) => row.readingCurrent).length;
+  const unclassified = sampled.filter((row) => !row.track && !row.function).length;
+  check("500 real jobs sampled", sampled.length >= 480, `${sampled.length} jobs, ${read} with a current reading, ${unclassified} never classified`);
+  for (const set of SETS) {
+    const sql = await db.$queryRaw<Array<{ id: string; pass: boolean }>>`
+      SELECT j.id, ${gateSql({ tracks: set.tracks, avoid: set.avoid })} AS pass FROM "Job" j WHERE j.id = ANY(${ids}::text[])`;
+    const bySql = new Map(sql.map((row) => [row.id, row.pass]));
+    const differ = sampled.filter((row) => jobGate(row, { tracks: set.tracks, avoid: set.avoid }, { field: true }).pass !== bySql.get(row.id));
+    const passed = sampled.filter((row) => bySql.get(row.id)).length;
+    check(
+      `JS and SQL agree: ${set.name}`,
+      differ.length === 0,
+      `${passed} of ${sampled.length} pass${differ.length ? `; differ: ${differ.slice(0, 3).map((row) => `${row.id} ${row.title} track=${row.track} fn=${row.function} read=${row.readingCurrent}/${row.roleFamily}/${row.kind}/${row.flags?.join("+")}`).join(" | ")}` : ""}`,
+    );
+  }
+}
+
+async function main() {
+  if (!process.argv.includes("--no-db")) await mirror();
+  console.log(failed === 0 ? "PASS gate-test" : `FAIL gate-test (${failed} failed)`);
+  process.exitCode = failed === 0 ? 0 : 1;
+}
+
+main().finally(() => db.$disconnect());

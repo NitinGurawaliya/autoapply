@@ -114,5 +114,24 @@ const notSoftware = ["Junior Metallurgist / Engineer", "Manufacturing Engineer",
 check("titles: other engineering disciplines are not software", notSoftware.every((t) => classifyTitle(t).track === null), notSoftware.filter((t) => classifyTitle(t).track !== null).join(" | "));
 const stillSoftware = ["Software Engineer, Manufacturing Infrastructure", "Sr. Software Engineer - Manufacturing Data & Test Infrastructure", "Senior Solutions Engineer (Manufacturing, Automotive, Defence)", "Product Engineer (Mobile)"];
 check("titles: software roles in manufacturing stay tech", stillSoftware.every((t) => classifyTitle(t).track !== null), stillSoftware.filter((t) => classifyTitle(t).track === null).join(" | "));
+
+// Phase P, P3: the one gate in the scorers (gate.ts jobGate). The feed passes the effective tracks with the field part;
+// the swipe check passes field: false. The score keeps the title's track.
+const webTracks = feedTracks(["fullstack", "backend", "frontend"]);
+const reading = (title: string, track: string, over: { roleFamily?: string; kind?: string; flags?: string[] } = {}) =>
+  ({ source: "greenhouse", title, track, roleFamily: over.roleFamily ?? track, kind: over.kind ?? "employee", flags: over.flags ?? [], readingCurrent: true });
+const gated = (title: string, track: string, over: Parameters<typeof reading>[2], field: boolean, tracks = webTracks) =>
+  scoreJob({ ...base, title, description: `${stack} 0-1 years of experience.`, track, similarity: 0.6, judgement: { fit: "good", why: "test" } }, nitin, { job: reading(title, track, over), tracks: field ? tracks : null, field });
+check("gate: a backend job read as backend scores as before", gated("Backend Engineer", "backend", {}, true).score === judged("Backend Engineer", `${stack} 0-1 years of experience.`, nitin, "good", 0.6).score);
+const readOut = gated("Backend Engineer", "backend", { roleFamily: "data_engineering" }, true);
+check("gate: a backend title read as data engineering is out of a web developer's feed", readOut.score === 0 && readOut.reason === "Not your field (Backend)", readOut.reason);
+check("gate: a reading in the tracks never puts a job in (title outside)", gated("Data Engineer", "data_engineering", { roleFamily: "backend" }, true).score === 0);
+const sales = gated("Software Engineer", "software", { roleFamily: "non_tech" }, false);
+check("gate: a job read as non-tech is out, even at the swipe check", sales.score === 0 && sales.reason === "Not a tech role", sales.reason);
+check("gate: a paid task is out at the swipe check", gated("Frontend Engineer", "frontend", { flags: ["paid_task"] }, false).score === 0);
+check("gate: a gig is out", gated("Frontend Engineer", "frontend", { kind: "gig" }, true).score === 0);
+check("gate: the swipe check ignores the field (any track filter)", gated("Data Engineer", "data_engineering", { roleFamily: "data_engineering" }, false).score > 0);
+check("gate: a contract role stays with no avoid", gated("Frontend Engineer", "frontend", { kind: "contract" }, true).score > 0);
+check("gate: mock jobs always pass", scoreJob({ ...base, title: "Account Executive", description: stack, similarity: 0.6, judgement: { fit: "good", why: "t" } }, nitin, { job: { source: "mock", title: "Account Executive", roleFamily: "non_tech", readingCurrent: true }, tracks: webTracks, field: true }).score > 0);
 console.log(failed === 0 ? "PASS match logic" : `FAIL match logic (${failed})`);
 process.exit(failed === 0 ? 0 : 1);

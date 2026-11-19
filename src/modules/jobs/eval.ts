@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { tracksOf } from "./functions";
-import { jobGate, trackOf, type GateJob } from "./gate";
+import { jobGate, titleTrack, trackOf, type GateJob } from "./gate";
 import { type FeedJob, type FeedRow, rankForEval } from "./match";
 import type { Fit, JudgementStore } from "./semantic";
 
@@ -77,8 +77,15 @@ const asGateJob = (job: FeedRow, reading: ReadingCols | undefined): GateJob => (
 /** The field gate and the family used for the score under each new rule (4.1.4; P2 compares them on labels). */
 export function gateFor(rule: Exclude<Rule, "old">, readings: Map<string, ReadingCols>) {
   if (rule === "reading") {
+    // "reading decides": the family (trackOf, the reading's when current) must be in the tracks. Written out since P3
+    // made jobGate's field part title AND reading.
     return {
-      keep: (job: FeedRow, tracks: string[] | null) => jobGate(asGateJob(job, readings.get(job.id)), { tracks }, { field: true }).pass,
+      keep: (job: FeedRow, tracks: string[] | null) => {
+        const gateJob = asGateJob(job, readings.get(job.id));
+        const family = trackOf(gateJob);
+        if (tracks && family !== "non_tech" && (!family || !tracks.includes(family))) return false;
+        return jobGate(gateJob, { tracks }, { field: false }).pass;
+      },
       trackOf: (job: FeedRow) => trackOf(asGateJob(job, readings.get(job.id))),
     };
   }
@@ -98,16 +105,10 @@ export function gateFor(rule: Exclude<Rule, "old">, readings: Map<string, Readin
   }
   if (rule === "title_and") {
     // "title AND reading" (added after round 1's labels, 19 Nov: the reading's removals were right, its additions
-    // half wrong): the title's track must be one of the tracks, and jobGate on the reading must pass too, so the
-    // reading can only take cards away. The score keeps the title's track, as the old matcher does.
-    const titleFamily = (job: FeedRow) => trackOf({ source: job.source, title: job.title, track: job.track });
+    // half wrong): since P3 this is jobGate itself, the feed's rule. The score keeps the title's track.
     return {
-      keep: (job: FeedRow, tracks: string[] | null) => {
-        const family = titleFamily(job);
-        if (tracks && (!family || !tracks.includes(family))) return false;
-        return jobGate(asGateJob(job, readings.get(job.id)), { tracks }, { field: true }).pass;
-      },
-      trackOf: titleFamily,
+      keep: (job: FeedRow, tracks: string[] | null) => jobGate(asGateJob(job, readings.get(job.id)), { tracks }, { field: true }).pass,
+      trackOf: (job: FeedRow) => titleTrack(job),
     };
   }
   // "title OR reading": the field passes when either the title's track or a current reading's family is one of the

@@ -266,7 +266,7 @@ Design: [docs/relevance/TDD.md](relevance/TDD.md) (v5, 19 Nov, after four indepe
 
 - [~] [P1 — One after-ingest tail, job reading, gate functions, LLM resilience](relevance/TASKS.md#p1)
 - [x] [P2 — Evaluation harness and round-1 labels](relevance/TASKS.md#p2)
-- [ ] [P3 — One gate in the feed, the score and the swipe check](relevance/TASKS.md#p3)
+- [x] [P3 — One gate in the feed, the score and the swipe check](relevance/TASKS.md#p3)
 - [ ] [P4 — Fields and avoids on the confirm screen](relevance/TASKS.md#p4)
 - [ ] [P5 — The candidate brief](relevance/TASKS.md#p5)
 - [ ] [P6 — Fit with evidence, in its own table](relevance/TASKS.md#p6)

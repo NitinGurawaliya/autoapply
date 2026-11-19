@@ -6,6 +6,7 @@
 import { db } from "../src/lib/db";
 import { companyKey, feedHistory, loadRules, roleKey } from "../src/modules/governance";
 import { candidateSkills, companyResultsById, judge, judgeJobs, listFeed, parseFeedFilters, profileVector, scoreJob, tracksOf } from "../src/modules/jobs";
+import { jobGate, readingGateOn } from "../src/modules/jobs/gate";
 import { dedupeListings, feedRows, feedTracks, levelsFor, yearsBand } from "../src/modules/jobs/match";
 
 let failed = 0;
@@ -79,7 +80,10 @@ async function referenceFeed(userId: string) {
   const shown = feedTracks(tracks);
   const years = profile?.yearsExperience ?? null;
   const vector = profile ? await profileVector(profile) : null;
-  const [jobs, history, results] = await Promise.all([
+  // The one gate (Phase P, P3): with READING_GATE on, jobGate in JavaScript on the full rows (title AND reading), which
+  // the feed does in SQL (gateSql); with it off, the stored track filter alone.
+  const gateOn = readingGateOn();
+  const [found, history, results] = await Promise.all([
     db.job.findMany({
       // India and remote-from-India by default (T80).
       where: { source: { in: sources }, eligibility: { in: ["india", "remote_india"] }, ...(shown ? { track: { in: shown } } : {}),
@@ -91,6 +95,7 @@ async function referenceFeed(userId: string) {
     feedHistory(userId, loadRules().max_per_company_per_week),
     companyResultsById().catch(() => new Map<string, never>()),
   ]);
+  const jobs = gateOn ? found.filter((job) => jobGate(job, { tracks: shown }, { field: true }).pass) : found;
   const minScore = loadRules().min_match_score;
   // Each job's closeness, one query; then the same shortlist the feed judges (the 150 closest still open to apply).
   const sims = new Map<string, number>();
@@ -118,7 +123,7 @@ async function referenceFeed(userId: string) {
     return jobs
     .filter((job) => !sims.has(job.id) || (sims.get(job.id)! >= 0.35 && kept.has(job.id)))
     .map((job) => {
-      const match = scoreJob({ ...job, similarity: sims.get(job.id) ?? null, judgement: verdicts.get(job.id) ?? null }, { currentTitle: profile?.currentTitle ?? null, skills, yearsExperience: profile?.yearsExperience ?? null, preferredLocations: preferred, tracks, shows });
+      const match = scoreJob({ ...job, similarity: sims.get(job.id) ?? null, judgement: verdicts.get(job.id) ?? null }, { currentTitle: profile?.currentTitle ?? null, skills, yearsExperience: profile?.yearsExperience ?? null, preferredLocations: preferred, tracks, shows }, gateOn ? { job, tracks: shown, field: true } : undefined);
       const daysAgo = Math.max(0, Math.floor((Date.now() - job.postedAt.getTime()) / 864e5));
       return {
         id: job.id, company: job.company.name, location: job.location, source: job.source, daysAgo, score: match.score, reason: match.reason, skillHits: match.skillHits.slice(0, 4),

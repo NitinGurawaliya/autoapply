@@ -1,7 +1,8 @@
 // What a user's feed shows and why: every card with its score, tier, title, the years and level it asks for, its
 // track, closeness by meaning and the model's verdict, plus the pool behind it. Flags cards that miss the user's
 // band, level, field or place by rules written here, apart from match.ts, so the check is not the code checking
-// itself. Reads only (the model's verdicts are cached per resume as the feed does). The feed cache is per process.
+// itself. Since P3 (Phase P) a current reading counts too: a card read as non-tech, outside the user's tracks, a gig,
+// a task or a paid task is off-target. Reads only (the model's verdicts are cached per resume as the feed does). The feed cache is per process.
 // npx tsx scripts/feed-audit.ts [--skipped] [userId-suffix ...]   (default: every real profile; --skipped: the cards they skipped)
 import { db } from "../src/lib/db";
 import { listFeed, parseFeedFilters, tracksOf } from "../src/modules/jobs";
@@ -14,7 +15,7 @@ const LEVEL_MIN_YEARS: Record<string, number> = { intern: 0, entry: 0, mid: 2, s
 
 /** Why a card is off-target for this user, or null. Independent of match.ts on purpose. */
 export function offTarget(
-  job: { title: string; track: string | null; seniority: string | null; requiredYears: number | null; eligibility: string },
+  job: { title: string; track: string | null; seniority: string | null; requiredYears: number | null; eligibility: string; reading?: { family: string | null; kind: string | null; flags: string[] } | null },
   user: { years: number; tracks: string[] },
 ) {
   const why: string[] = [];
@@ -28,6 +29,11 @@ export function offTarget(
   if (!track) why.push("not tech");
   else if (user.tracks.length > 0 && !user.tracks.includes(track) && track !== "software") why.push(`track ${track}`);
   if (!["india", "remote_india"].includes(job.eligibility)) why.push(`place ${job.eligibility}`);
+  const read = job.reading;
+  if (read?.family === "non_tech") why.push("read as not tech");
+  else if (read?.family && user.tracks.length > 0 && !user.tracks.includes(read.family) && read.family !== "software") why.push(`read as ${read.family}`);
+  if (read?.kind === "gig" || read?.kind === "task") why.push(`a ${read.kind}`);
+  if (read?.flags.includes("paid_task")) why.push("paid task");
   return why.length ? why.join(", ") : null;
 }
 
@@ -43,8 +49,8 @@ async function audit(userId: string, view: "new" | "skipped" = "new") {
   const ids = feed.map((job) => job.id);
   const vector = await profileVector(profile);
   const rows = ids.length
-    ? await db.$queryRaw<Array<{ id: string; seniority: string | null; track: string | null; eligibility: string; experienceMin: number | null; sim: number | null }>>`
-        SELECT id, seniority, track, eligibility, "experienceMin",
+    ? await db.$queryRaw<Array<{ id: string; seniority: string | null; track: string | null; eligibility: string; experienceMin: number | null; sim: number | null; roleFamily: string | null; kind: string | null; flags: string[]; readingCurrent: boolean }>>`
+        SELECT id, seniority, track, eligibility, "experienceMin", "roleFamily", kind, flags, "readingCurrent",
                CASE WHEN ${vector}::text IS NULL OR embedding IS NULL THEN NULL ELSE (1 - (embedding <=> ${vector}::halfvec))::float8 END AS sim
         FROM "Job" WHERE id = ANY(${ids}::text[])`
     : [];
@@ -54,11 +60,11 @@ async function audit(userId: string, view: "new" | "skipped" = "new") {
   const tiers: Record<string, number> = {};
   for (const job of feed) {
     const row = byId.get(job.id);
-    const flag = row ? offTarget({ title: job.title, track: row.track, seniority: row.seniority, requiredYears: row.experienceMin, eligibility: row.eligibility }, { years, tracks }) : "missing row";
+    const flag = row ? offTarget({ title: job.title, track: row.track, seniority: row.seniority, requiredYears: row.experienceMin, eligibility: row.eligibility, reading: row.readingCurrent ? { family: row.roleFamily, kind: row.kind, flags: row.flags } : null }, { years, tracks }) : "missing row";
     if (flag) off += 1;
     tiers[job.tier ?? "-"] = (tiers[job.tier ?? "-"] ?? 0) + 1;
     console.log(
-      `${flag ? "OFF " : "    "}${String(job.score).padStart(3)} ${(job.tier ?? "-").padEnd(7)} ${job.title.slice(0, 58).padEnd(58)} | ${job.company.slice(0, 18).padEnd(18)} | yrs ${row?.experienceMin ?? "?"} lvl ${row?.seniority ?? "-"} trk ${row?.track ?? "-"} ${job.breakdown.parts.map((part) => `${part.key[0]}${part.points}`).join(" ")} ${job.source} sim ${row?.sim?.toFixed(2) ?? "-"} llm ${verdicts.get(job.id) ?? "-"}${flag ? `  <- ${flag}` : ""}`,
+      `${flag ? "OFF " : "    "}${String(job.score).padStart(3)} ${(job.tier ?? "-").padEnd(7)} ${job.title.slice(0, 58).padEnd(58)} | ${job.company.slice(0, 18).padEnd(18)} | yrs ${row?.experienceMin ?? "?"} lvl ${row?.seniority ?? "-"} trk ${row?.track ?? "-"}${row?.readingCurrent ? `/${row.roleFamily ?? "-"}` : ""} ${job.breakdown.parts.map((part) => `${part.key[0]}${part.points}`).join(" ")} ${job.source} sim ${row?.sim?.toFixed(2) ?? "-"} llm ${verdicts.get(job.id) ?? "-"}${flag ? `  <- ${flag}` : ""}`,
     );
   }
   console.log(`cards ${feed.length} (${Object.entries(tiers).map(([tier, n]) => `${tier} ${n}`).join(", ")}), off-target ${off}, ${ms} ms`);

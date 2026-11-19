@@ -1,9 +1,11 @@
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { daysAgoLabel } from "@/lib/days";
 import { cachedFeed, rememberFeed } from "@/lib/feed-cache";
 import { companyKey, feedHistory, loadRules, roleKey } from "@/modules/governance";
 import { classifyTitle, SENIORITIES, TRACK_LABELS, TRACKS, trackFit, type Track, tracksOf } from "./functions";
+import { gateReason, gateSql, type GateJob, jobGate, readingGateOn } from "./gate";
 import { companyResultsById, judge } from "./results";
 import { APPLY_BOARDS } from "./pool";
 import { formatSalary } from "./salary";
@@ -293,6 +295,9 @@ export function tierOf(score: number, minScore: number): Tier | null {
   return score >= minScore ? "stretch" : null;
 }
 
+/** The one gate's inputs for a scorer (gate.ts jobGate): the job's gate columns and who it is for. */
+export type ScoreGate = { job: GateJob; tracks: string[] | null; avoid?: readonly string[] | null; field: boolean };
+
 export function scoreJob(
   job: {
     title: string;
@@ -315,6 +320,7 @@ export function scoreJob(
     contentHash?: string | null;
   },
   candidate: Candidate,
+  gate?: ScoreGate,
 ) {
   const title = job.title.toLowerCase();
   const description = job.description.toLowerCase();
@@ -337,6 +343,7 @@ export function scoreJob(
       jobSkills: job.skills ? labelledSkills({ skills: job.skills, skillsRequired: job.skillsRequired ?? [], skillsHash: job.skillsHash ?? null, contentHash: job.contentHash ?? null }) : { names: jobSkills(job.title, job.description), required: null },
     },
     candidate,
+    gate,
   );
 }
 
@@ -353,7 +360,17 @@ function labelledSkills(job: { skills: string[]; skillsRequired: string[]; skill
 export function scoreFeatures(
   job: { title: string; track?: string | null; seniority?: string | null; similarity?: number | null; judgement?: Judgement | null; country: string; remoteType: string; requiredYears: number | null; skillHits: string[]; jobSkills?: JobSkillsInput },
   candidate: Candidate,
+  gate?: ScoreGate,
 ) {
+  // The one gate (Phase P, gate.ts): the feed passes the effective tracks (the Track filter, else feedTracks), the swipe
+  // check `field: false`. A job it removes scores 0 with the rule's reason. The score keeps the title's track (job.track).
+  if (gate) {
+    const verdict = jobGate(gate.job, { tracks: gate.tracks, avoid: gate.avoid }, { field: gate.field });
+    if (!verdict.pass) {
+      const reason = gateReason(verdict.rule, job.track ?? null, (track) => TRACK_LABELS[track as Track] ?? track);
+      return { score: 0, reason, requiredYears: job.requiredYears, skillHits: job.skillHits, breakdown: NO_BREAKDOWN };
+    }
+  }
   // The hard gate before any score: years and level (bandMiss). The feed reads only jobs that pass it (feedRows); the
   // swipe check (lifecycle.ts) gets the same 0 for one that doesn't.
   const miss = bandMiss({ requiredYears: job.requiredYears, seniority: job.seniority ?? null }, candidate.yearsExperience);
@@ -590,6 +607,11 @@ export type FeedRow = {
   salaryMax: number | null;
   salaryCurrency: string | null;
   salaryPeriod: string | null;
+  /** The model's reading (Phase P): read for the one gate, which counts it only while readingCurrent. */
+  roleFamily: string | null;
+  kind: string | null;
+  flags: string[];
+  readingCurrent: boolean;
 };
 
 /** The SQL regex for mentions(): the skill as literal text between two non-word characters (or the text's ends). */
@@ -630,6 +652,13 @@ export async function feedRows(input: {
    * swiped. Null for the feed.
    */
   onlyIds?: string[] | null;
+  /**
+   * The one gate (gate.ts gateSql, READING_GATE): replaces the plain track filter with jobGate's field part (title AND
+   * reading) and its non-tech, gig, task, paid-task and avoid rules. False for the evaluation and the reference feed.
+   */
+  readingGate?: boolean;
+  /** The profile's "Never show me" values (P4); empty until then. */
+  avoid?: readonly string[];
 }) {
   const onlyIds = input.onlyIds ?? null;
   // One row per skill: its words (all must be among the job's words, looked up in the GIN index on terms) and, for
@@ -659,6 +688,7 @@ export async function feedRows(input: {
       SELECT j.id, j.title, j."contentHash", j.location, j.source, j.country, j."remoteType", j."experienceMin", j."applyUrl", j."postedAt",
              j."companyId", c.name AS company, c.stage, c."logoUrl", j.track, j.seniority, j."firstSeenAt", coalesce(h.hits, '{}') AS hits,
              j.skills, j."skillsRequired", j."skillsHash", j."salaryMin", j."salaryMax", j."salaryCurrency", j."salaryPeriod",
+             j."roleFamily", j.kind, j.flags, j."readingCurrent",
              CASE WHEN ${input.vector}::text IS NULL OR j.embedding IS NULL THEN NULL
                   ELSE (1 - (j.embedding <=> ${input.vector}::halfvec))::float8 END AS similarity
       FROM "Job" j
@@ -680,7 +710,9 @@ export async function feedRows(input: {
         AND (${input.band?.maxYears ?? null}::int IS NULL OR j.source = 'mock' OR j."experienceMin" IS NULL OR j."experienceMin" <= ${input.band?.maxYears ?? null}::int)
         AND (${input.band?.levels ?? null}::text[] IS NULL OR j.source = 'mock' OR j.seniority IS NULL OR j.seniority = ANY(${input.band?.levels ?? null}::text[]))
         AND (${input.stages}::text[] IS NULL OR c.stage = ANY(${input.stages}::text[]))
-        AND (${input.tracks}::text[] IS NULL OR j.source = 'mock' OR j.track = ANY(${input.tracks}::text[]))
+        AND ${input.readingGate
+          ? gateSql({ tracks: input.tracks, avoid: input.avoid })
+          : Prisma.sql`(${input.tracks}::text[] IS NULL OR j.source = 'mock' OR j.track = ANY(${input.tracks}::text[]))`}
         AND (${input.vector}::text IS NULL OR j.embedding IS NULL OR 1 - (j.embedding <=> ${input.vector}::halfvec) >= ${SIMILARITY_FLOOR})
         AND (${onlyIds}::text[] IS NULL OR j.id = ANY(${onlyIds}::text[]))
         AND (${onlyIds}::text[] IS NOT NULL OR j."postedAt" >= ${input.cutoff})
@@ -778,6 +810,9 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
   const vector = profile ? await profileVector(profile) : null;
   const shown = filters.tracks.length > 0 ? filters.tracks : feedTracks(tracks);
   const years = profile?.yearsExperience ?? null;
+  // The one gate (Phase P, P3): in SQL and again in the score, so the card and the swipe check agree. The evaluation
+  // keeps the old path and applies its own rule (EvalRanking.gate).
+  const gateOn = readingGateOn() && !evaluation;
   const [jobs, history, results] = await Promise.all([
     feedRows({
       userId,
@@ -797,6 +832,8 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
       prefilter: minScore > 30 && tracks.length === 0 && !vector,
       skippedOnly: view === "skipped",
       onlyIds: evaluation?.onlyIds ?? null,
+      readingGate: gateOn,
+      avoid: [],
     }).then((rows) => (evaluation?.gate ? rows.filter((row) => row.source === "mock" || evaluation.gate!.keep(row, shown)) : rows)),
     feedHistory(userId, loadRules().max_per_company_per_week),
     companyResultsById().catch(() => new Map<string, never>()),
@@ -831,6 +868,7 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
           tracks: [...new Set([...tracks, ...filters.tracks])],
           shows,
         },
+        gateOn ? { job: { source: job.source, title: job.title, track: job.track, roleFamily: job.roleFamily, kind: job.kind, flags: job.flags, readingCurrent: job.readingCurrent }, tracks: shown, field: true } : undefined,
       );
       return {
         id: job.id,

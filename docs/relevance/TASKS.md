@@ -17,10 +17,12 @@ Done 19 Nov: 6 profiles (owner + 5), 223 candidates incl. jobs a new rule remove
 Paths: migration `20261119100000_eval_tables`, `modules/jobs/eval.ts`, `match.ts rankForEval`, `semantic.ts JudgementStore`, `scripts/label-candidates.ts`, `scripts/relevance-eval.ts`, ARCHITECTURE 4 and 6.2 5d.
 
 <a id="p3"></a>
-### [ ] P3 — One gate in the feed, the score and the swipe check
+### [x] P3 — One gate in the feed, the score and the swipe check
 Do: `jobGate`'s field check becomes title AND reading (P2's decision, ARCHITECTURE 6.2 5d: the title's track in the tracks and, when current, the reading's family too; `eval.ts gateFor("title_and")` is the reference); the SQL mirror of `jobGate` in `feedRows` behind `READING_GATE` (returns `roleFamily`, `kind`, `flags`, `readingCurrent`); `scoreFeatures` uses `jobGate` with the effective tracks (Track filter or `feedTracks`) and passes the title's track to `trackFit`; `apply/lifecycle.ts candidateScore` uses `jobGate` with `field: false` and the profile's avoid; `jobs.yml` env carries the switch; `trackOf` for the card label and the reason; `feed-audit.ts`, `feed-sql-test.ts` reference path, `match-test.ts` updated; `gate-test.ts` mirror part; ARCHITECTURE 6.3.
 Design: [4.1 item 4](TDD.md#41-components).
 **Done when:** `gate-test` PASS (JS and SQL agree on 500 real jobs); the P3 gate in 7.1 passes (no profile loses a relevant card from its top 10; ≥ 80 % of labelled removed cards irrelevant; cards kept ≥ 20 where they were); `match-test`, `score-breakdown-test`, `feed-sql-test` PASS; the switch is on everywhere; typecheck and lint pass.
+Done 19 Nov: JS and SQL agree on 500 pool jobs (463 read) under 5 track/avoid sets; on the labels title AND reading equals the old p@10 on all 6 profiles (avg 88 %, p@20 78→80 %), 32 of 33 removals irrelevant, cards ≥ 20 kept (130→99, 128→107, 41→38); one relevant card on …f6bicb still moves 10th→11th behind a newly judged relevant one (P2's known case, owner chose the rule with it); live decks lose 0–8 cards, none under 20 (40→37); eval output unchanged by the change. `READING_GATE` on unless `0` (jobs.yml `"1"`); card and reason keep the title's track (`titleTrack`), per 6.2 5d.
+Paths: `modules/jobs/gate.ts` (title AND reading, `titleTrack`, `gateSql`, `readingGateOn`), `match.ts` (`feedRows`, `scoreFeatures`/`scoreJob` gate), `apply/lifecycle.ts`, `eval.ts`, `gate-test`, `match-test`, `feed-sql-test`, `feed-audit`, `jobs.yml`; ARCHITECTURE 6.2 5d, 6.3, 11.
 
 <a id="p4"></a>
 ### [ ] P4 — Fields and avoids on the confirm screen

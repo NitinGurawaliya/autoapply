@@ -38,6 +38,9 @@ env:
   VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
   VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
   VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+  # Phase P, P3: the one gate (title AND reading) in every feed these jobs build (warm, prescan); every process must carry
+  # the same value (docs/relevance/TDD.md 4.9). "0" turns the reading part off.
+  READING_GATE: "1"
   APP_URL: ${{ secrets.APP_URL }}
 
 jobs:
