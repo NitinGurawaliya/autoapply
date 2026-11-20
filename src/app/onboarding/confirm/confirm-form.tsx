@@ -297,13 +297,21 @@ export function ConfirmForm({
     setStatus("idle");
   }
 
+  // The required answers still empty, named in the error (an experienced user has three to fill, a fresher one).
+  const unanswered = [
+    answers.expected_ctc.trim() ? null : "expected CTC",
+    answers.current_ctc.trim() ? null : "current CTC",
+    answers.notice_period.trim() ? null : "notice period",
+  ].filter((item): item is string => item !== null);
+  const unansweredText = unanswered.length > 1 ? `${unanswered.slice(0, -1).join(", ")} and ${unanswered[unanswered.length - 1]}` : (unanswered[0] ?? "");
+
   async function save() {
     if (!values.fullName.trim() || !values.email.trim()) {
       setDetails(true);
       setStatus("missing");
       return;
     }
-    if (answers.show && (!answers.expected_ctc.trim() || !answers.current_ctc.trim() || !answers.notice_period.trim())) {
+    if (answers.show && unanswered.length > 0) {
       setStatus("answers");
       return;
     }
@@ -665,7 +673,7 @@ export function ConfirmForm({
       </ScreenBody>
       <StickyFooter>
         {/* Next to the button, so it is seen on a phone (it used to sit below the fold). */}
-        {status === "answers" ? <FieldError className="mb-2.5">Add your expected CTC to continue.</FieldError> : null}
+        {status === "answers" && unanswered.length > 0 ? <FieldError className="mb-2.5">Add your {unansweredText} to continue.</FieldError> : null}
         <Button variant="primary" size="xl" className="w-full" disabled={status === "saving"} onClick={() => void save()}>
           {status === "saving" ? "Saving…" : answers.show ? "Start swiping" : "Looks right"}
         </Button>
