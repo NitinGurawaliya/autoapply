@@ -1,5 +1,5 @@
 // Offline checks for the job skills vocabulary (Phase M2). npx tsx scripts/job-skills-test.ts
-import { candidateShows, candidateSkills, compareSkills, jobSkills, TECH_VOCAB, withImplied } from "../src/modules/jobs/skills";
+import { candidateShows, candidateSkills, compareSkills, jobSkills, stackGap, TECH_VOCAB, withImplied } from "../src/modules/jobs/skills";
 
 let failed = 0;
 function check(name: string, ok: boolean, detail = "") {
@@ -75,6 +75,13 @@ check("Next.js implies React, HTML, CSS and JavaScript", ["React", "HTML", "CSS"
 check("FastAPI implies Python, PostgreSQL implies SQL", shows.has("Python") && shows.has("SQL"));
 check("nothing is implied the other way or sideways", !shows.has("Node.js") && !shows.has("Django") && !shows.has("Vue.js"));
 check("a frontend job's HTML and CSS are not missing for a React resume", compareSkills(["React", "HTML", "CSS", "AWS"], ["HTML", "CSS", "AWS"], shows).missing.join() === "AWS");
+// 20 Nov blind review: platforms the role is built on, and the languages it requires.
+check("SFCC, WordPress and Shopify are named", has(jobSkills("SFCC Frontend Developer", "Build storefronts on SFRA."), "Salesforce Commerce Cloud") && has(jobSkills("Wordpress Developer", "Themes and plugins."), "WordPress") && has(jobSkills("Shopify Developer Intern", "Liquid themes."), "Shopify"));
+const react = candidateShows({ skills: ["React", "TypeScript", "Node.js"] });
+check("a required platform the candidate lacks is a gap", stackGap("Frontend Developer", ["Salesforce Commerce Cloud", "JavaScript"], ["Salesforce Commerce Cloud", "JavaScript"], react).join() === "Salesforce Commerce Cloud");
+check("a platform in the title is a gap without labels", stackGap("SFCC Backend Developer", ["JavaScript"], ["JavaScript"], react).join() === "Salesforce Commerce Cloud" && stackGap("Wordpress Developer", [], null, react).join() === "WordPress");
+check("a platform the candidate has, or a nice-to-have one, is no gap", stackGap("Shopify Developer", ["Shopify"], ["Shopify"], new Set(["Shopify"])).length === 0 && stackGap("Developer", ["Shopify"], [], react).length === 0);
+check("a missing language is left to the judge", stackGap("Backend Intern", ["Java", "Python"], ["Java", "Python"], react).length === 0);
 check("the vocabulary names every implied skill", [...withImplied(new Set(TECH_VOCAB.map((t) => t.name)))].length === TECH_VOCAB.length);
 
 console.log(`${failed === 0 ? "PASS" : "FAIL"} job-skills-test (${TECH_VOCAB.length} terms)`);

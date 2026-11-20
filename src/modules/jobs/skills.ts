@@ -250,10 +250,28 @@ export const TECH_VOCAB: readonly Term[] = [
   { name: "Unreal Engine", any: ["unreal engine"] },
   { name: "Blockchain", any: ["blockchain", "web3", "smart contracts"] },
   { name: "Salesforce", any: ["salesforce development", "lightning web components"], exact: ["Salesforce"], listOnly: true },
+  // Platforms a role is built on (20 Nov: SFCC, WordPress and Shopify roles read as plain HTML, CSS and JavaScript).
+  { name: "Salesforce Commerce Cloud", any: ["salesforce commerce cloud", "salesforce b2c commerce", "b2c commerce cloud", "sfcc", "sfra", "demandware"] },
+  { name: "WordPress", any: ["wordpress", "woocommerce"] },
+  { name: "Shopify", any: ["shopify", "shopify liquid"] },
   { name: "SAP", any: ["sap abap", "abap", "sap hana"], exact: ["SAP"], listOnly: true },
   { name: "ServiceNow", any: ["servicenow"] },
   { name: "Jira", any: ["jira"] },
 ];
+
+/** Platforms a role is built on: a required one the candidate lacks caps the fit at "stretch" (fit.ts, stackGap). */
+const PLATFORMS = new Set(["Shopify", "WordPress", "Salesforce", "Salesforce Commerce Cloud", "SAP", "ServiceNow"]);
+
+/**
+ * The platform a job is built on that the candidate does not show (20 Nov blind review: SFCC and WordPress roles rated
+ * "strong" for React developers, since the rest of their stack is HTML, CSS and JavaScript): a platform in the title, or
+ * one the model's labels mark required. Languages are left to the judge: capping on a required language the candidate
+ * lacked demoted 9 of 52 cards the reviewer rated good (frontend roles and fresher programs listing Python or Java).
+ */
+export function stackGap(title: string, skills: string[], required: string[] | null, have: Set<string>): string[] {
+  const named = new Set([...findTerms(title), ...(required ?? []).filter((skill) => skills.includes(skill))]);
+  return [...named].filter((skill) => PLATFORMS.has(skill) && !have.has(skill));
+}
 
 type Alias = { term: string; text: string; caseSensitive: boolean; listOnly: boolean };
 

@@ -10,7 +10,7 @@ import { randomBytes } from "node:crypto";
 import { db } from "../src/lib/db";
 import { deleteAccount } from "../src/modules/account";
 import { candidateSkills } from "../src/modules/jobs";
-import { applyLevel, capWords, checkFitAnswer, FIT_SYSTEM, fitInput, fitJobs, fitMessage, fitStats, lineSent, releaseLease, takeLease } from "../src/modules/jobs/fit";
+import { applyLevel, applyStack, capWords, checkFitAnswer, FIT_SYSTEM, fitInput, fitJobs, fitMessage, fitStats, lineSent, releaseLease, takeLease } from "../src/modules/jobs/fit";
 import { poolSql } from "../src/modules/jobs/pool";
 import { levelFit, levelOn } from "../src/modules/jobs/semantic";
 import { briefJson, briefOf } from "../src/modules/profile/brief";
@@ -111,6 +111,9 @@ function pure() {
   check("a stretch stays a stretch when above", leveled.get(4)?.fit === "stretch");
   check("an unknown level word is read as none, not a failed batch", leveled.get(5)?.fit === "good");
   check("the level rule on its own: no stays no, far_above never lifts", applyLevel("no", "far_above", "x").fit === "no" && applyLevel("stretch", "far_above", "x").fit === "no" && applyLevel("good", undefined, "x").fit === "good");
+  // 20 Nov blind review: a role built on a stack the candidate lacks is at most a stretch, in code (stackGap, applyStack).
+  check("a stack gap caps strong and good at stretch, with its reason", applyStack("strong", "x", ["WordPress", "PHP"]).fit === "stretch" && applyStack("good", "x", ["Python"]).why === "Built on Python, not on your resume");
+  check("no gap, or a stretch or no, is left as it is", applyStack("strong", "x", []).fit === "strong" && applyStack("no", "x", ["Java"]).fit === "no" && applyStack("stretch", "y", ["Java"]).why === "y");
   check("the fit judge's prompt names all three levels", ["fits", "above", "far_above"].every((word) => FIT_SYSTEM.includes(word)));
   check("levelOn: a senior role for 1 year is no", JSON.stringify(levelOn("strong", "Senior Backend Engineer", null, 1)) === JSON.stringify({ fit: "no", note: "a senior role" }));
   check("levelOn: 2 more years caps at stretch", levelOn("strong", "Backend Engineer", 3, 1).fit === "stretch");

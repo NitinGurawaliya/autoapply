@@ -17,7 +17,7 @@ export type { Seniority, Track } from "./functions";
 export { clearCompanyResultsCache, companyResultsById, judge, loadCompanyResults } from "./results";
 export type { CompanyResult, Verdict } from "./results";
 export { embedPendingJobs, jobSimilarity, judgeJobs, labelPendingSkills, profileVector } from "./semantic";
-export { candidateShows, candidateSkills, compareSkills, jobSkills, TECH_VOCAB, withImplied } from "./skills";
+export { candidateShows, candidateSkills, compareSkills, jobSkills, stackGap, TECH_VOCAB, withImplied } from "./skills";
 export type { Judgement } from "./semantic";
 export { warmFeeds } from "./warm";
 export { dailySetOn, dailyView, ensureDailySet, isDefaultFeed, releaseMore } from "./daily";

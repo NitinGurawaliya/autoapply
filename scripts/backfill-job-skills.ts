@@ -1,5 +1,6 @@
 // Phase M2: fill Job.skills (modules/jobs/skills.ts jobSkills) on every open job, and again after a change to the
-// vocabulary. Writes only rows whose list changed, 500 per statement. npx tsx scripts/backfill-job-skills.ts [--all]
+// vocabulary. Writes only rows whose list changed, 500 per statement, and clears their required labels (skillsHash) so
+// labelPendingSkills labels the new list (20 Nov: a new platform term was never required under the old labels). npx tsx scripts/backfill-job-skills.ts [--all]
 import { db } from "../src/lib/db";
 import { jobSkills } from "../src/modules/jobs/skills";
 
@@ -36,7 +37,7 @@ async function main() {
     const count = Object.keys(changed).length;
     if (count > 0) {
       await db.$executeRaw`
-        UPDATE "Job" AS j SET "skills" = ARRAY(SELECT jsonb_array_elements_text(v.s))
+        UPDATE "Job" AS j SET "skills" = ARRAY(SELECT jsonb_array_elements_text(v.s)), "skillsHash" = NULL
         FROM jsonb_each(${JSON.stringify(changed)}::jsonb) AS v(id, s)
         WHERE j.id = v.id`;
       written += count;

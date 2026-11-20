@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { callJson, type LlmLane } from "@/lib/llm";
 // The brief file itself, not the profile index (which pulls in resume parsing).
 import { type Brief, briefJson, FIT_VERSION, fitHashOf } from "@/modules/profile/brief";
-import { compareSkills } from "./skills";
+import { compareSkills, stackGap } from "./skills";
 import { type Fit, type Judgement, levelOn } from "./semantic";
 
 /**
@@ -129,7 +129,24 @@ export function fitInput(job: FitRowIn, shows: Set<string>) {
     skills: { have: compared.have, missing: compared.missing },
   };
   const json = JSON.stringify(sent);
-  return { sent, json, jobHash: createHash("md5").update(json).digest("hex"), requirements, sentIndex: kept.map((row) => row.i) };
+  const gap = stackGap(job.title, job.skills, labelled ? job.skillsRequired : null, shows);
+  return { sent, json, jobHash: createHash("md5").update(json).digest("hex"), requirements, sentIndex: kept.map((row) => row.i), gap };
+}
+
+/** "Built on WordPress and PHP, not on your resume": the reason a stack gap gives. */
+function gapNote(gap: string[]) {
+  const names = gap.length > 2 ? `${gap.slice(0, -1).join(", ")} or ${gap[gap.length - 1]}` : gap.join(" and ");
+  return `Built on ${names}, not on your resume`;
+}
+
+/**
+ * A role built on a stack the candidate does not show (stackGap) is at most a "stretch", whatever the model said: the
+ * prompt asks for it, but the model rated SFCC and WordPress roles "strong" for React developers (20 Nov). Code, so it
+ * holds for cached verdicts too.
+ */
+export function applyStack(fit: Fit, why: string, gap: string[]): { fit: Fit; why: string } {
+  if (gap.length === 0 || (fit !== "strong" && fit !== "good")) return { fit, why };
+  return { fit: "stretch", why: gapNote(gap) };
 }
 
 export type FitVerdict = Judgement & { quote: string | null };
@@ -161,7 +178,8 @@ export const fitStats = { judged: 0, cached: 0, evidenceMissed: 0, no: 0, failed
 export const capWords = (text: string) => text.trim().replace(/[.\s]+$/, "").split(/\s+/).slice(0, WHY_WORDS).join(" ");
 
 /** The model's row for one job, with the level (code) on top: what the feed scores with. */
-function verdictOf(row: { fit: string; why: string; evidenceIndex: number | null }, job: FitRowIn, requirements: string[], years: number | null): FitVerdict {
+function verdictOf(found: { fit: string; why: string; evidenceIndex: number | null }, job: FitRowIn, requirements: string[], years: number | null, gap: string[]): FitVerdict {
+  const row = { ...found, ...applyStack(found.fit as Fit, found.why, gap) };
   const { fit, note } = levelOn(row.fit as Fit, job.title, job.experienceMin, years);
   // Left out by the level although the work fits: the reason says why, as the old path does.
   const why = fit === "no" && note && row.fit !== "no" ? `${note[0].toUpperCase()}${note.slice(1)}` : row.why;
@@ -250,7 +268,7 @@ export async function fitJobs(who: FitWho, jobIds: string[], options: FitOptions
     store.read(who.profileId, jobIds),
   ]);
   const valid = new Map(cached.filter((row) => row.fitHash === fitHash).map((row) => [row.jobId, row]));
-  const missing: Array<{ job: FitRowIn; json: string; jobHash: string; requirements: string[]; sentIndex: number[] }> = [];
+  const missing: Array<{ job: FitRowIn; json: string; jobHash: string; requirements: string[]; sentIndex: number[]; gap: string[] }> = [];
   for (const job of rows) {
     const input = fitInput(job, who.shows);
     if (!input) {
@@ -260,8 +278,8 @@ export async function fitJobs(who: FitWho, jobIds: string[], options: FitOptions
     const row = valid.get(job.id);
     if (row && row.jobHash === input.jobHash) {
       fitStats.cached += 1;
-      out.set(job.id, verdictOf(row, job, input.requirements, who.years));
-    } else missing.push({ job, json: input.json, jobHash: input.jobHash, requirements: input.requirements, sentIndex: input.sentIndex });
+      out.set(job.id, verdictOf(row, job, input.requirements, who.years, input.gap));
+    } else missing.push({ job, json: input.json, jobHash: input.jobHash, requirements: input.requirements, sentIndex: input.sentIndex, gap: input.gap });
   }
   if (missing.length === 0 || options.judge === false) return out;
   if (options.lease && !(await takeLease(who.userId, who.brief))) {
@@ -278,12 +296,12 @@ export async function fitJobs(who: FitWho, jobIds: string[], options: FitOptions
             const verdicts = await fitBatch(who.brief, batch, options.lane);
             const fresh: Array<Omit<FitRow, "fitHash">> = [];
             for (const [n, verdict] of verdicts) {
-              const { job, jobHash, requirements } = batch[n];
+              const { job, jobHash, requirements, gap } = batch[n];
               fitStats.judged += 1;
               if (verdict.missed) fitStats.evidenceMissed += 1;
               if (verdict.fit === "no") fitStats.no += 1;
               fresh.push({ jobId: job.id, jobHash, fit: verdict.fit, why: verdict.why, evidenceIndex: verdict.evidenceIndex });
-              out.set(job.id, verdictOf(verdict, job, requirements, who.years));
+              out.set(job.id, verdictOf(verdict, job, requirements, who.years, gap));
             }
             // Per batch, so a second caller (or a build after a crash) reads what is done.
             await store.write(who.profileId, fitHash, fresh);
