@@ -98,6 +98,15 @@ function pureChecks() {
     JSON.stringify(soft.requirements) === JSON.stringify(["5+ years of Java and strong communication skills.", "Bachelor's degree in Computer Science."]),
     JSON.stringify(soft.requirements),
   );
+  // 20 Nov: gig titles the model read as an ordinary contract get paid_task by code, with the title as evidence.
+  const gigAnswer = { ...answer, roleFamily: "software" as const, kind: "contract" as const, flags: [], evidence: [], requirements: [] };
+  const licensing = checkReading({ title: "Software Engineers & Code Owners - AI Code Licensing Program", description: "Earn compensation by licensing existing software." }, gigAnswer);
+  const training = checkReading({ title: "Hardware Engineering Expert - AI Training & Evaluation", description: "Evaluate model answers." }, gigAnswer);
+  const real = checkReading({ title: "AI Code Generation Engineer", description: "Build our code generation models." }, gigAnswer);
+  const plain = checkReading({ title: "Machine Learning Engineer, Training Infrastructure", description: "Build the training platform." }, gigAnswer);
+  check("a code-licensing title is a paid task, with the title as evidence", licensing.flags.includes("paid_task") && licensing.evidence.some((item) => item.for === "paid_task" && item.line.includes("Code Licensing")));
+  check("an \"AI Training & Evaluation\" title is a paid task", training.flags.includes("paid_task"));
+  check("a real AI job is not (\"AI Code Generation Engineer\", \"Training Infrastructure\")", !real.flags.includes("paid_task") && !plain.flags.includes("paid_task"));
   const stray = answerSchema.safeParse({
     results: [
       { n: 0, roleFamily: "product", kind: "full_time", flags: ["remote", "paid_task"], summary: "x", evidence: [{ for: "summary", line: "abc" }], requirements: [] },

@@ -41,7 +41,12 @@ async function main() {
     check("a job missing from the listing is closed, the listed one is not", (await markClosed(company.id, "greenhouse", [a.externalId])) === 1 && !!(await db.job.findUnique({ where: { id: b.id } }))?.closedAt && !(await db.job.findUnique({ where: { id: a.id } }))?.closedAt);
     check("closing twice changes nothing", (await markClosed(company.id, "greenhouse", [a.externalId])) === 0);
     check("another board's jobs are untouched", (await markClosed(company.id, "lever", ["nope"])) === 0);
+    // This checks closing, not the quality floor (20 Nov), which would hide the test job behind the user's real matches.
+    const floor = process.env.FEED_FLOOR;
+    process.env.FEED_FLOOR = "0";
     const feed = await listFeed(user.id, parseFeedFilters({}));
+    if (floor === undefined) delete process.env.FEED_FLOOR;
+    else process.env.FEED_FLOOR = floor;
     check("the feed shows the open job and hides the closed one", feed.some((f) => f.id === a.id) && !feed.some((f) => f.id === b.id));
 
     // T79: the content hash changes only with what ingest stores.

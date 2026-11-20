@@ -33,7 +33,7 @@ const MIN_LINE_CHARS = 8;
 const MAX_ATTEMPTS = 3;
 const CLAIM_MINUTES = 10;
 const RETRY_AFTER_HOURS = 24;
-export const READING_VERSION = 4;
+export const READING_VERSION = 5;
 
 const NOW = Prisma.sql`(now() AT TIME ZONE 'UTC')`;
 /** Midnight of today in India, as a UTC timestamp (the daily budget's day). */
@@ -75,8 +75,8 @@ ${FAMILY_LINES}
 Pick from what the hire will do, not from the company's industry or product: a tech company's accountant is non_tech; a bank's backend developer is backend. "software" only for general software engineering that fits no narrower field. null only when the posting does not say what the work is.
 Edge cases: IT helpdesk, desktop or end-user support (laptops, printers, MS Office, password resets) is non_tech; support of a software product's customers by engineers is solutions. A business analyst who gathers requirements and writes user stories is non_tech; data_science only when the work is analysing data (SQL, dashboards, statistics, models). Market research, CRM or tool administration, reporting support and operations analysts are non_tech. Product, project and program managers are non_tech. Plant, maintenance, civil and mechanical engineers are non_tech.
 
-kind: employee (a salaried job, full time or part time, the default) | intern (an internship, apprenticeship or trainee programme) | contract (a fixed-term contract, freelance or consulting engagement) | gig (paid per piece of work through a platform: annotation, rating, tutoring sessions, microtasks) | task (an assessment or one-off task posted as a job).
-flags: paid_task (the "job" is to do paid tasks, e.g. train or evaluate AI models per task or per hour, on a platform) | commission_only (pay is only commission or revenue share, no salary). Usually none.
+kind: employee (a salaried job, full time or part time, the default) | intern (an internship, apprenticeship or trainee programme) | contract (a fixed-term contract, freelance or consulting engagement) | gig (paid per piece of work through a platform: annotation, rating, tutoring sessions, microtasks; or paid for what you hand over rather than for a role: licensing or selling your existing code, data or content, paid submissions) | task (an assessment or one-off task posted as a job).
+flags: paid_task (the "job" is to do paid tasks, e.g. train or evaluate AI models per task or per hour, on a platform, or to license your code or data to an AI lab) | commission_only (pay is only commission or revenue share, no salary). Usually none.
 
 evidence: lines copied word for word from the posting that show the roleFamily, the kind when it is not employee, and each flag: [{"for":"roleFamily"|"kind"|"paid_task"|"commission_only","line":"..."}]. Copy exactly, one short sentence or phrase each, at most 240 characters. The title counts as part of the posting.
 requirements: an array of plain strings, 4 to 6 lines (fewer only when the posting states fewer) copied word for word from the posting, the ones a candidate checks first to see whether they qualify, in this order: (1) the line stating the years of experience, when the posting states one; (2) the line stating the required degree or qualification, when it states one; (3) the must-have skills, tools or domain the role is defined by, those named in the title first; (4) the main duty, only if a slot is left. Prefer lines from the requirements or qualifications section over duty lines. Never working hours, shifts, location, pay, benefits, how to apply, generic soft skills (communication, teamwork, attitude) or company boilerplate.
@@ -155,6 +155,13 @@ export function isUselessRequirement(line: string) {
 }
 
 /** The checks of 4.1.2 on one answer: quoted lines must be in the posting; a claim without a line is dropped. */
+/**
+ * Titles that name an AI-training or code-licensing gig (20 Nov: "Software Engineers & Code Owners - AI Code Licensing
+ * Program" and the "… - AI Training & Evaluation" expert roles were read as an ordinary contract and reached engineers'
+ * feeds). A code rule on top of the model, with the title as its evidence: such a posting is a paid task, not a job.
+ */
+export const PAID_TASK_TITLE = /\b(ai training|training\s*(?:&|and)\s*evaluation|code licensing|llm trainer|ai tutor|rlhf|ai rater|search rater)\b/i;
+
 export function checkReading(job: ReadingInput, answer: z.output<typeof resultSchema>): Reading {
   const sent = postingText(job);
   const haystack = normalise(`${sent.title}\n${sent.description}`);
@@ -179,6 +186,10 @@ export function checkReading(job: ReadingInput, answer: z.output<typeof resultSc
   const shown = (target: string) => evidence.some((item) => item.for === target);
   const kind: JobKind | null = answer.kind === "employee" ? "employee" : answer.kind && shown("kind") ? answer.kind : null;
   const flags = [...new Set(answer.flags)].filter((flag): flag is JobFlag => flag !== null && shown(flag));
+  if (PAID_TASK_TITLE.test(sent.title) && !flags.includes("paid_task")) {
+    flags.push("paid_task");
+    evidence.push({ for: "paid_task", line: sent.title });
+  }
   // A field whose quoted line failed the check is still kept when the title alone says the same (classifyTitle): the
   // title is then the evidence (P1, 19 Nov: the model paraphrased or invented the line for 2 of 20 sampled jobs).
   const title = classifyTitle(sent.title);

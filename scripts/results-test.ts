@@ -5,6 +5,9 @@ import { deleteAccount } from "../src/modules/account";
 import { clearCompanyResultsCache, judge, listFeed, loadCompanyResults, parseFeedFilters } from "../src/modules/jobs";
 import type { CompanyResult } from "../src/modules/jobs";
 
+// This checks company results and their nudge on rank, not the quality floor (20 Nov), which would hide these low-score test jobs.
+process.env.FEED_FLOOR = "0";
+
 let failed = 0;
 function check(name: string, ok: boolean, detail = "") {
   if (!ok) failed += 1;
