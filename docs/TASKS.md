@@ -290,5 +290,5 @@ Design: [docs/onboarding/TDD.md](onboarding/TDD.md). Tasks: [docs/onboarding/TAS
 
 - [x] [S1 — The resume reads on pick and goes straight on](onboarding/TASKS.md#s1)
 - [x] [S2 — One profile screen with the few answers every form needs](onboarding/TASKS.md#s2)
-- [ ] [S3 — No "needs answers" line before the first swipe](onboarding/TASKS.md#s3)
-- [ ] [S4 — The new onboarding, end to end](onboarding/TASKS.md#s4)
+- [x] [S3 — No "needs answers" line before the first swipe](onboarding/TASKS.md#s3)
+- [x] [S4 — The new onboarding, end to end](onboarding/TASKS.md#s4)
