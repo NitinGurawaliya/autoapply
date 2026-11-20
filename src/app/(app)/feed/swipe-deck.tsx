@@ -495,11 +495,11 @@ export function SwipeDeck({
       <>
         <EmptyState
           art={<DeckDoneArt />}
-          title={`${set.released} of ${set.total} done`}
-          text={`${set.total - set.released} more ${set.total - set.released === 1 ? "job is" : "jobs are"} waiting in today's set.`}
+          title={`${set.released} of today's ${set.total} picks done`}
+          text={`${set.total - set.released} more ${set.total - set.released === 1 ? "pick is" : "picks are"} left today.`}
           actions={
             <Button variant="primary" size="xl" className="w-full" disabled={releasing} onClick={() => void releaseNext()}>
-              {releasing ? "Loading…" : `${count} more`}
+              {releasing ? "Loading…" : count === 1 ? "Show the last pick" : `Show next ${count}`}
             </Button>
           }
         />
@@ -513,7 +513,7 @@ export function SwipeDeck({
       <>
         <EmptyState
           art={<DeckDoneArt />}
-          title="That's today's set"
+          title={`That's all ${set.total} for today`}
           text="A new set comes tomorrow morning. Until then, the rest of your matches are a tap away."
           extra={
             <>
@@ -580,7 +580,7 @@ export function SwipeDeck({
       >
         {set ? (
           <p className="m-0 flex h-6 items-center type-meta text-muted-foreground" aria-live="polite">
-            Today&apos;s set · {set.released} of {set.total}
+            Pick {Math.min(set.total, Math.max(1, set.released - cards.length + 1))} of today&apos;s {set.total}
           </p>
         ) : (
           <StackCount total={cards.length} label={view === "skipped" ? "you skipped" : "in your feed"} />

@@ -202,7 +202,7 @@ export async function pushDailySets(deadline: number, only?: string[]) {
         UPDATE "DailySet" SET "pushedAt" = now()
         WHERE "userId" = ${userId} AND "day" = (now() AT TIME ZONE 'Asia/Kolkata')::date AND "pushedAt" IS NULL`;
       if (claimed !== 1) continue;
-      const sent = await sendPush(userId, { title: "Today's set is ready", body: `Your agent picked ${set.jobIds.length} jobs for you.`, url: "/feed", tag: "daily-set" });
+      const sent = await sendPush(userId, { title: "Today's picks are ready", body: `${set.jobIds.length} jobs picked for you, shown ${releaseSize()} at a time.`, url: "/feed", tag: "daily-set" });
       pushed += 1;
       console.log(`daily-set push ${short(userId)} ${set.day}: sent to ${sent} ${sent === 1 ? "browser" : "browsers"}`);
     } catch (error) {
