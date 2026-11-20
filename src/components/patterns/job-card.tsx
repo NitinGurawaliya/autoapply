@@ -181,7 +181,7 @@ export function JobCard({ job, stamps }: { job: JobCardData; stamps?: ReactNode 
                 <More n={missing.more} />
               </>
             ) : (
-              <span className="text-muted-foreground">Nothing it names</span>
+              <span className="text-muted-foreground">None, you have them all</span>
             )}
           </SkillLine>
         </div>
