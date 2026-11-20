@@ -6,7 +6,8 @@ import { storage } from "@/lib/storage";
 import { notifyNeedsInput } from "@/lib/notify";
 import { ONE_TIME_CODE_KEY, upsert } from "@/modules/answers";
 import { check, loadRules, writeEvent } from "@/modules/governance";
-import { BotCheckError, CaptchaRejectedError, MaybeSentError, NeedsAnswerError, NoRetryError, RefusedError, type FilledField, type PendingQuestion } from "./adapter";
+import { BotCheckError, CaptchaRejectedError, MaybeSentError, NeedsAnswerError, NoRetryError, RefusedError, type FilledField, type PendingQuestion, type ResolvedValue } from "./adapter";
+import { isLetterFile, LETTER_FILE, letterPdf } from "./letter";
 import { guessable, guessAnswers } from "./guess";
 import { decideAfterError, rerunsInRow, SUBMIT_ATTEMPT } from "./outcome";
 import { uploadResume } from "./adapters/mock";
@@ -219,7 +220,8 @@ async function execute(applicationId: string, options: { person?: boolean }) {
   const heartbeat = setInterval(() => void touch(), 30_000);
   let session: Awaited<ReturnType<typeof openBrowser>> | null = null;
   // Held in an object because it is assigned from inside a closure.
-  const upload: { cleanup: (() => Promise<void>) | null } = { cleanup: null };
+  // The resume's temp file, and the cover letters' (letter.ts): each deleted in `finally`.
+  const upload: { cleanup: (() => Promise<void>) | null; more: Array<() => Promise<void>> } = { cleanup: null, more: [] };
   const jobInfo = { company: job.company.name, title: job.title, location: job.location, country: job.country, description: job.description };
   const resolveLog = async (message: string, data?: Record<string, unknown>) => {
     // The answer pass reports each of its steps here, so a cancel stops the pass at its next step and nothing is added
@@ -325,7 +327,25 @@ async function execute(applicationId: string, options: { person?: boolean }) {
 
     await setApp(applicationId, { status: "filling" });
     const textValues = resolved.values.filter((value) => value.type !== "file");
-    const resume = resolved.values.find((value) => value.type === "file");
+    // The resume is the file field that is not a cover letter: with both on a form, the first file field was taken as
+    // the resume, whichever it was (20 Nov).
+    const resume = resolved.values.find((value) => value.type === "file" && !isLetterFile(value));
+    // A cover letter asked for as a file: the letter's text (the user's own or an AI draft) as a PDF, in its own field.
+    // Only on boards whose upload goes by the field (attachesBySelector); the others' upload knows the resume input only.
+    const attachLetters = async (values: ResolvedValue[]) => {
+      const done: FilledField[] = [];
+      for (const value of values.filter(isLetterFile)) {
+        if (adapter.uploadFile && !adapter.attachesBySelector) {
+          await writeEvent(applicationId, "error", `Could not attach "${value.label.slice(0, 60)}": this board's form takes only the resume file`);
+          continue;
+        }
+        const file = { ...value, fileName: LETTER_FILE };
+        const bytes = letterPdf(value.value);
+        upload.more.push(adapter.uploadFile ? await adapter.uploadFile(session!.page, file, bytes) : await uploadResume(session!.page, file, bytes));
+        done.push({ key: value.key, label: value.label, value: value.value, source: value.source, selector: value.selector });
+      }
+      return done;
+    };
     const uploadNow = async () => {
       if (!resume) return;
       // Read once, at the start of the run (resumeFile), and checked there to be neither missing nor empty.
@@ -347,6 +367,7 @@ async function execute(applicationId: string, options: { person?: boolean }) {
         selector: resume.selector,
       });
     }
+    filled.push(...(await attachLetters(resolved.values)));
     // Multi-page forms (adapter.nextStep, M7): each further page's questions are answered by the same chain as the first
     // page, asked when nothing answers them (the run stops here, as above), and filled. A few pages at most.
     const allValues = [...resolved.values];
@@ -370,6 +391,7 @@ async function execute(applicationId: string, options: { person?: boolean }) {
         return;
       }
       filled.push(...(await adapter.fill(session.page, next.values.filter((value) => value.type !== "file"))));
+      filled.push(...(await attachLetters(next.values)));
       allValues.push(...next.values);
     }
     // Keep why each value was chosen (a reused answer's original question) with the field and its event.
@@ -602,5 +624,6 @@ async function execute(applicationId: string, options: { person?: boolean }) {
     if (!session && early) session = await early.catch(() => null);
     await session?.close();
     await upload.cleanup?.().catch(() => undefined);
+    for (const cleanup of upload.more) await cleanup().catch(() => undefined);
   }
 }

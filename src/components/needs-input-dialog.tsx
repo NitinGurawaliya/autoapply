@@ -217,7 +217,8 @@ export function NeedsInputDialog() {
                         </option>
                       ))}
                     </NativeSelect>
-                  ) : question.type === "textarea" ? (
+                  ) : question.type === "textarea" || question.type === "file" ? (
+                    // A file asked here is a cover letter: its text is sent as a PDF (modules/apply/letter.ts).
                     <TextAreaBox id={id} className="mt-4" value={value} onChange={(event) => setValue(question.key, event.target.value)} />
                   ) : (
                     <InputBox id={id} boxClassName="mt-4" value={value} onChange={(event) => setValue(question.key, event.target.value)} />

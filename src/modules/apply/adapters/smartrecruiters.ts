@@ -595,7 +595,9 @@ async function attachFile(page: Page, value: ResolvedValue, bytes: Uint8Array) {
     const file = join(dir, name);
     await writeFile(file, bytes);
     const zone = page.locator(value.selector).first();
-    const uploaded = page.waitForResponse((response) => /\/oneclick-ui\/api\/company\/[^/]+\/attachment\/resume/.test(response.url()), { timeout: 60000 }).catch(() => null);
+    // The resume has its own upload call; another file (a cover letter, letter.ts) any attachment call.
+    const call = value.key === "resume" ? /\/oneclick-ui\/api\/company\/[^/]+\/attachment\/resume/ : /\/oneclick-ui\/api\/company\/[^/]+\/attachment/;
+    const uploaded = page.waitForResponse((response) => call.test(response.url()), { timeout: 60000 }).catch(() => null);
     await zone.locator("input[type=file]").first().setInputFiles(file);
     const answer = await uploaded;
     if (answer && answer.status() >= 400) throw new Error(`SmartRecruiters refused the file (${answer.status()})`);
@@ -780,6 +782,7 @@ export const smartRecruitersAdapter: AtsAdapter = {
   // Upload first: the form may fill fields from the resume; our values are typed after.
   uploadFirst: true,
   uploadFile: attachFile,
+  attachesBySelector: true,
   inspect(page: Page) {
     return readFields(page);
   },

@@ -450,6 +450,7 @@ export const greenhouseAdapter: AtsAdapter = {
     return readFields(page);
   },
   uploadFile: attachFile,
+  attachesBySelector: true,
   async fill(page, values) {
     const filled: FilledField[] = [];
     await dismissOverlays(page);

@@ -442,6 +442,7 @@ export const zohoAdapter: AtsAdapter = {
   // Upload first: Zoho may fill fields from the resume; our values are typed after.
   uploadFirst: true,
   uploadFile: attachFile,
+  attachesBySelector: true,
   inspect(page: Page) {
     return readFields(page);
   },

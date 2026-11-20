@@ -864,6 +864,7 @@ export const ashbyAdapter: AtsAdapter = {
   },
   formUrl,
   uploadFile: attachFile,
+  attachesBySelector: true,
   inspect(page: Page) {
     return readFields(page);
   },

@@ -3,7 +3,7 @@
 import { forgetVisitedPages } from "@/lib/forget-pages";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FieldError, InputBox, NativeSelect } from "@/components/ui/field";
+import { FieldError, InputBox, NativeSelect, TextAreaBox } from "@/components/ui/field";
 import { Icon } from "@/components/ui/icons";
 
 type Gap = { key: string; label: string; type: string; options: string[] | null; jobs: number };
@@ -70,6 +70,9 @@ export function GapsForm({ gaps }: { gaps: Gap[] }) {
                     </option>
                   ))}
                 </NativeSelect>
+              ) : gap.type === "textarea" || gap.type === "file" ? (
+                // A file asked here is a cover letter: its text is sent as a PDF (modules/apply/letter.ts).
+                <TextAreaBox aria-label={gap.label} value={values[gap.key] ?? ""} onChange={(event) => setValues((current) => ({ ...current, [gap.key]: event.target.value }))} />
               ) : (
                 <InputBox tone="soft" aria-label={gap.label} value={values[gap.key] ?? ""} onChange={(event) => setValues((current) => ({ ...current, [gap.key]: event.target.value }))} />
               )}

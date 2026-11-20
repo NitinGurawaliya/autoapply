@@ -81,6 +81,9 @@ export interface AtsAdapter {
   uploadFirst?: boolean;
   /** Attach a file the way this ATS expects; returns a cleanup that deletes the temp file. Defaults to setInputFiles. */
   uploadFile?(page: Page, value: ResolvedValue, bytes: Uint8Array): Promise<() => Promise<void>>;
+  /** uploadFile attaches to the value's own field (its selector), so a cover letter can go in beside the resume
+   * (letter.ts). Without it only the resume is attached; an adapter without uploadFile always goes by the selector. */
+  attachesBySelector?: boolean;
   fill(page: Page, values: ResolvedValue[]): Promise<FilledField[]>;
   /**
    * Multi-page forms (SmartRecruiters' screening page, M7; Workday later): after the current page is filled, move to the

@@ -19,10 +19,10 @@ const eeoFields = [
 export default async function MockGreenhousePage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; letter?: string }>;
 }) {
   if (!mockFormEnabled()) notFound();
-  const { error } = await searchParams;
+  const { error, letter } = await searchParams;
 
   return (
     <main className="mx-auto flex w-full max-w-[480px] flex-1 flex-col gap-6 px-4 py-8">
@@ -49,6 +49,13 @@ export default async function MockGreenhousePage({
           <Label htmlFor="resume">Resume</Label>
           <Input id="resume" name="resume" type="file" required />
         </div>
+        {/* ?letter=1: a required cover letter upload, as some Greenhouse forms ask (scripts/cover-letter-smoke.ts). */}
+        {letter === "1" ? (
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="cover_letter">Cover letter</Label>
+            <Input id="cover_letter" name="cover_letter" type="file" required />
+          </div>
+        ) : null}
         <div className="flex flex-col gap-2">
           <Label htmlFor="how_heard">How did you hear about us?</Label>
           <HowHeardCombobox />

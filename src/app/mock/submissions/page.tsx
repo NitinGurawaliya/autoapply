@@ -31,7 +31,7 @@ export default async function MockSubmissionsPage() {
                   {Object.entries(payload).map(([key, value]) => (
                     <div key={key} className="contents">
                       <dt className="text-muted-foreground">{key}</dt>
-                      <dd className="break-all">{value}</dd>
+                      <dd className="break-all">{typeof value === "string" ? value : `${value.name} (${value.bytes} bytes)`}</dd>
                     </div>
                   ))}
                 </dl>

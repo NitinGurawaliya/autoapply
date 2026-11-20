@@ -4,6 +4,7 @@ import type { FormField } from "./adapter";
 import { abroadAnswer } from "./abroad";
 import { deriveAnswers, type ProfileForDerive, yesNoOf } from "./derive";
 import { BEST_PROJECT_KEY, draftEssays, essayKind, ESSAY_PERMISSION_KEY, type EssayKind, type EssayProfile } from "./essay";
+import { LETTER_KEY } from "./letter";
 import { mapFields } from "./fieldMapper";
 import { guessAnswers } from "./guess";
 import { inferAnswers } from "./infer";
@@ -112,8 +113,9 @@ export async function resolveForm(input: {
   let willDraft: string[] = [];
   if (resolved.pending.length > 0 && essaysAllowed) {
     const pendingLabels = new Set(resolved.pending.map((question) => question.label));
+    // A required cover letter with no saved letter is drafted too, as text or for a file upload (letter.ts, 20 Nov).
     const essays = mapped
-      .map((item) => ({ label: item.field.label, kind: essayKind(item.field.label, item.field.type) }))
+      .map((item) => ({ label: item.field.label, kind: item.key === LETTER_KEY ? ("cover_letter" as const) : essayKind(item.field.label, item.field.type) }))
       .filter((item): item is { label: string; kind: EssayKind } => item.kind !== null && pendingLabels.has(item.label));
     const room = Math.max(0, rules.max_ai_drafts_per_application - resolved.values.filter((value) => value.source === "ai_draft").length);
     const take = essays.slice(0, room);

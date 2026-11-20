@@ -18,6 +18,8 @@ export async function POST(req: Request) {
   const form = await req.formData();
   const resume = form.get("resume");
   const resumeFileName = resume instanceof File && resume.size > 0 ? resume.name : "";
+  const letter = form.get("cover_letter");
+  const coverLetter = letter instanceof File && letter.size > 0 ? { name: letter.name, bytes: letter.size } : undefined;
   const parsed = mockPayloadSchema.safeParse({
     first_name: text(form, "first_name"),
     last_name: text(form, "last_name"),
@@ -32,6 +34,7 @@ export async function POST(req: Request) {
     veteran_status: text(form, "veteran_status"),
     disability: text(form, "disability"),
     resumeFileName,
+    coverLetter,
   });
 
   const back = new URL("/mock/greenhouse", req.url);

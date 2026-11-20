@@ -14,6 +14,8 @@ export const mockPayloadSchema = z.object({
   veteran_status: z.string().min(1).max(200),
   disability: z.string().min(1).max(200),
   resumeFileName: z.string().min(1).max(300),
+  /** The ?letter=1 form only: the cover letter file sent, its name and size. */
+  coverLetter: z.object({ name: z.string().max(300), bytes: z.number().int() }).optional(),
 });
 
 export type MockPayload = z.infer<typeof mockPayloadSchema>;

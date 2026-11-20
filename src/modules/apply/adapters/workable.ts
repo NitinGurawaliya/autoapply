@@ -152,7 +152,7 @@ async function attachFile(page: Page, value: ResolvedValue, bytes: Uint8Array) {
   try {
     const file = join(dir, name);
     await writeFile(file, bytes);
-    await page.locator(fileInput("resume")).first().setInputFiles(file);
+    await page.locator(value.selector).first().setInputFiles(file);
     // The drop zone shows the file's name once Workable has taken it (the input itself has no text).
     await page.waitForFunction((fileName) => document.body.innerText.toLowerCase().includes(fileName.toLowerCase()), name, { timeout: 30000 });
     // The name shows at once, but Workable keeps uploading the file and holds Submit disabled until it is done (11 Nov:
@@ -459,6 +459,7 @@ export const workableAdapter: AtsAdapter = {
   // Upload first: our values are typed after anything the page takes from the resume.
   uploadFirst: true,
   uploadFile: attachFile,
+  attachesBySelector: true,
   inspect(page: Page) {
     return readFields(page);
   },

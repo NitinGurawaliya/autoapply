@@ -20,7 +20,8 @@ export const BEST_PROJECT_KEY = "essay_best_project";
 export const ESSAY_PERMISSION_QUESTION =
   "Some forms ask open questions such as \"Why do you want to work here?\" or \"Tell us about a project you're proud of\". May SwipeApply draft these answers for you from your resume and the job? Drafts are marked as AI drafts, never invent facts, and your \"best project\" draft is saved where you can edit it.";
 
-export type EssayKind = "best_project" | "motivation" | "other";
+/** "cover_letter": a required cover letter (text or a file upload) the user has no saved letter for (letter.ts). */
+export type EssayKind = "best_project" | "motivation" | "other" | "cover_letter";
 
 // Also "Something you shipped end to end that you're proud of?" (16 Oct, Cardboard): no "project" in the wording.
 const BEST_PROJECT = /(best|favou?rite|most (impressive|challenging|interesting|complex|meaningful)|proud(est)?)\b.{0,60}\b(project|system|product|thing|work)|(project|system|product)\b.{0,40}\b(proud|built|shipped|led)\b|describe a (project|system) you|\b(something|anything) (that )?you('ve| have)? (built|shipped|made|created|launched)\b|\byou('re| are) (most )?proud of\b/i;
@@ -49,7 +50,7 @@ export type EssayProfile = { fullName: string; currentTitle: string | null; skil
 export type EssayJob = { company: string; title: string; description: string };
 
 const draftSchema = z.object({
-  results: z.array(z.object({ index: z.number().int(), text: z.string().max(2500), mentions: z.array(z.string().max(120)) })),
+  results: z.array(z.object({ index: z.number().int(), text: z.string().max(4000), mentions: z.array(z.string().max(120)) })),
 });
 
 const SYSTEM = `You write short answers to open questions on a job application, in the applicant's own voice (first person).
@@ -57,6 +58,7 @@ Use ONLY facts in the applicant's resume and, for why-this-company questions, th
 80 to 160 words, plain and specific, no greeting, no sign-off, no buzzwords, no headings, no lists.
 For a "best project" question: describe one real project from the resume, what the applicant did and the outcome stated there.
 For a "why this company" question: connect what the resume shows to what the posting says about the role and company.
+For a "cover_letter": a short cover letter instead, 150 to 250 words: "Dear Hiring Team," on its own line, three short paragraphs (the role applied for, what the resume shows that fits the posting, why this company from what the posting says), then "Regards," and the applicant's name on the last line. Paragraphs separated by a blank line. Never mention the resume itself or what it does not show, never claim a passion, admiration or excitement, and never repeat the posting's words back as praise: state what the applicant has done and how it fits the role. When the resume shows little, write a shorter letter (100 words is fine).
 "mentions": every organisation, school, product or technology name used in the text, exactly as written.
 Return {"results":[{"index","text","mentions"}]}.`;
 
