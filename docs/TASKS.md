@@ -282,4 +282,4 @@ Design: [docs/reveal/TDD.md](reveal/TDD.md); approved prototype `design/daily-re
 - [x] [R2 — The reveal in the feed](reveal/TASKS.md#r2)
 - [x] [R3 — Today's jobs without sets, the end of the day](reveal/TASKS.md#r3)
 - [x] [R4 — The first run after onboarding](reveal/TASKS.md#r4)
-- [ ] [R5 — Regression and switch-on](reveal/TASKS.md#r5)
+- [x] [R5 — Regression and switch-on](reveal/TASKS.md#r5)

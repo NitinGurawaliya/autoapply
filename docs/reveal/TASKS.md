@@ -35,7 +35,8 @@ Done 20 Nov: `hasSetToday`; the feed's Suspense fallback is `DailyReading` (the 
 Paths: `daily.ts` (`hasSetToday`), `patterns/daily-reveal.tsx` (`DailyReading`), `daily-reveal.module.css`, `feed/page.tsx`.
 
 <a id="r5"></a>
-### [ ] R5 — Regression and switch-on
+### [x] R5 — Regression and switch-on
 Do: the whole check list of TDD 7 on main; workers restarted; Done lines.
 Design: [7](TDD.md#7-testing), [8](TDD.md#8-rollout).
 **Done when:** every listed test PASS; a real profile's feed loads with the reveal and without it (second load); the docker and local workers run the new code.
+Done 20 Nov: typecheck, lint, ui-lint and 21 scripts PASS on main (daily-set, daily-reveal, match, score-breakdown, feed-sql, fit, learning, ingest-contract, results, swipe-batch, feed-prefs on the dev server, job-skills, eligibility, reading, essay, resolver, submit-guard, adapters, cover-letter); /feed (default, rest, skipped), /applications, /account, /answers, /gaps, /onboarding/confirm 200 for a clone; the clone saw the reveal once and the cards on the second load. Local worker restarted on main; the docker worker runs R1 (`swipeapply-worker:reveal1`), the only worker-side change. Clone deleted.
