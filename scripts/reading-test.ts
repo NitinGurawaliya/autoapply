@@ -161,6 +161,15 @@ async function dbChecks() {
     check("a write of the current text lands", again === 1 && (await state()).readingCurrent === true);
     await db.job.update({ where: { id: job.id }, data: { title: "Staff Backend Engineer (Node.js)" } });
     check("a title change stales the reading", (await state()).readingCurrent === false);
+    // 20 Nov: the years a requirement line asks for fill experienceMin when ingest found none, and never replace it.
+    const years = () => db.job.findUniqueOrThrow({ where: { id: job.id }, select: { experienceMin: true } }).then((row) => row.experienceMin);
+    await db.job.update({ where: { id: job.id }, data: { experienceMin: null } });
+    const yearsHash = md5("Staff Backend Engineer (Node.js)", `${BACKEND.description} Now hybrid.`);
+    await writeReadings([{ id: job.id, hash: yearsHash, reading: { ...READING, requirements: ["5+ years in backend development with Go."] } }]);
+    check("a requirement line's years fill an empty experienceMin", (await years()) === 5, String(await years()));
+    await db.job.update({ where: { id: job.id }, data: { experienceMin: 2 } });
+    await writeReadings([{ id: job.id, hash: yearsHash, reading: { ...READING, requirements: ["7+ years designing distributed systems."] } }]);
+    check("…but never replace years ingest found", (await years()) === 2, String(await years()));
   } finally {
     await db.company.delete({ where: { id: company.id } });
   }

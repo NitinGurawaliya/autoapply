@@ -23,6 +23,16 @@ check("0-2 years", requiredYears("Software Engineer", "0-2 years of experience")
 check("minimum 4 years", requiredYears("Backend Engineer", "Minimum 4 years building APIs.") === 4);
 check("experience of 6 years", requiredYears("Backend Engineer", "Relevant experience of at least 6 years") === 6);
 check("no info is unknown", requiredYears("Software Engineer", "Join our team and build great things.") === null);
+// 20 Nov: phrasings real postings use that reached 0-1 year candidates unread.
+check("an HTML entity between the number and 'years'", requiredYears("SDE Backend", "3+&#xa0;years of experience (real world, not academic).") === 3);
+check("'N+ years in' a field", requiredYears("Application Security Specialist", "About you • 5+ years in Application Security, Cyber Security.") === 5);
+check("'N+ years designing'", requiredYears("Java Software Engineer", "7+ years designing and building large-scale distributed systems.") === 7);
+check("a number written as a word", requiredYears("Python Software Developer", "A minimum of five years of professional experience developing software.") === 5);
+check("'Five or more years in'", requiredYears("Identity Security Engineer", "Five or more years in security engineering.") === 5);
+check("'5-8 years development'", requiredYears("R&D Engineer (C++)", "Seniority: 5-8 years development including 2–3 years tools.") === 5);
+check("'Experience: 1-5'", requiredYears("C++ Engineer", "Experience: 1-5 Must Have Strong programming skills in C++.") === 1);
+check("a company's own years are not asked of the candidate", requiredYears("Software Engineer", "We have 10+ years in business and serve 500 clients. Join us.") === null);
+check("'one of the best teams' is not a year count", requiredYears("Software Engineer", "Join one of the best teams in the world.") === null);
 
 const junior = {
   currentTitle: "MERN Stack Developer",

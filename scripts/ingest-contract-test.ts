@@ -27,7 +27,8 @@ async function main() {
     { roleKey: "a|se", location: "London", source: "ashby", daysAgo: 1 },
   ];
   const kept = dedupeListings(rows);
-  check("one role on two boards is one card, preferring the better board; other places stay", kept.length === 3 && kept.some((r) => r === rows[2]) && !kept.includes(rows[0]) && kept.includes(rows[3]), kept.map((r) => r.source).join(","));
+  // Since 20 Nov one role is one card in every city too (a 7+ year role filled three of twelve cards, one per city).
+  check("one role on two boards or in two cities is one card, preferring the better board", kept.length === 1 && kept[0] === rows[1], kept.map((r) => `${r.source} ${r.location}`).join(","));
 
   const user = await db.user.create({ data: { email: `ing-${stamp}@swipeapply.local`, name: "ing" } });
   await db.profile.create({ data: { userId: user.id, resumeKey: "x", resumeText: "x", fullName: "I", email: user.email, currentTitle: "Software Engineer", yearsExperience: 1, skills: ["Quixotlang"], experience: [], education: [], rawJson: {} } });

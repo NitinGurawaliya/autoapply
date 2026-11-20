@@ -575,11 +575,15 @@ function daysAgo(postedAt: Date) {
 /** Boards we can apply through, best first; when one role is listed on two of them, the best listing is the card. */
 const BOARD_RANK: Record<string, number> = { greenhouse: 0, ashby: 1, lever: 2, mock: 3 };
 
-/** Keeps one listing per company, title and place, so one role listed on two boards is one card. */
+/**
+ * Keeps one listing per company and title, so one role listed on two boards, or in several cities, is one card (20 Nov:
+ * one 7+ year role filled three of a candidate's twelve cards, one per city; the duplicate guard blocks a second right
+ * swipe on the same role anyway). The cities chosen still pass the place filter before this.
+ */
 export function dedupeListings<T extends { roleKey: string; location: string; source: string; daysAgo: number }>(rows: T[]) {
   const best = new Map<string, T>();
   for (const row of rows) {
-    const key = `${row.roleKey}|${row.location.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()}`;
+    const key = row.roleKey;
     const current = best.get(key);
     const better =
       !current ||
@@ -587,7 +591,7 @@ export function dedupeListings<T extends { roleKey: string; location: string; so
       ((BOARD_RANK[row.source] ?? 9) === (BOARD_RANK[current.source] ?? 9) && row.daysAgo < current.daysAgo);
     if (better) best.set(key, row);
   }
-  return rows.filter((row) => best.get(`${row.roleKey}|${row.location.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()}`) === row);
+  return rows.filter((row) => best.get(row.roleKey) === row);
 }
 
 export type FeedRow = {

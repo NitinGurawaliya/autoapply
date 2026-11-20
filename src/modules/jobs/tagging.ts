@@ -166,11 +166,32 @@ export function titleYears(title: string): number | null {
   return null;
 }
 
+const NUMBER_WORDS: Record<string, string> = {
+  one: "1", two: "2", three: "3", four: "4", five: "5", six: "6", seven: "7", eight: "8", nine: "9", ten: "10",
+  eleven: "11", twelve: "12", thirteen: "13", fourteen: "14", fifteen: "15",
+};
+
+/**
+ * The text the years phrases are read from: HTML entities a board left in ("3+&#xa0;years") decoded and number words
+ * ("five or more years") as digits (20 Nov: postings asking 3, 5 and 7+ years reached 0-1 year candidates because
+ * neither was read).
+ */
+function yearsText(description: string) {
+  return description
+    .slice(0, 8000)
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec: string) => String.fromCodePoint(Number(dec)))
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/ /g, " ")
+    .replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen)\b/gi, (word) => NUMBER_WORDS[word.toLowerCase()]);
+}
+
 /** Years of experience a posting asks for, from its title and its "N years of experience" phrases. Null if unknown. */
 export function requiredYears(title: string, description: string): number | null {
   if (ENTRY_TITLE.test(title)) return 0;
   const fromTitle = titleYears(title);
-  const text = description.slice(0, 8000);
+  const text = yearsText(description);
   const found: number[] = [];
   const add = (raw: string | undefined) => {
     const n = Number(raw);
@@ -182,6 +203,14 @@ export function requiredYears(title: string, description: string): number | null
   for (const m of text.matchAll(/experience[^.\n]{0,40}?(\d{1,2})\s*\+?\s*(?:years?|yrs?)\b/gi)) add(m[1]);
   // "minimum 3 years", "at least 5 years"
   for (const m of text.matchAll(/(?:minimum|at least|min\.?)\s*(?:of\s*)?(\d{1,2})\s*\+?\s*(?:years?|yrs?)\b/gi)) add(m[1]);
+  // "5+ years in Application Security", "7+ years designing…", "5 or more years in security", "5-8 years development":
+  // a plus, a range or "or more" followed by the work itself. Never a company's own history ("20+ years in business").
+  for (const m of text.matchAll(
+    /(\d{1,2})\s*(?:\+|plus|(?:[-–]|to)\s*\d{1,2}\s*\+?|or more)\s*(?:years?|yrs?)\b(?!\s+(?:of\s+)?(?:history|existence|business|operations?|legacy|trust|excellence|service|innovation|growth|ago|old|warranty|in business|in the market|in the industry serving))\s+(?:in|as|with|designing|building|developing|working|writing|professional|hands-on|coding|programming|development|engineering|industry|relevant|of\s+(?:professional|relevant|hands-on|industry|software|coding|programming|development|engineering|work))\b/gi,
+  ))
+    add(m[1]);
+  // "Experience: 1-5", "Experience required: 3+"
+  for (const m of text.matchAll(/experience(?:\s+required)?\s*[:\-–]\s*(\d{1,2})\s*(?:\+|(?:[-–]|to)\s*\d{1,2})/gi)) add(m[1]);
   const fromText = found.length ? Math.max(...found) : null;
   if (fromTitle == null) return fromText;
   if (fromText == null) return fromTitle;

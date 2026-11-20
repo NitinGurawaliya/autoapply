@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { callJson } from "@/lib/llm";
 import { classifyTitle, TRACKS, TRACK_LABELS } from "./functions";
 import { poolSql } from "./pool";
+import { requiredYears } from "./tagging";
 
 /**
  * Job reading (Phase P, docs/relevance/TDD.md 4.1.2): the model reads each job of the feed's pool once and says what
@@ -271,12 +272,16 @@ export async function writeReadings(rows: Array<{ id: string; hash: string; read
     kind: reading.kind,
     flags: reading.flags,
     reading: { version: READING_VERSION, summary: reading.summary, evidence: reading.evidence, requirements: reading.requirements },
+    // The years the requirement lines ask for, kept only where ingest found none in the description (20 Nov: "5+ years in
+    // Application Security" and the like left experienceMin empty, so the feed's years band let them through).
+    yearsAsked: requiredYears("", reading.requirements.join(". ")),
   }));
   return db.$executeRaw`
     UPDATE "Job" AS j SET "roleFamily" = v."roleFamily", kind = v.kind,
       flags = ARRAY(SELECT jsonb_array_elements_text(v.flags)), reading = v.reading, "readingCurrent" = true,
-      "readAt" = ${NOW}, "readAttempts" = 0, "readFailedAt" = NULL, "readClaimedUntil" = NULL
-    FROM jsonb_to_recordset(${JSON.stringify(data)}::jsonb) AS v(id text, hash text, "roleFamily" text, kind text, flags jsonb, reading jsonb)
+      "readAt" = ${NOW}, "readAttempts" = 0, "readFailedAt" = NULL, "readClaimedUntil" = NULL,
+      "experienceMin" = coalesce(j."experienceMin", v."yearsAsked")
+    FROM jsonb_to_recordset(${JSON.stringify(data)}::jsonb) AS v(id text, hash text, "roleFamily" text, kind text, flags jsonb, reading jsonb, "yearsAsked" int)
     WHERE j.id = v.id AND md5(j.title || chr(10) || j.description) = v.hash`;
 }
 
