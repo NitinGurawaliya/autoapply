@@ -229,7 +229,17 @@
 }
 .sound:focus-visible { outline: 2px solid var(--foreground); outline-offset: 2px; }
 
+/* The agent reading, while today's set is built (R4): the field, and the scan going over it again and again. */
+.reading { position: relative; display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: clip; }
+.readingWords { position: relative; z-index: 3; padding: 16px 24px 0; text-align: center; }
+.readingPlane { opacity: 1; transform: rotateX(56deg) rotateZ(-5deg) translateZ(-30px); animation: settle 3.8s cubic-bezier(0.16, 0.84, 0.24, 1) both; }
+@keyframes settle { from { opacity: 0; transform: rotateX(80deg) rotateZ(-18deg) translateZ(-240px); } }
+.scanLoop { opacity: 0.55; animation: sweep 1.8s linear infinite; }
+@keyframes sweep { from { top: 100%; } to { top: 0%; } }
+.blank { background: var(--sunk); }
+
 @media (prefers-reduced-motion: reduce) {
+  .readingPlane, .scanLoop { animation: none; }
   .plane, .tile, .mini, .column, .words, .count, .scan { transition: none; }
   .pick, .idle { animation: none; }
 }

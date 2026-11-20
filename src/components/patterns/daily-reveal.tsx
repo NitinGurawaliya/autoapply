@@ -425,3 +425,36 @@ export function DailyReveal({ picks, stats, full, onSeen, onOpen }: { picks: Rev
     </div>
   );
 }
+
+/**
+ * The agent reading (Phase R, R4): the feed's loading state while today's set is built (a user's first run after
+ * onboarding, or the first open of a morning before the worker built it). The field of postings with the scan going
+ * over it; when the deck streams in, the reveal takes over with the real numbers. No numbers here: nothing is counted yet.
+ */
+export function DailyReading() {
+  const tiles = useMemo(() => {
+    const rand = seeded(5);
+    return Array.from({ length: COLS * ROWS }, (_, i) => {
+      const row = Math.floor(i / COLS);
+      return { i, row, left: (i % COLS) * 32 + 2 + (rand() - 0.5) * 3, top: row * 39 + (rand() - 0.5) * 3, fog: 0.3 + 0.7 * (row / (ROWS - 1)) };
+    });
+  }, []);
+  return (
+    <div className={s.reading} aria-busy="true" aria-label="Your agent is reading today's jobs">
+      <div className={s.readingWords}>
+        <p className="m-0 type-section">Reading open jobs in India</p>
+        <p className="m-0 mt-1 type-meta text-muted-foreground">Your agent is picking today&apos;s jobs for you.</p>
+      </div>
+      <div className={s.scene}>
+        <div className={cn(s.plane, s.readingPlane)} aria-hidden>
+          {tiles.map((tile) => (
+            <i key={tile.i} className={cn(s.tile, tile.row < 3 && s.far)} style={{ left: tile.left, top: tile.top, ["--fog" as string]: tile.fog.toFixed(2) }}>
+              <span className={cn(s.initial, s.blank)} />
+            </i>
+          ))}
+          <i className={cn(s.scan, s.scanLoop)} />
+        </div>
+      </div>
+    </div>
+  );
+}

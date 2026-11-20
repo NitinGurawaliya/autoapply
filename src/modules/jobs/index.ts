@@ -20,7 +20,7 @@ export { embedPendingJobs, jobSimilarity, judgeJobs, labelPendingSkills, profile
 export { candidateShows, candidateSkills, compareSkills, jobSkills, stackGap, TECH_VOCAB, withImplied } from "./skills";
 export type { Judgement } from "./semantic";
 export { warmFeeds } from "./warm";
-export { dailySetOn, dailyView, ensureDailySet, isDefaultFeed, markRevealed, releaseMore } from "./daily";
+export { dailySetOn, dailyView, ensureDailySet, hasSetToday, isDefaultFeed, markRevealed, releaseMore } from "./daily";
 export type { DailyReveal, DailyStats, DailyView } from "./daily";
 export { fitJobs, fitOn, fitStats } from "./fit";
 export type { FitVerdict } from "./fit";

@@ -7,7 +7,7 @@ import { boardLabel } from "@/lib/board-label";
 import { db } from "@/lib/db";
 import { feedHref, feedQuery } from "@/lib/feed-url";
 import { dailySent } from "@/modules/governance";
-import { APPLY_BOARDS, dailyView, DEFAULT_FEED_DAYS, DEFAULT_PLACES, isDefaultFeed, listFeed, parseFeedFilters, TRACK_LABELS, tracksOf } from "@/modules/jobs";
+import { APPLY_BOARDS, dailyView, DEFAULT_FEED_DAYS, hasSetToday, DEFAULT_PLACES, isDefaultFeed, listFeed, parseFeedFilters, TRACK_LABELS, tracksOf } from "@/modules/jobs";
 import type { Track } from "@/modules/jobs";
 import type { FeedFilters, FeedView } from "@/modules/jobs";
 import { DailyUsage } from "@/components/daily-usage";
@@ -18,6 +18,7 @@ import { Icon } from "@/components/ui/icons";
 import { ChipGroup } from "@/components/patterns/chip-group";
 import { EmptyState } from "@/components/patterns/content";
 import { DeckEmptyArt } from "@/components/patterns/drawings";
+import { DailyReading } from "@/components/patterns/daily-reveal";
 import { JobCardSkeleton } from "@/components/patterns/job-card";
 import { FeedTopBar } from "@/components/patterns/top-bar";
 import { FilterSheet } from "./filter-sheet";
@@ -246,6 +247,10 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
     </FilterSheet>
   );
 
+  // While today's set is still to be built (a first run, or a morning before the worker built it), the wait shows the
+  // agent reading the field (Phase R, R4); then the reveal plays. Otherwise the usual card skeleton.
+  const reading = view === "new" && !rest && isDefaultFeed(filters) && !(await hasSetToday(user.id));
+
   return (
     <>
       <FeedTopBar usage={<DailyUsage userId={user.id} />} filters={sheet("icon")} />
@@ -261,7 +266,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
         </div>
       ) : null}
       {/* The top bar and filters need only the URL; the cards stream in when the feed is scored. */}
-      <Suspense key={deckQuery} fallback={<DeckSkeleton />}>
+      <Suspense key={deckQuery} fallback={reading ? <DailyReading /> : <DeckSkeleton />}>
         <FeedDeck
           userId={user.id}
           filters={filters}

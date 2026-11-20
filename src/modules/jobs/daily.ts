@@ -172,6 +172,14 @@ async function revealIsFull(userId: string) {
   return !row || row.seen < FULL_DAYS || (row.away ?? 0) > AWAY_DAYS;
 }
 
+/** Whether today's set exists yet: without one the feed's first load builds it, and shows the agent reading (Phase R, R4). */
+export async function hasSetToday(userId: string) {
+  if (!dailySetOn()) return true;
+  const [row] = await db.$queryRaw<Array<{ has: boolean }>>`
+    SELECT EXISTS (SELECT 1 FROM "DailySet" WHERE "userId" = ${userId} AND "day" = (now() AT TIME ZONE 'Asia/Kolkata')::date) AS has`;
+  return row?.has === true;
+}
+
 /** Today's reveal seen (POST /api/daily-set/reveal): it does not play again today, on any device. False without a set. */
 export async function markRevealed(userId: string) {
   const rows = await db.$executeRaw`

@@ -27,10 +27,12 @@ Done 20 Nov: on the clone the whole set of 12 came at once under "Today's jobs" 
 Paths: `feed/swipe-deck.tsx`; ARCHITECTURE 6.3; DESIGN.md.
 
 <a id="r4"></a>
-### [ ] R4 — The first run after onboarding
+### [x] R4 — The first run after onboarding
 Do: the feed's loading fallback for a user with no set yet shows the field being read; the first reveal is full.
 Design: [4.1 item 6](TDD.md#41-components).
 **Done when:** a fresh test user from onboarding sees the reading scene while the first set builds, then the full reveal.
+Done 20 Nov: `hasSetToday`; the feed's Suspense fallback is `DailyReading` (the field, the scan looping, "Reading open jobs in India") whenever today's set is not built yet, so also a morning's first open before the worker built it. A fresh clone's streamed /feed held "Reading open jobs in India" then "Today's jobs"; the full reveal followed on screen with real logos. The route-level `loading.tsx` ("Finding your matches") still covers in-app navigation before the page knows.
+Paths: `daily.ts` (`hasSetToday`), `patterns/daily-reveal.tsx` (`DailyReading`), `daily-reveal.module.css`, `feed/page.tsx`.
 
 <a id="r5"></a>
 ### [ ] R5 — Regression and switch-on
