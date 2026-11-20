@@ -1,0 +1,235 @@
+/* The daily reveal (Phase R, docs/reveal/TDD.md 5; approved prototype design/daily-reveal.html). 3D needs real CSS:
+   perspective, preserve-3d, keyframes. Colours are the app's tokens, so light and dark follow the theme. Type sizes
+   come from the type-* utilities in the component; here only layout, depth and motion. Curves: the calm ease-out
+   (lib/motion.ts ease.calm) for anything that appears; an ease-in for what falls away. */
+
+.root {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: clip;
+  user-select: none;
+}
+
+.scene {
+  position: relative;
+  min-height: 420px;
+  flex: 1;
+  perspective: 820px;
+  perspective-origin: 50% 16%;
+  touch-action: pan-y;
+}
+.grab { cursor: grab; }
+.grabbing { cursor: grabbing; }
+
+/* The count: one big number that rolls like an odometer, and what it counts. */
+.count {
+  pointer-events: none;
+  position: absolute;
+  inset-inline: 0;
+  top: 4px;
+  z-index: 3;
+  text-align: center;
+  transition: opacity 300ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.count.gone { opacity: 0; transform: translateY(-8px); }
+.number { display: inline-flex; height: 1em; overflow: hidden; }
+.digit { display: inline-block; height: 1em; overflow: hidden; }
+.column { display: flex; flex-direction: column; transition: transform 1000ms cubic-bezier(0.16, 0.84, 0.24, 1); }
+.column > span, .sep { display: block; height: 1em; line-height: 1em; }
+.label { display: block; margin-top: 8px; color: var(--muted-foreground); transition: opacity 160ms; }
+
+/* The jobs it read: a tilted field of real postings, flown over. */
+.plane {
+  pointer-events: none;
+  position: absolute;
+  left: 50%;
+  top: 90px;
+  width: 316px;
+  height: 504px;
+  margin-left: -158px;
+  opacity: 0;
+  transform: rotateX(80deg) rotateZ(-18deg) translateZ(-240px);
+  transform-origin: 50% 50%;
+  transform-style: preserve-3d;
+  transition: opacity 900ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 3800ms cubic-bezier(0.16, 0.84, 0.24, 1);
+}
+.plane.on { opacity: 1; transform: rotateX(56deg) rotateZ(-5deg) translateZ(-30px); }
+.plane.away {
+  opacity: 0;
+  transform: rotateX(62deg) rotateZ(-4deg) translateZ(-240px);
+  transition-duration: 700ms, 900ms;
+}
+
+.tile {
+  position: absolute;
+  width: 28px;
+  height: 34px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--card);
+  box-shadow: 0 0 0 0.5px var(--line-strong), 0 1.5px 0 var(--line-strong);
+  opacity: var(--fog, 1);
+  transform-style: preserve-3d;
+  transition: opacity 380ms cubic-bezier(0.4, 0, 1, 1), transform 620ms cubic-bezier(0.55, 0, 1, 0.45), background-color 260ms, box-shadow 260ms;
+}
+.far { filter: blur(0.6px); }
+.tile img, .initial {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: #fff;
+  object-fit: contain;
+}
+.initial {
+  display: grid;
+  place-items: center;
+  background: var(--faint);
+  color: var(--card);
+  font-size: 9px;
+  font-weight: 600;
+}
+.tile::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 22px;
+  width: 18px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--line-strong);
+  box-shadow: 0 4px 0 var(--line-strong);
+}
+/* Outside the user's fields: it falls away under the scan, speeding up as it goes. */
+.out { opacity: 0; transform: translateZ(-90px) rotateX(-28deg); }
+.fit { box-shadow: 0 0 0 1px var(--faint), 0 1.5px 0 var(--line-strong); }
+/* A pick lifts off and hovers. */
+.pick {
+  background: var(--foreground);
+  opacity: 1;
+  filter: none;
+  box-shadow: 0 0 0 0.5px var(--foreground);
+  transform: translateZ(54px);
+  transition: transform 720ms cubic-bezier(0.16, 0.84, 0.24, 1), background-color 260ms;
+  animation: hover 2.6s ease-in-out 720ms infinite;
+}
+.pick::after { background: var(--faint); box-shadow: 0 4px 0 var(--faint); }
+@keyframes hover { 50% { transform: translateZ(62px); } }
+.shade {
+  position: absolute;
+  width: 28px;
+  height: 34px;
+  border-radius: 6px;
+  background: var(--foreground);
+  filter: blur(4px);
+  opacity: 0;
+  transition: opacity 720ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.shade.on { opacity: 0.22; }
+/* The scan: a hairline the agent reads the field with, front to back. */
+.scan {
+  position: absolute;
+  inset-inline: -12px;
+  top: 100%;
+  height: 1px;
+  background: var(--foreground);
+  box-shadow: 0 0 10px 1px var(--line-strong);
+  opacity: 0;
+  transform: translateZ(3px);
+  transition: top 900ms linear, opacity 240ms;
+}
+.scan.on { opacity: 0.55; }
+
+/* What it found: an arc of cards, the best in the middle. Drag it sideways or tap a card to bring it round. */
+.arc {
+  position: absolute;
+  left: 50%;
+  top: 76px;
+  width: 264px;
+  height: 290px;
+  margin-left: -132px;
+  transform-style: preserve-3d;
+}
+.idle { animation: drift 9s ease-in-out infinite; }
+@keyframes drift { 0%, 100% { rotate: y 0deg; } 50% { rotate: y 5deg; } }
+.mini {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: 0 0 0 0.5px var(--line-strong), 0 22px 36px -18px rgb(0 0 0 / 28%), var(--edge, 0 0 #0000);
+  opacity: 0;
+  transition: transform 640ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+/* Further round the arc is dimmer: a veil of the page colour, so nothing shows through. */
+.mini::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  background: var(--background);
+  opacity: var(--veil, 0);
+}
+.miniTop { display: flex; align-items: flex-start; gap: 10px; }
+.miniWho { min-width: 0; flex: 1; }
+.miniWho b, .ellipsis { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.miniScore { line-height: 1; text-align: right; color: var(--brand-text); }
+.miniTitle {
+  display: -webkit-box;
+  margin: 16px 0 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.miniReason {
+  display: -webkit-box;
+  margin: 10px 0 0;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.miniSplit { display: flex; height: 4px; gap: 4px; margin-top: auto; }
+.miniSplit i { position: relative; overflow: hidden; border-radius: 2px; background: var(--track); }
+.miniSplit i::after { content: ""; position: absolute; inset: 0; width: var(--f); border-radius: 2px; background: var(--bar); }
+
+/* The words under the arc. */
+.words {
+  flex: none;
+  padding: 0 24px 24px;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 360ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.words.in { opacity: 1; transform: none; }
+
+.sound {
+  position: absolute;
+  right: 12px;
+  top: 0;
+  z-index: 4;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+.sound:focus-visible { outline: 2px solid var(--foreground); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .plane, .tile, .mini, .column, .words, .count, .scan { transition: none; }
+  .pick, .idle { animation: none; }
+}

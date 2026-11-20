@@ -11,6 +11,7 @@ import { DeckDoneArt } from "@/components/patterns/drawings";
 import type { JobCardData } from "@/components/patterns/job-card";
 import { StackCount, SwipeStage, type Direction, type SwipeStageHandle } from "@/components/patterns/swipe-stage";
 import { AgentToast } from "@/components/patterns/agent-toast";
+import { DailyReveal, type RevealPick } from "@/components/patterns/daily-reveal";
 import { useApplicationsSummary } from "@/components/applications-summary";
 import { boardLabel } from "@/lib/board-label";
 import { experienceChip, postedLabel, STAGE_LABEL, whereLabel } from "@/lib/job-facts";
@@ -50,6 +51,24 @@ function cardData(job: FeedJob, query: string): JobCardData {
 }
 
 /** The job's page; it carries the feed's filters so its score matches the card and Back returns to the same feed. */
+/** A job as the reveal's arc shows it (Phase R): the same facts as the card, smaller. */
+function revealPick(job: FeedJob): RevealPick {
+  const experience = experienceChip(job);
+  return {
+    id: job.id,
+    company: job.company,
+    logoUrl: job.logoUrl,
+    title: job.title,
+    board: boardLabel(job.source),
+    place: whereLabel(job).split(",")[0].trim(),
+    level: [experience.label, job.salary].filter(Boolean).join(" · ") || null,
+    reason: job.reason,
+    have: job.skills.have,
+    parts: job.breakdown.parts.map((part) => ({ points: part.points, max: part.max })),
+    score: job.score,
+  };
+}
+
 function jobHref(id: string, query: string) {
   return query ? `/jobs/${id}?${query}` : `/jobs/${id}`;
 }
@@ -145,6 +164,8 @@ export function SwipeDeck({
   // Where the deck is in today's set; null outside it (a filter, the skipped jobs, "Keep going", or no set today).
   const [set, setSet] = useState(daily ? { total: daily.total, released: daily.released, more: daily.more, next: daily.next } : null);
   const [releasing, setReleasing] = useState(false);
+  // Today's reveal (Phase R) while unseen: what the agent did, played before the cards. Only in the default view.
+  const [reveal, setReveal] = useState(view === "new" && daily?.reveal && initial.length >= 2 ? daily.reveal : null);
 
   function setDeck(next: FeedJob[]) {
     deck.current = next;
@@ -332,6 +353,23 @@ export function SwipeDeck({
     }, Math.max(0, hideAt - Date.now()));
     return () => clearTimeout(timer);
   }, [agentKey, hideAt]);
+
+  if (reveal) {
+    return (
+      <DailyReveal
+        picks={cards.map(revealPick)}
+        stats={reveal.stats}
+        full={reveal.full}
+        // Seen once the arc is shown: it does not play again today, on any device. A failed call only replays it once.
+        onSeen={() => void fetch("/api/daily-set/reveal", { method: "POST" }).catch(() => undefined)}
+        // The deck starts at the card the user brought to the front, the rest in their order after it.
+        onOpen={(index) => {
+          if (index > 0) setDeck([...deck.current.slice(index), ...deck.current.slice(0, index)]);
+          setReveal(null);
+        }}
+      />
+    );
+  }
 
   const top = cards[0];
   const next = cards[1];

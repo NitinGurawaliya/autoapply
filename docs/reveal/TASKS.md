@@ -11,10 +11,12 @@ Done 20 Nov: `daily-set-test` PASS (27 checks, its batches pinned to 4; a real b
 Paths: migration `20261120120000_daily_reveal` (applied with `migrate deploy`), `match.ts` (`FeedPool`, `rankedFeed.found`), `lib/feed-cache.ts` (`extra`), `daily.ts`, `api/daily-set/reveal`, `scripts/daily-set-test.ts`, `scripts/daily-reveal-test.ts`; ARCHITECTURE 4, 6.3, 11.
 
 <a id="r2"></a>
-### [ ] R2 — The reveal in the feed
+### [x] R2 — The reveal in the feed
 Do: `components/patterns/daily-reveal.tsx`, `daily-reveal.module.css`, `lib/reveal-sound.ts`; `feed/swipe-deck.tsx` shows it before the cards and starts the deck at the chosen card; full and short; reduced motion; sound toggle; DESIGN.md.
 Design: [4.1 items 4–5](TDD.md#41-components), [4.4](TDD.md#44-sound), [5](TDD.md#5-ui).
 **Done when:** on a clone at 390 px light and dark the reveal plays once, skips on a tap, the arc drags, "See today's N" opens the deck at that card, a reload shows the cards; ui-lint, typecheck, lint pass.
+Done 20 Nov: on a clone of a real profile (dev server, 390 px): the full reveal played from the first build (read 20,549, 12 picks, AiPrise 95 in front), the arc dragged to Infilect and "See today's 12" opened the deck at Infilect, a reload showed the cards without the reveal (POST 200), dark mode and the short version (3 days seen) played, no console errors. ui-lint, typecheck, lint, daily-set, daily-reveal, match, feed-sql, swipe-batch PASS.
+Paths: `components/patterns/daily-reveal.tsx`, `daily-reveal.module.css`, `lib/reveal-sound.ts`, `feed/swipe-deck.tsx`; DESIGN.md.
 
 <a id="r3"></a>
 ### [ ] R3 — Today's jobs without sets, the end of the day
