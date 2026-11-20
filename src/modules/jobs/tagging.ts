@@ -106,7 +106,9 @@ const ABROAD = [
 ];
 
 // A remote role open to someone in India: Asia-Pacific, Indian time, or no place limit at all.
-const OPEN_TO_INDIA = /\b(apac|apj|asia|asia[- ]pacific|anywhere|worldwide|global(ly)?|any location|all locations|work from anywhere)\b/i;
+// "Asia" alone, not South-East, East, Central or West Asia, which do not include India (20 Nov: "Taipei / SouthEast Asia"
+// was shown to India users).
+const OPEN_TO_INDIA = /\b(apac|apj|(?<!south\s?-?\s?east\s|southeast\s|east\s|central\s|west\s)asia|asia[- ]pacific|anywhere|worldwide|global(ly)?|any location|all locations|work from anywhere)\b/i;
 // What a posting must say before a bare "Remote" counts as open to India. Not "global": companies use it for anything.
 const DESCRIPTION_OPEN = /\bindia\b|\bIST\b|indian standard time|anywhere in the world|work from anywhere/i;
 // Location words that say nothing about where ("Hybrid", "N/A"): the offices or the description must decide.
@@ -131,7 +133,9 @@ export function eligibility(input: { location: string; offices?: string[]; descr
   // 1. India named in the location. "Bangalore, India; Remote, Poland": the India part decides whether it is remote.
   const indiaParts = location.split(/;|\||\bor\b|\/|\n/).filter((part) => includesAny(part, INDIA));
   if (indiaParts.length > 0) return indiaParts.some(remoteIn) ? "remote_india" : "india";
-  // 2. The location opens it to India ("Remote, APAC", "Remote (Anywhere)", "Remote, Global").
+  // 2. A job that is not remote and names a place abroad is abroad, whatever region it adds ("Taipei / Asia").
+  if (!input.remote && !remoteIn(location) && abroadIn(location, input.location)) return "abroad";
+  // 3. The location opens it to India ("Remote, APAC", "Remote (Anywhere)", "Remote, Global", "APJ").
   if (OPEN_TO_INDIA.test(location)) return "remote_india";
   // 3. The location names other countries or cities.
   if (abroadIn(location, input.location)) return "abroad";

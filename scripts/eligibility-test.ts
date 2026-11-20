@@ -68,6 +68,12 @@ const cases: Case[] = [
   ["Chennai, TN", [], "", "india"],
   ["IN-Pune", [], "", "india"],
   ["Remote - United Arab Emirates", [], "", "abroad"],
+  // 20 Nov: a city abroad with a region that is not India's
+  ["Taipei / SouthEast Asia", [], "", "abroad"],
+  ["Singapore / APAC", [], "", "abroad"],
+  ["Remote, South East Asia", [], "", "unknown"],
+  ["Remote - Singapore or APAC", [], "", "remote_india"],
+  ["Remote, Asia", [], "", "remote_india"],
   // Nothing to go on: not shown
   ["Remote", [], "Join our distributed team.", "unknown"],
   ["Hybrid", [], "", "unknown"],
