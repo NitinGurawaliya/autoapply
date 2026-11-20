@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { daysAgoLabel } from "@/lib/days";
-import { cachedFeed, cachedFeedDegraded, rememberFeed } from "@/lib/feed-cache";
+import { cachedFeed, cachedFeedDegraded, cachedFeedExtra, rememberFeed } from "@/lib/feed-cache";
 import { companyKey, feedHistory, loadRules, roleKey } from "@/modules/governance";
 // The brief file itself, not the profile index (which pulls in resume parsing).
 import { briefOf } from "@/modules/profile/brief";
@@ -808,15 +808,18 @@ export async function listFeed(userId: string, filters: FeedFilters, view: FeedV
  * jobs against this list, so a busy day's arrivals never push set jobs out of a 40-card slice. `degraded`: the model's
  * verdict is missing for part of the judged shortlist (a failed call), so a set is not built from it.
  */
-export async function rankedFeed(userId: string, filters: FeedFilters = parseFeedFilters({}), view: FeedView = "new", build: FeedBuild = {}): Promise<{ jobs: FeedJob[]; degraded: boolean }> {
+/** What a build found besides its cards (Phase R, the daily reveal): the gate pool (jobs in the user's fields) and a sample of it. */
+export type FeedPool = { pool: number; field: Array<{ company: string; logo: string | null }> };
+
+export async function rankedFeed(userId: string, filters: FeedFilters = parseFeedFilters({}), view: FeedView = "new", build: FeedBuild = {}): Promise<{ jobs: FeedJob[]; degraded: boolean; found?: FeedPool }> {
   // A visit within a minute of the last one, with nothing changed since, reuses its result (lib/feed-cache.ts).
   const filtersKey = view === "new" ? JSON.stringify(filters) : `${JSON.stringify(filters)}|skipped`;
   const cached = cachedFeed<FeedJob[]>(userId, filtersKey);
-  if (cached) return { jobs: cached, degraded: cachedFeedDegraded(userId, filtersKey) };
-  const run = { degraded: false };
+  if (cached) return { jobs: cached, degraded: cachedFeedDegraded(userId, filtersKey), found: cachedFeedExtra<FeedPool>(userId, filtersKey) };
+  const run: ScoreRun = { degraded: false };
   const jobs = await scoreFeed(userId, filters, view, undefined, run, build);
-  rememberFeed(userId, filtersKey, jobs, run.degraded);
-  return { jobs, degraded: run.degraded };
+  rememberFeed(userId, filtersKey, jobs, run.degraded, run.found);
+  return { jobs, degraded: run.degraded, found: run.found };
 }
 
 /**
@@ -846,7 +849,11 @@ export function rankForEval(userId: string, options: EvalRanking): Promise<FeedJ
  * `run` (the feed only): the list comes back uncut, and `degraded` says whether verdicts were missing. `build.warm`: built
  * by warm or prescan (the fit path judges up to MAX_SHORTLIST in the background lane).
  */
-async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, evaluation?: EvalRanking, run?: { degraded: boolean }, build: FeedBuild = {}): Promise<FeedJob[]> {
+/** What scoreFeed reports beyond its cards: `degraded` (a verdict missing) and `found` (the gate pool, Phase R). */
+type ScoreRun = { degraded: boolean; found?: FeedPool };
+const FIELD_SAMPLE = 130;
+
+async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, evaluation?: EvalRanking, run?: ScoreRun, build: FeedBuild = {}): Promise<FeedJob[]> {
   // Independent reads run together: every database round trip is ~250 ms from India to the database.
   const [profile, answers, brief] = await Promise.all([
     db.profile.findUnique({ where: { userId } }),
@@ -1008,6 +1015,13 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
   // gets no verdict by design (fit.ts), so it does not count: otherwise nearly every shortlist (5 % of the pool unread)
   // would count as degraded and no daily set (P7) would ever be built with RELEVANCE_FIT on (found merging P6, 20 Nov).
   if (run) run.degraded = profile != null && shortlist.some((job) => !judgements.has(job.id) && !(fitWho && !job.readingCurrent));
+  // The jobs in the user's fields this build read, and an even sample of them for the reveal's field (Phase R).
+  if (run) {
+    const step = Math.max(1, jobs.length / FIELD_SAMPLE);
+    const field: FeedPool["field"] = [];
+    for (let i = 0; i < jobs.length && field.length < FIELD_SAMPLE; i += step) field.push({ company: jobs[Math.floor(i)].company, logo: jobs[Math.floor(i)].logoUrl });
+    run.found = { pool: jobs.length, field };
+  }
 
   const ranked = dedupeListings(scored)
     .map((job) => ({

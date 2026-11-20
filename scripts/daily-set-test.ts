@@ -2,11 +2,13 @@
 // compare-and-set, swipes read from the Swipe table, rebuilt when the fields change, no short or degraded sets, one push
 // a day. Throwaway test users and mock jobs, all removed. Run: npx tsx scripts/daily-set-test.ts
 process.env.DAILY_SET = "1";
+// Since Phase R the whole set is released at once; these checks pin batches of four to keep testing the release.
+process.env.DAILY_RELEASE = "4";
 process.env.DAILY_PUSH_HOUR_IST = "1"; // the push step runs from 01:00 IST in this test (1 is the lowest it takes)
 import { db } from "../src/lib/db";
 import { dropFromFeed, forgetFeed } from "../src/lib/feed-cache";
 import { deleteAccount } from "../src/modules/account";
-import { dailyView, ensureDailySet, isDefaultFeed, listFeed, parseFeedFilters, releaseMore } from "../src/modules/jobs";
+import { dailyView, ensureDailySet, isDefaultFeed, listFeed, markRevealed, parseFeedFilters, releaseMore } from "../src/modules/jobs";
 import { pushDailySets } from "../src/modules/jobs/daily";
 
 let failed = 0;
@@ -45,6 +47,13 @@ async function main() {
     const set = a!.jobIds;
     const ranked = (await listFeed(user.id, parseFeedFilters({}))).map((job) => job.id);
     check("the set is the top 12 of the ranked feed, in order", JSON.stringify(set) === JSON.stringify(ranked.slice(0, 12)));
+    // Phase R: what the agent did is kept with the set, and the day's reveal is offered until it is seen.
+    const stats = a?.stats;
+    check("the set keeps what the agent did (read, fields, fits, a field sample)", !!stats && stats.read > 0 && stats.fields >= stats.fits && stats.fits >= 12 && stats.field.length > 0 && stats.field.length <= 130 && stats.field.every((f) => typeof f.company === "string"), JSON.stringify({ ...stats, field: stats?.field.length }));
+    const unseen = await dailyView(user.id);
+    check("a new user's first day offers the full reveal", unseen?.reveal?.full === true && unseen.reveal.stats.fits === stats?.fits);
+    check("seen: the reveal is marked", await markRevealed(user.id));
+    check("seen: it is not offered again today", (await dailyView(user.id))?.reveal === null);
 
     let view = await dailyView(user.id);
     check("the first release is 4 of 12", view?.jobs.length === 4 && view.released === 4 && view.total === 12 && view.more && view.next === 4, JSON.stringify({ n: view?.jobs.length, r: view?.released, m: view?.more }));

@@ -273,3 +273,13 @@ Design: [docs/relevance/TDD.md](relevance/TDD.md) (v5, 19 Nov, after four indepe
 - [x] [P7 — The daily set](relevance/TASKS.md#p7)
 - [x] [P8 — Learning from skips](relevance/TASKS.md#p8)
 - [ ] [P9 — Cleanup](relevance/TASKS.md#p9)
+
+## Phase R — Today's jobs, revealed (owner, 20 Nov)
+
+Design: [docs/reveal/TDD.md](reveal/TDD.md); approved prototype `design/daily-reveal.html`. Tasks: [docs/reveal/TASKS.md](reveal/TASKS.md), in build order.
+
+- [x] [R1 — Counts and the seen flag](reveal/TASKS.md#r1)
+- [ ] [R2 — The reveal in the feed](reveal/TASKS.md#r2)
+- [ ] [R3 — Today's jobs without sets, the end of the day](reveal/TASKS.md#r3)
+- [ ] [R4 — The first run after onboarding](reveal/TASKS.md#r4)
+- [ ] [R5 — Regression and switch-on](reveal/TASKS.md#r5)

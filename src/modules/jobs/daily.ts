@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { sendPush } from "@/lib/push";
 import { tracksOf } from "./functions";
 import { readingGateOn } from "./gate";
-import { feedTracks, type FeedFilters, type FeedJob, parseFeedFilters, rankedFeed } from "./match";
+import { feedTracks, type FeedFilters, type FeedJob, type FeedPool, parseFeedFilters, rankedFeed } from "./match";
 import { judgeFromHash } from "./semantic";
 
 /**
@@ -20,7 +20,8 @@ function envInt(name: string, fallback: number) {
   return Number.isInteger(value) && value > 0 ? value : fallback;
 }
 export const setSize = () => envInt("DAILY_SET_SIZE", 12);
-export const releaseSize = () => envInt("DAILY_RELEASE", 4);
+// The whole set at once since Phase R (owner, 20 Nov: "just show today's jobs"); DAILY_RELEASE still releases it in batches.
+export const releaseSize = () => envInt("DAILY_RELEASE", setSize());
 const pushHour = () => envInt("DAILY_PUSH_HOUR_IST", 8);
 
 /** The set serves only the default view: no filter in the URL, not the skipped jobs, not "Keep going". */
@@ -28,12 +29,16 @@ export function isDefaultFeed(filters: FeedFilters) {
   return JSON.stringify(filters) === JSON.stringify(parseFeedFilters({}));
 }
 
-export type DailySetRow = { day: string; jobIds: string[]; released: number; basis: string; pushedAt: Date | null };
+/** What the agent did for a set (Phase R, the daily reveal): open jobs in India read, the ones in the user's fields, the ones that
+ * fit (the ranked list), and a sample of the field (company and logo) for the reveal's scene. */
+export type DailyStats = { read: number; fields: number; fits: number; field: FeedPool["field"] };
+
+export type DailySetRow = { day: string; jobIds: string[]; released: number; basis: string; pushedAt: Date | null; stats: DailyStats | null; revealedAt: Date | null };
 
 // The India day, by the database's clock, so every process agrees on when it turns.
 async function readSet(userId: string): Promise<DailySetRow | null> {
   const rows = await db.$queryRaw<DailySetRow[]>`
-    SELECT to_char("day", 'YYYY-MM-DD') AS day, "jobIds", released, basis, "pushedAt" FROM "DailySet"
+    SELECT to_char("day", 'YYYY-MM-DD') AS day, "jobIds", released, basis, "pushedAt", stats, "revealedAt" FROM "DailySet"
     WHERE "userId" = ${userId} AND "day" = (now() AT TIME ZONE 'Asia/Kolkata')::date`;
   return rows[0] ?? null;
 }
@@ -84,7 +89,12 @@ async function fitBuildRunning(userId: string) {
  * pick (no short sets: the ranked list as before) or a degraded feed (verdicts missing; the next build tries again).
  * Null when the switch is off, there is no profile, or no set could be stored.
  */
-export async function ensureDailySet(userId: string, ranked?: { jobs: FeedJob[]; degraded: boolean }): Promise<DailySetRow | null> {
+/** Open jobs in India: what the agent reads each day (the reveal's first number). */
+async function openJobsInIndia() {
+  return db.job.count({ where: { closedAt: null, eligibility: { in: ["india", "remote_india"] } } });
+}
+
+export async function ensureDailySet(userId: string, ranked?: { jobs: FeedJob[]; degraded: boolean; found?: FeedPool }): Promise<DailySetRow | null> {
   if (!dailySetOn()) return null;
   const [basis, existing] = await Promise.all([setBasis(userId), readSet(userId)]);
   if (!basis) return null;
@@ -115,20 +125,23 @@ export async function ensureDailySet(userId: string, ranked?: { jobs: FeedJob[];
   const jobIds = top.filter((id) => !swiped.has(id)).slice(0, setSize());
   // A set built on another basis no longer fits the user's fields: without a full new one, the ranked list.
   if (jobIds.length < setSize()) return null;
+  // What the agent did, kept with the set for the reveal (Phase R); a cached feed without its pool counts its cards.
+  const stats: DailyStats = { read: await openJobsInIndia(), fields: feed.found?.pool ?? feed.jobs.length, fits: feed.jobs.length, field: feed.found?.field ?? [] };
+  const statsJson = JSON.stringify(stats);
   // Only the request whose write landed logs it: a concurrent one reads the same row and says nothing.
   let wrote: number;
   if (!existing) {
     wrote = await db.$executeRaw`
-      INSERT INTO "DailySet" ("userId", "day", "jobIds", released, basis)
-      VALUES (${userId}, (now() AT TIME ZONE 'Asia/Kolkata')::date, ${jobIds}::text[], ${releaseSize()}, ${basis})
+      INSERT INTO "DailySet" ("userId", "day", "jobIds", released, basis, stats)
+      VALUES (${userId}, (now() AT TIME ZONE 'Asia/Kolkata')::date, ${jobIds}::text[], ${releaseSize()}, ${basis}, ${statsJson}::jsonb)
       ON CONFLICT ("userId", "day") DO NOTHING`;
   } else {
     wrote = await db.$executeRaw`
-      UPDATE "DailySet" SET "jobIds" = ${jobIds}::text[], released = ${releaseSize()}, basis = ${basis}, "builtAt" = now()
+      UPDATE "DailySet" SET "jobIds" = ${jobIds}::text[], released = ${releaseSize()}, basis = ${basis}, stats = ${statsJson}::jsonb, "builtAt" = now()
       WHERE "userId" = ${userId} AND "day" = (now() AT TIME ZONE 'Asia/Kolkata')::date AND basis = ${existing.basis}`;
   }
   const row = await readSet(userId);
-  if (wrote === 1 && row) console.log(`daily-set ${short(userId)} ${row.day}: ${existing ? "rebuilt (basis changed)" : "built"}, ${row.jobIds.length} jobs`);
+  if (wrote === 1 && row) console.log(`daily-set ${short(userId)} ${row.day}: ${existing ? "rebuilt (basis changed)" : "built"}, ${row.jobIds.length} jobs (read ${stats.read}, fields ${stats.fields}, fits ${stats.fits})`);
   return row;
 }
 
@@ -143,7 +156,29 @@ export type DailyView = {
   more: boolean;
   /** How many the next release brings (the button's number; fewer than DAILY_RELEASE near the end of the set). */
   next: number;
+  /** The day's reveal (Phase R) while it is unseen: what the agent did, and whether to play it in full. Null once seen. */
+  reveal: DailyReveal | null;
 };
+
+export type DailyReveal = { stats: DailyStats; full: boolean };
+
+/** Full for a user's first FULL_DAYS revealed days and after AWAY_DAYS away; the short one otherwise (TDD 4.3). */
+const FULL_DAYS = 3;
+const AWAY_DAYS = 4;
+async function revealIsFull(userId: string) {
+  const [row] = await db.$queryRaw<Array<{ seen: number; away: number | null }>>`
+    SELECT count(*)::int AS seen, ((now() AT TIME ZONE 'Asia/Kolkata')::date - max("day"))::int AS away FROM "DailySet"
+    WHERE "userId" = ${userId} AND "revealedAt" IS NOT NULL AND "day" < (now() AT TIME ZONE 'Asia/Kolkata')::date`;
+  return !row || row.seen < FULL_DAYS || (row.away ?? 0) > AWAY_DAYS;
+}
+
+/** Today's reveal seen (POST /api/daily-set/reveal): it does not play again today, on any device. False without a set. */
+export async function markRevealed(userId: string) {
+  const rows = await db.$executeRaw`
+    UPDATE "DailySet" SET "revealedAt" = coalesce("revealedAt", now())
+    WHERE "userId" = ${userId} AND "day" = (now() AT TIME ZONE 'Asia/Kolkata')::date`;
+  return rows === 1;
+}
 
 /**
  * The release for the deck: `set[0 .. released)` minus jobs swiped (the Swipe table) and minus jobs no longer in the
@@ -158,7 +193,11 @@ export async function dailyView(userId: string): Promise<DailyView | null> {
   const swiped = await swipedAmong(userId, set.jobIds);
   const open = (id: string) => byId.has(id) && !swiped.has(id);
   const released = Math.min(set.released, set.jobIds.length);
+  // The reveal plays while unseen, from stats kept with the set (none on a set from before Phase R), and only when it has
+  // at least 2 open jobs to show: a nearly finished day goes straight to the cards.
+  const reveal = set.stats && !set.revealedAt && set.jobIds.filter(open).length >= 2 ? { stats: set.stats, full: await revealIsFull(userId) } : null;
   return {
+    reveal,
     jobs: set.jobIds.slice(0, released).filter(open).map((id) => byId.get(id)!),
     total: set.jobIds.length,
     released,
@@ -202,7 +241,9 @@ export async function pushDailySets(deadline: number, only?: string[]) {
         UPDATE "DailySet" SET "pushedAt" = now()
         WHERE "userId" = ${userId} AND "day" = (now() AT TIME ZONE 'Asia/Kolkata')::date AND "pushedAt" IS NULL`;
       if (claimed !== 1) continue;
-      const sent = await sendPush(userId, { title: "Today's picks are ready", body: `${set.jobIds.length} jobs picked for you, shown ${releaseSize()} at a time.`, url: "/feed", tag: "daily-set" });
+      // What the agent did, in its own words (Phase R); a set from before the stats says how many were picked.
+      const body = set.stats ? `Your agent read ${set.stats.read.toLocaleString("en-IN")} open jobs in India and picked ${set.jobIds.length} for you.` : `${set.jobIds.length} jobs picked for you.`;
+      const sent = await sendPush(userId, { title: "Today's jobs are ready", body, url: "/feed", tag: "daily-set" });
       pushed += 1;
       console.log(`daily-set push ${short(userId)} ${set.day}: sent to ${sent} ${sent === 1 ? "browser" : "browsers"}`);
     } catch (error) {

@@ -10,7 +10,8 @@ const TTL_MS = 60_000;
 // On globalThis, like the Prisma client: Next.js bundles route handlers and pages separately, and a plain module-level
 // Map would give each bundle its own copy (a swipe saved by /api/swipes would not clear the copy the feed page reads).
 // `degraded`: the model's verdict is missing for part of the shortlist (a failed call); the daily set is not built from it.
-const holder = globalThis as unknown as { swipeApplyFeedCache?: Map<string, { at: number; value: unknown; degraded?: boolean }> };
+// `extra`: what the build found besides the cards (the gate pool's size and a sample, for the daily reveal, Phase R).
+const holder = globalThis as unknown as { swipeApplyFeedCache?: Map<string, { at: number; value: unknown; degraded?: boolean; extra?: unknown }> };
 const cache = (holder.swipeApplyFeedCache ??= new Map());
 
 export function cachedFeed<T>(userId: string, filtersKey: string): T | undefined {
@@ -24,10 +25,17 @@ export function cachedFeedDegraded(userId: string, filtersKey: string): boolean 
   return cache.get(`${userId}\u0000${filtersKey}`)?.degraded === true;
 }
 
-export function rememberFeed(userId: string, filtersKey: string, value: unknown, degraded = false) {
+/** What the cached build found besides its cards (rememberFeed's `extra`); undefined when none is cached. */
+export function cachedFeedExtra<T>(userId: string, filtersKey: string): T | undefined {
+  const hit = cache.get(`${userId}\u0000${filtersKey}`);
+  if (!hit || Date.now() - hit.at > TTL_MS) return undefined;
+  return hit.extra as T | undefined;
+}
+
+export function rememberFeed(userId: string, filtersKey: string, value: unknown, degraded = false, extra?: unknown) {
   // Old entries go when they are next read; this keeps the map from growing with users who never come back.
   if (cache.size > 2000) for (const [key, entry] of cache) if (Date.now() - entry.at > TTL_MS) cache.delete(key);
-  cache.set(`${userId}\u0000${filtersKey}`, { at: Date.now(), value, degraded });
+  cache.set(`${userId}\u0000${filtersKey}`, { at: Date.now(), value, degraded, extra });
 }
 
 /**

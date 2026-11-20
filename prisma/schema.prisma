@@ -58,6 +58,10 @@ model DailySet {
   // The day's one "Today's set is ready" push.
   pushedAt DateTime?
   builtAt  DateTime  @default(now())
+  // What the agent did for the set, shown by the daily reveal (Phase R): { read, fields, fits, field: [{ company, logo }] }.
+  stats      Json?
+  // When the user saw the day's reveal: once a day, on any device.
+  revealedAt DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
