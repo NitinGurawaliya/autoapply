@@ -433,8 +433,8 @@ export function SwipeDeck({
       <>
         <EmptyState
           art={<DeckDoneArt />}
-          title={`That's all ${set.total} for today`}
-          text="A new set comes tomorrow morning. Until then, the rest of your matches are a tap away."
+          title="That's today's jobs"
+          text="New ones tomorrow morning. Until then, the rest of your matches are a tap away."
           extra={
             <>
               <SoftChip>{stats.sentToday} sent today</SoftChip>
@@ -500,7 +500,8 @@ export function SwipeDeck({
       >
         {set ? (
           <p className="m-0 flex h-6 items-center type-meta text-muted-foreground" aria-live="polite">
-            Pick {Math.min(set.total, Math.max(1, set.released - cards.length + 1))} of today&apos;s {set.total}
+            {/* Just today's jobs, no counter (owner, 20 Nov: no "1 of 12"). */}
+            Today&apos;s jobs
           </p>
         ) : (
           <StackCount total={cards.length} label={view === "skipped" ? "you skipped" : "in your feed"} />

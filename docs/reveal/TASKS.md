@@ -19,10 +19,12 @@ Done 20 Nov: on a clone of a real profile (dev server, 390 px): the full reveal 
 Paths: `components/patterns/daily-reveal.tsx`, `daily-reveal.module.css`, `lib/reveal-sound.ts`, `feed/swipe-deck.tsx`; DESIGN.md.
 
 <a id="r3"></a>
-### [ ] R3 — Today's jobs without sets, the end of the day
+### [x] R3 — Today's jobs without sets, the end of the day
 Do: `feed/swipe-deck.tsx`: no "Pick N of today's 12", the batch screen only if `DAILY_RELEASE` is set below the set size, the end screen "That's today's jobs" with sent and in-progress rows; DESIGN.md.
 Design: [5](TDD.md#5-ui).
 **Done when:** a clone swipes its whole set without a pause and sees the end screen; "Keep going" still opens the ranked list; `daily-set-test` PASS.
+Done 20 Nov: on the clone the whole set of 12 came at once under "Today's jobs" (no counter), skipped through to "That's today's jobs" (kept after a reload), "Keep going" (`?rest=1`) opened the ranked list. `daily-set-test` PASS, ui-lint, typecheck, lint pass. Seen on the way, not changed: the stage drops a throw while the last card's exit animation runs, and a hidden tab pauses that animation.
+Paths: `feed/swipe-deck.tsx`; ARCHITECTURE 6.3; DESIGN.md.
 
 <a id="r4"></a>
 ### [ ] R4 — The first run after onboarding
