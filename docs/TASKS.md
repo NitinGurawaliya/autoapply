@@ -217,11 +217,11 @@ Order (owner, 9 Nov): measure and scale, seed every known company, then the boar
 
 Later, boards that need an employer account:
 
-- [ ] [M5 — Employer accounts: application password, vault, permission, the email step by the user](boards/TASKS.md#m5)
-- [ ] [M6 — Workday apply (K12 in the Naukri plan)](boards/TASKS.md#m6)
-- [ ] [M8 — SuccessFactors](boards/TASKS.md#m8)
-- [ ] [M10 — Darwinbox](boards/TASKS.md#m10)
-- [ ] [M15 — iCIMS (later)](boards/TASKS.md#m15)
+- [-] [M5 — Employer accounts: application password, vault, permission, the email step by the user (moved to Phase U: U1, U2)](boards/TASKS.md#m5)
+- [-] [M6 — Workday apply (K12 in the Naukri plan) (moved to Phase U: U3, U4)](boards/TASKS.md#m6)
+- [-] [M8 — SuccessFactors (moved to Phase U: U7)](boards/TASKS.md#m8)
+- [-] [M10 — Darwinbox (moved to Phase U: U5, U6)](boards/TASKS.md#m10)
+- [-] [M15 — iCIMS (later) (moved to Phase U: U8)](boards/TASKS.md#m15)
 
 Parked (owner, 9 Nov):
 
@@ -294,3 +294,16 @@ Design: [docs/onboarding/TDD.md](onboarding/TDD.md). Tasks: [docs/onboarding/TAS
 - [x] [S2 — One profile screen with the few answers every form needs](onboarding/TASKS.md#s2)
 - [x] [S3 — No "needs answers" line before the first swipe](onboarding/TASKS.md#s3)
 - [x] [S4 — The new onboarding, end to end](onboarding/TASKS.md#s4)
+
+## Phase U — Boards that need an account: Workday, Darwinbox, SuccessFactors (owner, 21 Nov)
+
+Design: [docs/accounts/TDD.md](accounts/TDD.md) (v1, 21 Nov; replaces M5, M6, M8, M10, M15 for applying; decisions to close in its section 11). Tasks: [docs/accounts/TASKS.md](accounts/TASKS.md). Order U1 → U4, then U5 → U6, then U7; U8 only on numbers.
+
+- [ ] [U1 — Vault, application password, permission](accounts/TASKS.md#u1)
+- [ ] [U2 — The account step and a mock account board](accounts/TASKS.md#u2)
+- [ ] [U3 — Workday jobs fresh again](accounts/TASKS.md#u3)
+- [ ] [U4 — Workday apply](accounts/TASKS.md#u4)
+- [ ] [U5 — Darwinbox reader](accounts/TASKS.md#u5)
+- [ ] [U6 — Darwinbox apply](accounts/TASKS.md#u6)
+- [ ] [U7 — SuccessFactors](accounts/TASKS.md#u7)
+- [ ] [U8 — iCIMS (only on numbers)](accounts/TASKS.md#u8)
