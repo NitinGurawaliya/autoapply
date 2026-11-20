@@ -11,7 +11,7 @@ import { companyKey, feedHistory, loadRules, roleKey } from "../src/modules/gove
 import { candidateSkills, companyResultsById, fitJobs, fitOn, judge, judgeJobs, listFeed, parseFeedFilters, profileVector, scoreJob, tracksOf } from "../src/modules/jobs";
 import { briefOf } from "../src/modules/profile/brief";
 import { jobGate, readingGateOn } from "../src/modules/jobs/gate";
-import { dedupeListings, feedRows, feedTracks, levelsFor, yearsBand } from "../src/modules/jobs/match";
+import { applyFeedFloor, dedupeListings, feedRows, feedTracks, levelsFor, yearsBand } from "../src/modules/jobs/match";
 
 let failed = 0;
 function check(name: string, ok: boolean, detail = "") {
@@ -142,10 +142,11 @@ async function referenceFeed(userId: string) {
     .filter((job) => !history.roles.has(job.roleKey))
     .filter((job) => !history.companiesAtCap.has(companyKey(job.company)));
   }
-  return dedupeListings(scored)
-    .map((job) => ({ ...job, rank: job.score + job.verdict.nudge }))
-    .sort((a, b) => b.rank - a.rank || b.score - a.score || a.daysAgo - b.daysAgo)
-    .slice(0, 40);
+  return applyFeedFloor(
+    dedupeListings(scored)
+      .map((job) => ({ ...job, rank: job.score + job.verdict.nudge }))
+      .sort((a, b) => b.rank - a.rank || b.score - a.score || a.daysAgo - b.daysAgo),
+  ).slice(0, 40);
 }
 
 async function realProfiles() {

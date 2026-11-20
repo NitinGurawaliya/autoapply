@@ -45,6 +45,8 @@ env:
   # Phase P, P3: the one gate (title AND reading) in every feed these jobs build (warm, prescan); every process must carry
   # the same value (docs/relevance/TDD.md 4.9). "0" turns the reading part off.
   READING_GATE: "1"
+  # 20 Nov: the quality floor (match.ts applyFeedFloor) in every feed these jobs build; the same value on every process.
+  FEED_FLOOR: "65"
   # Phase P, P7: the daily set (warm builds it; after-ingest sends its one morning push). "1" on, anything else off; the
   # web app and the worker must carry the same value. On since 20 Nov (owner).
   DAILY_SET: "1"

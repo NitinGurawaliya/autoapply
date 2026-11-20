@@ -299,6 +299,34 @@ export function bandMiss(job: { requiredYears: number | null; seniority: string 
 // most it can score is the top of Good.
 const UNSTATED_CAP = 74;
 
+/**
+ * The quality floor (20 Nov, owner: fewer cards instead of wrong ones). A blind review of the 10 real users' top 12
+ * (115 cards) found no wrong match among the cards scoring 75 or more, and more than half wrong below 65 (16 of 28). The
+ * feed shows only cards scoring FEED_FLOOR (65) or more, but never fewer than FEED_FLOOR_MIN (5): a thin profile gets its
+ * best few, not an empty feed. FEED_FLOOR=0 turns it off; the same value on every process. Not applied to the skipped
+ * view (it lists what the user skipped) nor to the evaluation, which compares rules on the whole ranked list.
+ */
+export const feedFloor = () => {
+  const value = Number(process.env.FEED_FLOOR);
+  return process.env.FEED_FLOOR !== undefined && process.env.FEED_FLOOR !== "" && Number.isFinite(value) ? Math.max(0, value) : 65;
+};
+export const feedFloorMin = () => {
+  const value = Number(process.env.FEED_FLOOR_MIN);
+  return Number.isInteger(value) && value > 0 ? value : 5;
+};
+
+/** The cards that pass the floor, plus the best-ranked ones up to the minimum; in the order given (rank order). */
+export function applyFeedFloor<T extends { score: number; source: string }>(ranked: T[], floor = feedFloor(), min = feedFloorMin()): T[] {
+  if (floor <= 0) return ranked;
+  const keep = new Set(ranked.filter((job) => job.source === "mock" || job.score >= floor));
+  if (keep.size === ranked.length) return ranked;
+  for (const job of ranked) {
+    if (keep.size >= min) break;
+    keep.add(job);
+  }
+  return ranked.filter((job) => keep.has(job));
+}
+
 /** Strong, good or stretch from the score; null below the minimum. */
 export function tierOf(score: number, minScore: number): Tier | null {
   if (score >= 75) return "strong";
@@ -971,14 +999,17 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
       for (const [id, judgement] of await judgeJobs(profile, texts, evaluation?.store)) judgements.set(id, judgement);
     }
     scored = scoreAll(new Set(shortlist.map((job) => job.id)));
-    if (scored.length >= FEED_SIZE || limit >= closest.length || limit >= MAX_SHORTLIST) break;
+    // With the floor, a card that will not show does not count: a thin profile reads on through the shortlist.
+    const floor = evaluation || view === "skipped" ? 0 : feedFloor();
+    const showing = floor > 0 ? scored.filter((job) => job.mock || job.score >= floor).length : scored.length;
+    if (showing >= FEED_SIZE || limit >= closest.length || limit >= MAX_SHORTLIST) break;
   }
   // Degraded = a verdict that should be there is missing (a failed call). On the fit path a job without a current reading
   // gets no verdict by design (fit.ts), so it does not count: otherwise nearly every shortlist (5 % of the pool unread)
   // would count as degraded and no daily set (P7) would ever be built with RELEVANCE_FIT on (found merging P6, 20 Nov).
   if (run) run.degraded = profile != null && shortlist.some((job) => !judgements.has(job.id) && !(fitWho && !job.readingCurrent));
 
-  return dedupeListings(scored)
+  const ranked = dedupeListings(scored)
     .map((job) => ({
       id: job.id,
       title: job.title,
@@ -1014,6 +1045,6 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
     .map(({ rank, ...job }) => {
       void rank;
       return job;
-    })
-    .slice(0, run ? undefined : (evaluation?.limit ?? FEED_SIZE));
+    });
+  return (evaluation || view === "skipped" ? ranked : applyFeedFloor(ranked)).slice(0, run ? undefined : (evaluation?.limit ?? FEED_SIZE));
 }

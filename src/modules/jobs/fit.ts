@@ -54,6 +54,8 @@ export const fitSchema = z.object({
       fit: z.enum(["strong", "good", "stretch", "no"]),
       evidence: z.number().int().nullable().optional(),
       why: z.string(),
+      // The job's seniority against the candidate's years, read from its words (20 Nov); a missing or unknown value reads as "fits".
+      level: z.enum(["fits", "above", "far_above"]).optional().catch(undefined),
     }),
   ),
 });
@@ -64,9 +66,14 @@ For each job say how close the WORK is to the candidate's own work, ignoring sen
 - good: the same field, a neighbouring specialty or another main stack (data science and ML engineering; backend and full-stack; SOC / detection and application or cloud security; a Node.js backend engineer and a Java backend role).
 - stretch: a different specialty they could move into with their skills (a developer and DevOps or QA automation; a data scientist and data engineering).
 - no: another kind of work (for a developer: sales, recruiting, product or program management, design, writing, finance, operations; for a data scientist: frontend or mobile engineering; for a web developer: iOS or embedded).
+level: the job's seniority against the candidate's years (their "years"; null means a fresher), read from the title and the requirement lines, also when no number of years is stated.
+- fits: an entry-level, junior, graduate, intern or trainee role, or one that asks for nothing beyond what they have.
+- above: asks for clearly more than they have: strong commercial experience, a proven track record, owning a system end to end, mentoring others.
+- far_above: a senior, lead, staff, principal or manager role, expert-level experience, a research degree (MS or PhD) as a requirement, or many years beyond theirs. For a candidate with 0 to 2 years, a role that asks for "significant", "extensive", "proven" or "expert" experience is far_above.
+Judge experience and ownership, not how much they know of a tool: "strong knowledge of Python" is not seniority.
 evidence: the number of the ONE requirement line that best shows what the work is (its main skill, stack or duty), for every verdict, "no" included (for "no", the line that shows the other kind of work). null only when the job has no requirement lines.
 why: at most 12 words, to the candidate as "you", about the work in that line (e.g. "Java and Spring backend services, close to your backend work", "Detection engineering, next to your SOC work", "An iOS role, not web work"). No years.
-Return {"results":[{"n","fit","evidence","why"}]} with one entry per job.`;
+Return {"results":[{"n","fit","evidence","why","level"}]} with one entry per job.`;
 
 /** The job's columns fit.ts reads in its one query (FeedRow carries no reading). */
 type FitRowIn = {
@@ -168,6 +175,20 @@ export function fitMessage(brief: Brief, jobs: BatchJob[]) {
   return `{"candidate":${briefJson(brief)},"jobs":[${jobs.map((job, n) => `{"n":${n},${job.json.slice(1)}`).join(",")}]}`;
 }
 
+const ABOVE_NOTE = "Asks for more experience than you have";
+const FAR_ABOVE_NOTE = "Asks for far more experience than you have";
+
+/**
+ * The seniority the model read, on top of its fit (20 Nov: senior roles with no number of years reached 0-2 year
+ * candidates, "expert", "significant experience", an MS/PhD): far above the candidate is a "no", clearly above is at most
+ * a "stretch". Stored as the verdict, so the cache and the feed need nothing more.
+ */
+export function applyLevel(fit: Fit, level: "fits" | "above" | "far_above" | undefined, why: string): { fit: Fit; why: string } {
+  if (level === "far_above" && fit !== "no") return { fit: "no", why: FAR_ABOVE_NOTE };
+  if (level === "above" && (fit === "strong" || fit === "good")) return { fit: "stretch", why: why || ABOVE_NOTE };
+  return { fit, why };
+}
+
 /** The model's answer checked: one verdict per known index, evidence kept only when it is one of that job's lines. */
 export function checkFitAnswer(answer: z.output<typeof fitSchema>, jobs: BatchJob[]) {
   const out = new Map<number, { fit: Fit; why: string; evidenceIndex: number | null; missed: boolean }>();
@@ -176,7 +197,8 @@ export function checkFitAnswer(answer: z.output<typeof fitSchema>, jobs: BatchJo
     if (!job || out.has(result.n)) continue;
     const line = result.evidence ?? null;
     const valid = line != null && line >= 1 && line <= job.sentIndex.length;
-    out.set(result.n, { fit: result.fit, why: capWords(result.why), evidenceIndex: valid ? job.sentIndex[line - 1] : null, missed: job.sentIndex.length > 0 && !valid });
+    const judged = applyLevel(result.fit, result.level, capWords(result.why));
+    out.set(result.n, { fit: judged.fit, why: judged.why, evidenceIndex: valid ? job.sentIndex[line - 1] : null, missed: job.sentIndex.length > 0 && !valid });
   }
   return out;
 }

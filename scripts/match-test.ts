@@ -1,7 +1,7 @@
 // Offline checks for experience parsing and match scoring. npx tsx scripts/match-test.ts
 import { scoreJob, tierOf } from "../src/modules/jobs";
 import { classifyTitle } from "../src/modules/jobs/functions";
-import { bandMiss, feedTracks, levelsFor, scoreFeatures, yearsBand } from "../src/modules/jobs/match";
+import { applyFeedFloor, bandMiss, feedTracks, levelsFor, scoreFeatures, yearsBand } from "../src/modules/jobs/match";
 import { levelOn, trackFloor } from "../src/modules/jobs/semantic";
 import { requiredYears, titleYears } from "../src/modules/jobs/tagging";
 
@@ -23,6 +23,19 @@ check("0-2 years", requiredYears("Software Engineer", "0-2 years of experience")
 check("minimum 4 years", requiredYears("Backend Engineer", "Minimum 4 years building APIs.") === 4);
 check("experience of 6 years", requiredYears("Backend Engineer", "Relevant experience of at least 6 years") === 6);
 check("no info is unknown", requiredYears("Software Engineer", "Join our team and build great things.") === null);
+// 20 Nov: the quality floor (cards under FEED_FLOOR are hidden, but never fewer than FEED_FLOOR_MIN).
+{
+  const card = (id: string, score: number, source = "greenhouse") => ({ id, score, source });
+  const ids = (list: Array<{ id: string }>) => list.map((job) => job.id).join(",");
+  const ranked = [card("a", 82), card("b", 71), card("c", 66), card("d", 63), card("e", 50)];
+  check("floor: cards under it are hidden, order kept", ids(applyFeedFloor(ranked, 65, 2)) === "a,b,c");
+  check("floor: nothing hidden when every card passes", applyFeedFloor([card("a", 80), card("b", 70)], 65, 5).length === 2);
+  check("floor: never fewer than the minimum, the best-ranked ones", ids(applyFeedFloor([card("a", 70), card("b", 60), card("c", 58), card("d", 40)], 65, 3)) === "a,b,c");
+  check("floor: a card that passes ranks below sub-floor ones and is still kept, in rank order", ids(applyFeedFloor([card("a", 60), card("b", 50), card("c", 70)], 65, 2)) === "a,c");
+  check("floor: off at 0", ids(applyFeedFloor(ranked, 0, 5)) === "a,b,c,d,e");
+  check("floor: mock jobs always pass", ids(applyFeedFloor([card("a", 80), card("m", 10, "mock")], 65, 1)) === "a,m");
+  check("floor: an empty feed stays empty", applyFeedFloor([], 65, 5).length === 0);
+}
 // 20 Nov: phrasings real postings use that reached 0-1 year candidates unread.
 check("an HTML entity between the number and 'years'", requiredYears("SDE Backend", "3+&#xa0;years of experience (real world, not academic).") === 3);
 check("'N+ years in' a field", requiredYears("Application Security Specialist", "About you • 5+ years in Application Security, Cyber Security.") === 5);

@@ -10,7 +10,7 @@ import { randomBytes } from "node:crypto";
 import { db } from "../src/lib/db";
 import { deleteAccount } from "../src/modules/account";
 import { candidateSkills } from "../src/modules/jobs";
-import { capWords, checkFitAnswer, fitInput, fitJobs, fitMessage, fitStats, lineSent, releaseLease, takeLease } from "../src/modules/jobs/fit";
+import { applyLevel, capWords, checkFitAnswer, FIT_SYSTEM, fitInput, fitJobs, fitMessage, fitStats, lineSent, releaseLease, takeLease } from "../src/modules/jobs/fit";
 import { poolSql } from "../src/modules/jobs/pool";
 import { levelFit, levelOn } from "../src/modules/jobs/semantic";
 import { briefJson, briefOf } from "../src/modules/profile/brief";
@@ -90,6 +90,28 @@ function pure() {
   check("an unknown index is dropped", answer.size === 3);
   check("why is at most 12 words", (answer.get(0)?.why.split(/\s+/).length ?? 99) <= 12 && capWords("a b c d e f g h i j k l m n.").split(" ").length === 12);
 
+  // 20 Nov: the seniority the model reads from the words (no number of years), on top of its fit.
+  const leveled = checkFitAnswer(
+    {
+      results: [
+        { n: 0, fit: "strong", evidence: 1, why: "Backend services, your own work", level: "far_above" },
+        { n: 1, fit: "good", evidence: 1, why: "Node.js backend, close to your work", level: "above" },
+        { n: 2, fit: "strong", evidence: 1, why: "Your own work", level: "fits" },
+        { n: 3, fit: "good", evidence: 1, why: "No level given" },
+        { n: 4, fit: "stretch", evidence: 1, why: "A neighbouring stack", level: "above" },
+        { n: 5, fit: "good", evidence: 1, why: "Not one of the three", level: "gigantic" as never },
+      ],
+    },
+    [input, input, input, input, input, input],
+  );
+  check("a job far above the candidate is a no, whatever its field", leveled.get(0)?.fit === "no" && leveled.get(0)?.why === "Asks for far more experience than you have");
+  check("a job clearly above is at most a stretch, keeping the model's reason", leveled.get(1)?.fit === "stretch" && leveled.get(1)?.why === "Node.js backend, close to your work");
+  check("a job that fits keeps its verdict", leveled.get(2)?.fit === "strong");
+  check("no level at all keeps the verdict (an answer from before the field)", leveled.get(3)?.fit === "good");
+  check("a stretch stays a stretch when above", leveled.get(4)?.fit === "stretch");
+  check("an unknown level word is read as none, not a failed batch", leveled.get(5)?.fit === "good");
+  check("the level rule on its own: no stays no, far_above never lifts", applyLevel("no", "far_above", "x").fit === "no" && applyLevel("stretch", "far_above", "x").fit === "no" && applyLevel("good", undefined, "x").fit === "good");
+  check("the fit judge's prompt names all three levels", ["fits", "above", "far_above"].every((word) => FIT_SYSTEM.includes(word)));
   check("levelOn: a senior role for 1 year is no", JSON.stringify(levelOn("strong", "Senior Backend Engineer", null, 1)) === JSON.stringify({ fit: "no", note: "a senior role" }));
   check("levelOn: 2 more years caps at stretch", levelOn("strong", "Backend Engineer", 3, 1).fit === "stretch");
   check("levelOn: no stays no", levelOn("no", "Backend Engineer", null, 3).fit === "no");
