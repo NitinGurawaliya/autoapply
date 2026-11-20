@@ -1,10 +1,22 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { dropFromFeed } from "@/lib/feed-cache";
+import { dropFromFeed, forgetFeed } from "@/lib/feed-cache";
 import { swipeRight } from "@/modules/apply/lifecycle";
 import { trackOf } from "@/modules/jobs/gate";
+import { learnFromSwipes } from "@/modules/profile";
+
+/**
+ * What the swipe taught the feed (P8, no question asked): the user's last 30 days are read after the response, and a line
+ * that lowers a skipped field's rank (or one an apply lifted) makes the cached feed rebuild. A failure here never shows.
+ */
+function learn(userId: string) {
+  after(async () => {
+    const { changed } = await learnFromSwipes(userId).catch(() => ({ changed: false }));
+    if (changed) forgetFeed(userId);
+  });
+}
 
 const bodySchema = z.object({
   jobId: z.string().min(1),
@@ -23,17 +35,21 @@ export async function POST(req: Request) {
     const job = await db.job.findUnique({ where: { id: jobId }, select: { source: true, title: true, track: true, roleFamily: true, readingCurrent: true } });
     if (!job) return NextResponse.json({ error: "not_found" }, { status: 404 });
     try {
-      // The job's family at this moment (P8): a reason given later counts toward it, whatever a re-reading says.
+      // The job's family at this moment (P8): it counts toward that field, whatever a later re-reading says.
       await db.swipe.create({ data: { userId: user.id, jobId, direction: "left", family: trackOf(job) } });
       dropFromFeed(user.id, jobId);
     } catch {
       return NextResponse.json({ error: "already_swiped" }, { status: 409 });
     }
+    learn(user.id);
     return NextResponse.json({ ok: true });
   }
 
   const result = await swipeRight(user.id, jobId);
-  if (result.ok) return NextResponse.json({ ok: true, applicationId: result.applicationId });
+  if (result.ok) {
+    learn(user.id);
+    return NextResponse.json({ ok: true, applicationId: result.applicationId });
+  }
   if (result.reason === "blocked") {
     // A full queue is a "try again later", not a refusal: nothing was saved and the card goes back to the deck.
     if (result.rule === "max_in_flight") return NextResponse.json({ ok: false, blocked: "max_in_flight" }, { status: 429 });

@@ -941,7 +941,7 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
         seniority: job.seniority,
         salary: formatSalary({ min: job.salaryMin, max: job.salaryMax, currency: job.salaryCurrency, period: job.salaryPeriod }),
         // The family a skip is counted in (trackOf, the swipe's own Swipe.family), so a line acts on the jobs it learned from.
-        learnedNote: learnedNotes.size > 0 ? (learnedNotes.get(trackOf(job) ?? "") ?? null) : null,
+        learnedNote: learnedNotes.size > 0 ? (learnedNotes.get(trackOf(job) ?? "") ?? (job.readingCurrent && job.kind ? learnedNotes.get(`kind:${job.kind}`) : undefined) ?? null) : null,
         quote: judgements.get(job.id)?.quote ?? null,
       };
     })

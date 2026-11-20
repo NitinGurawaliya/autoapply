@@ -26,7 +26,6 @@ import { DeckDoneArt, DeckEmptyArt, ResumeSketch, SignInArt } from "@/components
 import { JobCard } from "@/components/patterns/job-card";
 import { StackCount, SwipeStage } from "@/components/patterns/swipe-stage";
 import { AgentToast } from "@/components/patterns/agent-toast";
-import { SkipReasonToast } from "@/components/patterns/skip-reason-toast";
 import { AgentStatus } from "@/components/patterns/agent-status";
 import { AnimatePresence } from "framer-motion";
 import { SentToast } from "@/components/sent-celebration";
@@ -374,24 +373,6 @@ function Patterns() {
           <AgentToast company="Lumen Pay" stage={3} status="submitted" href="#" visible />
           <AgentToast company="Lumen Pay" stage={1} status="needs_input" href="#" visible />
           <AgentToast company="Lumen Pay" stage={1} status="blocked" error="min_match_score" href="#" visible />
-        </Section>
-        <Section title="Why you skipped (P8)">
-          <SkipReasonToast company="Lumen Pay" state={{ step: "why" }} visible onReason={() => undefined} onAnswer={() => undefined} />
-          <SkipReasonToast company="Lumen Pay" state={{ step: "noted", text: "Noted" }} visible onReason={() => undefined} onAnswer={() => undefined} />
-          <SkipReasonToast
-            company="Lumen Pay"
-            state={{ step: "ask", busy: false, ask: { family: "qa", type: "stop_track", title: "Stop showing QA / Test roles?", detail: "You skipped 3 as not your field.", yes: "Stop showing", no: "Keep showing", done: "" } }}
-            visible
-            onReason={() => undefined}
-            onAnswer={() => undefined}
-          />
-          <SkipReasonToast
-            company="Lumen Pay"
-            state={{ step: "ask", busy: true, ask: { family: "kind:contract", type: "hide_kind", title: "Hide contract roles?", detail: "You skipped 3 and applied to none.", yes: "Hide", no: "Keep showing", done: "" } }}
-            visible
-            onReason={() => undefined}
-            onAnswer={() => undefined}
-          />
         </Section>
         <Section title="Agent at work">
           <AgentStatus text="Getting ready to apply" />
