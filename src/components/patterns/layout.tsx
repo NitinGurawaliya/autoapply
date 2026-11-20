@@ -16,8 +16,8 @@ export function Screen({ children, className }: { children: ReactNode; className
   );
 }
 
-/** Back arrow, three segments and "1 of 3". */
-export function StepHeader({ step, onBack, backHref }: { step: 1 | 2 | 3; onBack?: () => void; backHref?: string }) {
+/** Back arrow, the segments and "1 of 2" (onboarding has 2 steps since Phase S; `of` defaults to 3 for older screens). */
+export function StepHeader({ step, of = 3, onBack, backHref }: { step: 1 | 2 | 3; of?: 2 | 3; onBack?: () => void; backHref?: string }) {
   const back = <Icon name="back" size={22} />;
   return (
     <header className="flex h-11 flex-none items-center gap-3 pr-4 pl-3">
@@ -33,8 +33,8 @@ export function StepHeader({ step, onBack, backHref }: { step: 1 | 2 | 3; onBack
         // Step 1 has nowhere to go back to: the same space, nothing to focus.
         <span aria-hidden="true" className="size-11 flex-none" />
       )}
-      <SegmentedProgress count={3} done={step} thickness={6} className="flex-1" />
-      <span className="type-meta font-semibold text-muted-foreground tabular-nums">{step} of 3</span>
+      <SegmentedProgress count={of} done={step} thickness={6} className="flex-1" />
+      <span className="type-meta font-semibold text-muted-foreground tabular-nums">{step} of {of}</span>
     </header>
   );
 }

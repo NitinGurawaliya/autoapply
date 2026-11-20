@@ -3,56 +3,12 @@
 import { forgetVisitedPages } from "@/lib/forget-pages";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { cn } from "cn";
-import { Button } from "@/components/ui/button";
 import { FieldError } from "@/components/ui/field";
 import { Icon } from "@/components/ui/icons";
 import { ProgressBar } from "@/components/ui/segmented-progress";
 import { InfoNote } from "@/components/patterns/content";
 import { ResumeSketch } from "@/components/patterns/drawings";
 import { PageIntro, ScreenBody, StepHeader, StickyFooter } from "@/components/patterns/layout";
-
-type Profile = {
-  fullName: string;
-  phone: string | null;
-  yearsExperience: number | null;
-  skills: string[];
-  experience: Array<{ title: string }>;
-  education: Array<{ school: string; degree: string | null }>;
-};
-
-type Find = { label: string; value: string; missing?: boolean };
-
-function findsOf(profile: Profile): Find[] {
-  const roles = profile.experience.length;
-  const years = profile.yearsExperience;
-  const skills = profile.skills;
-  const school = profile.education[0];
-  return [
-    { label: "Name", value: profile.fullName || "Not found. You can add it next", missing: !profile.fullName },
-    {
-      label: "Experience",
-      value:
-        roles === 0
-          ? "Not found. You can add it next"
-          : `${years != null ? `${years} ${years === 1 ? "year" : "years"} across ` : ""}${roles} ${roles === 1 ? "role" : "roles"}`,
-      missing: roles === 0,
-    },
-    {
-      label: "Skills",
-      value: skills.length === 0 ? "Not found. You can add them next" : skills.length > 3 ? `${skills.slice(0, 3).join(", ")} and ${skills.length - 3} more` : skills.join(", "),
-      missing: skills.length === 0,
-    },
-    {
-      label: "Education",
-      value: school ? [school.degree, school.school].filter(Boolean).join(", ") : "Not found. You can add it next",
-      missing: !school,
-    },
-    { label: "Phone", value: profile.phone || "Not found. You can add it next", missing: !profile.phone },
-  ];
-}
-
-const LABELS = ["Name", "Experience", "Skills", "Education", "Phone"];
 
 /** What the upload's refusal (api/profile/resume, modules/profile/parseResume.ts) means to the user. */
 const UPLOAD_ERRORS: Record<string, string> = {
@@ -64,128 +20,73 @@ const UPLOAD_ERRORS: Record<string, string> = {
   rate_limited: "Too many uploads in the last hour. Try again later.",
 };
 
+/** How long a read usually takes (18 s measured on 21 Nov): the bar fills towards it and never claims to be done. */
+const TYPICAL_MS = 20_000;
+
 /**
- * Step 1 of onboarding (design/onboarding.html): choose a PDF, then watch it being read. The upload is the same
- * POST /api/profile/resume as before; once it is read, the findings come from GET /api/profile.
+ * Step 1 of onboarding (Phase S, docs/onboarding/TDD.md 3): pick a PDF and it is read at once (no second button), then
+ * straight on to the profile screen, which shows what was found (no findings screen of its own). The wait shows the
+ * page being read and a bar that fills with time, so it never looks stuck. The upload is POST /api/profile/resume.
  */
 export function ResumeUploadForm({ signOut }: { signOut: React.ReactNode }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [view, setView] = useState<"upload" | "reading">("upload");
-  const [finds, setFinds] = useState<Find[] | null>(null);
-  const [shown, setShown] = useState(0);
-  const [tick, setTick] = useState(0);
+  const [reading, setReading] = useState(false);
+  const [started, setStarted] = useState(0);
+  const [now, setNow] = useState(0);
   const [error, setError] = useState("");
 
-  // The lime band sweeps the page while we read.
+  // The band sweeps the page and the bar creeps on while we read.
   useEffect(() => {
-    if (view !== "reading" || (finds && shown >= finds.length)) return;
-    const timer = window.setInterval(() => setTick((value) => value + 1), 1100);
+    if (!reading) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 400);
     return () => window.clearInterval(timer);
-  }, [view, finds, shown]);
+  }, [reading]);
 
-  // Findings appear one by one once they are in.
-  useEffect(() => {
-    if (!finds || shown >= finds.length) return;
-    const timer = window.setTimeout(() => setShown((value) => value + 1), 450);
-    return () => window.clearTimeout(timer);
-  }, [finds, shown]);
-
-  async function read() {
-    if (!file) {
+  async function read(file: File) {
+    if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") {
       setError("Choose a PDF resume.");
       return;
     }
     setError("");
-    setFinds(null);
-    setShown(0);
-    setView("reading");
+    setStarted(Date.now());
+    setNow(Date.now());
+    setReading(true);
     const body = new FormData();
     body.set("resume", file);
     const response = await fetch("/api/profile/resume", { method: "POST", body }).catch(() => null);
     if (!response?.ok) {
-      setView("upload");
+      setReading(false);
+      if (input.current) input.current.value = "";
       const code = response ? ((await response.json().catch(() => null)) as { error?: string } | null)?.error : null;
       setError((code && UPLOAD_ERRORS[code]) || "Could not read that PDF. Try another file.");
       return;
     }
-    // A replaced resume's changes, for the review screen (sessionStorage: it may be unavailable, then nothing shows).
+    // A replaced resume's changes, for the profile screen (sessionStorage: it may be unavailable, then nothing shows).
     const result = (await response.json().catch(() => null)) as { changes?: { replaced?: boolean } } | null;
     try {
       if (result?.changes?.replaced) sessionStorage.setItem("resume-changes", JSON.stringify(result.changes));
       else sessionStorage.removeItem("resume-changes");
     } catch {
-      /* private mode: the review screen shows the profile without the summary */
+      /* private mode: the profile screen shows the profile without the summary */
     }
     void forgetVisitedPages(); // a new resume changes the feed
-    const profile = await fetch("/api/profile", { cache: "no-store" })
-      .then((res) => (res.ok ? (res.json() as Promise<Profile>) : null))
-      .catch(() => null);
-    setFinds(profile ? findsOf(profile) : LABELS.map((label) => ({ label, value: "Read" })));
+    router.push("/onboarding/confirm");
   }
 
-  const done = Boolean(finds && shown >= finds.length);
-  const missing = finds?.filter((find) => find.missing).length ?? 0;
-
-  if (view === "reading") {
+  if (reading) {
+    const elapsed = Math.max(0, now - started);
+    // Up to 90 % over the usual time, then slower: honest about the wait without a fake finish.
+    const value = elapsed < TYPICAL_MS ? (elapsed / TYPICAL_MS) * 90 : 90 + Math.min(8, (elapsed - TYPICAL_MS) / 2000);
     return (
       <>
-        <StepHeader step={1} />
+        <StepHeader step={1} of={2} />
         <ScreenBody>
-          <PageIntro
-            title={done ? "Got it" : "Reading your resume"}
-            sub={
-              done
-                ? `${(finds?.length ?? 0) - missing} things found${missing ? `, ${missing} to add` : ""}. Have a quick look before we start.`
-                : "Usually takes 5 to 15 seconds."
-            }
-          />
-          <ResumeSketch band={tick} />
-          <ul className="m-0 mt-6 flex list-none flex-col gap-1 p-0" aria-live="polite">
-            {LABELS.map((label, index) => {
-              const find = finds && index < shown ? finds[index] : null;
-              return (
-                <li
-                  key={label}
-                  className={cn(
-                    "flex min-h-12 items-center gap-3 transition-[opacity,transform] duration-420 ease-calm",
-                    find ? "translate-y-0 opacity-100" : "translate-y-1.5 opacity-40",
-                  )}
-                >
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      "box-border flex size-7 flex-none items-center justify-center rounded-full border",
-                      !find && "border-sketch-line bg-transparent",
-                      find && !find.missing && "border-inverse bg-inverse text-inverse-foreground",
-                      find?.missing && "border-foreground bg-transparent text-foreground",
-                    )}
-                  >
-                    {find && !find.missing ? <Icon name="check" size={14} /> : null}
-                    {find?.missing ? <span className="text-sm font-semibold">!</span> : null}
-                  </span>
-                  <div className="flex flex-col gap-px">
-                    <span className="type-meta text-muted-foreground">{label}</span>
-                    <span className="type-body font-semibold">{find ? find.value : "Looking…"}</span>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-          <div className="mt-auto pt-6">
-            {done ? (
-              <Button variant="primary" size="xl" className="w-full" onClick={() => router.push("/onboarding/confirm")}>
-                Check what we found
-              </Button>
-            ) : (
-              <div className="flex flex-col gap-2.5">
-                <ProgressBar value={finds ? 40 + (shown / finds.length) * 60 : Math.min(36, 8 + tick * 6)} />
-                <span className="text-center text-sm text-muted-foreground">
-                  Found {shown} of {LABELS.length} · keep this screen open
-                </span>
-              </div>
-            )}
+          <PageIntro title="Reading your resume" sub={elapsed > TYPICAL_MS + 5000 ? "Almost there. Long resumes take a little longer." : "Your work, skills and education. Usually under 20 seconds."} />
+          <ResumeSketch band={Math.floor(elapsed / 1100)} />
+          <div className="mt-auto flex flex-col gap-2.5 pt-6" aria-live="polite">
+            <ProgressBar value={value} />
+            <span className="text-center type-meta text-muted-foreground">Next, you check what we found</span>
           </div>
         </ScreenBody>
       </>
@@ -194,7 +95,7 @@ export function ResumeUploadForm({ signOut }: { signOut: React.ReactNode }) {
 
   return (
     <>
-      <StepHeader step={1} />
+      <StepHeader step={1} of={2} />
       <ScreenBody>
         <PageIntro title="Start with your resume" sub="We read it once, so you never retype your details again." />
         <input
@@ -206,44 +107,26 @@ export function ResumeUploadForm({ signOut }: { signOut: React.ReactNode }) {
           className="sr-only"
           aria-label="Resume PDF"
           onChange={(event) => {
-            setFile(event.target.files?.[0] ?? null);
-            setError("");
+            const file = event.target.files?.[0];
+            if (file) void read(file);
           }}
         />
-        {file ? (
-          <div className="mt-7 box-border flex items-center gap-3.5 rounded-panel bg-surface p-4 shadow-lift">
-            <span aria-hidden="true" className="flex size-12 flex-none items-center justify-center rounded-tile bg-inverse text-xs font-bold text-inverse-foreground">
-              PDF
-            </span>
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="truncate text-base font-semibold">{file.name}</span>
-              <span className="type-meta text-muted-foreground">{Math.max(1, Math.round(file.size / 1024))} KB · Ready to read</span>
-            </div>
-            <Button variant="underline" size="text" className="text-sm" onClick={() => input.current?.click()}>
-              Replace
-            </Button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => input.current?.click()}
-            className="mt-7 box-border flex h-70 cursor-pointer flex-col items-center justify-center gap-3 rounded-card border border-dashed border-line-strong bg-surface text-foreground"
-          >
-            <span className="box-border flex size-14 items-center justify-center rounded-control bg-primary text-primary-foreground">
-              <Icon name="upload" size={30} />
-            </span>
-            <span className="mt-1 text-lg font-semibold">Upload your resume</span>
-            <span className="text-sm text-muted-foreground">PDF, up to 5 MB</span>
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => input.current?.click()}
+          className="mt-7 box-border flex h-70 cursor-pointer flex-col items-center justify-center gap-3 rounded-card border border-dashed border-line-strong bg-surface text-foreground"
+        >
+          <span className="box-border flex size-14 items-center justify-center rounded-control bg-primary text-primary-foreground">
+            <Icon name="upload" size={30} />
+          </span>
+          <span className="mt-1 text-lg font-semibold">Upload your resume</span>
+          <span className="text-sm text-muted-foreground">PDF, up to 5 MB</span>
+        </button>
         <InfoNote className="mt-4.5">Private to you. Used only for jobs you swipe right on.</InfoNote>
         {error ? <FieldError className="mt-4">{error}</FieldError> : null}
       </ScreenBody>
       <StickyFooter>
-        <Button variant="primary" size="xl" className="w-full" disabled={!file} onClick={() => void read()}>
-          Read my resume
-        </Button>
-        <div className="mt-2 flex justify-center">{signOut}</div>
+        <div className="flex justify-center">{signOut}</div>
       </StickyFooter>
     </>
   );
