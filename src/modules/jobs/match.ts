@@ -15,7 +15,7 @@ import { companyResultsById, judge } from "./results";
 import { APPLY_BOARDS } from "./pool";
 import { formatSalary } from "./salary";
 import { judgeJobs, type Judgement, type JudgementStore, profileVector } from "./semantic";
-import { candidateSkills, compareSkills, jobSkills } from "./skills";
+import { candidateShows, compareSkills, jobSkills } from "./skills";
 import { requiredYears } from "./tagging";
 
 export { daysAgoLabel };
@@ -473,7 +473,7 @@ function scoreInBand(
     ? Math.min(WORK_MAX, (fit === "same" ? 35 : 20) + 5 * skillsInTitle.length)
     : Math.round(WORK_MAX * Math.min(1, titleRatio + 0.5 * skillsInTitle.length));
 
-  const skills = skillsPart(job.jobSkills, candidate.shows ?? candidateSkills({ skills: candidate.skills }));
+  const skills = skillsPart(job.jobSkills, candidate.shows ?? candidateShows({ skills: candidate.skills }));
 
   const asks = job.requiredYears;
   const have = candidate.yearsExperience ?? 0;
@@ -531,7 +531,7 @@ function scoreByMeaning(
   const closenessScore = Math.round(CLOSENESS_MAX * closeness);
   const verdictScore = verdict ? FIT_POINTS[verdict.fit] : UNJUDGED_POINTS;
   const meaningScore = closenessScore + verdictScore;
-  const skills = skillsPart(job.jobSkills, candidate.shows ?? candidateSkills({ skills: candidate.skills }));
+  const skills = skillsPart(job.jobSkills, candidate.shows ?? candidateShows({ skills: candidate.skills }));
   // A stretch with none of the job's skills on the resume is not a match (owner, 19 Nov): the model called it only a
   // stretch, and nothing in the posting shows the candidate can do it.
   if (verdict?.fit === "stretch" && skills.matched === 0) {
@@ -871,7 +871,7 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
   const tracks = profile ? tracksOf(profile) : [];
   // Every vocabulary skill the candidate shows, in their skills list or their resume (Phase M4): a job's skill is
   // "missing" only when it is in neither.
-  const shows = profile ? candidateSkills(profile) : new Set<string>();
+  const shows = profile ? candidateShows(profile) : new Set<string>();
   const vector = profile ? await profileVector(profile) : null;
   // "Also show nearby fields" (P4) widens the default tracks; the evaluation keeps the old path.
   const shown = filters.tracks.length > 0 ? filters.tracks : feedTracks(tracks, !evaluation && profile?.showNearby === true);

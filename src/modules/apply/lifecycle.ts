@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { cachedFeedScore, dropFromFeed } from "@/lib/feed-cache";
 import { APPLY_QUEUES, enqueueApply } from "@/lib/queue";
 import { check, historyFor, loadRules, writeEvent } from "@/modules/governance";
-import { APPLY_BOARDS, candidateSkills, fitJobs, fitOn, jobSimilarity, judgeJobs, profileVector, readingGateOn, scoreJob, tracksOf } from "@/modules/jobs";
+import { APPLY_BOARDS, candidateShows, fitJobs, fitOn, jobSimilarity, judgeJobs, profileVector, readingGateOn, scoreJob, tracksOf } from "@/modules/jobs";
 import { briefOf } from "@/modules/profile/brief";
 import { lastRunMaySendTwice } from "./outcome";
 
@@ -34,7 +34,7 @@ export async function candidateScore(profile: ScoredProfile, job: ScoredJob) {
     preferredLocations: [],
     tracks: tracksOf(profile),
     // The skills the card counted (profile skills and resume), so the swipe scores the job as the feed did (Phase N).
-    shows: candidateSkills(profile),
+    shows: candidateShows(profile),
     // The one gate without its field part (Phase P, P3): this check cannot know the Track filter the card was shown
     // under, so it enforces non-tech, gig, task, paid task and the profile's "Never show me" (P4) only.
   }, readingGateOn() ? { job, tracks: null, avoid: profile.avoid ?? [], field: false } : undefined).score;
@@ -42,7 +42,7 @@ export async function candidateScore(profile: ScoredProfile, job: ScoredJob) {
 
 async function fitOf(profile: ScoredProfile, jobId: string) {
   const brief = briefOf({ ...profile, showNearby: profile.showNearby ?? false });
-  const verdicts = await fitJobs({ userId: profile.userId, profileId: profile.id, brief, shows: candidateSkills(profile), years: profile.yearsExperience }, [jobId], { lease: false });
+  const verdicts = await fitJobs({ userId: profile.userId, profileId: profile.id, brief, shows: candidateShows(profile), years: profile.yearsExperience }, [jobId], { lease: false });
   return verdicts.get(jobId) ?? null;
 }
 

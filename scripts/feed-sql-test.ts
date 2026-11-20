@@ -8,7 +8,7 @@
 // RELEVANCE_FIT=1 npx tsx scripts/feed-sql-test.ts   (fit path)
 import { db } from "../src/lib/db";
 import { companyKey, feedHistory, loadRules, roleKey } from "../src/modules/governance";
-import { candidateSkills, companyResultsById, fitJobs, fitOn, judge, judgeJobs, listFeed, parseFeedFilters, profileVector, scoreJob, tracksOf } from "../src/modules/jobs";
+import { candidateShows, companyResultsById, fitJobs, fitOn, judge, judgeJobs, listFeed, parseFeedFilters, profileVector, scoreJob, tracksOf } from "../src/modules/jobs";
 import { briefOf } from "../src/modules/profile/brief";
 import { jobGate, readingGateOn } from "../src/modules/jobs/gate";
 import { applyFeedFloor, dedupeListings, feedRows, feedTracks, levelsFor, yearsBand } from "../src/modules/jobs/match";
@@ -78,7 +78,7 @@ async function referenceFeed(userId: string) {
   const preferred = (answers[0]?.answer ?? "").split(",").map((item) => item.trim()).filter((item) => item === "India" || item === "US" || item === "Other");
   const sources = profile?.isTest ? [...new Set([...filters.boards, "mock"])] : filters.boards;
   const tracks = profile ? tracksOf(profile) : [];
-  const shows = profile ? candidateSkills(profile) : new Set<string>();
+  const shows = profile ? candidateShows(profile) : new Set<string>();
   // Strict matching (9 Nov): the user's own tracks (plus plain software roles for developers) and their years band are
   // hard filters; closeness by meaning and the model's verdict rank what passes.
   const shown = feedTracks(tracks);

@@ -3,7 +3,7 @@
 import { db } from "../src/lib/db";
 import { listFeed, parseFeedFilters, scoreJob } from "../src/modules/jobs";
 import type { Breakdown } from "../src/modules/jobs/match";
-import { candidateSkills } from "../src/modules/jobs/skills";
+import { candidateShows } from "../src/modules/jobs/skills";
 
 let failed = 0;
 function check(name: string, ok: boolean, detail = "") {
@@ -48,7 +48,7 @@ async function realFeeds() {
   let withPay = 0;
   for (const profile of profiles) {
     const feed = await listFeed(profile.userId, parseFeedFilters({}));
-    const shows = candidateSkills(profile);
+    const shows = candidateShows(profile);
     for (const job of feed) {
       jobs += 1;
       if (!adds(job.score, job.breakdown) || !within(job.breakdown)) {

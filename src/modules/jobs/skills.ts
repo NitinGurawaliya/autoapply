@@ -354,6 +354,69 @@ export function candidateSkills(profile: { skills: unknown; resumeText?: string 
 }
 
 /**
+ * What a skill proves the candidate also has: a React developer writes HTML, CSS and JavaScript, a FastAPI one Python,
+ * a PostgreSQL one SQL. Only certain implications (20 Nov: a React and TypeScript resume showed "Missing: HTML, CSS").
+ */
+const IMPLIES: Record<string, string[]> = {
+  React: ["HTML", "CSS", "JavaScript"],
+  "Next.js": ["React"],
+  "Vue.js": ["HTML", "CSS", "JavaScript"],
+  Nuxt: ["Vue.js"],
+  Angular: ["HTML", "CSS", "TypeScript"],
+  Svelte: ["HTML", "CSS", "JavaScript"],
+  jQuery: ["HTML", "CSS", "JavaScript"],
+  Redux: ["JavaScript"],
+  "Tailwind CSS": ["CSS"],
+  Sass: ["CSS"],
+  Bootstrap: ["CSS"],
+  TypeScript: ["JavaScript"],
+  "Node.js": ["JavaScript"],
+  Express: ["Node.js"],
+  NestJS: ["Node.js", "TypeScript"],
+  Django: ["Python"],
+  Flask: ["Python"],
+  FastAPI: ["Python"],
+  Pandas: ["Python"],
+  NumPy: ["Python"],
+  PySpark: ["Python", "Apache Spark"],
+  "Spring Boot": ["Spring"],
+  Spring: ["Java"],
+  Hibernate: ["Java"],
+  "ASP.NET": [".NET"],
+  Laravel: ["PHP"],
+  "Ruby on Rails": ["Ruby"],
+  PostgreSQL: ["SQL"],
+  MySQL: ["SQL"],
+  "SQL Server": ["SQL"],
+  SQLite: ["SQL"],
+  "Oracle Database": ["SQL"],
+  "PL/SQL": ["SQL"],
+  GitHub: ["Git"],
+  GitLab: ["Git"],
+  SwiftUI: ["Swift"],
+  Flutter: ["Dart"],
+  "Jetpack Compose": ["Kotlin", "Android"],
+  "AWS Lambda": ["AWS"],
+  EC2: ["AWS"],
+  S3: ["AWS"],
+  CloudFormation: ["AWS"],
+};
+
+/** The candidate's skills with everything they imply (IMPLIES, followed to the end): what the card and the judge compare. */
+export function withImplied(skills: Set<string>): Set<string> {
+  const out = new Set(skills);
+  const queue = [...skills];
+  while (queue.length > 0) {
+    for (const implied of IMPLIES[queue.pop()!] ?? []) {
+      if (out.has(implied)) continue;
+      out.add(implied);
+      queue.push(implied);
+    }
+  }
+  return out;
+}
+
+/**
  * The job's skills split by what the candidate shows. With the model's labels (`required`, a subset of `skills`),
  * missing lists only required ones and `split` is true; without, missing is every skill not shown.
  */
@@ -362,4 +425,10 @@ export function compareSkills(skills: string[], required: string[] | null, have:
   const split = required != null;
   const pool = split ? required.filter((skill) => skills.includes(skill)) : skills;
   return { have: shown, missing: pool.filter((skill) => !have.has(skill)), split };
+}
+
+/** What the card and the fit judge count as the candidate's skills: candidateSkills plus what they imply. The brief
+ * keeps candidateSkills alone (its own list, unchanged, so verdicts stay cached). */
+export function candidateShows(profile: { skills: unknown; resumeText?: string | null }): Set<string> {
+  return withImplied(candidateSkills(profile));
 }

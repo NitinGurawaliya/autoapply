@@ -1,5 +1,5 @@
 // Offline checks for the job skills vocabulary (Phase M2). npx tsx scripts/job-skills-test.ts
-import { candidateSkills, compareSkills, jobSkills, TECH_VOCAB } from "../src/modules/jobs/skills";
+import { candidateShows, candidateSkills, compareSkills, jobSkills, TECH_VOCAB, withImplied } from "../src/modules/jobs/skills";
 
 let failed = 0;
 function check(name: string, ok: boolean, detail = "") {
@@ -68,6 +68,14 @@ check("missing = required only, never one the candidate shows", same(compared.mi
 const unsplit = compareSkills(found, null, candidate);
 check("without labels, missing = all not shown", !unsplit.split && unsplit.missing.length === found.length - unsplit.have.length);
 check("required outside the job's skills is ignored", compareSkills(["Python"], ["Rust"], new Set()).missing.length === 0);
+
+// 20 Nov: a skill proves the ones under it (a React developer writes HTML and CSS); IMPLIES names only real ones.
+const shows = candidateShows({ skills: ["Next.js", "TypeScript", "FastAPI", "PostgreSQL"] });
+check("Next.js implies React, HTML, CSS and JavaScript", ["React", "HTML", "CSS", "JavaScript"].every((term) => shows.has(term)), [...shows].join(", "));
+check("FastAPI implies Python, PostgreSQL implies SQL", shows.has("Python") && shows.has("SQL"));
+check("nothing is implied the other way or sideways", !shows.has("Node.js") && !shows.has("Django") && !shows.has("Vue.js"));
+check("a frontend job's HTML and CSS are not missing for a React resume", compareSkills(["React", "HTML", "CSS", "AWS"], ["HTML", "CSS", "AWS"], shows).missing.join() === "AWS");
+check("the vocabulary names every implied skill", [...withImplied(new Set(TECH_VOCAB.map((t) => t.name)))].length === TECH_VOCAB.length);
 
 console.log(`${failed === 0 ? "PASS" : "FAIL"} job-skills-test (${TECH_VOCAB.length} terms)`);
 process.exit(failed === 0 ? 0 : 1);
