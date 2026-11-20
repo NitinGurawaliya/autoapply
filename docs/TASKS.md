@@ -289,6 +289,6 @@ Design: [docs/reveal/TDD.md](reveal/TDD.md); approved prototype `design/daily-re
 Design: [docs/onboarding/TDD.md](onboarding/TDD.md). Tasks: [docs/onboarding/TASKS.md](onboarding/TASKS.md).
 
 - [x] [S1 — The resume reads on pick and goes straight on](onboarding/TASKS.md#s1)
-- [ ] [S2 — One profile screen with the few answers every form needs](onboarding/TASKS.md#s2)
+- [x] [S2 — One profile screen with the few answers every form needs](onboarding/TASKS.md#s2)
 - [ ] [S3 — No "needs answers" line before the first swipe](onboarding/TASKS.md#s3)
 - [ ] [S4 — The new onboarding, end to end](onboarding/TASKS.md#s4)

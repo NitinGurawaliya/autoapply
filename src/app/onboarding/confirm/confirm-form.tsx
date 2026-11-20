@@ -3,6 +3,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { CheckRow } from "@/components/ui/check-row";
+import { ChipGroup } from "@/components/patterns/chip-group";
 import { Chip, SkillTag } from "@/components/ui/chip";
 import { FieldError, FieldLabel, InputBox, TextAreaBox } from "@/components/ui/field";
 import { IconButton } from "@/components/ui/icon-button";
@@ -35,6 +36,49 @@ export type ConfirmValues = {
   /** "Never show me" (Profile.avoid, P4): contract, intern, commission_only. */
   avoid: string[];
 };
+
+/**
+ * The few answers every application form needs, saved with the profile (Phase S, docs/onboarding/TDD.md 3). `show`: some
+ * are missing (a new user). Pre-filled where the resume or a default settles them; the user sees and confirms them all.
+ */
+export type ApplyAnswers = {
+  show: boolean;
+  current_ctc: string;
+  expected_ctc: string;
+  notice_period: string;
+  employment_type: string;
+  preferred_location: string;
+  citizenship: string;
+  accept_acknowledgements: string;
+  citizenshipQuestion: string;
+  acknowledgementKey: string;
+  acknowledgementQuestion: string;
+};
+
+// Notice period is saved in days; "Immediate" is 0.
+const NOTICE = [
+  { label: "Immediate", value: "0" },
+  { label: "15 days", value: "15" },
+  { label: "30 days", value: "30" },
+  { label: "60 days", value: "60" },
+  { label: "90 days", value: "90" },
+];
+const EMPLOYMENT = ["Full-time", "Part-time", "Contract", "Internship"];
+const PLACES = ["India", "US", "Other"];
+
+/** "Fresher · 2 internships", "3 years · 4 roles": the level in words. */
+function levelOf(years: number | null, experience: Array<{ title: string }>) {
+  const roles = experience.length;
+  const interns = experience.filter((role) => /\bintern/i.test(role.title)).length;
+  if (years == null || years < 1) {
+    if (interns > 0) return `Fresher · ${interns} ${interns === 1 ? "internship" : "internships"}`;
+    return roles > 0 ? `Fresher · ${roles} ${roles === 1 ? "role" : "roles"}` : "Fresher";
+  }
+  return `${years} ${years === 1 ? "year" : "years"}${roles > 0 ? ` · ${roles} ${roles === 1 ? "role" : "roles"}` : ""}`;
+}
+
+// After saving, a full load of the feed (not router.push): it shows the agent reading while the first set is built.
+const FEED = "/feed";
 
 /** "Never show me" choices (modules/jobs/gate.ts AVOIDS). */
 const AVOID_OPTIONS = [
@@ -212,13 +256,13 @@ function ResumeChangesPanel() {
  */
 export function ConfirmForm({
   initial,
-  next,
+  answers: initialAnswers,
   trackOptions,
   suggestedTracks = [],
   nearbyTracks = {},
 }: {
   initial: ConfirmValues;
-  next: string;
+  answers: ApplyAnswers;
   trackOptions: Array<{ id: string; label: string }>;
   suggestedTracks?: string[];
   /** Each track's adjacent tracks (modules/jobs/functions.ts ADJACENT), to name what "nearby" adds. */
@@ -226,11 +270,14 @@ export function ConfirmForm({
 }) {
   const [values, setValues] = useState(initial);
   const [editing, setEditing] = useState<string | null>(null);
-  const [status, setStatus] = useState<"idle" | "saving" | "error" | "missing">("idle");
+  const [status, setStatus] = useState<"idle" | "saving" | "error" | "missing" | "answers">("idle");
   // Link fields the server refused as not an address (e2e finding 10): named, so the user can fix them.
   const [badLinks, setBadLinks] = useState<string[]>([]);
   // The phone card shows when the resume had no number, and stays while it is being typed.
   const [askPhone] = useState(!initial.phone.trim());
+  const [answers, setAnswers] = useState(initialAnswers);
+  // The full details open by themselves only when something must be fixed before saving (no name or email).
+  const [details, setDetails] = useState(!initial.fullName.trim() || !initial.email.trim());
   // What "Also show nearby fields" adds for the fields picked now, by name.
   const nearby = [...new Set(values.tracks.flatMap((track) => nearbyTracks[track] ?? []))].filter((track) => !values.tracks.includes(track));
   const nearbyHint =
@@ -245,9 +292,19 @@ export function ConfirmForm({
     setStatus("idle");
   }
 
+  function setAnswer(key: keyof ApplyAnswers, value: string) {
+    setAnswers((current) => ({ ...current, [key]: value }));
+    setStatus("idle");
+  }
+
   async function save() {
     if (!values.fullName.trim() || !values.email.trim()) {
+      setDetails(true);
       setStatus("missing");
+      return;
+    }
+    if (answers.show && (!answers.expected_ctc.trim() || !answers.current_ctc.trim() || !answers.notice_period.trim())) {
+      setStatus("answers");
       return;
     }
     setStatus("saving");
@@ -282,10 +339,33 @@ export function ConfirmForm({
       return;
     }
     setBadLinks([]);
+    // The answers every form needs, as the user confirmed them here (source "user").
+    if (answers.show) {
+      const rows = [
+        { key: "current_ctc", question: "Current CTC", answer: answers.current_ctc.trim() },
+        { key: "expected_ctc", question: "Expected CTC", answer: answers.expected_ctc.trim() },
+        { key: "notice_period", question: "Notice period", answer: answers.notice_period.trim() },
+        { key: "employment_type", question: "Employment type", answer: answers.employment_type },
+        { key: "preferred_location", question: "Preferred location", answer: answers.preferred_location },
+        { key: "citizenship", question: answers.citizenshipQuestion, answer: answers.citizenship.trim().slice(0, 200) },
+        { key: answers.acknowledgementKey, question: answers.acknowledgementQuestion, answer: answers.accept_acknowledgements },
+      ].filter((row) => row.answer);
+      const saved = await fetch("/api/answers", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers: rows.map((row) => ({ ...row, source: "user" })) }),
+      }).catch(() => null);
+      if (!saved?.ok) {
+        setStatus("error");
+        return;
+      }
+    }
     // A full load, not router.push after forgetVisitedPages: that server action re-rendered this page, and the refresh
     // often won over the push, leaving the user here with the profile saved (e2e 18 Nov, 3 of 6 tries). A full load
     // also starts with no kept pages, which is what forgetting them was for.
-    window.location.assign(next);
+    // Straight to the feed: a full load shows the agent reading while today's set is built (Phase R, R4).
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- a full load on purpose (above)
+    window.location.assign(FEED);
   }
 
   const skills = values.skills.split(",").map((item) => item.trim()).filter(Boolean);
@@ -293,9 +373,9 @@ export function ConfirmForm({
 
   return (
     <>
-      <StepHeader step={2} backHref="/onboarding/resume" />
+      <StepHeader step={2} of={2} backHref="/onboarding/resume" />
       <ScreenBody className="gap-4 overflow-y-auto pb-5">
-        <PageIntro title="Here's what we found" sub="Tap anything to fix it. We only ever use what's on this page." />
+        <PageIntro title="Your profile" sub="Read from your resume. Change anything now or later." />
         <ResumeChangesPanel />
 
         {askPhone ? (
@@ -320,6 +400,40 @@ export function ConfirmForm({
           </div>
         ) : null}
 
+        {/* What was read, in a few lines (Phase S): name, title and level, the fields the feed shows, the skills. */}
+        <SectionCard
+          title="From your resume"
+          action={
+            <Button variant="underline" size="text" className="text-sm" aria-expanded={details} onClick={() => setDetails(!details)}>
+              {details ? "Hide details" : "Edit details"}
+            </Button>
+          }
+          className="pb-4"
+        >
+          <div className="flex flex-col gap-1.5">
+            <p className="m-0 type-section">{values.fullName || "Your name"}</p>
+            <p className="m-0 type-body text-muted-foreground">
+              {[values.currentTitle, levelOf(values.yearsExperience.trim() === "" ? null : Number(values.yearsExperience), values.experience)].filter(Boolean).join(" · ")}
+            </p>
+            {values.tracks.length > 0 ? (
+              <p className="m-0 type-body">
+                <span className="text-muted-foreground">Jobs in </span>
+                {values.tracks.map((id) => trackOptions.find((option) => option.id === id)?.label ?? id).join(", ")}
+              </p>
+            ) : null}
+            {skills.length > 0 ? (
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {skills.slice(0, 8).map((skill) => (
+                  <SkillTag key={skill}>{skill}</SkillTag>
+                ))}
+                {skills.length > 8 ? <span className="self-center type-meta text-muted-foreground">+{skills.length - 8}</span> : null}
+              </div>
+            ) : null}
+          </div>
+        </SectionCard>
+
+        {details ? (
+          <>
         {SECTIONS.map((section) => (
           <SectionCard
             key={section.title}
@@ -485,6 +599,61 @@ export function ConfirmForm({
           )}
         </SectionCard>
 
+        {answers.show ? (
+          <SectionCard title="What you're looking for" className="pb-4">
+            <div className="flex flex-col gap-4">
+              <ChipGroup
+                legend="Kind of job"
+                options={EMPLOYMENT.map((kind) => ({ label: kind, selected: answers.employment_type === kind, onSelect: () => setAnswer("employment_type", kind) }))}
+              />
+              <ChipGroup
+                legend="Where"
+                options={PLACES.map((place) => {
+                  const picked = answers.preferred_location.split(",").map((item) => item.trim()).filter(Boolean);
+                  const selected = picked.includes(place);
+                  return { label: place, selected, onSelect: () => setAnswer("preferred_location", (selected ? picked.filter((item) => item !== place) : [...picked, place]).join(",")) };
+                })}
+              />
+              <div className="flex flex-col gap-2">
+                <FieldLabel tone="small" htmlFor="citizenship">
+                  Citizen of
+                </FieldLabel>
+                <InputBox id="citizenship" tone="soft" value={answers.citizenship} onChange={(event) => setAnswer("citizenship", event.target.value)} />
+              </div>
+            </div>
+          </SectionCard>
+        ) : null}
+          </>
+        ) : null}
+
+        {/* The few answers every application form asks (Phase S): most people type only their expected pay. */}
+        {answers.show ? (
+          <SectionCard title="For your applications" className="pb-4">
+            <p className="m-0 mb-4 type-meta text-muted-foreground">Forms ask these. They go only to jobs you swipe right on.</p>
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <FieldLabel htmlFor="expected_ctc">Expected CTC</FieldLabel>
+                <InputBox id="expected_ctc" inputMode="decimal" prefix="₹" suffix="lakh a year" value={answers.expected_ctc} onChange={(event) => setAnswer("expected_ctc", event.target.value)} />
+              </div>
+              <div className="flex flex-col gap-2">
+                <FieldLabel htmlFor="current_ctc">Current CTC</FieldLabel>
+                <InputBox id="current_ctc" inputMode="decimal" prefix="₹" suffix="lakh a year" value={answers.current_ctc} onChange={(event) => setAnswer("current_ctc", event.target.value)} />
+              </div>
+              <ChipGroup
+                legend="Notice period"
+                options={NOTICE.map((option) => ({ label: option.label, selected: answers.notice_period.trim() === option.value, onSelect: () => setAnswer("notice_period", option.value) }))}
+              />
+              <CheckRow
+                className="border-t border-line pt-2"
+                title="Let my agent accept routine consents"
+                hint="Privacy notices and “my answers are true” declarations. Never marketing opt-ins or statements about you."
+                checked={answers.accept_acknowledgements === "Yes"}
+                onChange={(event) => setAnswer("accept_acknowledgements", event.target.checked ? "Yes" : "No")}
+              />
+            </div>
+          </SectionCard>
+        ) : null}
+
         {status === "error" ? (
           <FieldError>
             {badLinks.length > 0
@@ -495,8 +664,10 @@ export function ConfirmForm({
         {status === "missing" ? <FieldError>Add your full name and email to continue.</FieldError> : null}
       </ScreenBody>
       <StickyFooter>
+        {/* Next to the button, so it is seen on a phone (it used to sit below the fold). */}
+        {status === "answers" ? <FieldError className="mb-2.5">Add your expected CTC to continue.</FieldError> : null}
         <Button variant="primary" size="xl" className="w-full" disabled={status === "saving"} onClick={() => void save()}>
-          {status === "saving" ? "Saving…" : "Looks right"}
+          {status === "saving" ? "Saving…" : answers.show ? "Start swiping" : "Looks right"}
         </Button>
       </StickyFooter>
     </>

@@ -9,9 +9,10 @@ Do: `onboarding/resume/upload-form.tsx`: reading starts when a PDF is picked; th
 Done 21 Nov: pick to profile screen with no tap (about 30 s on dev; the read was 18.2 s before, plus a "Got it" tap and a findings screen); a text-less PDF lands back on the drop zone with the no-text error. `onboarding/resume/upload-form.tsx`, `patterns/layout.tsx` (`StepHeader of`).
 
 <a id="s2"></a>
-### [ ] S2 — One profile screen with the few answers every form needs
+### [x] S2 — One profile screen with the few answers every form needs
 Do: `onboarding/confirm/page.tsx`, `confirm-form.tsx`: the summary card, details behind "Edit details", expected CTC, current CTC and notice pre-filled under a year, job type, location and citizenship from the resume, the consent tick; saves profile then answers, full load of /feed; `StepHeader` of 2; DESIGN.md, ARCHITECTURE.
 **Done when:** a fresh fresher reaches the feed after typing only expected CTC; the saved answers match what the screen showed; a replaced resume still shows what changed; typecheck, lint, ui-lint, feed-prefs-test pass.
+Done 21 Nov: a fresher typed only "6" and reached the feed (about 10 s on dev, full load); saved current_ctc 0, expected_ctc 6, notice 0, Full-time, India, citizenship India, consents Yes, all `source=user`; a re-upload showed "What changed"; dark checked. `onboarding/confirm/page.tsx`, `confirm-form.tsx`, DESIGN.md, ARCHITECTURE 6.1.
 
 <a id="s3"></a>
 ### [ ] S3 — No "needs answers" line before the first swipe

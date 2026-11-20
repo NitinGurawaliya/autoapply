@@ -1,17 +1,19 @@
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getAll } from "@/modules/answers";
-import { CITIZENSHIP_KEY, RELOCATE_ABROAD_KEY } from "@/modules/apply/abroad";
-import { SPONSORSHIP_ABROAD_KEY } from "@/modules/apply/sponsorship";
-import { ACKNOWLEDGEMENT_KEY } from "@/modules/apply/acknowledgement";
+import { CITIZENSHIP_KEY, CITIZENSHIP_QUESTION } from "@/modules/apply/abroad";
+import { ACKNOWLEDGEMENT_KEY, ACKNOWLEDGEMENT_QUESTION } from "@/modules/apply/acknowledgement";
 import { ADJACENT_TRACKS, feedTracks, TRACK_LABELS, TRACKS, tracksOf } from "@/modules/jobs";
 import { profileSchema } from "@/modules/profile";
 import { redirect } from "next/navigation";
 import { Screen } from "@/components/patterns/layout";
-import { ConfirmForm } from "./confirm-form";
+import { ConfirmForm, type ApplyAnswers } from "./confirm-form";
 
-/** What the questions step (onboarding/questions) saves. */
-const ONBOARDING_KEYS = ["current_ctc", "expected_ctc", "notice_period", "employment_type", "preferred_location", CITIZENSHIP_KEY, RELOCATE_ABROAD_KEY, SPONSORSHIP_ABROAD_KEY, ACKNOWLEDGEMENT_KEY];
+/**
+ * What onboarding saves with the profile (Phase S, docs/onboarding/TDD.md 3). Moving abroad and sponsorship are no longer
+ * asked up front: the agent asks them on the form of a job abroad that needs them (modules/apply/abroad.ts).
+ */
+const ONBOARDING_KEYS = ["current_ctc", "expected_ctc", "notice_period", "employment_type", "preferred_location", CITIZENSHIP_KEY, ACKNOWLEDGEMENT_KEY];
 
 export default async function ConfirmPage() {
   const user = await getCurrentUser();
@@ -37,13 +39,29 @@ export default async function ConfirmPage() {
   });
   // Saved answers are not on this page (2 Nov, owner: a replaced resume showed hundreds of them, and saving them all back
   // failed past 60). Someone who already answered the onboarding questions goes straight to the feed.
-  const answered = new Set((await getAll(user.id)).filter((answer) => answer.answer.trim()).map((answer) => answer.key));
-  const next = ONBOARDING_KEYS.every((key) => answered.has(key)) ? "/feed" : "/onboarding/questions";
+  const saved = new Map((await getAll(user.id)).filter((answer) => answer.answer.trim()).map((answer) => [answer.key, answer.answer.trim()]));
+  // The few answers every form needs, on this screen when any is missing (a new user); pre-filled where the resume or a
+  // default settles them, shown so the user confirms them. Under a year of experience: no current pay, free to join now.
+  const fresher = (row.yearsExperience ?? 0) < 1;
+  const country = row.country?.trim() || "India";
+  const answers: ApplyAnswers = {
+    show: !ONBOARDING_KEYS.every((key) => saved.has(key)),
+    current_ctc: saved.get("current_ctc") ?? (fresher ? "0" : ""),
+    expected_ctc: saved.get("expected_ctc") ?? "",
+    notice_period: saved.get("notice_period") ?? (fresher ? "0" : ""),
+    employment_type: saved.get("employment_type") ?? "Full-time",
+    preferred_location: saved.get("preferred_location") ?? (/^india$/i.test(country) ? "India" : "Other"),
+    citizenship: saved.get(CITIZENSHIP_KEY) ?? country,
+    accept_acknowledgements: saved.get(ACKNOWLEDGEMENT_KEY) ?? "Yes",
+    citizenshipQuestion: CITIZENSHIP_QUESTION,
+    acknowledgementKey: ACKNOWLEDGEMENT_KEY,
+    acknowledgementQuestion: ACKNOWLEDGEMENT_QUESTION,
+  };
 
   return (
     <Screen>
       <ConfirmForm
-        next={next}
+        answers={answers}
         trackOptions={TRACKS.map((id) => ({ id, label: TRACK_LABELS[id] }))}
         // What the resume suggests today, offered when it differs from the saved fields (Phase N1).
         suggestedTracks={tracksOf({ ...row, tracks: [] })}
