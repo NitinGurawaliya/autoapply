@@ -15,8 +15,10 @@ async function gapsSummary(userId: string) {
 
 /** Feed header: how many questions would unblock the rest of the feed (T56). */
 export async function GapsLink({ userId }: { userId: string }) {
-  const { scan, gaps } = await gapsSummary(userId);
-  if (!scan || gaps === 0) return null;
+  // Not before the first swipe (Phase S, 21 Nov): a new user who just finished onboarding was met by "Your agent needs
+  // 4 answers"; the agent asks on the form that needs an answer, and the line is for someone already applying.
+  const [{ scan, gaps }, swiped] = await Promise.all([gapsSummary(userId), db.swipe.findFirst({ where: { userId }, select: { jobId: true } })]);
+  if (!swiped || !scan || gaps === 0) return null;
   const blocked = scan.scanned - scan.covered;
   const sentence = `Your agent needs ${gaps} ${gaps === 1 ? "answer" : "answers"} to apply to ${blocked} more ${blocked === 1 ? "job" : "jobs"}`;
   // One line (the deck needs the height on short phones); the whole sentence is in the title.
