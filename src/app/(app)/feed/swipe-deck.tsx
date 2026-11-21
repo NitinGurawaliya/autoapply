@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { SoftChip } from "@/components/ui/chip";
+import { Icon } from "@/components/ui/icons";
+import { SegmentedProgress } from "@/components/ui/segmented-progress";
 import { EmptyState } from "@/components/patterns/content";
 import { DeckDoneArt } from "@/components/patterns/drawings";
 import type { JobCardData } from "@/components/patterns/job-card";
@@ -27,6 +29,9 @@ const TOAST_POLL_MS = 1500;
 const TOAST_LIVE_MAX_MS = 60_000;
 const TOAST_AFTER_SENT_MS = 1600;
 const TOAST_AFTER_STOP_MS = 4000;
+
+/** The day (YYYY-MM-DD, local) this device last played the swipe hint. */
+const HINT_KEY = "swipeapply:swipe-hint";
 
 function cardData(job: FeedJob, query: string): JobCardData {
   return {
@@ -158,7 +163,7 @@ export function SwipeDeck({
   // Keys and buttons throw the card through the stage, which commits the swipe when the card is off screen.
   const stage = useRef<SwipeStageHandle>(null);
   const router = useRouter();
-  const { refresh: refreshSummary } = useApplicationsSummary();
+  const { refresh: refreshSummary, sentToday, inProgress, waiting } = useApplicationsSummary();
 
   const [agent, setAgent] = useState<Toast | null>(null);
   // Where the deck is in today's set; null outside it (a filter, the skipped jobs, "Keep going", or no set today).
@@ -268,6 +273,8 @@ export function SwipeDeck({
       if (direction === "right" && body.applicationId) {
         const id = body.applicationId;
         updateToast(toastKey, (current) => ({ ...current, id }));
+        // The new application counts at once: the end of the set lists it as being filled in.
+        refreshSummary();
       }
     } catch {
       // Nothing was saved: put the card back on top so the user can try again.
@@ -354,6 +361,28 @@ export function SwipeDeck({
     return () => clearTimeout(timer);
   }, [agentKey, hideAt]);
 
+  // The swipe hint (design/daily-reveal.html `teach`): when the cards first show (after the reveal, if one plays), the
+  // top card sways towards Apply and Skip so it is clear it can be swiped. Once a day per device; never with reduced
+  // motion. Marked in the timer, so a development double run of this effect still plays it once.
+  const showingCards = !reveal && cards.length > 0;
+  const hinted = useRef(false);
+  useEffect(() => {
+    if (!showingCards || hinted.current) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = window.setTimeout(() => {
+      hinted.current = true;
+      const today = new Date().toLocaleDateString("en-CA");
+      try {
+        if (localStorage.getItem(HINT_KEY) === today) return;
+        localStorage.setItem(HINT_KEY, today);
+      } catch {
+        // Storage blocked: the hint plays once per visit instead.
+      }
+      stage.current?.nudge();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [showingCards]);
+
   if (reveal) {
     return (
       <DailyReveal
@@ -431,28 +460,7 @@ export function SwipeDeck({
   if (!top && set) {
     return (
       <>
-        <EmptyState
-          art={<DeckDoneArt />}
-          title="That's today's jobs"
-          text="New ones tomorrow morning. Until then, the rest of your matches are a tap away."
-          extra={
-            <>
-              <SoftChip>{stats.sentToday} sent today</SoftChip>
-              <SoftChip>{stats.inProgress} in progress</SoftChip>
-            </>
-          }
-          actions={
-            <>
-              <Link href="/applications" className={buttonVariants({ variant: "primary", size: "xl", className: "w-full" })}>
-                Done for today
-              </Link>
-              {/* The ranked list after the set, with the deck's refill on (/feed?rest=1). */}
-              <Link href="/feed?rest=1" className={buttonVariants({ variant: "line", size: "lg", className: "w-full" })}>
-                Keep going
-              </Link>
-            </>
-          }
-        />
+        <DayDone total={set.total} sent={sentToday ?? stats.sentToday} filling={inProgress ?? stats.inProgress} waiting={waiting?.length ?? 0} />
         {toastNode}
       </>
     );
@@ -520,6 +528,47 @@ export function SwipeDeck({
       </div>
       <p className="m-0 hidden text-center text-xs text-muted-foreground md:block">Use the left and right arrow keys to skip or apply.</p>
       {toastNode}
+    </div>
+  );
+}
+
+/**
+ * The end of the day's set (design/daily-reveal.html, the end screen): what happened to the day's jobs, from the
+ * shell's live counts, so an application sent while this is on screen moves from "being filled in" to "sent".
+ */
+function DayDone({ total, sent, filling, waiting }: { total: number; sent: number; filling: number; waiting: number }) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">
+      <div className="my-auto">
+        <h1 className="m-0 type-heading">That&apos;s today&apos;s jobs</h1>
+        <p className="m-0 mt-2 type-body text-muted-foreground">New ones tomorrow morning.</p>
+        <div className="mt-6 flex flex-col gap-3 border-t border-line pt-6" aria-live="polite">
+          {sent > 0 ? (
+            <p className="m-0 flex items-center gap-3 type-body">
+              <Icon name="check" size={24} className="flex-none" />
+              {sent} sent
+            </p>
+          ) : null}
+          {filling > 0 ? (
+            <p className="m-0 flex items-center gap-3 type-body">
+              <span className="w-6 flex-none">
+                <SegmentedProgress count={3} done={2} thickness={4} className="gap-0.5 motion-safe:[&>[data-lit]]:animate-pulse" />
+              </span>
+              {filling} being filled in
+            </p>
+          ) : null}
+          {waiting > 0 ? (
+            <p className="m-0 flex items-center gap-3 type-body">
+              <Icon name="info" size={24} className="flex-none" />
+              {waiting} {waiting === 1 ? "needs" : "need"} you
+            </p>
+          ) : null}
+          {sent + filling + waiting === 0 ? <p className="m-0 type-body text-muted-foreground">You skipped all {total}.</p> : null}
+        </div>
+      </div>
+      <Link href="/applications" className={buttonVariants({ variant: "primary", size: "xl", className: "w-full" })}>
+        See applications
+      </Link>
     </div>
   );
 }

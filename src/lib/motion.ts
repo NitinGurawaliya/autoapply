@@ -18,6 +18,8 @@ export const ease = {
   out: [0, 0, 0.58, 1] as Bezier,
   /** Phase O (Direction B): the one curve outside the swipe, a short ease-out with no overshoot. Taps, toasts, sheets. */
   calm: [0.2, 0.8, 0.2, 1] as Bezier,
+  /** In and out alike: the top card swaying to show it can be swiped (design/daily-reveal.html `teach`). */
+  sway: [0.45, 0, 0.55, 1] as Bezier,
 };
 
 /** Durations in seconds (Framer Motion units). */
@@ -51,7 +53,22 @@ export const transition = {
   segment: { duration: duration.segment, ease: ease.settle },
   segmentSlow: { duration: duration.segmentSlow, ease: ease.settle },
   bar: { duration: duration.bar, ease: ease.settle },
+  /** A count going up (sent today): the old number leaves upwards, the new one comes up from below. */
+  count: { duration: duration.fade, ease: ease.calm },
 } as const;
+
+/**
+ * The swipe hint (design/daily-reveal.html `teach`): when the day's cards first show, the top card sways right towards
+ * Apply, then left towards Skip, and settles. Pixels and degrees at the 390 px design width; once a day per device.
+ */
+export const swipeHint = {
+  x: [0, 44, 0, -36, 0],
+  rotate: [0, 2.5, 0, -2, 0],
+  times: [0, 0.25, 0.5, 0.75, 1],
+  duration: 1.5,
+  delay: 0.5,
+  ease: ease.sway,
+};
 
 /** Swipe deck physics, in CSS pixels at the 390 px design width. */
 export const swipe = {

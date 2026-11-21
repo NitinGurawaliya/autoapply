@@ -22,12 +22,15 @@ type SummaryState = {
   celebrated: (submittedAt: number) => void;
   /** Poll now, e.g. right after the user answered something. */
   refresh: () => void;
+  /** Applications sent today and still on the way; null until the first poll returns (the page's own count shows). */
+  sentToday: number | null;
+  inProgress: number | null;
 };
 
 const POLL_MS = 5000;
 // Until when this device has shown the "Sent!" moment (ms). A first visit starts from now, so it never replays history.
 const CELEBRATED_KEY = "swipeapply:celebrated-until";
-const SummaryContext = createContext<SummaryState>({ waiting: null, sent: null, celebrated: () => undefined, refresh: () => undefined });
+const SummaryContext = createContext<SummaryState>({ waiting: null, sent: null, celebrated: () => undefined, refresh: () => undefined, sentToday: null, inProgress: null });
 
 function readCelebrated(): number {
   try {
@@ -49,6 +52,7 @@ function readCelebrated(): number {
 export function ApplicationsSummaryProvider({ children }: { children: React.ReactNode }) {
   const [waiting, setWaiting] = useState<WaitingApplication[] | null>(null);
   const [sent, setSent] = useState<SentNews | null>(null);
+  const [counts, setCounts] = useState<{ sentToday: number | null; inProgress: number | null }>({ sentToday: null, inProgress: null });
   const inFlight = useRef(false);
   const since = useRef<number | null>(null);
 
@@ -60,8 +64,12 @@ export function ApplicationsSummaryProvider({ children }: { children: React.Reac
       // A request that hangs must not block every later tick behind the in-flight guard.
       const response = await fetch(`/api/applications/summary?since=${since.current}`, { cache: "no-store", signal: AbortSignal.timeout(10_000) });
       if (!response.ok) return;
-      const body = (await response.json()) as { waiting: WaitingApplication[] } & Partial<SentNews>;
+      const body = (await response.json()) as { waiting: WaitingApplication[]; sentToday?: number; inProgress?: number } & Partial<SentNews>;
       setWaiting(body.waiting);
+      if (typeof body.sentToday === "number" && typeof body.inProgress === "number") {
+        const next = { sentToday: body.sentToday, inProgress: body.inProgress };
+        setCounts((current) => (current.sentToday === next.sentToday && current.inProgress === next.inProgress ? current : next));
+      }
       // Only news replaces news: an empty answer while a moment is on screen must not take it away.
       if (body.sent && body.sent.length > 0) setSent({ sent: body.sent, sentTotal: body.sentTotal ?? null, sentThisWeek: body.sentThisWeek ?? null });
     } catch {
@@ -96,7 +104,7 @@ export function ApplicationsSummaryProvider({ children }: { children: React.Reac
   }, []);
 
   const refresh = useCallback(() => void poll(), [poll]);
-  return <SummaryContext.Provider value={{ waiting, sent, celebrated, refresh }}>{children}</SummaryContext.Provider>;
+  return <SummaryContext.Provider value={{ waiting, sent, celebrated, refresh, ...counts }}>{children}</SummaryContext.Provider>;
 }
 
 export function useApplicationsSummary() {

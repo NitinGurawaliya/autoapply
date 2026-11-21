@@ -284,6 +284,7 @@ Design: [docs/reveal/TDD.md](reveal/TDD.md); approved prototype `design/daily-re
 - [x] [R3 — Today's jobs without sets, the end of the day](reveal/TASKS.md#r3)
 - [x] [R4 — The first run after onboarding](reveal/TASKS.md#r4)
 - [x] [R5 — Regression and switch-on](reveal/TASKS.md#r5)
+- [x] [R6 — The end of the day as the prototype, the sent count rolling, the swipe hint](reveal/TASKS.md#r6)
 
 ## Phase S — A shorter onboarding (owner, 21 Nov)
 

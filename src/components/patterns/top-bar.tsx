@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/ui/icons";
 import { ProfileMenu } from "@/components/patterns/profile-menu";
+import { SentCount } from "@/components/patterns/sent-count";
 
 // The three top bars of the design. The 54 px phone status bar in the boards is the device's, so the page starts
 // below the safe area instead.
@@ -58,8 +59,8 @@ export function UsagePill({ sent, used, cap }: { sent: number; used: number; cap
       className="box-border flex h-8 items-center gap-2 rounded-control border border-line bg-surface px-2.5"
       title={used >= cap ? "Daily limit reached. It resets at midnight UTC." : undefined}
     >
-      <span className="type-meta font-semibold tabular-nums">
-        {sent}
+      <span className="type-meta font-semibold">
+        <SentCount initial={sent} />
         <span className="font-medium text-muted-foreground"> {near ? (used >= cap ? "sent · done for today" : `sent · ${cap - used} left`) : "sent today"}</span>
       </span>
       <span className="sr-only">{used >= cap ? ". Daily limit reached." : ""}</span>

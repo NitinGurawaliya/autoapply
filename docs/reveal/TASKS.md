@@ -40,3 +40,10 @@ Do: the whole check list of TDD 7 on main; workers restarted; Done lines.
 Design: [7](TDD.md#7-testing), [8](TDD.md#8-rollout).
 **Done when:** every listed test PASS; a real profile's feed loads with the reveal and without it (second load); the docker and local workers run the new code.
 Done 20 Nov: typecheck, lint, ui-lint and 21 scripts PASS on main (daily-set, daily-reveal, match, score-breakdown, feed-sql, fit, learning, ingest-contract, results, swipe-batch, feed-prefs on the dev server, job-skills, eligibility, reading, essay, resolver, submit-guard, adapters, cover-letter); /feed (default, rest, skipped), /applications, /account, /answers, /gaps, /onboarding/confirm 200 for a clone; the clone saw the reveal once and the cards on the second load. Local worker restarted on main; the docker worker runs R1 (`swipeapply-worker:reveal1`), the only worker-side change. Clone deleted.
+
+<a id="r6"></a>
+### [x] R6 — The end of the day as the prototype, the sent count rolling, the swipe hint
+Do: `feed/swipe-deck.tsx` (DayDone, the hint), `patterns/swipe-stage.tsx` (`nudge`), `patterns/sent-count.tsx`, `patterns/top-bar.tsx`, `api/applications/summary` and `applications-summary.tsx` (`sentToday`, `inProgress`), `lib/motion.ts`; DESIGN.md, ARCHITECTURE.
+Design: `design/daily-reveal.html` (end screen, `teach`, `bumpSent`).
+**Done when:** the end screen matches the prototype light and dark with live rows; the top bar's count rolls up when an application is sent; the top card sways once a day when the cards first show.
+Done 21 Nov: on a test profile the card swayed to −36 px/−2° and settled after "See today's 12" (once, marked for the day); 12 skips gave "You skipped all 12."; two rows added in the DB rolled the pill 0→1→2 and the rows to "1 sent / 1 being filled in", then "2 sent". typecheck, lint, ui-lint, daily-set and daily-reveal PASS.

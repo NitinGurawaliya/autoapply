@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { dailySent } from "@/modules/governance";
 
 export const dynamic = "force-dynamic";
 
@@ -49,13 +50,17 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const sinceParam = Number(new URL(request.url).searchParams.get("since"));
-  const [waiting, sent] = await Promise.all([
+  // Today's sent count and the applications still on the way: the top bar's "sent today" goes up as each one is sent,
+  // and the end of the day's set counts what is being filled in (two indexed counts).
+  const [waiting, sent, sentToday, inProgress] = await Promise.all([
     db.application.findMany({
       where: { userId: user.id, status: "needs_input" },
       orderBy: { createdAt: "desc" },
       select: { id: true, jobId: true, pendingQuestions: true },
     }),
     Number.isFinite(sinceParam) && sinceParam > 0 ? sentSince(user.id, sinceParam) : Promise.resolve(null),
+    dailySent(user.id),
+    db.application.count({ where: { userId: user.id, status: { in: ["queued", "inspecting", "filling"] } } }),
   ]);
   const ids = waiting.map((application) => application.id);
   const [jobs, prompts] = waiting.length
@@ -83,6 +88,8 @@ export async function GET(request: Request) {
         };
       }),
       ...(sent ?? {}),
+      sentToday,
+      inProgress,
     },
     { headers: { "Cache-Control": "no-store" } },
   );

@@ -4,10 +4,10 @@ import { useImperativeHandle, useLayoutEffect, useRef, type DragEvent, type Ref 
 import { animate, motion, useMotionValue, useTransform } from "framer-motion";
 import { stampClass } from "@/components/ui/marks";
 import { CARD_HEIGHT, JobCard, type JobCardData } from "@/components/patterns/job-card";
-import { swipe as physics, transition } from "@/lib/motion";
+import { swipe as physics, swipeHint, transition } from "@/lib/motion";
 
 export type Direction = "left" | "right";
-export type SwipeStageHandle = { fling: (direction: Direction) => void };
+export type SwipeStageHandle = { fling: (direction: Direction) => void; nudge: () => void };
 
 /** How far each card behind the top one shows below it, so the stack reads as more jobs waiting. */
 const PEEK = physics.backOffsetY;
@@ -77,7 +77,16 @@ export function SwipeStage({
     leaving.current = false;
   }, [top.id, x, rotate]);
 
-  useImperativeHandle(ref, () => ({ fling }));
+  // The swipe hint: the top card sways towards Apply and Skip through the same values a drag moves, so its tilt, the
+  // stamps and the cards behind follow as they would under a finger. A touch stops it (onPointerDown).
+  function nudge() {
+    if (leaving.current) return;
+    const { x: xs, rotate: turns, ...timing } = swipeHint;
+    void animate(x, xs, timing);
+    void animate(rotate, turns, timing);
+  }
+
+  useImperativeHandle(ref, () => ({ fling, nudge }));
 
   return (
     <>
@@ -122,6 +131,9 @@ export function SwipeStage({
             while (trail.current.length > 2 && event.timeStamp - trail.current[0].t > 100) trail.current.shift();
           }}
           onDragStart={() => {
+            // A hint still swaying gives way to the finger (a plain tap lets it settle).
+            x.stop();
+            rotate.stop();
             dragged.current = true;
           }}
           onClick={() => {
