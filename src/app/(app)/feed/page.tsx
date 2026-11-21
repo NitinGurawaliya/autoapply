@@ -127,7 +127,11 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
     tracks: filters.tracks,
   };
   // The user's own tracks, for the Track chips (the feed also shows the adjacent ones unless one is picked).
-  const profile = await db.profile.findUnique({ where: { userId: user.id }, select: { tracks: true, currentTitle: true, skills: true, experience: true } });
+  // Whether today's set is built yet, read alongside (each round trip is ~250 ms; the page waits on both before it shows).
+  const [profile, setToday] = await Promise.all([
+    db.profile.findUnique({ where: { userId: user.id }, select: { tracks: true, currentTitle: true, skills: true, experience: true } }),
+    hasSetToday(user.id),
+  ]);
   const myTracks = profile ? tracksOf(profile) : [];
 
   // "Jobs you skipped": the left-swiped jobs, offered once the feed runs out (?view=skipped).
@@ -249,7 +253,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
 
   // While today's set is still to be built (a first run, or a morning before the worker built it), the wait shows the
   // agent reading the field (Phase R, R4); then the reveal plays. Otherwise the usual card skeleton.
-  const reading = view === "new" && !rest && isDefaultFeed(filters) && !(await hasSetToday(user.id));
+  const reading = view === "new" && !rest && isDefaultFeed(filters) && !setToday;
 
   return (
     <>

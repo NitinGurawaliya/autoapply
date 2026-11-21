@@ -8,7 +8,7 @@ process.env.DAILY_PUSH_HOUR_IST = "1"; // the push step runs from 01:00 IST in t
 import { db } from "../src/lib/db";
 import { dropFromFeed, forgetFeed } from "../src/lib/feed-cache";
 import { deleteAccount } from "../src/modules/account";
-import { dailyView, ensureDailySet, isDefaultFeed, listFeed, markRevealed, parseFeedFilters, releaseMore } from "../src/modules/jobs";
+import { dailyView, ensureDailySet, hasSetToday, isDefaultFeed, listFeed, markRevealed, parseFeedFilters, releaseMore } from "../src/modules/jobs";
 import { pushDailySets } from "../src/modules/jobs/daily";
 
 let failed = 0;
@@ -103,7 +103,11 @@ async function main() {
     // No degraded and no short sets.
     const otherFeed = await listFeed(other.id, parseFeedFilters({}));
     check("a degraded feed builds no set", (await ensureDailySet(other.id, { jobs: otherFeed, degraded: true })) === null && (await db.dailySet.count({ where: { userId: other.id } })) === 0);
-    check("a short feed (11 jobs) builds no set", (await ensureDailySet(other.id, { jobs: otherFeed.slice(0, 11), degraded: false })) === null && (await db.dailySet.count({ where: { userId: other.id } })) === 0);
+    check("a short feed (11 jobs) builds no set", (await ensureDailySet(other.id, { jobs: otherFeed.slice(0, 11), degraded: false })) === null);
+    // ...but the day is decided (an empty row), so the feed does not play the agent reading on every visit.
+    const marker = await db.$queryRaw<Array<{ n: number }>>`SELECT cardinality("jobIds")::int AS n FROM "DailySet" WHERE "userId" = ${other.id}`;
+    check("a short feed marks the day decided (empty row)", marker.length === 1 && marker[0].n === 0 && (await hasSetToday(other.id)), JSON.stringify(marker));
+    check("an empty day serves the ranked list (no set view)", (await dailyView(other.id)) === null);
 
     // One push per user per day: the second call finds pushedAt already claimed.
     await db.pushSubscription.create({ data: { userId: user.id, endpoint: `https://push.invalid/daily-${stamp}`, p256dh: "x", auth: "x" } });

@@ -85,16 +85,21 @@ async function fitBuildRunning(userId: string) {
 
 /**
  * Today's set, built when missing (INSERT … ON CONFLICT DO NOTHING, then read: two requests at once get the same row)
- * or rebuilt when its basis changed (compare-and-set on the old basis). Not stored: fewer than DAILY_SET_SIZE jobs to
- * pick (no short sets: the ranked list as before) or a degraded feed (verdicts missing; the next build tries again).
- * Null when the switch is off, there is no profile, or no set could be stored.
+ * or rebuilt when its basis changed (compare-and-set on the old basis). Fewer than DAILY_SET_SIZE jobs to pick: no set
+ * (the ranked list as before), kept as an empty row so the day counts as decided (hasSetToday). Not stored: a degraded
+ * feed (verdicts missing; the next build tries again). Null when the switch is off, there is no profile, or no set.
  */
+export async function ensureDailySet(userId: string, ranked?: { jobs: FeedJob[]; degraded: boolean; found?: FeedPool }): Promise<DailySetRow | null> {
+  const row = await buildDailySet(userId, ranked);
+  return row && row.jobIds.length > 0 ? row : null;
+}
+
 /** Open jobs in India: what the agent reads each day (the reveal's first number). */
 async function openJobsInIndia() {
   return db.job.count({ where: { closedAt: null, eligibility: { in: ["india", "remote_india"] } } });
 }
 
-export async function ensureDailySet(userId: string, ranked?: { jobs: FeedJob[]; degraded: boolean; found?: FeedPool }): Promise<DailySetRow | null> {
+async function buildDailySet(userId: string, ranked?: { jobs: FeedJob[]; degraded: boolean; found?: FeedPool }): Promise<DailySetRow | null> {
   if (!dailySetOn()) return null;
   const [basis, existing] = await Promise.all([setBasis(userId), readSet(userId)]);
   if (!basis) return null;
@@ -123,8 +128,22 @@ export async function ensureDailySet(userId: string, ranked?: { jobs: FeedJob[];
   const top = feed.jobs.slice(0, setSize() + 20).map((job) => job.id);
   const swiped = await swipedAmong(userId, top);
   const jobIds = top.filter((id) => !swiped.has(id)).slice(0, setSize());
-  // A set built on another basis no longer fits the user's fields: without a full new one, the ranked list.
-  if (jobIds.length < setSize()) return null;
+  // Fewer than a set to pick (or a set built on another basis that no longer fits): the ranked list, as before. The day
+  // is still marked decided with an empty row, so the feed does not show the agent reading on every visit only to fall
+  // back to the list (21 Nov: a well-swiped account saw the reading flash before each load); a basis change tries again.
+  if (jobIds.length < setSize()) {
+    if (!existing) {
+      await db.$executeRaw`
+        INSERT INTO "DailySet" ("userId", "day", "jobIds", released, basis)
+        VALUES (${userId}, (now() AT TIME ZONE 'Asia/Kolkata')::date, '{}'::text[], 0, ${basis})
+        ON CONFLICT ("userId", "day") DO NOTHING`;
+    } else {
+      await db.$executeRaw`
+        UPDATE "DailySet" SET "jobIds" = '{}'::text[], released = 0, basis = ${basis}, stats = NULL, "builtAt" = now()
+        WHERE "userId" = ${userId} AND "day" = (now() AT TIME ZONE 'Asia/Kolkata')::date AND basis = ${existing.basis}`;
+    }
+    return null;
+  }
   // What the agent did, kept with the set for the reveal (Phase R); a cached feed without its pool counts its cards.
   const stats: DailyStats = { read: await openJobsInIndia(), fields: feed.found?.pool ?? feed.jobs.length, fits: feed.jobs.length, field: feed.found?.field ?? [] };
   const statsJson = JSON.stringify(stats);
@@ -244,7 +263,8 @@ export async function pushDailySets(deadline: number, only?: string[]) {
   for (const { userId } of users.filter((user) => !only || only.includes(user.userId))) {
     try {
       const set = Date.now() < deadline ? await ensureDailySet(userId) : await readSet(userId);
-      if (!set) continue;
+      // No set today (an empty row: too few jobs to pick) sends nothing.
+      if (!set || set.jobIds.length === 0) continue;
       const claimed = await db.$executeRaw`
         UPDATE "DailySet" SET "pushedAt" = now()
         WHERE "userId" = ${userId} AND "day" = (now() AT TIME ZONE 'Asia/Kolkata')::date AND "pushedAt" IS NULL`;

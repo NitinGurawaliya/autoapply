@@ -1,7 +1,10 @@
-import { AgentStatus } from "@/components/patterns/agent-status";
 import { Skeleton } from "@/components/ui/eyebrow";
-import { JobCardSkeleton } from "@/components/patterns/job-card";
 
+/**
+ * The moment before the feed page's first reads land: only the top bar. The body's own wait follows at once (the card
+ * skeleton, or the agent reading while today's set is built), so a card skeleton here would show and then be swapped
+ * for the reading scene (21 Nov: "the skeleton comes, then the animation for a second").
+ */
 export default function FeedLoading() {
   return (
     <div className="flex flex-1 flex-col gap-6 px-5 pb-2" aria-busy="true" aria-label="Loading jobs">
@@ -10,12 +13,6 @@ export default function FeedLoading() {
         <div className="flex-1" />
         <Skeleton className="h-8 w-24 rounded-control" />
         <Skeleton className="size-11 rounded-control" />
-      </div>
-      <AgentStatus text="Finding your matches" className="mt-4 justify-center" />
-      <JobCardSkeleton />
-      <div className="flex items-center gap-2">
-        <Skeleton className="h-12 flex-1 rounded-control" />
-        <Skeleton className="h-12 flex-[2] rounded-control" />
       </div>
     </div>
   );
