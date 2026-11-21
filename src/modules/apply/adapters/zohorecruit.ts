@@ -4,8 +4,10 @@ import { join } from "node:path";
 import type { Page, Request, Response } from "playwright";
 import { z } from "zod";
 import type { AtsAdapter, FilledField, FormField, ResolvedValue, SubmitContext, SubmitResult } from "../adapter";
-import { BotCheckError, MaybeSentError, NoRetryError, NotSentError, WindowClosedError } from "../adapter";
+import { BotCheckError, CaptchaRejectedError, MaybeSentError, NoRetryError, NotSentError, WindowClosedError } from "../adapter";
 import { canShowWindow, livePage } from "../browser";
+import { modelUnavailable, readCaptcha } from "../captcha/ai";
+import { captureZohoCaptcha, refreshZohoCaptcha, ZOHO_CAPTCHA } from "../captcha/detector";
 import { assertJobOpen, dismissOverlays, firstVisible, friendlyError, inField } from "./common";
 import { numberText } from "./workable";
 
@@ -19,13 +21,17 @@ import { numberText } from "./workable";
  * `input[type=file][name=rec-form_<attachmentId>_file]`.
  *
  * Survey of 30 India portals (17 Nov): 20 forms carry an image CAPTCHA, 6 add an assessment page after the form, none
- * requires the education or experience tables. A CAPTCHA is typed by a person (a handoff, lib/queue.ts HANDOFF_BOARDS):
- * nothing here reads or solves it. A form without one is submitted by the worker. Either way the application leaves as a
- * POST to `/recruit/v2/public/Job_Openings/<jobId>/apply/<webform_id>`, and Zoho's answer to it decides the outcome.
+ * requires the education or experience tables. Since 21 Nov (owner) the worker reads the CAPTCHA, as on Keka
+ * (../captcha: the image drawn from the page, read by the model, typed), and presses Submit itself. An image that does
+ * not load or does not read as text is refreshed and read again, never submitted blank; a CAPTCHA Zoho refuses starts the
+ * run again from the form with a new one (CaptchaRejectedError, runner.ts). When the model cannot be used, or no read
+ * worked, the form goes to a person in the window (a handoff, lib/queue.ts HANDOFF_BOARDS), as it did before. A form
+ * without a CAPTCHA is submitted by the worker. Either way the application leaves as a POST to
+ * `/recruit/v2/public/Job_Openings/<jobId>/apply/<webform_id>`, and Zoho's answer to it decides the outcome.
  */
 
 const APPLY_POST = /\/recruit\/v2\/public\/Job_Openings\/\d+\/apply\/\d+(?:[?#]|$)/;
-const CAPTCHA_INPUT = 'input[placeholder="Type below image text"]';
+const CAPTCHA_INPUT = ZOHO_CAPTCHA.input;
 const INTERESTED = ["button:has-text(\"I'm interested\")", "text=\"I'm interested\"", "button:has-text('Apply')"];
 
 const idSchema = z.union([z.string(), z.number()]).transform(String);
@@ -114,7 +120,7 @@ async function declineCookies(page: Page) {
   await dismissOverlays(page);
 }
 
-// What each open page's form carries, for submit (a CAPTCHA means a person types it).
+// What each open page's form carries, for submit (a CAPTCHA is read and typed before Submit).
 const formsSeen = new WeakMap<Page, ZohoForm>();
 
 async function readFields(page: Page): Promise<FormField[]> {
@@ -309,13 +315,14 @@ async function successShown(page: Page) {
 /** The form's own error lines after a Submit that did not leave (a required field, a wrong CAPTCHA). */
 async function formErrors(page: Page) {
   const texts = await page
-    .locator('.crc-form-row [class*="error" i]:visible, .lyteErrorMessage:visible, [class*="errorMsg" i]:visible')
+    .locator('.crc-form-row [class*="error" i]:visible, .crc-captcha [class*="error" i]:visible, .lyteErrorMessage:visible, [class*="errorMsg" i]:visible')
     .allInnerTexts()
     .catch(() => [] as string[]);
   return [...new Set(texts.map((text) => text.replace(/\s+/g, " ").trim()).filter(Boolean))].slice(0, 5);
 }
 
-export type ZohoReply = { kind: "sent" | "refused" | "unknown"; status: number; reason: string };
+/** `code`: Zoho's error code when it gave one (a wrong CAPTCHA may be named only there). */
+export type ZohoReply = { kind: "sent" | "refused" | "unknown"; status: number; reason: string; code?: string };
 
 /**
  * Zoho's answer to the application's POST. Its API answers `{ data: [{ code, status, message }] }` or a top-level
@@ -326,25 +333,78 @@ export type ZohoReply = { kind: "sent" | "refused" | "unknown"; status: number; 
 export function readZohoReply(status: number, body: string): ZohoReply {
   let reason = "";
   let failed = false;
+  let code = "";
   try {
     const json = JSON.parse(body) as Record<string, unknown>;
     const first = (Array.isArray(json.data) ? (json.data[0] as Record<string, unknown> | undefined) : undefined) ?? json;
     const statusWord = String(first.status ?? json.status ?? "").toLowerCase();
-    const code = String(first.code ?? json.code ?? "").toUpperCase();
+    code = String(first.code ?? json.code ?? "").toUpperCase();
     reason = String(first.message ?? json.message ?? "");
     failed = statusWord === "error" || (code !== "" && code !== "SUCCESS");
   } catch {
     reason = "";
   }
   reason = reason.replace(/\s+/g, " ").trim().slice(0, 160);
+  const coded = code && code !== "SUCCESS" ? { code: code.slice(0, 60) } : {};
   if (/already (applied|submitted|exists)|duplicate (application|candidate)/i.test(reason)) return { kind: "sent", status, reason };
   if (status >= 200 && status < 300 && !failed) return { kind: "sent", status, reason };
-  if ((status >= 400 && status < 500) || failed) return { kind: "refused", status, reason };
-  return { kind: "unknown", status, reason };
+  if ((status >= 400 && status < 500) || failed) return { kind: "refused", status, reason, ...coded };
+  return { kind: "unknown", status, reason, ...coded };
 }
 
 const AUTO_WAIT_MS = 90000;
 const PERSON_WAIT_MS = 15 * 60 * 1000;
+// Images read in one window before the CAPTCHA goes to a person: the first, then new ones by Zoho's refresh button.
+const CAPTCHA_READS = 3;
+// Zoho's CAPTCHA has 6 characters: all 19 images read on 11 portals (21 Nov). The two wrong reads in a 5-form dry run
+// were one character short and one long, so a read of any other length is refused and a new image read instead.
+const CAPTCHA_LENGTH = 6;
+// What Zoho's answer or the form says about a wrong CAPTCHA (its words are not known for certain: "captcha" anywhere).
+const CAPTCHA_WORDS = /captcha|image text/i;
+
+type CaptchaRead = { typed: true } | { person: string };
+
+/**
+ * Zoho's CAPTCHA read by the model and typed into its box (21 Nov, owner: as Keka). An image that has not loaded, is
+ * blank, or reads as anything but 6 letters and digits is refreshed and read again; a slow or failed read too. After
+ * CAPTCHA_READS, or at once when the model cannot be used (no key, a refused key), the CAPTCHA goes to a person.
+ * Nothing is ever typed but a clean read, so the form is never submitted with a blank or junk CAPTCHA.
+ */
+export async function typeZohoCaptcha(page: Page): Promise<CaptchaRead> {
+  const input = page.locator(CAPTCHA_INPUT).first();
+  let why = "The CAPTCHA image did not load";
+  for (let read = 0; read < CAPTCHA_READS; read += 1) {
+    if (read > 0) await refreshZohoCaptcha(page);
+    const image = await captureZohoCaptcha(page);
+    if (!image) {
+      why = "The CAPTCHA image did not load";
+      continue;
+    }
+    let text: string | null;
+    try {
+      text = await readCaptcha(image, { length: CAPTCHA_LENGTH });
+    } catch (error) {
+      if (modelUnavailable(error)) return { person: "The agent's CAPTCHA reader is not available" };
+      why = `The agent could not read the CAPTCHA (${friendlyError(error)})`;
+      continue;
+    }
+    if (!text) {
+      why = "The agent could not read the CAPTCHA";
+      continue;
+    }
+    await centre(input);
+    await input.fill(text);
+    if (((await input.inputValue().catch(() => "")) ?? "") !== text) {
+      why = "The CAPTCHA box did not keep what the agent read";
+      continue;
+    }
+    return { typed: true };
+  }
+  return { person: `${why} after ${CAPTCHA_READS} images` };
+}
+
+/** The form as Zoho showed it, kept with a refusal (the window may be closed before the run stops). */
+const shot = (page: Page) => page.screenshot({ type: "jpeg", quality: 72, fullPage: true, timeout: 10000 }).catch(() => undefined);
 
 async function submitZoho(page: Page, ctx: SubmitContext): Promise<SubmitResult> {
   await declineCookies(page);
@@ -367,30 +427,48 @@ async function submitZoho(page: Page, ctx: SubmitContext): Promise<SubmitResult>
       });
   };
   context.on("response", onResponse);
-  let withPerson = Boolean(ctx.person) || captcha;
+  // A person already holds this application (ctx.person): they type any CAPTCHA and press Submit, as before 21 Nov.
+  let withPerson = Boolean(ctx.person);
   let deadline = Date.now() + (withPerson ? PERSON_WAIT_MS : AUTO_WAIT_MS);
+  // The CAPTCHA in the box is the agent's read: Zoho refusing it starts the run again from the form.
+  let agentRead = false;
   const askPerson = async (what: string) => {
     if (!ctx.handoff || !canShowWindow()) throw new BotCheckError(`${what}. Nothing was sent.`);
     withPerson = true;
+    agentRead = false;
     deadline = Date.now() + PERSON_WAIT_MS;
     await ctx.announceHandoff?.(`${what}: finish it in the Chrome window on your computer, then press Submit Application`);
+  };
+  const press = async () => {
+    try {
+      await button.click({ timeout: 15000 });
+    } catch (error) {
+      throw new NotSentError(`Could not press Submit on the Zoho Recruit form: ${friendlyError(error)}`);
+    }
   };
   try {
     await page.bringToFront().catch(() => undefined);
     await centre(button);
-    if (captcha) {
-      // A person types the CAPTCHA and presses Submit; nothing here reads the image.
+    if (captcha && withPerson) {
       if (!ctx.handoff || !canShowWindow()) throw new BotCheckError("This Zoho Recruit form has a CAPTCHA, which a person types at a worker with a screen. Nothing was sent.");
       await page.locator(CAPTCHA_INPUT).first().focus().catch(() => undefined);
       await ctx.announceHandoff?.("Zoho Recruit's form is filled: type the CAPTCHA in the Chrome window on your computer, then press Submit Application");
+    } else if (captcha) {
+      // The worker reads the CAPTCHA and presses Submit (21 Nov, as Keka); in the form's window, as every handoff board.
+      if (!ctx.handoff) throw new BotCheckError("This Zoho Recruit form has a CAPTCHA, which is read in the form's window at a worker that opens one. Nothing was sent.");
+      const read = await typeZohoCaptcha(page);
+      if ("typed" in read) {
+        agentRead = true;
+        await press();
+      } else {
+        await page.locator(CAPTCHA_INPUT).first().fill("").catch(() => undefined);
+        await page.locator(CAPTCHA_INPUT).first().focus().catch(() => undefined);
+        await askPerson(`${read.person}, so the CAPTCHA is yours to type`);
+      }
     } else if (withPerson) {
       await ctx.announceHandoff?.("Check the Zoho Recruit form in the Chrome window on your computer and press Submit Application");
     } else {
-      try {
-        await button.click({ timeout: 15000 });
-      } catch (error) {
-        throw new NotSentError(`Could not press Submit on the Zoho Recruit form: ${friendlyError(error)}`);
-      }
+      await press();
     }
     const pressedAt = Date.now();
     for (;;) {
@@ -400,8 +478,13 @@ async function submitZoho(page: Page, ctx: SubmitContext): Promise<SubmitResult>
         reply = null;
         posted = false;
         const what = `Zoho Recruit refused the submission (${answer.status}${answer.reason ? `: ${answer.reason}` : ""})`;
-        // A wrong CAPTCHA is typed again by the person in the same window; any other refusal ends the run.
-        if (!(withPerson && /captcha/i.test(answer.reason)) || !livePage(page)) throw new NotSentError(`${what}. Nothing was sent.`);
+        const aboutCaptcha = CAPTCHA_WORDS.test(`${answer.reason} ${answer.code ?? ""}`);
+        // The agent's read refused: nothing was sent, and the run starts again from the form with a new CAPTCHA.
+        if (aboutCaptcha && agentRead) {
+          throw new CaptchaRejectedError(`Zoho Recruit did not accept the CAPTCHA the agent read (${answer.status}${answer.reason ? `: ${answer.reason}` : ""}), so nothing was sent.`, await shot(livePage(page) ?? page));
+        }
+        // A wrong CAPTCHA a person typed is typed again by them in the same window; any other refusal ends the run.
+        if (!(withPerson && aboutCaptcha) || !livePage(page)) throw new NotSentError(`${what}. Nothing was sent.`);
       }
       const live = livePage(page);
       if (!live) {
@@ -412,6 +495,10 @@ async function submitZoho(page: Page, ctx: SubmitContext): Promise<SubmitResult>
       if (evidence) return { confirmed: true, evidence };
       if (!posted && !withPerson && Date.now() - pressedAt > 6000) {
         const errors = await formErrors(live);
+        // A wrong CAPTCHA said on the form rather than in an answer: the same rerun as above.
+        if (agentRead && errors.some((line) => CAPTCHA_WORDS.test(line))) {
+          throw new CaptchaRejectedError(`Zoho Recruit did not accept the CAPTCHA the agent read (${errors.join("; ")}), so nothing was sent.`, await shot(live));
+        }
         if (errors.length > 0) throw new NotSentError(`Zoho Recruit did not take the form: ${errors.join("; ")}`);
       }
       if (Date.now() >= deadline) {

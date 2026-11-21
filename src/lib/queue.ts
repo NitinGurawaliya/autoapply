@@ -18,8 +18,9 @@ export const APPLY_QUEUES = [APPLY_QUEUE, ...LEGACY_APPLY_QUEUES];
 /**
  * Boards whose challenge goes to the person in the window (the adapters' `ctx.handoff`), and where an Ashby check, once
  * shown, keeps later runs of that application with the person (`withPerson`).
- * Keka (T96) and Zoho Recruit (M13): image CAPTCHAs only a person types. Ashby, Lever, Workable, SmartRecruiters: the worker
- * presses Submit and a challenge goes to the person.
+ * Keka (T96) and Zoho Recruit (M13, read by the worker since 21 Nov): image CAPTCHAs the worker reads in the form's window;
+ * on Zoho one the reader cannot read goes to the person. Ashby, Lever, Workable, SmartRecruiters: the worker presses
+ * Submit and a challenge goes to the person.
  */
 export const HANDOFF_BOARDS: readonly string[] = ["ashby", "keka", "lever", "workable", "zohorecruit", "smartrecruiters"];
 const INGEST_QUEUE = "ingest";

@@ -207,6 +207,7 @@ Order (owner, 9 Nov): measure and scale, seed every known company, then the boar
 - [x] [M7 — SmartRecruiters (T95, moved here)](boards/TASKS.md#m7)
 - [x] [M12 — Workable](boards/TASKS.md#m12)
 - [x] [M13 — Zoho Recruit apply](boards/TASKS.md#m13)
+- [x] [M13b — Zoho Recruit's CAPTCHA read by the worker](boards/TASKS.md#m13b)
 - [ ] [M4 — Continuous discovery and re-validation (supersedes T98)](boards/TASKS.md#m4)
 - [~] [M21 — Discovery and ingest on a GitHub Actions schedule](boards/TASKS.md#m21)
 - [ ] [M16 — Board health: success rate, alert, pause](boards/TASKS.md#m16)

@@ -287,6 +287,18 @@ Design: [3.1 Order](TDD.md#31-which-boards-and-in-what-order) · [4.5 Recipe](TD
   Changed: `adapters/zohorecruit.ts` (new: text, number, picklist, yes/no, skills and suggestion boxes; CAPTCHA forms handed to a person, others submitted by the worker; assessment, required tables and multi-selects stop the run), `pick.ts`, `adapter.ts`, `lib/queue.ts` (`HANDOFF_BOARDS`), `match.ts` (in `APPLY_BOARDS`, `ENABLE_ZOHO=0` to switch off). Checks: `scripts/_zoho-survey.ts`, `scripts/_zoho-fillcheck.ts`.
   Left for later: the assessment page (6 of 30 forms) and questions before the browser (`questions.ts`).
 
+<a id="m13b"></a>
+### [x] M13b — Zoho Recruit's CAPTCHA read by the worker, as Keka (owner, 21 Nov)
+Do: `captcha/` (board-generic types and errors, `inspectZohoCaptcha`, capture and refresh in `detector.ts`, `readCaptcha` in `ai.ts`), `adapters/zohorecruit.ts submitZoho` (read, type, Submit; wrong CAPTCHA → `CaptchaRejectedError`; no reader → the person), ARCHITECTURE "Zoho Recruit's CAPTCHA".
+Design: ARCHITECTURE Keka paragraph (the same rerun) and "Human handoff".
+**Done when:**
+- `scripts/zoho-captcha-test.ts` prints PASS.
+- Live portals: the CAPTCHA row is found, captured and refreshed with nothing typed (`scripts/_zoho-captcha-probe.ts --read`).
+- One real Zoho application whose CAPTCHA the worker read is confirmed by Zoho (a real job and profile, the owner's yes).
+
+- Done 21 Nov: `zoho-captcha-test` PASS (19 checks); live probe, 4 CAPTCHA portals: one markup, capture and refresh on all 4, model reads right on about half by eye. Real submit: owner's profile, Quicko Full Stack Developer, the agent read "36gw62", Zoho answered 200 on the first read (no person, 32 s from start to sent). Zoho back in `APPLY_BOARDS` (owner); a first job (Arting Digital) was refused at the swipe by `min_match_score`. Second, Nitin's account (owner's ask): his feed shows Zoho cards, techcarrot AI Engineer (score 56), read "pbnw4p", Zoho 200 first read, 47 s. Dry run, 5 forms twice, never submitted: 81 of 81 fields filled each round, 10 of 10 typed, ~5 of 10 reads right by eye; both length misreads led to reads held to 6 characters.
+  Changed: `captcha/*`, `adapters/zohorecruit.ts`, `jobs/pool.ts`, `lib/queue.ts` (comment), ARCHITECTURE; checks `scripts/zoho-captcha-test.ts`, `scripts/_zoho-captcha-probe.ts`, `scripts/_zoho-real-run.ts` (one run on this code beside the live worker).
+
 <a id="m14"></a>
 ### [-] M14 — The long tail of public boards, as M1 earns them (parked by the owner, 17 Nov: few India jobs)
 Do: for each of Jobvite, Rippling, Recruitee, BambooHR, JazzHR, Pinpoint, Gem, Teamtailor, Breezy, Personio and Polymer, but only those whose M1 numbers after M3 show at least 10 new India jobs a week:

@@ -1,5 +1,6 @@
 // T99: Workday and Zoho Recruit. Pure checks (slugs from addresses, dates, form hosts), then one live Workday tenant and
-// one live Zoho Recruit portal fetched and ingested into Postgres. Both boards stay out of APPLY_BOARDS (hidden).
+// one live Zoho Recruit portal fetched and ingested into Postgres. Workday stays out of APPLY_BOARDS (hidden); Zoho
+// Recruit is in it since 21 Nov (M13b).
 // npx tsx scripts/boards-smoke.ts [workdaySlug] [zohoSlug]
 import { db } from "../src/lib/db";
 import { formUrlAllowed } from "../src/modules/apply/urls";
@@ -30,7 +31,8 @@ async function main() {
   check("Posted 3 Days Ago", postedOnDate("Posted 3 Days Ago", now)?.toISOString() === "2026-10-15T00:00:00.000Z");
   check("Posted 30+ Days Ago is older than 30 days", postedOnDate("Posted 30+ Days Ago", now)?.toISOString() === "2026-09-17T00:00:00.000Z");
   check("form hosts", formUrlAllowed("https://sprinklr.wd1.myworkdayjobs.com/careers/job/x", "workday") && formUrlAllowed("https://acme.zohorecruit.in/jobs/Careers/1/x", "zohorecruit") && !formUrlAllowed("https://evil.example.com/x", "workday") && !formUrlAllowed("https://acme.zohorecruit.in.evil.com/x", "zohorecruit"));
-  check("neither board is applied to", !APPLY_BOARDS.includes("workday") && !APPLY_BOARDS.includes("zohorecruit"));
+  // Zoho Recruit is applied to since 21 Nov (M13b); Workday still is not (no adapter).
+  check("Workday is not applied to, Zoho Recruit is", !APPLY_BOARDS.includes("workday") && APPLY_BOARDS.includes("zohorecruit"));
 
   for (const live of LIVE) {
     const board = boardOf(live.source)!;
