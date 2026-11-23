@@ -196,7 +196,9 @@ async function readPage(page: Page): Promise<FormField[]> {
         type = "textarea";
         answered = (el.querySelector("textarea")?.value ?? "").trim() !== "";
       } else if (!text) return;
-      else answered = text.value.trim() !== "";
+      // An address Workday filled from the resume with a dash look-alike is not taken as answered (24 Nov, Nitin: the
+      // parsed LinkedIn box held "…/in/name–x/" and Workday then refused it as an invalid URL): it is filled again.
+      else answered = text.value.trim() !== "" && !(/[‐-―−]/.test(text.value) && /:\/\/|www\.|linkedin/i.test(text.value));
       // Workday fills some itself (Country, the account's email, a returning candidate's details): left as they are.
       if (answered) return;
       // A phone extension is never ours to fill (23 Nov: "Phone Extension" took the phone number by its label).
