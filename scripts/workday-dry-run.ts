@@ -50,6 +50,17 @@ async function main() {
       for (const field of fields) console.log(`  field ${field.type}${field.required ? "*" : ""} ${field.hintKey ?? ""} "${field.label.slice(0, 50)}" options=${field.options?.slice(0, 4).join("/") ?? "-"}${(field.options?.length ?? 0) > 4 ? "/..." : ""}`);
       const { resolved } = await resolveForm({ userId: user.id, source: "workday", fields, profile, answers, job: jobInfo, draftEssays: true });
       for (const value of resolved.values) console.log(`  ${value.label.slice(0, 60)} = ${value.type === "file" ? "(file)" : value.value.slice(0, 60)} [${value.source}]`);
+      // The user's answers given on the command line (--answer "<words of the question>=<answer>"), as the needs-you card
+      // would give them; used for this run only, never saved.
+      const given = process.argv.flatMap((item, at) => (process.argv[at - 1] === "--answer" ? [item] : [])).map((item) => item.split("="));
+      resolved.pending = resolved.pending.filter((question) => {
+        const answer = given.find(([words]) => question.label.toLowerCase().includes(words.toLowerCase()));
+        const field = answer && fields!.find((item) => item.label === question.label);
+        if (!answer || !field) return true;
+        resolved.values.push({ key: question.key, label: question.label, value: answer.slice(1).join("="), source: "user", selector: field.selector, type: field.type, required: field.required });
+        console.log(`  ${question.label.slice(0, 60)} = ${answer.slice(1).join("=")} [user, given for this run]`);
+        return false;
+      });
       for (const question of resolved.pending) console.log(`  PENDING: ${question.label.slice(0, 80)}`);
       if (resolved.pending.length > 0) {
         console.log("stopping: questions the user must answer");
