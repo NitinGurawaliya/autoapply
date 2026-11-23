@@ -73,10 +73,12 @@ Design: [13.12 Architecture](TDD.md#1312-architecture-connect-keep-alive-run) (C
 **Done when:** the owner connects Naukri from their phone at 390 px through the stream, password and OTP typed by the owner, "Connected as <name>" shown, with no worker on the owner's laptop; nothing of the login pages is stored or logged (checked in the relay's and worker's logs); `naukri-connect-smoke` PASS with the stream; typecheck and lint pass.
 
 <a id="k8b"></a>
-### [~] K8b — Connect Naukri with a code (OTP), no Naukri page on the phone
+### [x] K8b — Connect Naukri with a code (OTP), no Naukri page on the phone
 Do: on K8's relay, `POST /stream/<id>/login` (the mobile number, or the saved one) and `POST /stream/<id>/code` (Naukri's code), handled by the worker driving Naukri's own OTP login (`sites/naukriOtp.ts`) in the stealthy Chrome through the user's proxy; a challenge falls back to K8's page for that step; the number kept sealed (`browser-state/<userId>/naukri-login.json`); the Account sheet becomes number, then six-digit code, then "Connected as <name>"; CLAUDE.md and ARCHITECTURE §6.20 changed to the owner's OTP rule.
 Design: [13.16 OTP connect](TDD.md#1316-otp-connect-owner-23-nov-2026-after-the-first-live-try) · [13.12 Architecture](TDD.md#1312-architecture-connect-keep-alive-run) · [4.9 Security](TDD.md#49-security-and-privacy).
 **Done when:** the owner connects their real Naukri account from the app with their number and Naukri's code only, "Connected as <name>" shown; a local Naukri-like page passes the same flow in `naukri-stream-smoke` with the code and number absent from logs and storage (the number only sealed); typecheck and lint pass.
+Done 23 Nov: the owner connected their real account from the app on the laptop (number, then Naukri's code; "Nitin"), session and number sealed, first run 3 searches, 13 listed, 1 new job; `naukri-stream-smoke` 78/78. Local worker, direct egress (no proxy yet).
+Paths: `sites/naukriOtp.ts`, `sites/relay.ts` (/login, /code), `sources/login-number.ts`, `account/sign-in-stream.tsx`.
 
 <a id="k9"></a>
 ### [ ] K9 — Connect from a computer: the extension
