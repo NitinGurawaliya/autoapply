@@ -1,6 +1,6 @@
 import { hostname } from "node:os";
 import { db } from "@/lib/db";
-import { APPLY_QUEUE, getBoss, INGEST_SOURCE_QUEUE, LEGACY_APPLY_QUEUES, SOURCE_CONNECT_QUEUE, SOURCE_INGEST_TICK } from "@/lib/queue";
+import { APPLY_QUEUE, getBoss, INGEST_SOURCE_QUEUE, LEGACY_APPLY_QUEUES, SITE_APPLY_QUEUE, SOURCE_CONNECT_QUEUE, SOURCE_INGEST_TICK } from "@/lib/queue";
 import { guardUndiciParserAssertions } from "@/lib/undici-guard";
 import { canShowWindow } from "@/modules/apply/browser";
 import { relayConfig, startRelay } from "@/modules/apply/sites/relay";
@@ -43,7 +43,9 @@ async function sourcesOnly() {
   await startSignInRelay();
   await boss.work(SOURCE_CONNECT_QUEUE, { localConcurrency: 2 }, handleSourceConnect);
   await boss.work(INGEST_SOURCE_QUEUE, { localConcurrency: 1 }, handleSourceIngest);
-  console.log(`worker (sources only) listening for ${SOURCE_CONNECT_QUEUE} and ${INGEST_SOURCE_QUEUE}; no applications, schedules or reaping`);
+  // Applications on the user's own signed-in site (Naukri), one at a time: never the shared apply queue.
+  await boss.work(SITE_APPLY_QUEUE, { localConcurrency: 1 }, handleApply);
+  console.log(`worker (sources only) listening for ${SOURCE_CONNECT_QUEUE}, ${INGEST_SOURCE_QUEUE} and ${SITE_APPLY_QUEUE}; no other applications, schedules or reaping`);
   let stopping = false;
   const stop = (signal: string) => {
     if (stopping) process.exit(1);
@@ -76,6 +78,8 @@ async function main() {
   // screen applies; one without (the Docker worker) reads jobs only. The pre-18 Nov queues are emptied here too.
   const applies = canShowWindow();
   if (applies) for (const queue of [APPLY_QUEUE, ...LEGACY_APPLY_QUEUES]) await boss.work(queue, { localConcurrency: concurrency }, handleApply);
+  // Naukri applications (lib/queue.ts SITE_APPLY_QUEUE): one at a time per worker, in the user's own window.
+  if (applies) await boss.work(SITE_APPLY_QUEUE, { localConcurrency: 1 }, handleApply);
   // Signing in to a user's own job-site account (Naukri): a window the person sees, so a screen is needed (docs/naukri/TDD.md 4.2).
   if (applies) await startSignInRelay();
   if (applies) await boss.work(SOURCE_CONNECT_QUEUE, { localConcurrency: 2 }, handleSourceConnect);

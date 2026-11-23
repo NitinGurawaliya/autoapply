@@ -14,7 +14,14 @@ export const APPLY_QUEUE = "apply";
 /** The queues before 18 Nov: a worker with a screen still empties them, and cancel and reap code still reads them. */
 export const LEGACY_APPLY_QUEUES = ["apply-handoff", "apply-unprotected", "apply-person"];
 /** Every queue an application can be on, for code that reads or cancels its queue jobs. */
-export const APPLY_QUEUES = [APPLY_QUEUE, ...LEGACY_APPLY_QUEUES];
+/**
+ * Applications on a site the user signs in to (Naukri, ARCHITECTURE 6.20): their own queue, taken only by a worker
+ * running the signed-in-site code, so a worker on older code never picks one up and fails it.
+ */
+export const SITE_APPLY_QUEUE = "apply-site";
+/** The sources whose applications go on SITE_APPLY_QUEUE (modules/sources/sites.ts SITES). */
+const SIGNED_IN_SOURCES: readonly string[] = ["naukri"];
+export const APPLY_QUEUES = [APPLY_QUEUE, ...LEGACY_APPLY_QUEUES, SITE_APPLY_QUEUE];
 /**
  * Boards whose challenge goes to the person in the window (the adapters' `ctx.handoff`), and where an Ashby check, once
  * shown, keeps later runs of that application with the person (`withPerson`).
@@ -116,7 +123,8 @@ export async function enqueueApply(applicationId: string, delaySeconds = 0, opti
   // One hour covers a form plus waiting behind another application's security code, or a person pressing Submit (15
   // minutes); no automatic pg-boss retry, because the runner retries on its own and a blind re-run could apply twice.
   const data = person ? { applicationId, person: true } : { applicationId };
-  return boss.send(APPLY_QUEUE, data, { expireInSeconds: 3600, retryLimit: 0, ...(delaySeconds > 0 ? { startAfter: delaySeconds } : {}) });
+  const queue = row && SIGNED_IN_SOURCES.includes(row.source) ? SITE_APPLY_QUEUE : APPLY_QUEUE;
+  return boss.send(queue, data, { expireInSeconds: 3600, retryLimit: 0, ...(delaySeconds > 0 ? { startAfter: delaySeconds } : {}) });
 }
 
 /**
