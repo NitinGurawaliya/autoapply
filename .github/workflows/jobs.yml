@@ -39,6 +39,10 @@ env:
   DATABASE_URL: ${{ secrets.DATABASE_URL }}
   DIRECT_URL: ${{ secrets.DIRECT_URL }}
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  # 21 Nov: the text calls' provider (lib/llm.ts). Set the repository variable LLM_PROVIDER to "gemini" (with the secret
+  # GEMINI_API_KEY) to move them to Gemini; unset keeps OpenAI. Embeddings stay on OpenAI. The web app must match.
+  LLM_PROVIDER: ${{ vars.LLM_PROVIDER }}
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
   VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
   VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
   VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}

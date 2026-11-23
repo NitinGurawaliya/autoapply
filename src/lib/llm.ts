@@ -3,12 +3,41 @@ import { readFileSync } from "node:fs";
 import type { z } from "zod";
 import { db } from "@/lib/db";
 
-const MODEL = process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
+/**
+ * Which service answers the text calls (callJson): "openai" (default) or "gemini" (LLM_PROVIDER=gemini, 21 Nov), through
+ * Gemini's OpenAI-compatible endpoint with GEMINI_API_KEY. Embeddings stay on OpenAI either way: every stored job and
+ * profile vector is an OpenAI vector, and a Gemini vector cannot be compared with them.
+ */
+export type LlmProvider = "openai" | "gemini";
+export function llmProvider(): LlmProvider {
+  return process.env.LLM_PROVIDER?.trim().toLowerCase() === "gemini" ? "gemini" : "openai";
+}
+
+const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
+const GEMINI_CHAT_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+
+/** The default text model: OPENAI_MODEL (gpt-4o-mini), or on Gemini GEMINI_MODEL (gemini-2.5-flash). */
+export function defaultModel() {
+  return llmProvider() === "gemini" ? process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash" : process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
+}
+
+/** The stronger model for judgement calls (fit.ts): GEMINI_FIT_MODEL (gemini-2.5-pro) on Gemini, else FIT_MODEL. */
+export function strongModel(): string | null {
+  return llmProvider() === "gemini" ? process.env.GEMINI_FIT_MODEL?.trim() || "gemini-2.5-pro" : process.env.FIT_MODEL?.trim() || null;
+}
+
+/** A model name the provider can serve: on Gemini an OpenAI name (gpt-…, o1…) a caller passed becomes the default. */
+function modelFor(requested: string | undefined) {
+  const name = requested?.trim();
+  if (!name) return defaultModel();
+  if (llmProvider() === "gemini" && /^(gpt-|o\d)/i.test(name)) return defaultModel();
+  return name;
+}
 
 const memory = new Map<string, unknown>();
 
-function loadEnvKey() {
-  if (process.env.OPENAI_API_KEY) return;
+function loadEnvKey(name: "OPENAI_API_KEY" | "GEMINI_API_KEY") {
+  if (process.env[name]) return;
   let text = "";
   try {
     text = readFileSync(".env", "utf8");
@@ -17,15 +46,15 @@ function loadEnvKey() {
   }
   for (const line of text.split(/\r?\n/)) {
     const trimmed = line.trim();
-    if (!trimmed.startsWith("OPENAI_API_KEY=")) continue;
-    let value = trimmed.slice("OPENAI_API_KEY=".length).trim();
+    if (!trimmed.startsWith(`${name}=`)) continue;
+    let value = trimmed.slice(name.length + 1).trim();
     if (
       (value.startsWith('"') && value.endsWith('"')) ||
       (value.startsWith("'") && value.endsWith("'"))
     ) {
       value = value.slice(1, -1);
     }
-    if (value) process.env.OPENAI_API_KEY = value;
+    if (value) process.env[name] = value;
   }
 }
 
@@ -93,13 +122,14 @@ function waitMs(response: Response | null, attempt: number) {
 }
 
 /**
- * POST JSON to OpenAI with a per-try timeout, retrying a 429, a 5xx, a timeout or a network error at most TRIES times.
- * Any other error status is returned as is for the caller to report.
+ * POST JSON to OpenAI or Gemini (`provider`) with a per-try timeout, retrying a 429, a 5xx, a timeout or a network error
+ * at most TRIES times. Any other error status is returned as is for the caller to report.
  */
-async function postJson(url: string, payload: unknown, options: CallOptions) {
-  loadEnvKey();
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
+async function postJson(url: string, payload: unknown, options: CallOptions, provider: LlmProvider = "openai") {
+  const keyName = provider === "gemini" ? "GEMINI_API_KEY" : "OPENAI_API_KEY";
+  loadEnvKey(keyName);
+  const apiKey = process.env[keyName];
+  if (!apiKey) throw new Error(`${keyName} is not set`);
   const timeoutMs = options.timeoutMs ?? envInt("LLM_TIMEOUT_MS", 60_000);
   return inLane(options.lane ?? "interactive", async () => {
     let lastError = "";
@@ -123,24 +153,29 @@ async function postJson(url: string, payload: unknown, options: CallOptions) {
         await new Promise((resolve) => setTimeout(resolve, wait));
       }
     }
-    throw new Error(`OpenAI request failed after ${TRIES} tries (${lastError})`);
+    throw new Error(`${provider === "gemini" ? "Gemini" : "OpenAI"} request failed after ${TRIES} tries (${lastError})`);
   });
 }
 
-async function complete(system: string, user: string, model = MODEL, options: CallOptions = {}) {
+async function complete(system: string, user: string, requested?: string, options: CallOptions = {}) {
   const started = Date.now();
+  const provider = llmProvider();
+  const model = modelFor(requested);
   const response = await postJson(
-    "https://api.openai.com/v1/chat/completions",
+    provider === "gemini" ? GEMINI_CHAT_URL : OPENAI_CHAT_URL,
     {
       model,
       temperature: 0,
-      response_format: { type: "json_object" },
+      // Gemini's endpoint is held to JSON by the prompt (callJson's system line) and the schema check, not by
+      // response_format; OpenAI keeps its JSON mode.
+      ...(provider === "openai" ? { response_format: { type: "json_object" } } : {}),
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },
       ],
     },
     options,
+    provider,
   );
   const latencyMs = Date.now() - started;
   const body = (await response.json()) as {
@@ -149,13 +184,13 @@ async function complete(system: string, user: string, model = MODEL, options: Ca
     usage?: { prompt_tokens?: number; completion_tokens?: number };
   };
   if (!response.ok) {
-    throw new Error(body.error?.message ?? `OpenAI request failed (${response.status})`);
+    throw new Error(body.error?.message ?? `${provider === "gemini" ? "Gemini" : "OpenAI"} request failed (${response.status})`);
   }
   llmUsage.calls += 1;
   llmUsage.input += body.usage?.prompt_tokens ?? 0;
   llmUsage.output += body.usage?.completion_tokens ?? 0;
   console.log(
-    `llm tokens input=${body.usage?.prompt_tokens ?? 0} output=${body.usage?.completion_tokens ?? 0} latencyMs=${latencyMs}`,
+    `llm tokens model=${model} input=${body.usage?.prompt_tokens ?? 0} output=${body.usage?.completion_tokens ?? 0} latencyMs=${latencyMs}`,
   );
   return body.choices?.[0]?.message?.content ?? "";
 }
@@ -208,7 +243,7 @@ export async function callJson<T>(
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const prompt = attempt === 0 ? user : `${user}\n\nThe previous response failed validation: ${lastError}`;
-    const raw = stripFences(await complete(jsonSystem, prompt, options?.model?.trim() || MODEL, { lane: options?.lane, timeoutMs: options?.timeoutMs }));
+    const raw = stripFences(await complete(jsonSystem, prompt, options?.model, { lane: options?.lane, timeoutMs: options?.timeoutMs }));
     try {
       parsed = schema.parse(JSON.parse(raw));
       break;

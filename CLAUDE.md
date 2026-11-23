@@ -54,7 +54,7 @@ Agents: one session per task, fresh context each time (the entry carries everyth
 
 ## Stack (do not swap)
 
-Next.js 16 App Router (`src/proxy.ts`, not middleware) · TypeScript strict · Tailwind + shadcn/ui · Framer Motion · Prisma + Postgres (Neon) · pg-boss · Playwright (Chromium) · Auth.js v5 + Google · `lib/storage.ts` (Postgres FileBlob driver; S3 later) · OpenAI Chat Completions (`gpt-4o-mini`, `OPENAI_MODEL` to override) · Zod · pdf-parse · tsx.
+Next.js 16 App Router (`src/proxy.ts`, not middleware) · TypeScript strict · Tailwind + shadcn/ui · Framer Motion · Prisma + Postgres (Neon) · pg-boss · Playwright (Chromium) · Auth.js v5 + Google · `lib/storage.ts` (Postgres FileBlob driver; S3 later) · OpenAI Chat Completions (`gpt-4o-mini`, `OPENAI_MODEL` to override), or Gemini with `LLM_PROVIDER=gemini` (ARCHITECTURE §8; embeddings stay on OpenAI) · Zod · pdf-parse · tsx.
 
 ## Commands
 
@@ -85,7 +85,7 @@ npx playwright test
 
 - Modules in `src/modules/<name>` export through `index.ts`; imported by both `src/app/api/*` and `src/worker/*`. Modules never import from `app/`.
 - Playwright code lives only under `src/modules/apply` and runs only in the worker process. API routes enqueue; they never launch a browser.
-- All LLM calls go through `lib/llm.ts callJson(schema, system, user, {cacheKey})`. JSON-only prompts validated with Zod. No direct OpenAI calls outside `lib/llm.ts`.
+- All LLM calls go through `lib/llm.ts callJson(schema, system, user, {cacheKey})`. JSON-only prompts validated with Zod. No direct OpenAI or Gemini calls outside `lib/llm.ts`.
 - Field mapping order: synonym regex → `FieldMappingCache` → LLM (then write cache). Standard fields must map without the LLM.
 - The runner is stateless and re-runnable from the job URL. Never hold a browser open while waiting for the user.
 - Errors: catch at the runner level; `attempt < max_attempts` → `retry` event + re-enqueue; else `failed` + `error` + `error` event. Browser closed in `finally`.

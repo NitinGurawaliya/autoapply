@@ -1,5 +1,26 @@
 import type { Salary } from "./salary";
 
+/** One reply from a board's API, the part of a fetch Response the fetchers read. */
+export type HttpReply = {
+  status: number;
+  ok: boolean;
+  headers: { get(name: string): string | null };
+  json(): Promise<unknown>;
+};
+
+/**
+ * How a fetcher reaches a board's API: the process's own fetch by default; a board whose Cloudflare refuses this
+ * server's requests (Workday, 17 Nov) can be read from inside the stealthy Chrome instead (modules/apply/board-reader.ts),
+ * which sends the same requests the site's own page sends.
+ */
+export type BoardHttp = {
+  fetch(url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }): Promise<HttpReply>;
+};
+
+export const processHttp: BoardHttp = {
+  fetch: (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(30000) }),
+};
+
 export type FetchedJob = {
   externalId: string;
   title: string;

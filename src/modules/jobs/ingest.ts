@@ -5,7 +5,7 @@ import { afterIngest, afterIngestDeadline } from "./after-ingest";
 import { boardOf } from "./boards";
 import { GENTLE_BOARDS, GENTLE_GROUP_TIER, GENTLE_PER_TICK, GENTLE_SCALE, nextFetchAt, REFUSED, tierOf, type Tier } from "./cadence";
 import { classifyTitle } from "./functions";
-import type { FetchedJob } from "./normalize";
+import type { BoardHttp, FetchedJob } from "./normalize";
 import { forgetJobVectors } from "./semantic";
 import { jobSkills } from "./skills";
 import { tagPosting } from "./tagging";
@@ -48,8 +48,8 @@ export async function markClosed(companyId: string, source: string, listedExtern
   return result.count;
 }
 
-async function fetchCompany(source: string, slug: string, known?: ReadonlySet<string>): Promise<FetchedJob[]> {
-  return boardOf(source)?.fetch(slug, { known }) ?? [];
+async function fetchCompany(source: string, slug: string, known?: ReadonlySet<string>, http?: BoardHttp): Promise<FetchedJob[]> {
+  return boardOf(source)?.fetch(slug, { known, http }) ?? [];
 }
 
 /** What ingest stores and tags from: when none of it changed, the job is not written again. */
@@ -81,7 +81,7 @@ export type CompanyResult = {
 export type IngestCompany = { id: string; source: string; slug: string; keepAbroad?: boolean; listHash?: string | null };
 
 /** One company: fetch its board (one retry), create new jobs, update changed ones, close the ones it no longer lists. */
-export async function ingestCompany(company: IngestCompany, cutoff: number): Promise<CompanyResult> {
+export async function ingestCompany(company: IngestCompany, cutoff: number, options: { http?: BoardHttp } = {}): Promise<CompanyResult> {
   const empty = { fetched: 0, created: 0, updated: 0, closed: 0, createdEligible: 0, indiaListed: null, listHash: company.listHash ?? null };
   const board = boardOf(company.source);
   // Boards with a cheap list (Greenhouse): an unchanged list means an unchanged board; a failed probe reads in full.
@@ -95,14 +95,14 @@ export async function ingestCompany(company: IngestCompany, cutoff: number): Pro
   const known = new Set(knownRows.map((row) => row.externalId));
   let jobs: FetchedJob[];
   try {
-    jobs = await fetchCompany(company.source, company.slug, known);
+    jobs = await fetchCompany(company.source, company.slug, known, options.http);
   } catch (first) {
     // A refused read (cadence.ts REFUSED) is not tried again at once: asking again is what got it refused.
     const message = first instanceof Error ? first.message : "fetch failed";
     if (REFUSED.test(message)) return { ...empty, listHash: null, error: message };
     await pause(2000);
     try {
-      jobs = await fetchCompany(company.source, company.slug, known);
+      jobs = await fetchCompany(company.source, company.slug, known, options.http);
     } catch (error) {
       return { ...empty, listHash: null, error: error instanceof Error ? error.message : "fetch failed" };
     }
@@ -314,12 +314,12 @@ export async function startTickRun(companies: number) {
 }
 
 /** One company's read in tick mode: the same read as a run, recorded with its tier and next read time. */
-export async function ingestOne(companyId: string, options: { runId?: string; days?: number; now?: Date } = {}) {
+export async function ingestOne(companyId: string, options: { runId?: string; days?: number; now?: Date; http?: BoardHttp } = {}) {
   const company = await db.company.findUnique({ where: { id: companyId }, select: { ...COMPANY_STATE, active: true } });
   if (!company || !company.active) return null;
   const days = options.days ?? (Number(process.env.INGEST_DAYS) || DEFAULT_INGEST_DAYS);
   const now = options.now ?? new Date();
-  const result = await ingestCompany(company, now.getTime() - days * 24 * 60 * 60 * 1000);
+  const result = await ingestCompany(company, now.getTime() - days * 24 * 60 * 60 * 1000, { http: options.http });
   const { tier } = await recordRead(company, result, "tick", now);
   if (options.runId) {
     await db.$executeRaw`

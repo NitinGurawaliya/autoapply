@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { callJson, type LlmLane } from "@/lib/llm";
+import { callJson, type LlmLane, strongModel } from "@/lib/llm";
 // The brief file itself, not the profile index (which pulls in resume parsing).
 import { type Brief, briefJson, FIT_VERSION, fitHashOf } from "@/modules/profile/brief";
 import { compareSkills, stackGap } from "./skills";
@@ -33,7 +33,9 @@ export function fitOn() {
 
 /** FIT_MODEL overrides the model for the fit calls only (lib/llm.ts's default otherwise). */
 export function fitModel() {
-  return process.env.FIT_MODEL?.trim() || null;
+  // FIT_MODEL on OpenAI; GEMINI_FIT_MODEL (gemini-2.5-pro) with LLM_PROVIDER=gemini. The model is part of fitHash, so
+  // switching provider re-judges every verdict once.
+  return strongModel();
 }
 
 /** The cache key of a brief's verdicts: FIT_VERSION and the brief exactly as sent, plus the model when overridden. */
