@@ -1,6 +1,8 @@
 import { cachedFeedScore } from "@/lib/feed-cache";
 import { db } from "@/lib/db";
-import { candidateScore } from "@/modules/apply";
+// From lifecycle, never the apply index: the index loads the browser and the runner, which a web server can't
+// (on Vercel that made every route importing this module a 500, 23 Nov).
+import { candidateScore } from "@/modules/apply/lifecycle";
 
 /**
  * The match score a signed-in user with a profile sees on a share page (Phase U): the number their feed showed when
