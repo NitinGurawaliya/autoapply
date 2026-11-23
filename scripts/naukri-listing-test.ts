@@ -59,9 +59,13 @@ check("full description from the job page", detailed.description.includes("Assis
 check("every location from the job page", (detailed.offices ?? []).join("|") === "Hyderabad|Chennai|Bengaluru");
 check("a detail for another job is ignored", withDetail(infosys, detail) === infosys);
 
-// 5. Searches: from the user's tracks, title, city and years; the page a person would open.
-const plan = planSearches({ tracks: ["backend", "fullstack"], currentTitle: "Software Engineer II", city: "Bengaluru", yearsExperience: 2.4 }, 3);
-check("searches from tracks then title", plan.map((s) => s.keyword).join("|") === "backend developer|full stack developer|software engineer ii", plan.map((s) => s.keyword).join("|"));
+// 5. Searches: from the user's tracks, title, city and years, in the user's city and the big tech cities and remote
+// (owner, 23 Nov); the page a person would open.
+const plan = planSearches({ tracks: ["backend", "fullstack"], currentTitle: "Software Engineer II", city: "Bengaluru", yearsExperience: 2.4 }, 12);
+const keywordsInOrder = [...new Set(plan.map((s) => s.keyword))];
+check("searches from tracks then title", keywordsInOrder.join("|") === "backend developer|full stack developer|software engineer ii", keywordsInOrder.join("|"));
+check("each field in the city, then the other cities and remote, no city twice", plan.slice(0, 4).map((s) => s.location).join("|") === "Bengaluru|pune|hyderabad|remote", plan.slice(0, 4).map((s) => s.location).join("|"));
+check("a small city first, then the big ones", planSearches({ tracks: ["backend"], currentTitle: null, city: "Mohali", yearsExperience: 1 }, 10).map((s) => s.location).join("|") === "Mohali|bengaluru|pune|hyderabad|remote");
 check("limited to the run's budget", planSearches({ tracks: ["backend", "frontend", "devops", "qa"], currentTitle: null, city: null, yearsExperience: null }, 2).length === 2);
 check("page 1 URL", searchUrl(plan[0], 1) === "https://www.naukri.com/backend-developer-jobs-in-bengaluru?experience=2&jobAge=7", searchUrl(plan[0], 1));
 check("page 2 URL", searchUrl(plan[0], 2) === "https://www.naukri.com/backend-developer-jobs-in-bengaluru-2?experience=2&jobAge=7");

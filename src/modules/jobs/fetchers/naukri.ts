@@ -186,8 +186,15 @@ export type NaukriSearch = { keyword: string; location: string | null; experienc
 const slugPart = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
 /**
+ * Where every user's searches look besides their own city (owner, 23 Nov: a city-only search on the owner's account found
+ * about five jobs a search): the big tech cities and remote. Naukri's own place slugs.
+ */
+export const EXTRA_LOCATIONS = ["bengaluru", "pune", "hyderabad", "remote"] as const;
+
+/**
  * The searches one run makes for a user, from what they already told us: their tracks' phrases, then their current
- * title; their city; their years. At most `limit`.
+ * title; in their city, then EXTRA_LOCATIONS; their years. Field first: each phrase in every place before the next
+ * phrase, so a small budget still covers the user's main field everywhere. At most `limit`.
  */
 export function planSearches(input: { tracks: string[]; currentTitle: string | null; city: string | null; yearsExperience: number | null }, limit: number): NaukriSearch[] {
   const keywords: string[] = [];
@@ -200,7 +207,12 @@ export function planSearches(input: { tracks: string[]; currentTitle: string | n
   if (keywords.length === 0) keywords.push(TRACK_SEARCH.software);
   const city = input.city?.trim() ? input.city.trim() : null;
   const experience = input.yearsExperience != null && Number.isFinite(input.yearsExperience) ? Math.max(0, Math.round(input.yearsExperience)) : null;
-  return keywords.slice(0, Math.max(0, limit)).map((keyword) => ({ keyword, location: city, experience }));
+  const places: string[] = [];
+  for (const place of [city, ...EXTRA_LOCATIONS]) {
+    if (place && !places.some((known) => slugPart(known) === slugPart(place))) places.push(place);
+  }
+  const searches = keywords.flatMap((keyword) => places.map((location) => ({ keyword, location, experience })));
+  return searches.slice(0, Math.max(0, limit));
 }
 
 /**

@@ -45,6 +45,8 @@ export async function runSourceIngest(userId: string, site: Site, options: { log
 
   const run = await db.sourceRun.create({ data: { userId, site } });
   const counts = { searches: 0, pages: 0, listed: 0, created: 0, updated: 0, details: 0 };
+  // Why listings were not stored (observability, docs/naukri/TDD.md 4.11): counts only, never a title or a company.
+  let kept = "";
   let stop: PageStop | null = null;
   let budgetHit = false;
   let error: string | null = null;
@@ -118,6 +120,13 @@ export async function runSourceIngest(userId: string, site: Site, options: { log
   // Stores what was read (also when a run stops part way), records the run, and settles the connection.
   async function finish(found?: Map<string, NaukriListing>): Promise<SourceIngestOutcome> {
     const connected = await stillConnected();
+    if (found && found.size > 0) {
+      const all = [...found.values()];
+      const elsewhere = all.filter((job) => job.applyKind === "none").length;
+      const onBoard = all.filter((job) => job.applyKind === "board").length;
+      const tech = all.filter((job) => job.applyKind === "naukri" && worthDetail(job)).length;
+      kept = `; ${found.size} unique: ${all.length - elsewhere - onBoard} apply on Naukri (${tech} India tech), ${onBoard} on a board we apply on, ${elsewhere} elsewhere (not kept)`;
+    }
     if (found && found.size > 0 && connected) {
       const stored = await storeSiteListings(site, [...found.values()], Date.now() - INGEST_DAYS * 24 * 60 * 60 * 1000);
       counts.created = stored.created;
@@ -140,7 +149,7 @@ export async function runSourceIngest(userId: string, site: Site, options: { log
       await session.saveState();
       await recordIngest(userId, site);
     }
-    log(`${stopReason}: ${counts.searches} searches, ${counts.pages} pages, ${counts.listed} listed, ${counts.details} job pages, ${counts.created} new, ${counts.updated} changed${error ? `; ${error}` : ""}`);
+    log(`${stopReason}: ${counts.searches} searches, ${counts.pages} pages, ${counts.listed} listed, ${counts.details} job pages, ${counts.created} new, ${counts.updated} changed${kept}${error ? `; ${error}` : ""}`);
     return { status: "ran", runId: run.id, stopReason, listed: counts.listed, created: counts.created, updated: counts.updated, details: counts.details };
   }
 }
