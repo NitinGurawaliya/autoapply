@@ -45,17 +45,23 @@ input,button{position:absolute;left:20px;width:300px;height:40px;font-size:16px;
 #u{top:100px}#p{top:180px}#o{top:260px}button{top:340px}
 </style></head><body><form method="post" action="/signin"><input id="u" name="u"><input id="p" name="p" type="password"><input id="o" name="o"><button>Login</button></form></body></html>`;
 
-/** A login page on this machine: user, password and OTP, posted to itself; success lands on /home. It logs nothing. */
+export type Received = { u: string; p: string; o: string; sid: string };
+
+/**
+ * A login page on this machine: user, password and OTP, posted to itself; success sets a session cookie of its own
+ * (`sid`, new for each sign-in) and lands on /home. It logs nothing.
+ */
 export async function fakeLogin() {
-  let received: { u: string; p: string; o: string } | null = null;
+  const signIns: Received[] = [];
   const server: Server = createServer((req, res) => {
     if (req.method === "POST" && req.url === "/signin") {
       let body = "";
       req.on("data", (chunk) => (body += chunk));
       req.on("end", () => {
         const form = new URLSearchParams(body);
-        received = { u: form.get("u") ?? "", p: form.get("p") ?? "", o: form.get("o") ?? "" };
-        res.writeHead(302, { Location: "/home" }).end();
+        const sid = randomBytes(8).toString("hex");
+        signIns.push({ u: form.get("u") ?? "", p: form.get("p") ?? "", o: form.get("o") ?? "", sid });
+        res.writeHead(302, { Location: "/home", "Set-Cookie": `sid=${sid}; Path=/; HttpOnly` }).end();
       });
       return;
     }
@@ -69,14 +75,16 @@ export async function fakeLogin() {
   const { port } = server.address() as AddressInfo;
   return {
     url: `http://127.0.0.1:${port}/login`,
-    received: () => received,
+    /** The latest sign-in, or the one made with this user name. */
+    received: (user?: string) => (user ? signIns.find((signIn) => signIn.u === user) : signIns.at(-1)) ?? null,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
 }
 
 /**
  * The fake page's sign-in test, in place of Naukri's (sites/naukri.ts waitForSignIn): the window reached /home. Like
- * the real one it never reads the form; on success it adds a naukri.com cookie, so the sealed save has something to keep.
+ * the real one it never reads the form; on success it copies the fake site's session id into a naukri.com cookie, so the
+ * sealed save keeps something that tells one window's sign-in from another's.
  */
 export const fakeWaitForSignIn: typeof waitForSignIn = async (page: Page, timeoutMs, cancelled) => {
   const deadline = Date.now() + timeoutMs;
@@ -89,7 +97,8 @@ export const fakeWaitForSignIn: typeof waitForSignIn = async (page: Page, timeou
       if (await cancelled()) return { status: "cancelled" };
     }
     if (new URL(current.url()).pathname === "/home") {
-      await current.context().addCookies([{ name: "k8-marker", value: "v", domain: ".naukri.com", path: "/", secure: true, httpOnly: false, sameSite: "Lax", expires: -1 }]);
+      const sid = (await current.context().cookies(current.url())).find((cookie) => cookie.name === "sid")?.value ?? "none";
+      await current.context().addCookies([{ name: "k8-marker", value: sid, domain: ".naukri.com", path: "/", secure: true, httpOnly: false, sameSite: "Lax", expires: -1 }]);
       return { status: "signed_in", accountLabel: "Smoke" };
     }
     await new Promise((resolve) => setTimeout(resolve, 300));

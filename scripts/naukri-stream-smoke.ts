@@ -6,7 +6,10 @@
 //   page in frames sized to a phone, taps the fields and types a made-up user, password and OTP, presses Enter; the
 //   worker sees the window signed in and saves it sealed, as K1 does. Then: every way in without the right pass is
 //   refused, a cancel and an expiry end the stream, a test profile gets no pass, and nothing typed or shown on the
-//   login page reaches this process's log, stealthy-browser.log or storage. Opens a Chrome window for a few seconds.
+//   login page reaches this process's log, stealthy-browser.log or storage. Then two more users sign in at the same
+//   time, each in their own window and stream: neither pass opens the other's stream, each page gets only its own
+//   user's typing, each saved sign-in holds only its own session, and each user has their own proxy session name.
+//   Opens Chrome windows for a few seconds.
 //   Its own throwaway users only; all removed at the end.
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
@@ -28,13 +31,16 @@ async function main() {
   const { runConnect } = await import("../src/modules/apply/sites/connect");
   const { openStream, relayReady, startRelay, stopRelay } = await import("../src/modules/apply/sites/relay");
   const { closeAllStealthyBrowsers } = await import("../src/modules/apply/real-browser");
-  const { disconnect, getConnection, signStreamToken, siteStateKey, startConnect, streamIdOf, streamTicket } = await import("../src/modules/sources");
+  const { unseal } = await import("../src/lib/sealed");
+  const { disconnect, getConnection, sessionName, signStreamToken, siteStateKey, startConnect, streamIdOf, streamTicket } = await import("../src/modules/sources");
   type Ticket = Awaited<ReturnType<typeof streamTicket>>;
 
   const stealthyLog = process.env.STEALTHY_LOG || path.resolve(process.cwd(), "stealthy-browser.log");
   const stealthyFrom = existsSync(stealthyLog) ? statSync(stealthyLog).size : 0;
   const logs = captureLogs();
   const typed = secrets();
+  const typedA = secrets();
+  const typedB = secrets();
   const tokens: string[] = [];
   const login = await fakeLogin();
 
@@ -57,6 +63,8 @@ async function main() {
 
   const tester = await makeUser("test", true);
   const person = await makeUser("real", false);
+  const userA = await makeUser("a", false);
+  const userB = await makeUser("b", false);
   const fakeEnqueue = async () => "job";
   try {
     await startRelay();
@@ -158,29 +166,91 @@ async function main() {
     check("it ends as expired at its deadline", await phone3.until(() => phone3.endOutcome === "expired", 5000), String(phone3.endOutcome));
     await phone3.close();
     check("an expired stream refuses the pass", (await raw(short.url, { headers: { Authorization: `Bearer ${shortToken}` } })) === 404);
+
+    // 8. Two users sign in at the same time, each in their own window and stream.
+    check("two users connect at once", (await startConnect(userA.id, "naukri", fakeEnqueue)).ok && (await startConnect(userB.id, "naukri", fakeEnqueue)).ok);
+    const runA = runConnect(userA.id, "naukri", { loginUrl: login.url, waitForSignIn: fakeWaitForSignIn });
+    const runB = runConnect(userB.id, "naukri", { loginUrl: login.url, waitForSignIn: fakeWaitForSignIn });
+    const [ticketA, ticketB] = await Promise.all([readyTicket(userA.id), readyTicket(userB.id)]);
+    if (ticketA.state !== "ready" || ticketB.state !== "ready") {
+      check("both passes ready", false, `${ticketA.state}, ${ticketB.state}`);
+      await Promise.all([disconnect(userA.id, "naukri"), disconnect(userB.id, "naukri")]);
+      await Promise.allSettled([runA, runB]);
+      return;
+    }
+    check("each user has their own stream", ticketA.url !== ticketB.url && streamIdOf(ticketA.url) !== streamIdOf(ticketB.url));
+    check("A's pass does not open B's stream", (await raw(ticketB.url, { headers: { Authorization: `Bearer ${ticketA.token}` } })) === 404);
+    check("B's pass does not open A's stream", (await raw(ticketA.url, { headers: { Authorization: `Bearer ${ticketB.token}` } })) === 404);
+    const phoneA = new Phone(ticketA.url, ticketA.token);
+    const phoneB = new Phone(ticketB.url, ticketB.token);
+    // B's stream address with A's pass: what A would send to type into B's window.
+    const intruder = new Phone(ticketB.url, ticketA.token);
+    check("A cannot type into B's window", (await intruder.type("x")) === 404);
+    check("both phones open their stream", (await phoneA.open()) === 200 && (await phoneB.open()) === 200);
+    check("both get frames", (await phoneA.until(() => phoneA.frames > 0, 30_000)) && (await phoneB.until(() => phoneB.frames > 0, 30_000)), `${phoneA.frames}, ${phoneB.frames}`);
+    // Typed in turns, A and B interleaved, as two people at once would.
+    const signIn = (phone: Phone, values: { user: string; pass: string; otp: string }) => [
+      () => phone.input([{ t: "tap", ...FIELD.user }]),
+      () => phone.type(values.user),
+      () => phone.input([{ t: "tap", ...FIELD.pass }]),
+      () => phone.type(values.pass),
+      () => phone.input([{ t: "tap", ...FIELD.otp }]),
+      () => phone.type(values.otp),
+      () => phone.input([{ t: "key", k: "Enter" }]),
+    ];
+    const stepsA = signIn(phoneA, typedA);
+    const stepsB = signIn(phoneB, typedB);
+    const statusesAB: number[] = [];
+    for (let index = 0; index < stepsA.length; index += 1) statusesAB.push(...(await Promise.all([stepsA[index](), stepsB[index]()])));
+    check("both users' input accepted", statusesAB.every((status) => status === 204), statusesAB.join(","));
+    const [outcomeA, outcomeB] = await Promise.all([runA, runB]);
+    check("both connected", outcomeA === "connected" && outcomeB === "connected", `${outcomeA}, ${outcomeB}`);
+    const gotA = login.received(typedA.user);
+    const gotB = login.received(typedB.user);
+    check("A's page got exactly A's typing", gotA?.p === typedA.pass && gotA.o === typedA.otp);
+    check("B's page got exactly B's typing", gotB?.p === typedB.pass && gotB.o === typedB.otp);
+    await Promise.all([phoneA.close(), phoneB.close()]);
+    const saved = async (userId: string, otherId: string) => {
+      const key = siteStateKey(userId, "naukri");
+      const blob = await storage.get(key);
+      const plain = blob ? unseal(blob.bytes, key) : null;
+      const state = plain ? (JSON.parse(Buffer.from(plain).toString("utf8")) as { cookies: Array<{ name: string; value: string }> }) : null;
+      return {
+        marker: state?.cookies.find((cookie) => cookie.name === "k8-marker")?.value ?? null,
+        opensAsOther: blob ? unseal(blob.bytes, siteStateKey(otherId, "naukri")) !== null : null,
+      };
+    };
+    const [savedA, savedB] = await Promise.all([saved(userA.id, userB.id), saved(userB.id, userA.id)]);
+    check("A's saved sign-in is A's own session", Boolean(gotA) && savedA.marker === gotA!.sid, `${savedA.marker} vs ${gotA?.sid}`);
+    check("B's saved sign-in is B's own session", Boolean(gotB) && savedB.marker === gotB!.sid, `${savedB.marker} vs ${gotB?.sid}`);
+    check("neither saved sign-in opens as the other user's", savedA.opensAsOther === false && savedB.opensAsOther === false);
+    const [rowA, rowB] = await Promise.all([getConnection(userA.id, "naukri"), getConnection(userB.id, "naukri")]);
+    check("both show Connected, streams closed", rowA?.status === "connected" && rowB?.status === "connected" && rowA.streamUrl === null && rowB.streamUrl === null);
+    check("each user gets their own proxy session", sessionName(userA.id, "naukri") !== sessionName(userB.id, "naukri"));
   } finally {
     logs.stop();
     // 8. Nothing of the login pages in the log, stealthy-browser.log or storage.
     const logged = logs.text();
     const stealthy = existsSync(stealthyLog) ? readFileSync(stealthyLog).subarray(stealthyFrom).toString("utf8") : "";
-    const values = [typed.user, typed.pass, typed.otp];
+    const values = [typed, typedA, typedB].flatMap((set) => [set.user, set.pass, set.otp]);
     check("the log has lines from this run", logged.includes("relay: stream opened"));
     check("nothing typed reaches the log", values.every((value) => !logged.includes(value)));
     check("nothing typed reaches stealthy-browser.log", values.every((value) => !stealthy.includes(value)));
     check("no stream token reaches any log", tokens.length > 0 && tokens.every((token) => !logged.includes(token) && !stealthy.includes(token)));
     check("no frame reaches any log", !logged.includes("/9j/") && !stealthy.includes("/9j/"));
-    const blobs = await db.fileBlob.findMany({ where: { userId: { in: [person.id, tester.id] } }, select: { key: true, bytes: true } });
+    const everyone = [person.id, tester.id, userA.id, userB.id];
+    const blobs = await db.fileBlob.findMany({ where: { userId: { in: everyone } }, select: { key: true, bytes: true } });
     check("storage holds only the sealed sign-in", blobs.every((blob) => blob.key.startsWith("browser-state/")), blobs.map((blob) => blob.key).join(","));
     check("nothing typed or seen is in storage", blobs.every((blob) => values.every((value) => !Buffer.from(blob.bytes).includes(Buffer.from(value))) && !Buffer.from(blob.bytes).includes(Buffer.from("/9j/"))));
     check("no screenshot stored", blobs.every((blob) => !/screenshot|\.png|\.jpe?g/i.test(blob.key)));
-    const rows = JSON.stringify(await db.siteConnection.findMany({ where: { userId: { in: [person.id, tester.id] } } }));
+    const rows = JSON.stringify(await db.siteConnection.findMany({ where: { userId: { in: everyone } } }));
     check("nothing typed is on the connection row", values.every((value) => !rows.includes(value)));
 
     await stopRelay();
     await login.close();
     await closeAllStealthyBrowsers().catch(() => undefined);
     await db.workerBeat.deleteMany({ where: { id: SMOKE_BEAT } });
-    for (const user of [tester, person]) {
+    for (const user of [tester, person, userA, userB]) {
       await db.$executeRaw`UPDATE pgboss.job SET state = 'cancelled', completed_on = now() WHERE state IN ('created', 'retry') AND data->>'userId' = ${user.id}`.catch(() => 0);
       await storage.deleteForUser(user.id);
       await db.rateEvent.deleteMany({ where: { key: { endsWith: user.id } } });
