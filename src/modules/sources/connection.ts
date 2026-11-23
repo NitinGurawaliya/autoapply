@@ -4,6 +4,7 @@ import { enqueueConnect, SOURCE_CONNECT_QUEUE } from "@/lib/queue";
 import { storage } from "@/lib/storage";
 import { CANCELLABLE, cancelApplication } from "@/modules/apply/lifecycle";
 import { SITE_INFO, SITES, siteStateKey, type Site } from "./sites";
+import { signStreamToken, STREAM_TOKEN_TTL_MS, streamIdOf, streamSecret } from "./stream-token";
 
 /**
  * A user's connection to a signed-in job site (docs/naukri/TDD.md 4.4). Every status change goes through here. No
@@ -103,14 +104,46 @@ export async function finishConnect(userId: string, site: Site, accountLabel: st
   const now = new Date();
   const moved = await db.siteConnection.updateMany({
     where: { userId, site, status: "connecting" },
-    data: { status: "connected", stateKey: siteStateKey(userId, site), accountLabel, connectedAt: now, lastUsedAt: now, pausedUntil: null, lastError: null },
+    data: { status: "connected", stateKey: siteStateKey(userId, site), accountLabel, connectedAt: now, lastUsedAt: now, pausedUntil: null, lastError: null, streamUrl: null },
   });
   return moved.count > 0;
 }
 
 /** The sign-in did not finish (window closed, too slow, nothing saved); `message` is shown on the Account page. */
 export async function failConnect(userId: string, site: Site, message: string) {
-  await db.siteConnection.updateMany({ where: { userId, site, status: "connecting" }, data: { status: "failed", lastError: message } });
+  await db.siteConnection.updateMany({ where: { userId, site, status: "connecting" }, data: { status: "failed", lastError: message, streamUrl: null } });
+}
+
+/**
+ * K8: the worker holding this user's sign-in window serves it at `url` (null when the window closes). Set only while
+ * the connection is still "connecting", so a Disconnect meanwhile is never undone.
+ */
+export async function setStreamUrl(userId: string, site: Site, url: string | null) {
+  const moved = await db.siteConnection.updateMany({ where: { userId, site, ...(url ? { status: "connecting" } : {}) }, data: { streamUrl: url } });
+  return moved.count > 0;
+}
+
+export type StreamTicket =
+  | { state: "ready"; url: string; token: string; expiresAt: string }
+  /** The worker is opening the window, or the stream is not set up on this deploy. */
+  | { state: "waiting" | "unavailable" }
+  | { state: "ended"; status: ConnectionStatus | "not_connected"; accountLabel: string | null; lastError: string | null };
+
+/**
+ * The phone's pass to the user's own streamed sign-in (K8): the worker's address and a token for that window only,
+ * valid 10 minutes. Scoped by `userId`, so a user can only ever see their own window; a test profile never gets one.
+ */
+export async function streamTicket(userId: string, site: Site, now = Date.now()): Promise<StreamTicket> {
+  const [row, profile] = await Promise.all([getConnection(userId, site), db.profile.findUnique({ where: { userId }, select: { isTest: true } })]);
+  if (!profile || profile.isTest) return { state: "ended", status: "not_connected", accountLabel: null, lastError: null };
+  if (row?.status !== "connecting") {
+    return { state: "ended", status: (row?.status as ConnectionStatus | undefined) ?? "not_connected", accountLabel: row?.accountLabel ?? null, lastError: row?.lastError ?? null };
+  }
+  if (!streamSecret()) return { state: "unavailable" };
+  const sid = row.streamUrl ? streamIdOf(row.streamUrl) : null;
+  if (!row.streamUrl || !sid) return { state: "waiting" };
+  const exp = now + STREAM_TOKEN_TTL_MS;
+  return { state: "ready", url: row.streamUrl, token: signStreamToken({ sid, uid: userId, site, exp }), expiresAt: new Date(exp).toISOString() };
 }
 
 /**
@@ -162,7 +195,7 @@ export async function disconnect(userId: string, site: Site) {
   await storage.delete(siteStateKey(userId, site));
   await db.siteConnection.updateMany({
     where: { userId, site },
-    data: { status: "disconnected", stateKey: null, accountLabel: null, pausedUntil: null, lastError: null },
+    data: { status: "disconnected", stateKey: null, accountLabel: null, pausedUntil: null, lastError: null, streamUrl: null },
   });
   await db.$executeRaw`
     UPDATE pgboss.job SET state = 'cancelled', completed_on = now()

@@ -8,17 +8,18 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import { AgentStatus } from "@/components/patterns/agent-status";
 import { InfoNote } from "@/components/patterns/content";
 import type { ConnectionView, SourcesOverview } from "@/modules/sources";
+import { SignInStream } from "./sign-in-stream";
 
-// The user's own job-site accounts (Phase K, docs/naukri/TDD.md 5): connect by signing in themselves in a window on
-// their computer, see where it stands, disconnect.
+// The user's own job-site accounts (Phase K, docs/naukri/TDD.md 5, 13.12): connect by signing in themselves on the
+// site's own page, streamed here from a browser we run (K8), see where it stands, disconnect.
 
 const POLL_MS = 3000;
 
 const REFUSED: Record<string, string> = {
   test_profile_mock_only: "Test profiles cannot connect a job site.",
   profile_required: "Finish setting up your profile first.",
-  no_screen_worker: "Start the worker on your computer first: the sign-in opens in a Chrome window there.",
-  already_connecting: "A sign-in window is already open on your computer.",
+  no_screen_worker: "Sign-in is not available right now. Try again in a few minutes.",
+  already_connecting: "A sign-in is already open. Continue it instead.",
   rate_limited: "Too many tries. Wait a little and connect again.",
 };
 
@@ -65,6 +66,7 @@ function statusLine(site: ConnectionView) {
 export function ConnectedSites({ initial }: { initial: SourcesOverview }) {
   const [overview, setOverview] = useState(initial);
   const [sheetFor, setSheetFor] = useState<ConnectionView | null>(null);
+  const [streamFor, setStreamFor] = useState<ConnectionView | null>(null);
   const [agreed, setAgreed] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -96,6 +98,7 @@ export function ConnectedSites({ initial }: { initial: SourcesOverview }) {
       }
       setSheetFor(null);
       setAgreed(false);
+      setStreamFor(site);
       await refresh();
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Could not open the sign-in. Try again.");
@@ -143,25 +146,25 @@ export function ConnectedSites({ initial }: { initial: SourcesOverview }) {
   }
 
   return (
-    <section className="box-border flex flex-col gap-3 rounded-panel border-[1.5px] border-line bg-surface p-4">
+    <section className="box-border flex flex-col gap-3 rounded-card border border-line bg-surface p-4">
       <div className="flex flex-col gap-1">
-        <h2 className="m-0 text-lg font-semibold tracking-[-0.01em]">Your job site accounts</h2>
+        <h2 className="m-0 type-section">Your job site accounts</h2>
         <p className="m-0 text-sm leading-normal text-muted-foreground">Connect your own account and your agent finds jobs there and applies when you swipe right.</p>
       </div>
       {overview.sites.map((site) => {
         const linked = site.status === "connected" || site.status === "limited";
         return (
-          <div key={site.site} className="flex flex-col gap-2.5 border-t-[1.5px] border-line pt-3">
+          <div key={site.site} className="flex flex-col gap-2.5 border-t border-line pt-3">
             <div className="flex items-center gap-3">
-              <span aria-hidden="true" className="flex size-10 flex-none items-center justify-center rounded-xl border-[1.5px] border-line bg-subtle text-[15px] font-bold">
+              <span aria-hidden="true" className="flex size-10 flex-none items-center justify-center rounded-control border border-line bg-subtle type-body font-semibold">
                 {site.label.charAt(0)}
               </span>
               <span className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-[15px] font-semibold">{site.label}</span>
-                {site.status === "connecting" ? null : <span className="text-[13px] leading-snug text-muted-foreground">{statusLine(site)}</span>}
+                <span className="type-body font-semibold">{site.label}</span>
+                {site.status === "connecting" ? null : <span className="type-meta text-muted-foreground">{statusLine(site)}</span>}
               </span>
             </div>
-            {site.status === "connecting" ? <AgentStatus text="Waiting for you to sign in" detail="Use the Chrome window on your computer" size={32} /> : null}
+            {site.status === "connecting" ? <AgentStatus text="Waiting for you to sign in" size={32} /> : null}
             {linked ? (
               <div className="flex flex-col gap-2">
                 {site.status === "connected" ? (
@@ -174,9 +177,14 @@ export function ConnectedSites({ initial }: { initial: SourcesOverview }) {
                 </Button>
               </div>
             ) : site.status === "connecting" ? (
-              <Button type="button" variant="quiet" size="lg" className="w-full" disabled={busy === site.site} onClick={() => void disconnect(site)}>
-                Cancel
-              </Button>
+              <div className="flex flex-col gap-2">
+                <Button type="button" variant="primary" size="lg" className="w-full" onClick={() => setStreamFor(site)}>
+                  Continue signing in
+                </Button>
+                <Button type="button" variant="quiet" size="lg" className="w-full" disabled={busy === site.site} onClick={() => void disconnect(site)}>
+                  Cancel
+                </Button>
+              </div>
             ) : (
               <Button type="button" variant="primary" size="lg" className="w-full" disabled={!overview.canConnect} onClick={() => openSheet(site)}>
                 {site.status === "needs_signin" ? "Sign in again" : `Connect ${site.label}`}
@@ -193,14 +201,18 @@ export function ConnectedSites({ initial }: { initial: SourcesOverview }) {
         <SheetContent aria-label={sheetFor ? `Connect ${sheetFor.label}` : "Connect"}>
           {sheetFor ? (
             <div className="flex flex-col gap-4 pt-4">
-              <SheetTitle className="m-0 text-xl font-semibold tracking-[-0.01em]">Connect {sheetFor.label}</SheetTitle>
+              <SheetTitle className="m-0 type-heading">Connect {sheetFor.label}</SheetTitle>
               <SheetDescription className="m-0 flex flex-col gap-2.5 text-sm leading-normal text-muted-foreground">
                 <span>
                   Your agent will use your {sheetFor.label} account to find jobs for you and to apply when you swipe right. It reads job listings and your own profile only, never other people&apos;s profiles or messages.
                 </span>
                 <span>It applies one job at a time, at a person&apos;s pace, and stops the moment {sheetFor.label} asks for a check.</span>
                 <span>
-                  {sheetFor.label}&apos;s terms do not allow automated use, and {sheetFor.label} may limit or suspend accounts it finds automated. You sign in yourself in a window on your computer; we never see your password or OTP. Disconnect at any time: it deletes the saved sign-in.
+                  You sign in on {sheetFor.label}&apos;s own page, shown here from a browser we run. You type your password and OTP yourself; we never type, keep or record them.
+                </span>
+                <span>After that we keep you signed in and use the account from our servers, through a home internet address in your city, until you disconnect.</span>
+                <span>
+                  {sheetFor.label}&apos;s terms do not allow automated use, and {sheetFor.label} may limit or suspend accounts it finds automated. Disconnect at any time: it deletes the saved sign-in.
                 </span>
               </SheetDescription>
               <CheckRow title={`I understand ${sheetFor.label} may limit or suspend accounts it finds automated`} checked={agreed} onChange={(event) => setAgreed(event.target.checked)} />
@@ -208,13 +220,34 @@ export function ConnectedSites({ initial }: { initial: SourcesOverview }) {
               {error ? <FieldError>{error}</FieldError> : null}
               <div className="flex flex-col gap-2">
                 <Button type="button" variant="primary" size="xl" className="w-full" disabled={!agreed || !overview.screenWorkerAlive || busy === sheetFor.site} onClick={() => void connect(sheetFor)}>
-                  {busy === sheetFor.site ? "Opening..." : `Open ${sheetFor.label} sign-in`}
+                  {busy === sheetFor.site ? "Opening..." : `Continue to ${sheetFor.label} sign-in`}
                 </Button>
                 <Button type="button" variant="quiet" size="lg" className="w-full" onClick={() => setSheetFor(null)}>
                   Not now
                 </Button>
               </div>
             </div>
+          ) : null}
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={streamFor !== null} onOpenChange={(open) => (open ? undefined : setStreamFor(null))}>
+        <SheetContent aria-label={streamFor ? `Sign in to ${streamFor.label}` : "Sign in"}>
+          {streamFor ? (
+            <SignInStream
+              site={streamFor.site}
+              label={streamFor.label}
+              onSettled={() => void refresh()}
+              onClose={() => {
+                setStreamFor(null);
+                void refresh();
+              }}
+              onCancel={() => {
+                const site = streamFor;
+                setStreamFor(null);
+                void disconnect(site);
+              }}
+            />
           ) : null}
         </SheetContent>
       </Sheet>

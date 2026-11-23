@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { APPLY_QUEUE, getBoss, INGEST_SOURCE_QUEUE, LEGACY_APPLY_QUEUES, SOURCE_CONNECT_QUEUE, SOURCE_INGEST_TICK } from "@/lib/queue";
 import { guardUndiciParserAssertions } from "@/lib/undici-guard";
 import { canShowWindow } from "@/modules/apply/browser";
+import { relayConfig, startRelay } from "@/modules/apply/sites/relay";
 import { handleApply } from "./handlers/apply";
 import { handleBoardDay } from "./handlers/board-day";
 import { handleDiscover } from "./handlers/discover";
@@ -21,10 +22,25 @@ import { claimWorkerLock } from "./single";
 // so trying Naukri on a laptop never picks up real applications from the shared queues.
 const ONLY_SOURCES = process.argv.includes("--only=sources") || process.env.WORKER_ONLY === "sources";
 
+/**
+ * Streamed sign-ins (K8): with SOURCE_STREAM_PORT, SOURCE_STREAM_PUBLIC_URL and SOURCE_STREAM_SECRET set, this worker
+ * serves the user's sign-in window to their phone (modules/apply/sites/relay.ts); without them it shows K1's window on
+ * its own screen. A configured relay that cannot start is logged and the worker carries on with the window.
+ */
+async function startSignInRelay() {
+  const config = relayConfig();
+  if ("error" in config) {
+    if (process.env.SOURCE_STREAM_PORT || process.env.SOURCE_STREAM_PUBLIC_URL) console.error(`relay: off (${config.error})`);
+    return;
+  }
+  await startRelay().catch((error) => console.error(`relay: could not start (${error instanceof Error ? error.message.slice(0, 120) : "failed"})`));
+}
+
 async function sourcesOnly() {
   claimWorkerLock();
   if (!canShowWindow()) throw new Error("--only=sources needs a screen: the sign-in and the job runs open a visible Chrome window");
   const boss = await getBoss();
+  await startSignInRelay();
   await boss.work(SOURCE_CONNECT_QUEUE, { localConcurrency: 2 }, handleSourceConnect);
   await boss.work(INGEST_SOURCE_QUEUE, { localConcurrency: 1 }, handleSourceIngest);
   console.log(`worker (sources only) listening for ${SOURCE_CONNECT_QUEUE} and ${INGEST_SOURCE_QUEUE}; no applications, schedules or reaping`);
@@ -61,6 +77,7 @@ async function main() {
   const applies = canShowWindow();
   if (applies) for (const queue of [APPLY_QUEUE, ...LEGACY_APPLY_QUEUES]) await boss.work(queue, { localConcurrency: concurrency }, handleApply);
   // Signing in to a user's own job-site account (Naukri): a window the person sees, so a screen is needed (docs/naukri/TDD.md 4.2).
+  if (applies) await startSignInRelay();
   if (applies) await boss.work(SOURCE_CONNECT_QUEUE, { localConcurrency: 2 }, handleSourceConnect);
   // A user's run on their signed-in site, in their window: one at a time per worker (docs/naukri/TDD.md 4.2).
   if (applies) await boss.work(INGEST_SOURCE_QUEUE, { localConcurrency: 1 }, handleSourceIngest);

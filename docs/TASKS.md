@@ -186,7 +186,7 @@ Design: [docs/naukri/TDD.md](naukri/TDD.md) (final, 3 Nov). Tasks with their Do,
 - [ ] [K5 — LinkedIn Easy Apply adapter](naukri/TASKS.md#k5)
 - [ ] [K6 — Checks on the owner's account, through a proxy](naukri/TASKS.md#k6) (the myjobb way, owner 23 Nov, TDD §13)
 - [~] [K7 — A residential proxy per user](naukri/TASKS.md#k7)
-- [ ] [K8 — Streamed Naukri sign-in on the phone](naukri/TASKS.md#k8)
+- [~] [K8 — Streamed Naukri sign-in on the phone](naukri/TASKS.md#k8)
 - [ ] [K9 — Connect from a computer: the extension](naukri/TASKS.md#k9)
 - [ ] [K10 — Keep alive and run in the cloud](naukri/TASKS.md#k10)
 - [ ] [K11 — Pilot of 20 accounts, then a load test](naukri/TASKS.md#k11)

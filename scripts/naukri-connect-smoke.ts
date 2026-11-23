@@ -5,6 +5,8 @@
 //   and disconnect states, a saved sign-in opened again by a NEW process (a worker restart), Disconnect deleting it.
 //   Opens a Chrome window for a few seconds (a signed-in site is only ever used in a visible window). Needs
 //   BROWSER_STATE_KEY. Its own throwaway users only; all removed at the end.
+//   Then K8: the same connect streamed to a phone (scripts/naukri-stream-smoke.ts, in its own process with its own relay,
+//   SIGNED_IN_PROXY_URL=off and a local login page); this smoke passes only when that one does.
 //
 // npx tsx scripts/naukri-connect-smoke.ts --live you@example.com [--disconnect]
 //   The real thing for one account: Naukri's login opens in a Chrome window, YOU sign in there (the script types
@@ -32,7 +34,18 @@ const MARKER = "smoke-marker";
 /** Runs this script in a fresh process: a worker restart, as far as the saved sign-in is concerned. */
 function inNewProcess(args: string[]) {
   const cli = join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs");
-  return execFileSync(process.execPath, [cli, __filename, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"], timeout: 180_000 }).trim().split("\n").at(-1) ?? "";
+  return execFileSync(process.execPath, [cli, __filename, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"], timeout: 180_000 })  // The child's report is its last JSON line: the stealthy Chrome logs its closing after it.
+    .trim().split("\n").filter((line) => line.startsWith("{")).at(-1) ?? "";
+}
+
+/** K8's streamed connect, end to end, in its own process (it sets up its own relay and environment). */
+function streamedConnect() {
+  const cli = join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs");
+  try {
+    return execFileSync(process.execPath, [cli, join(__dirname, "naukri-stream-smoke.ts")], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"], timeout: 400_000 });
+  } catch (error) {
+    return String((error as { stdout?: string }).stdout ?? "");
+  }
 }
 
 /** Child mode: open the saved sign-in and report what came back. */
@@ -131,6 +144,11 @@ async function offline() {
     } else {
       console.log("skip no-screen check: a real worker with a screen is running");
     }
+
+    // 9. K8: the same connect, streamed to a phone through the worker's relay.
+    const streamed = streamedConnect();
+    const failures = streamed.split("\n").filter((line) => line.startsWith("FAIL "));
+    check("streamed sign-in end to end (naukri-stream-smoke)", streamed.includes("PASS naukri-stream-smoke"), failures.join("; ").slice(0, 300));
   } finally {
     await db.workerBeat.deleteMany({ where: { id: SMOKE_BEAT } });
     for (const user of [tester, person]) {

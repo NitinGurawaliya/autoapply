@@ -266,6 +266,7 @@ model SiteConnection {
   lastIngestAt DateTime?
   pausedUntil  DateTime? // limited: nothing runs for this user and site until then
   lastError    String? // a sentence for the UI, never page text
+  streamUrl    String? // K8: the worker's address for this user's streamed sign-in while its window is open; null otherwise
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 

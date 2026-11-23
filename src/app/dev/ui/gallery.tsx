@@ -27,6 +27,7 @@ import { JobCard } from "@/components/patterns/job-card";
 import { StackCount, SwipeStage } from "@/components/patterns/swipe-stage";
 import { AgentToast } from "@/components/patterns/agent-toast";
 import { AgentStatus } from "@/components/patterns/agent-status";
+import { SignInStreamDemo } from "./sign-in-stream-demo";
 import { AnimatePresence } from "framer-motion";
 import { SentToast } from "@/components/sent-celebration";
 import type { SentNews } from "@/components/applications-summary";
@@ -302,6 +303,9 @@ function Patterns() {
   return (
     <ShellProvider value={{ name: "Aarav Kumar", email: "aarav.kumar@email.com", signOut: <Button variant="plain" size="row" className="w-full">Sign out</Button> }}>
       <div className="flex flex-col gap-8">
+        <Section title="Streamed sign-in (K8)">
+          <SignInStreamDemo />
+        </Section>
         <Section title="Top bars">
           <div className="-mx-5 flex flex-col gap-5">
             <FeedTopBar
