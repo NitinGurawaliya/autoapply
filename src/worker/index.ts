@@ -1,6 +1,6 @@
 import { hostname } from "node:os";
 import { db } from "@/lib/db";
-import { APPLY_QUEUE, getBoss, LEGACY_APPLY_QUEUES } from "@/lib/queue";
+import { APPLY_QUEUE, getBoss, INGEST_SOURCE_QUEUE, LEGACY_APPLY_QUEUES, SOURCE_CONNECT_QUEUE, SOURCE_INGEST_TICK } from "@/lib/queue";
 import { guardUndiciParserAssertions } from "@/lib/undici-guard";
 import { canShowWindow } from "@/modules/apply/browser";
 import { handleApply } from "./handlers/apply";
@@ -10,11 +10,45 @@ import { handleIngest } from "./handlers/ingest";
 import { handleIngestCompany } from "./handlers/ingest-company";
 import { handleIngestTick } from "./handlers/ingest-tick";
 import { handlePrescan } from "./handlers/prescan";
+import { handleSourceConnect } from "./handlers/sourceConnect";
+import { handleSourceIngest, handleSourceIngestTick } from "./handlers/sourceIngest";
 import { expirePersonHandoffs, housekeeping, reapStaleRuns } from "./reaper";
 import { registerSchedules } from "./schedule";
 import { claimWorkerLock } from "./single";
 
+// `--only=sources` (or WORKER_ONLY=sources): a worker for the user's own job-site accounts only (Naukri sign-in and job
+// runs, docs/naukri/TDD.md 4.2), beside a normal worker or with none: it takes no applications, schedules or reaping,
+// so trying Naukri on a laptop never picks up real applications from the shared queues.
+const ONLY_SOURCES = process.argv.includes("--only=sources") || process.env.WORKER_ONLY === "sources";
+
+async function sourcesOnly() {
+  claimWorkerLock();
+  if (!canShowWindow()) throw new Error("--only=sources needs a screen: the sign-in and the job runs open a visible Chrome window");
+  const boss = await getBoss();
+  await boss.work(SOURCE_CONNECT_QUEUE, { localConcurrency: 2 }, handleSourceConnect);
+  await boss.work(INGEST_SOURCE_QUEUE, { localConcurrency: 1 }, handleSourceIngest);
+  console.log(`worker (sources only) listening for ${SOURCE_CONNECT_QUEUE} and ${INGEST_SOURCE_QUEUE}; no applications, schedules or reaping`);
+  let stopping = false;
+  const stop = (signal: string) => {
+    if (stopping) process.exit(1);
+    stopping = true;
+    console.log(`worker: ${signal}: finishing the run in progress (signal again to stop now)`);
+    void boss.stop({ graceful: true, timeout: 12 * 60 * 1000 }).finally(() => process.exit(0));
+  };
+  process.on("SIGINT", () => stop("SIGINT"));
+  process.on("SIGTERM", () => stop("SIGTERM"));
+  // The web app offers Connect only while a worker with a screen beats (modules/sources screenWorkerAlive).
+  const host = `${process.env.WORKER_NAME?.trim() || hostname()}:sources`;
+  const startedAt = new Date();
+  const beat = async () => {
+    await db.workerBeat.upsert({ where: { id: host }, create: { id: host, beatAt: new Date(), startedAt, hasScreen: true }, update: { beatAt: new Date(), startedAt, hasScreen: true } }).catch(() => undefined);
+  };
+  void beat();
+  setInterval(() => void beat(), 60_000);
+}
+
 async function main() {
+  if (ONLY_SOURCES) return sourcesOnly();
   claimWorkerLock();
   guardUndiciParserAssertions();
   const boss = await getBoss("worker");
@@ -26,6 +60,11 @@ async function main() {
   // screen applies; one without (the Docker worker) reads jobs only. The pre-18 Nov queues are emptied here too.
   const applies = canShowWindow();
   if (applies) for (const queue of [APPLY_QUEUE, ...LEGACY_APPLY_QUEUES]) await boss.work(queue, { localConcurrency: concurrency }, handleApply);
+  // Signing in to a user's own job-site account (Naukri): a window the person sees, so a screen is needed (docs/naukri/TDD.md 4.2).
+  if (applies) await boss.work(SOURCE_CONNECT_QUEUE, { localConcurrency: 2 }, handleSourceConnect);
+  // A user's run on their signed-in site, in their window: one at a time per worker (docs/naukri/TDD.md 4.2).
+  if (applies) await boss.work(INGEST_SOURCE_QUEUE, { localConcurrency: 1 }, handleSourceIngest);
+  await boss.work(SOURCE_INGEST_TICK, handleSourceIngestTick);
   await boss.work("ingest", handleIngest);
   await boss.work("prescan", handlePrescan);
   // The daily run hands each board its own job; this takes them one at a time (handlers/discover.ts).
@@ -38,7 +77,7 @@ async function main() {
   const perHost = Math.min(Math.max(Number(process.env.INGEST_PER_HOST) || 4, 1), ingestConcurrency);
   // A gentle board (Workday, modules/jobs/cadence.ts) one company at a time (owner, 18 Nov: its bot check).
   await boss.work("ingest-company", { localConcurrency: ingestConcurrency, groupConcurrency: { default: perHost, tiers: { gentle: 1 } } }, handleIngestCompany);
-  console.log(applies ? `worker listening for apply (x${concurrency}) and ingest` : "worker listening for ingest only (no screen, so no applications)");
+  console.log(applies ? `worker listening for apply (x${concurrency}), ${SOURCE_CONNECT_QUEUE}, ${INGEST_SOURCE_QUEUE} and ingest` : "worker listening for ingest only (no screen, so no applications)");
 
   // Graceful stop (Ctrl+C, `docker stop -t 960`): take no new jobs and let the runs in progress finish, up to a handoff's
   // 15-minute wait, so a restart never cuts off a run after its Submit (21 Oct: a restart seconds after Rubrik's Submit
@@ -53,13 +92,13 @@ async function main() {
   process.on("SIGINT", () => stop("SIGINT"));
   process.on("SIGTERM", () => stop("SIGTERM"));
   const ingest = await registerSchedules(boss);
-  console.log(`ingest scheduled (${ingest.mode}): "${ingest.cron}" ${ingest.timezone}, last ${ingest.days} days; discovery "${ingest.discoverCron}"; board day "${ingest.boardDayCron}"`);
+  console.log(`ingest scheduled (${ingest.mode}): "${ingest.cron}" ${ingest.timezone}, last ${ingest.days} days; discovery "${ingest.discoverCron}"; board day "${ingest.boardDayCron}"; signed-in sites "${ingest.sourceCron}"`);
 
   // Heartbeat for /api/health: a worker that has not beaten for a few minutes is down.
   const host = process.env.WORKER_NAME?.trim() || hostname();
   const startedAt = new Date();
   const beat = async () => {
-    await db.workerBeat.upsert({ where: { id: host }, create: { id: host, beatAt: new Date(), startedAt }, update: { beatAt: new Date(), startedAt } }).catch(() => undefined);
+    await db.workerBeat.upsert({ where: { id: host }, create: { id: host, beatAt: new Date(), startedAt, hasScreen: canShowWindow() }, update: { beatAt: new Date(), startedAt, hasScreen: canShowWindow() } }).catch(() => undefined);
   };
   void beat();
   setInterval(() => void beat(), 60_000);

@@ -19,6 +19,10 @@ Everything that finds jobs (today the Greenhouse, Lever and Ashby fetchers) hand
 - The feed never shows a closed job; a swipe on a closed job is refused with rule `job_closed`.
 - The runner never reads `Job.raw`.
 
+## Signed-in sources (Naukri, Phase K)
+
+Read per user, not per company (ARCHITECTURE 6.20): a user's run hands `storeSiteListings` its listings, which go through the same write as a company's (`storeJobs`). Two differences: `markClosed` is never called (a search is not the company's board), so a job closes after 14 days unlisted by any search; and `Job.applyVia` names the board whose adapter applies when the listing sends the user to it. Their companies are stored inactive.
+
 ## Adding a board
 
 Write `fetchers/<board>.ts` returning `FetchedJob[]`, add one entry in `modules/jobs/boards.ts` (fetcher, which jobs are stored, form hosts, slug rule, optional discovery settings; ingest, discovery and `apply/urls.ts` read it), add an adapter, and only then add it to `APPLY_BOARDS` after one real submit succeeded.

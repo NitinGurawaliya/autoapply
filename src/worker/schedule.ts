@@ -9,6 +9,8 @@ export const DEFAULT_DISCOVER_CRON = "30 1 * * *";
 export const DEFAULT_BOARD_DAY_CRON = "30 23 * * *";
 // Tick mode (Phase M, M2): every 5 minutes, the companies due for a read are sent one job each.
 export const DEFAULT_INGEST_TICK_CRON = "*/5 * * * *";
+// Each connected user's signed-in sites (Naukri), every 8 hours; the per-day budget in config/rules.json still decides.
+export const DEFAULT_SOURCE_INGEST_CRON = "0 */8 * * *";
 
 type Env = Record<string, string | undefined>;
 
@@ -36,6 +38,7 @@ export function schedulePlan(env: Env = process.env) {
     tick: mode === "tick" ? cronOf(env.INGEST_TICK_CRON, DEFAULT_INGEST_TICK_CRON) : null,
     discover: cronOf(env.DISCOVER_CRON, DEFAULT_DISCOVER_CRON),
     boardDay: cronOf(env.BOARD_DAY_CRON, DEFAULT_BOARD_DAY_CRON),
+    source: cronOf(env.SOURCE_INGEST_CRON, DEFAULT_SOURCE_INGEST_CRON),
     days: Number(env.INGEST_DAYS) || DEFAULT_INGEST_DAYS,
   };
 }
@@ -57,6 +60,7 @@ export async function registerSchedules(boss: PgBoss) {
   await set("ingest-tick", plan.tick, {}, { expireInSeconds: 600, retryLimit: 0 });
   await set("discover", plan.discover, {}, { expireInSeconds: 3600, retryLimit: 0 });
   await set("board-day", plan.boardDay, {}, { expireInSeconds: 900, retryLimit: 1 });
+  await set("source-ingest-tick", plan.source, {}, { expireInSeconds: 600, retryLimit: 0 });
   const off = "off (GitHub Actions)";
-  return { mode: plan.mode, cron: plan.tick ?? plan.ingest ?? off, timezone: "UTC", days: plan.days, discoverCron: plan.discover ?? off, boardDayCron: plan.boardDay ?? off };
+  return { mode: plan.mode, cron: plan.tick ?? plan.ingest ?? off, timezone: "UTC", days: plan.days, discoverCron: plan.discover ?? off, boardDayCron: plan.boardDay ?? off, sourceCron: plan.source ?? off };
 }

@@ -1,0 +1,45 @@
+{
+  "_source": "Naukri's own /jobapi/v4/job/301026011205 response as its public job page fetched it, 3 Nov 2026 (signed out); seo block removed.",
+  "loggedIn": false,
+  "jobDetails": {
+    "education": { "ug": ["Graduation Not Required"], "pg": [] },
+    "hideApplyButton": false,
+    "applyCount": 9452,
+    "groupId": 900242,
+    "roleCategory": "Software Development",
+    "mode": "jp",
+    "jobRole": "Back End Developer",
+    "isTopGroup": 0,
+    "clientLogo": "https://img.naukimg.com/logo_images/groups/v1/900242.gif",
+    "wfhType": "0",
+    "companyDetail": { "name": "Creative Hands HR", "hideClientName": true, "clientHeadline": "Creative Hands HR" },
+    "jobId": "301026011205",
+    "companyId": 4426402,
+    "functionalArea": "Engineering - Software & QA",
+    "experienceText": "0-2 Yrs",
+    "vacancy": 2,
+    "locationGids": ["17", "97", "183"],
+    "description": "<br /><p><strong>Job Description Software Engineer</strong></p><br /><p><strong>Key Responsibilities:</strong></p><ul><li>Assist in the design, development, and implementation of software applications.</li><li>Write clean, efficient, and well-documented code.</li><li>Test and debug applications to ensure optimal performance.</li></ul><p><strong>Requirements:</strong></p><ul><li>Bachelors degree in Computer Science, Information Technology, Engineering, or related fields.</li><li>Strong understanding of programming fundamentals (OOP, data structures, algorithms).</li><li>Basic understanding of databases (SQL/NoSQL).</li></ul>",
+    "industry": "BPM / BPO",
+    "staticUrl": "https://www.naukri.com/job-listings-software-engineer-creative-hands-hr-hyderabad-chennai-bengaluru-0-to-2-years-301026011205",
+    "title": "Software Engineer",
+    "walkIn": false,
+    "maximumExperience": 2,
+    "jobType": "fulltime",
+    "minimumExperience": 0,
+    "employmentType": "Full Time, Permanent",
+    "createdDate": "2026-10-30 10:34:10",
+    "consultant": true,
+    "locations": [
+      { "label": "Hyderabad", "url": "https://www.naukri.com/jobs-in-hyderabad-secunderabad" },
+      { "label": "Chennai", "url": "https://www.naukri.com/jobs-in-chennai" },
+      { "label": "Bengaluru", "url": "https://www.naukri.com/jobs-in-bangalore" }
+    ],
+    "keySkills": {
+      "other": [{ "label": "Python" }, { "label": "Javascript" }, { "label": "Software Development" }],
+      "preferred": [{ "label": "Java" }, { "label": "C++" }]
+    },
+    "salaryDetail": { "minimumSalary": 175000, "maximumSalary": 300000, "currency": "INR", "hideSalary": false, "label": "1.75-3 Lacs" },
+    "board": "1"
+  }
+}

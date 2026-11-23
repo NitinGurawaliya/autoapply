@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { APPLY_QUEUES } from "@/lib/queue";
+import { APPLY_QUEUES, SOURCE_CONNECT_QUEUE } from "@/lib/queue";
 import { storage } from "@/lib/storage";
 import { CANCELLABLE, cancelApplication } from "@/modules/apply/lifecycle";
 
@@ -61,6 +61,10 @@ export async function deleteAccount(userId: string) {
   // No foreign key ties these to the user, so the cascade misses them (16 Oct QA: 788 gap rows, 29 scans and 5,663 job
   // verdicts, whose "why" lines come from the resume, outlived 18 deleted accounts).
   await db.feedGap.deleteMany({ where: { userId } });
+  // Signed-in job sites: the connection cascades with the user, its runs and any queued sign-in do not; the saved
+  // sign-in itself is one of the stored files removed below.
+  await db.sourceRun.deleteMany({ where: { userId } });
+  await db.$executeRaw`UPDATE pgboss.job SET state = 'cancelled', completed_on = now() WHERE name = ${SOURCE_CONNECT_QUEUE} AND state IN ('created', 'retry') AND data->>'userId' = ${userId}`;
   await db.feedScan.deleteMany({ where: { userId } });
   const profile = await db.profile.findUnique({ where: { userId }, select: { id: true } });
   if (profile) await db.jobJudgement.deleteMany({ where: { profileId: profile.id } });

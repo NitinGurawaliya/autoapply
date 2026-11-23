@@ -2,7 +2,9 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { z } from "zod";
+import { seal, unseal } from "@/lib/sealed";
 import { storage } from "@/lib/storage";
+import { onSiteDomain, siteStateKey, type Site } from "@/modules/sources/sites";
 import { NoRetryError } from "./adapter";
 import { openStealthyBrowser, stealthEnabled } from "./real-browser";
 
@@ -11,6 +13,10 @@ export type OpenBrowser = {
   page: Page;
   /** Where this owner's cookies and local storage are kept between runs (lib/storage.ts). */
   stateKey: string;
+  /** A saved state was found and opened into this context (false: a fresh one). */
+  restored: boolean;
+  /** Saves the context's state now; false when nothing could be saved. A signed-in site saves only its own cookies. */
+  saveState: () => Promise<boolean>;
   close: () => Promise<void>;
 };
 
@@ -109,27 +115,55 @@ const stateSchema = z.object({
 });
 type SavedState = z.infer<typeof stateSchema>;
 
-async function loadState(key: string): Promise<SavedState | undefined> {
+/**
+ * A saved state, read back. A signed-in site's state (Naukri) is encrypted (lib/sealed.ts, bound to its storage key);
+ * one that does not open (another key, changed, no key on this worker) is treated as no state: the run then meets the
+ * site's login page and the connection asks the user to sign in again, never anything guessed.
+ */
+async function loadState(key: string, site?: Site): Promise<SavedState | undefined> {
   const file = await storage.get(key).catch(() => null);
   if (!file) return undefined;
   try {
-    const parsed = stateSchema.safeParse(JSON.parse(Buffer.from(file.bytes).toString("utf8")));
-    return parsed.success ? parsed.data : undefined;
+    const bytes = site ? unseal(file.bytes, key) : file.bytes;
+    if (!bytes) return undefined;
+    const parsed = stateSchema.safeParse(JSON.parse(Buffer.from(bytes).toString("utf8")));
+    if (!parsed.success) return undefined;
+    return site ? onlySite(parsed.data, site) : parsed.data;
   } catch {
     return undefined;
   }
 }
 
+/** Only the site's own cookies and storage: a Naukri sign-in never carries another site's cookies, nor the reverse. */
+export function onlySite(state: SavedState, site: Site): SavedState {
+  return {
+    cookies: state.cookies.filter((cookie) => onSiteDomain(cookie.domain, site)),
+    origins: state.origins.filter((origin) => {
+      try {
+        return onSiteDomain(new URL(origin.origin).hostname, site);
+      } catch {
+        return false;
+      }
+    }),
+  };
+}
+
 // Two runs of one user at once: the one that closes last wins, which loses at most the other run's new cookies.
-async function saveState(context: BrowserContext, key: string, owner: string) {
+async function saveState(context: BrowserContext, key: string, owner: string, site?: Site) {
   try {
-    const state = await context.storageState();
+    const raw = await context.storageState();
+    // The ATS jar is kept exactly as Playwright gives it, as before; a site's sign-in only its own domain's part.
+    const state = site ? onlySite(stateSchema.parse(raw), site) : raw;
     let text = JSON.stringify(state);
     if (text.length > MAX_STATE_BYTES) text = JSON.stringify({ cookies: state.cookies, origins: [] });
-    if (text.length > MAX_STATE_BYTES) return;
-    await storage.put(key, new TextEncoder().encode(text), "application/json", owner);
+    if (text.length > MAX_STATE_BYTES) return false;
+    const plain = new TextEncoder().encode(text);
+    if (site) await storage.put(key, seal(plain, key), "application/octet-stream", owner);
+    else await storage.put(key, plain, "application/json", owner);
+    return true;
   } catch {
-    /* a closed or crashed context has nothing to save; the previous state stays */
+    /* a closed or crashed context has nothing to save, or this worker has no BROWSER_STATE_KEY; the previous state stays */
+    return false;
   }
 }
 
@@ -137,25 +171,48 @@ async function saveState(context: BrowserContext, key: string, owner: string) {
  * `handoff`: a run where the user presses Submit themselves (Ashby, whose spam check refuses submissions an automated
  * browser makes on its own): a visible window in the user's installed Google Chrome, or the bundled Chromium when
  * Chrome is not installed. It needs a screen, so it runs only where the worker runs on the user's own computer.
+ *
+ * `site`: the user's own account on a signed-in job site (Naukri; docs/naukri/TDD.md 4.5): its own saved sign-in,
+ * encrypted, apart from the ATS cookie jar, and always the visible window. `fresh`: start with no saved state (signing
+ * in). `persist: false`: closing does not save (a sign-in that did not finish must not replace a good one).
  */
-export async function openBrowser(url: string, owner: string, options: { handoff?: boolean; window?: boolean } = {}): Promise<OpenBrowser> {
-  // The stealthy Chrome (real-browser.ts) is the default for every kind of run (main, handoff, window) since 17 Nov:
-  // Workable's Turnstile, Ashby's spam check and the rest see a person's Chrome. The Playwright browser below runs only
+export async function openBrowser(
+  url: string,
+  owner: string,
+  options: { handoff?: boolean; window?: boolean; site?: Site; fresh?: boolean; persist?: boolean } = {},
+): Promise<OpenBrowser> {
+  if (options.site && !canShowWindow()) {
+    throw new NoRetryError("Your job-site account is used only in a window on a computer with a screen, and this worker has none.");
+  }
+  // A signed-in site (Naukri) keeps its own sealed state, only that site's cookies (docs/naukri/TDD.md 4.9); every other
+  // run keeps the owner's ATS jar. The two are never loaded into one context.
+  const site = options.site;
+  const stateKey = site ? siteStateKey(owner, site) : stateKeyFor(owner);
+  const savedState = options.fresh ? undefined : await loadState(stateKey, site);
+
+  // The stealthy Chrome (real-browser.ts) is the default for every kind of run (main, handoff, window, a signed-in site)
+  // since 17 Nov: Workable's Turnstile, Ashby's spam check and the rest see a person's Chrome. Each launch is a fresh
+  // Chrome with no profile folder, so only the cookies passed here are in it. The Playwright browser below runs only
   // with STEALTHY_BROWSER=0 (stealth off) or STEALTHY_FALLBACK=1 (allowed when the stealthy Chrome cannot start).
   if (stealthEnabled()) {
-    const stealthy = await openStealthyBrowser(url, owner, { savedState: await loadState(stateKeyFor(owner)) });
+    const stealthy = await openStealthyBrowser(url, owner, { savedState });
     if (stealthy) {
-      const stateKey = stateKeyFor(owner);
       let closed = false;
+      const save = () => (closed ? Promise.resolve(false) : saveState(stealthy.context, stateKey, owner, site));
       return {
         context: stealthy.context,
         page: stealthy.page,
         stateKey,
+        restored: Boolean(savedState),
+        saveState: save,
         close: async () => {
           if (closed) return;
           closed = true;
-          await saveState(stealthy.context, stateKey, owner);
-          await stealthy.close();
+          try {
+            if (options.persist !== false) await saveState(stealthy.context, stateKey, owner, site);
+          } finally {
+            await stealthy.close();
+          }
         },
       };
     }
@@ -164,16 +221,14 @@ export async function openBrowser(url: string, owner: string, options: { handoff
     if (process.env.STEALTHY_FALLBACK !== "1") {
       throw new Error("The stealthy Chrome could not start (see stealthy-browser.log); the run will be retried. Set STEALTHY_FALLBACK=1 to allow the Playwright browser.");
     }
-    console.log(`browser: stealthy Chrome unavailable, opening the Playwright ${options.handoff || options.window ? "handoff" : "main"} browser for ${url}`);
+    console.log(`browser: stealthy Chrome unavailable, opening the Playwright ${options.handoff || options.window || site ? "handoff" : "main"} browser for ${url}`);
   }
 
   if (options.handoff && !canShowWindow()) {
     throw new NoRetryError("This form needs you to press Submit yourself, and the worker is running without a screen. Run the worker on your own computer, or open the form and apply by hand.");
   }
   // `window` (AtsAdapter.window): the same real Chrome window as a handoff, but the worker presses Submit itself.
-  const kind = options.handoff || options.window ? "handoff" : "main";
-  const stateKey = stateKeyFor(owner);
-  const savedState = await loadState(stateKey);
+  const kind = options.handoff || options.window || site ? "handoff" : "main";
 
   let entry = sharedBrowser(kind);
   let context: BrowserContext | undefined;
@@ -197,11 +252,12 @@ export async function openBrowser(url: string, owner: string, options: { handoff
   const held = entry;
 
   let closed = false;
+  const save = () => (closed ? Promise.resolve(false) : saveState(context, stateKey, owner, site));
   const close = async () => {
     if (closed) return;
     closed = true;
     try {
-      await saveState(context, stateKey, owner);
+      if (options.persist !== false) await saveState(context, stateKey, owner, site);
       await context.close().catch(() => undefined);
     } finally {
       await release(kind, held);
@@ -222,5 +278,5 @@ export async function openBrowser(url: string, owner: string, options: { handoff
     throw error;
   }
 
-  return { context, page, stateKey, close };
+  return { context, page, stateKey, restored: Boolean(savedState), saveState: save, close };
 }

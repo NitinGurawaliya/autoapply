@@ -11,5 +11,8 @@
   "max_in_flight_per_user": 25,
   "no_duplicate_role": true,
   "max_ai_drafts_per_application": 3,
-  "max_attempts": 2
+  "max_attempts": 2,
+  "signed_in_sources": {
+    "naukri": { "searches_per_run": 3, "pages_per_search": 3, "details_per_run": 40, "seconds_between_pages": 4, "runs_per_day": 2, "max_applies_per_day": 30, "min_minutes_between_applies": 1, "pause_hours_after_challenge": 24 }
+  }
 }

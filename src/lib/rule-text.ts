@@ -19,5 +19,13 @@ export function describeRules(rules: Rules): RuleLine[] {
     { id: "max_attempts", title: "Automatic retries", value: `${rules.max_attempts} tries`, meaning: "A failed run is retried once. After a submit may have gone out it is never retried, so you cannot apply twice by accident." },
     { id: "test_profile_mock_only", title: "Test profiles stay on the mock form", value: yes(rules.test_profile_mock_only), meaning: "A test profile can never reach a real company." },
     { id: "allow_submit_on_real_sites", title: "Submitting on real sites", value: yes(rules.allow_submit_on_real_sites), meaning: "The master switch for real submissions." },
+    ...Object.entries(rules.signed_in_sources).flatMap(([site, limits]) => {
+      const label = site.charAt(0).toUpperCase() + site.slice(1);
+      return [
+        { id: `max_applies_per_day_${site}`, title: `${label} applies`, value: `${limits.max_applies_per_day} a day`, meaning: `At most this many applications through your own ${label} account each day (UTC), on top of the daily limit.` },
+        { id: `min_minutes_between_applies_${site}`, title: `${label} pace`, value: `${limits.min_minutes_between_applies} min apart`, meaning: `Applications on ${label} go one at a time, at least this far apart, never on a beat.` },
+        { id: `pause_hours_after_challenge_${site}`, title: `${label} checks`, value: `${limits.pause_hours_after_challenge} h pause`, meaning: `If ${label} asks for a check or turns automated use away, your agent stops using your account there for this long.` },
+      ];
+    }),
   ];
 }

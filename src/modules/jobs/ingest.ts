@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { afterIngest, afterIngestDeadline } from "./after-ingest";
 import { boardOf } from "./boards";
 import { GENTLE_BOARDS, GENTLE_GROUP_TIER, GENTLE_PER_TICK, GENTLE_SCALE, nextFetchAt, REFUSED, tierOf, type Tier } from "./cadence";
+import type { NaukriListing } from "./fetchers/naukri";
 import { classifyTitle } from "./functions";
 import type { FetchedJob } from "./normalize";
 import { forgetJobVectors } from "./semantic";
@@ -109,6 +110,17 @@ export async function ingestCompany(company: IngestCompany, cutoff: number): Pro
   }
   const indiaListed = jobs.filter((job) => INDIA.has(tagPosting(job).eligibility)).length;
   const kept = jobs.filter((job) => job.postedAt.getTime() >= cutoff && storedFromBoard(company.source, job, company.keepAbroad));
+  const written = await storeJobs(company, kept);
+  const closed = await markClosed(company.id, company.source, jobs.map((job) => job.externalId));
+  return { fetched: jobs.length, ...written, closed, indiaListed, listHash };
+}
+
+/**
+ * Writes one company's jobs (INGEST_CONTRACT): new ones created, changed ones rewritten (content, company, or back after
+ * closing), pay-only changes written alone, unchanged ones left alone. `applyViaOf`: the board that applies to a job when
+ * it is not its source's own (a Naukri listing that sends the user to Greenhouse; docs/naukri/TDD.md 4.6).
+ */
+export async function storeJobs(company: { id: string; source: string }, kept: FetchedJob[], applyViaOf?: (job: FetchedJob) => string | null) {
   const stored = await db.job.findMany({ where: { source: company.source, externalId: { in: kept.map((job) => job.externalId) } }, select: { id: true, externalId: true, contentHash: true, closedAt: true, companyId: true, salaryMin: true, salaryMax: true, salaryCurrency: true, salaryPeriod: true } });
   const byExternalId = new Map(stored.map((row) => [row.externalId, row]));
   const now = new Date();
@@ -135,6 +147,7 @@ export async function ingestCompany(company: IngestCompany, cutoff: number): Pro
       fetchedAt: now,
       contentHash: contentHash(job),
       raw: job.raw as Prisma.InputJsonValue,
+      ...(applyViaOf ? { applyVia: applyViaOf(job) } : {}),
     };
   };
   // A list-only posting is one we hold already; one we do not (deleted meanwhile) waits for a full read.
@@ -172,17 +185,51 @@ export async function ingestCompany(company: IngestCompany, cutoff: number): Pro
   }
   // A changed posting is embedded again (semantic.ts); new ones have no vector yet. List-only ones keep theirs.
   await forgetJobVectors(changed.filter((job) => !job.listOnly).map((job) => byExternalId.get(job.externalId)!.id));
-  const closed = await markClosed(company.id, company.source, jobs.map((job) => job.externalId));
   return {
-    fetched: jobs.length,
     created: fresh.length,
     updated: changed.length,
-    closed,
     createdEligible: fresh.filter((job) => INDIA.has(job.eligibility)).length,
-    indiaListed,
-    listHash,
   };
 }
+
+// A signed-in site's job (Naukri) that no user's search has listed for this long is closed: a search is not the
+// company's board, so its absence from one run says nothing (docs/naukri/TDD.md 4.6). A later run that lists it reopens it.
+const SITE_UNSEEN_CLOSE_DAYS = 14;
+
+export type SiteStoreResult = { kept: number; created: number; updated: number; createdEligible: number; closed: number; companies: number };
+
+/**
+ * Stores what one user's run on a signed-in site found (Phase K): ordinary Job rows shared by every connected user,
+ * under inactive Company rows (the company ingest never fetches them). Listings Naukri sends to a site we cannot apply
+ * on never reach here (fetchers/naukri.ts applyKind "none").
+ */
+export async function storeSiteListings(site: string, listings: NaukriListing[], cutoff: number, now = new Date()): Promise<SiteStoreResult> {
+  const kept = listings.filter((job) => job.applyKind !== "none" && job.postedAt.getTime() >= cutoff && storedFromBoard(site, job));
+  const byCompany = new Map<string, NaukriListing[]>();
+  for (const job of kept) byCompany.set(job.company.slug, [...(byCompany.get(job.company.slug) ?? []), job]);
+  const applyVia = new Map(kept.map((job) => [job.externalId, job.applyVia]));
+  const totals: SiteStoreResult = { kept: kept.length, created: 0, updated: 0, createdEligible: 0, closed: 0, companies: byCompany.size };
+  for (const [slug, jobs] of byCompany) {
+    const first = jobs[0].company;
+    const company = await db.company.upsert({
+      where: { source_slug: { source: site, slug } },
+      create: { source: site, slug, name: first.name, active: false, addedBy: site, logoUrl: first.logoUrl, logoCheckedAt: first.logoUrl ? now : null },
+      update: first.logoUrl ? { logoUrl: first.logoUrl, logoCheckedAt: now } : {},
+      select: { id: true },
+    });
+    const written = await storeJobs({ id: company.id, source: site }, jobs, (job) => applyVia.get(job.externalId) ?? null);
+    totals.created += written.created;
+    totals.updated += written.updated;
+    totals.createdEligible += written.createdEligible;
+  }
+  // Seen now, so the unseen sweep below keys on it (unchanged jobs are not rewritten by storeJobs).
+  if (kept.length > 0) await db.job.updateMany({ where: { source: site, externalId: { in: kept.map((job) => job.externalId) } }, data: { fetchedAt: now } });
+  const unseenSince = new Date(now.getTime() - SITE_UNSEEN_CLOSE_DAYS * 24 * 60 * 60 * 1000);
+  const closed = await db.job.updateMany({ where: { source: site, closedAt: null, fetchedAt: { lt: unseenSince } }, data: { closedAt: now } });
+  totals.closed = closed.count;
+  return totals;
+}
+
 
 type CompanyState = { id: string; source: string; slug: string; listHash: string | null; failedFetches: number; notFoundFetches: number; emptySince: Date | null; lastIndiaAt: Date | null; indiaOpen: number; lastFetchCount: number | null };
 

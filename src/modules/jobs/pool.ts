@@ -7,7 +7,14 @@ import { Prisma } from "@prisma/client";
 // back in on 21 Nov (owner), with its CAPTCHA read by the worker as Keka's (adapters/zohorecruit.ts, M13b). Left out
 // until they prove themselves (INGEST_CONTRACT: a board goes in after real submits), their jobs still ingested: Lever
 // (none: hCaptcha), Workday (no adapter).
-export const APPLY_BOARDS: readonly string[] = ["greenhouse", "ashby", "keka", "workable", "smartrecruiters", "zohorecruit"];
+const SHARED_BOARDS: readonly string[] = ["greenhouse", "ashby", "keka", "workable", "smartrecruiters", "zohorecruit"];
+/**
+ * Sites applied on through the user's own signed-in account (Phase K, docs/naukri/TDD.md 4.7): Naukri only where both
+ * ENABLE_NAUKRI=1 and ENABLE_NAUKRI_APPLY=1, and then only for a user connected to it (modules/apply/sites/gate.ts).
+ * Never in the shared pool (poolSql): a user who has not connected Naukri never sees its jobs.
+ */
+export const SIGNED_IN_APPLY_BOARDS: readonly string[] = process.env.ENABLE_NAUKRI === "1" && process.env.ENABLE_NAUKRI_APPLY === "1" ? ["naukri"] : [];
+export const APPLY_BOARDS: readonly string[] = [...SHARED_BOARDS, ...SIGNED_IN_APPLY_BOARDS];
 
 /**
  * The feed's pool (Phase P, docs/relevance/TDD.md 4.1.1) as SQL on "Job" `alias`: open, on a board the agent applies
@@ -16,6 +23,6 @@ export const APPLY_BOARDS: readonly string[] = ["greenhouse", "ashby", "keka", "
 export function poolSql(alias = "j") {
   const days = Number(process.env.INGEST_DAYS) || 60;
   const j = Prisma.raw(`"${alias}"`);
-  return Prisma.sql`${j}."closedAt" IS NULL AND ${j}.source = ANY(${[...APPLY_BOARDS]}::text[])
+  return Prisma.sql`${j}."closedAt" IS NULL AND ${j}.source = ANY(${[...SHARED_BOARDS]}::text[])
     AND ${j}.eligibility IN ('india', 'remote_india') AND ${j}."postedAt" >= (now() AT TIME ZONE 'UTC') - make_interval(days => ${days}::int)`;
 }

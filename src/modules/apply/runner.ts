@@ -5,8 +5,8 @@ import { enqueueApply, HANDOFF_BOARDS, PERSON_HANDOFF } from "@/lib/queue";
 import { storage } from "@/lib/storage";
 import { notifyNeedsInput } from "@/lib/notify";
 import { ONE_TIME_CODE_KEY, upsert } from "@/modules/answers";
-import { check, loadRules, writeEvent } from "@/modules/governance";
-import { BotCheckError, CaptchaRejectedError, MaybeSentError, NeedsAnswerError, NoRetryError, RefusedError, type FilledField, type PendingQuestion, type ResolvedValue } from "./adapter";
+import { check, loadRules, sourceRules, writeEvent } from "@/modules/governance";
+import { BotCheckError, CaptchaRejectedError, MaybeSentError, NeedsAnswerError, NoRetryError, NotSentError, RefusedError, type FilledField, type PendingQuestion, type ResolvedValue } from "./adapter";
 import { isLetterFile, LETTER_FILE, letterPdf } from "./letter";
 import { guessable, guessAnswers } from "./guess";
 import { decideAfterError, rerunsInRow, SUBMIT_ATTEMPT } from "./outcome";
@@ -16,9 +16,13 @@ import { boardSupported } from "./lifecycle";
 import { pickAdapter } from "./pick";
 import { jobQuestions, questionsCached } from "./questions";
 import { resolveForm } from "./resolveForm";
-import { formUrlAllowed } from "./urls";
+import { formUrlAllowed, mockSiteOf } from "./urls";
 import { LockStopped, withSubmitLock } from "./submitLock";
 import { sendPush } from "@/lib/push";
+import { markStopped } from "@/modules/sources";
+import { isSignedInApplySite, runGate, type SignedInApplySite } from "./sites/gate";
+import { answer, ApplyWatch, pressApply, readJobPage, type NaukriStep } from "./sites/naukriApply";
+import type { Answer, Profile } from "@prisma/client";
 
 /** The user (or a queue clear) cancelled this application while it was running. */
 export class CancelledError extends Error {
@@ -164,6 +168,18 @@ async function execute(applicationId: string, options: { person?: boolean }) {
   }
 
   const rules = loadRules();
+
+  // A job on a site the user signed in to (Naukri, K4): the site's own Apply, one question at a time, in their window.
+  // A mock job on the mock Naukri page (K4b) runs the same way, with no account and no window of the user's.
+  if (isSignedInApplySite(job.source)) {
+    await executeOnSite({ application, job, profile, answers, site: job.source, mock: false });
+    return;
+  }
+  const mockSite = job.source === "mock" ? mockSiteOf(job.applyUrl) : null;
+  if (mockSite) {
+    await executeOnSite({ application, job, profile, answers, site: mockSite, mock: true });
+    return;
+  }
 
   // The reaper treats a running application whose heartbeat stops as belonging to a dead worker.
   // It also notices a cancel: no row updated means the user cancelled, and the run stops writing progress (below).
@@ -625,5 +641,241 @@ async function execute(applicationId: string, options: { person?: boolean }) {
     await session?.close();
     await upload.cleanup?.().catch(() => undefined);
     for (const cleanup of upload.more) await cleanup().catch(() => undefined);
+  }
+}
+
+// Naukri's own Apply (K4, docs/naukri/TDD.md 4.7, 4.8). Its questions come one at a time in a chat drawer that opens only
+// after Apply is pressed, so the run answers each from the same chain as every form (resolveForm: the bank, matched,
+// derived, guessed; never a guess where the rules forbid one) and asks the user for anything left, closing the window
+// first. Nothing is sent while a question is open: Naukri applies when the last answer is saved, and says so in its
+// own apply service's reply to its own page (sites/naukriChat.ts readApplyReply).
+const SITE_MAX_QUESTIONS = 15;
+const SITE_LABEL: Record<SignedInApplySite, string> = { naukri: "Naukri" };
+
+type SiteRunInput = {
+  application: { id: string; userId: string; attempt: number };
+  job: { id: string; title: string; location: string; country: string; description: string; applyUrl: string; externalId: string; applyVia: string | null; company: { name: string } };
+  profile: Profile;
+  answers: Answer[];
+  site: SignedInApplySite;
+  /** The mock Naukri page (K4b): this app's own, for test profiles; no account, no caps, no window of the user's. */
+  mock: boolean;
+};
+
+async function executeOnSite(input: SiteRunInput) {
+  const { application, job, profile, site, mock } = input;
+  const applicationId = application.id;
+  const label = SITE_LABEL[site];
+  // The rules see the mock as the mock form, so a test profile passes them only there.
+  const source = mock ? "mock" : site;
+  // A job the site sends to another board applies through that board's adapter (later: K4c).
+  if (job.applyVia) {
+    await block(applicationId, "board_not_supported", `This ${label} job applies on ${job.applyVia}, which your agent does not do from ${label} yet`);
+    return;
+  }
+  if (!formUrlAllowed(job.applyUrl, source)) {
+    await block(applicationId, "unsafe_form_url", `Refused to open ${new URL(job.applyUrl, "http://invalid").host} for a ${label} job`);
+    return;
+  }
+  const started = await check("start", { applicationId, profileExists: true, isTest: profile.isTest, adapterSource: source });
+  if (!started.ok) {
+    await setApp(applicationId, { status: "blocked", error: started.rule });
+    return;
+  }
+  if (profile.isTest && !mock) {
+    await block(applicationId, "test_profile_mock_only", "Test profiles can only apply on the mock form");
+    return;
+  }
+  // The reaper treats a run whose heartbeat stops as a dead worker's, also while it waits for the lock.
+  const touch = () => db.application.updateMany({ where: { id: applicationId, status: { not: "cancelled" } }, data: { heartbeatAt: new Date() } }).catch(() => undefined);
+  await touch();
+  const heartbeat = setInterval(() => void touch(), 30_000);
+  try {
+    // One run on the site per user at a time, so the pace and the daily cap are read and kept by one run only.
+    await withSubmitLock(
+      application.userId,
+      applicationId,
+      {
+        onWait: async () => {
+          await writeEvent(applicationId, "resolve", `Waiting for your other ${label} application to finish first`);
+        },
+        shouldStop: async () => (await db.application.findUnique({ where: { id: applicationId }, select: { status: true } }))?.status === "cancelled",
+      },
+      async () => {
+        if (mock) {
+          await writeEvent(applicationId, "rule_check", `Mock ${label}: no account, daily applies or pace to keep`, "source_ready_mock");
+          await runOnSite(input);
+          return;
+        }
+        const gate = await runGate(application.userId, site);
+        if (gate.kind === "block") {
+          await block(applicationId, gate.rule, gate.message);
+          return;
+        }
+        if (gate.kind === "wait") {
+          // Not an attempt: the run comes back when the site may be used again.
+          await writeEvent(applicationId, "resolve", gate.message, gate.rule);
+          await enqueueApply(applicationId, gate.seconds);
+          return;
+        }
+        await writeEvent(applicationId, "rule_check", `${label} account connected, within today's applies and the pace between them`, `source_ready_${site}`);
+        await runOnSite(input);
+      },
+    );
+  } catch (error) {
+    if (error instanceof LockStopped) throw new CancelledError();
+    throw error;
+  } finally {
+    clearInterval(heartbeat);
+  }
+}
+
+async function runOnSite({ application, job, profile, answers, site, mock }: SiteRunInput) {
+  const applicationId = application.id;
+  const userId = application.userId;
+  const label = SITE_LABEL[site];
+  const rules = loadRules();
+  const pauseHours = sourceRules(site)?.pause_hours_after_challenge ?? 24;
+  const attempt = application.attempt + 1;
+  await setApp(applicationId, { attempt, status: "inspecting" });
+  const jobInfo = { company: job.company.name, title: job.title, location: job.location, country: job.country, description: job.description };
+  const resolveLog = async (message: string, data?: Record<string, unknown>) => {
+    await writeEvent(applicationId, "resolve", message, undefined, data as Prisma.InputJsonValue | undefined);
+  };
+  // The site stopped the run (signed out, a check, a refusal): the account pauses for every run, and the user hears.
+  const stopSite = async (stop: "needs_signin" | "challenge" | "refused" | "error", detail: string) => {
+    if (stop === "error") return new Error(`${label}'s page did not load: ${detail}`);
+    if (!mock) await markStopped(userId, site, stop, pauseHours).catch(() => undefined);
+    const message =
+      stop === "needs_signin"
+        ? `${label} signed you out. Sign in to ${label} again from Account, then retry. Nothing was sent.`
+        : stop === "challenge"
+          ? `${label} asked for a check (a CAPTCHA), so your agent paused ${label} for ${pauseHours} hours. Nothing was sent.`
+          : `${label} turned automated use away for now, so your agent paused ${label} for ${pauseHours} hours. Nothing was sent.`;
+    if (!mock) void sendPush(userId, { title: `${label} paused`, body: message, url: "/account", tag: `source-${site}` }).catch(() => undefined);
+    await writeEvent(applicationId, "diagnostic", `${label}: ${detail}`.slice(0, 300));
+    return new NotSentError(message);
+  };
+
+  let session: Awaited<ReturnType<typeof openBrowser>> | null = null;
+  let watch: ApplyWatch | null = null;
+  let confirmedSent = false;
+  // The last thing pressed could have sent it: Apply itself, or a saved answer (the drawer's last one makes the page
+  // apply). False while a question is open on screen, where nothing is sent.
+  let maySent = false;
+  const filled: FilledField[] = [];
+  try {
+    session = await openBrowser(job.applyUrl, userId, mock ? { handoff: false } : { site, persist: false });
+    const page = session.page;
+    const read = await readJobPage(page);
+    if (read.kind === "stop") throw await stopSite(read.stop, read.detail);
+    if (read.state === "already_applied") {
+      // After a press of ours on an earlier run, Naukri recorded it (the drawer's last answer, or Apply itself): sent.
+      const pressedBefore = await db.applicationEvent.count({ where: { applicationId, type: SUBMIT_ATTEMPT } });
+      if (pressedBefore > 0) {
+        await recordAfterSubmit(applicationId, { status: "submitted", submittedAt: new Date(), pendingQuestions: [], error: null });
+        confirmedSent = true;
+        await writeEvent(applicationId, "submit", `Application submitted. Confirmation: ${label} shows this job as applied after your agent's earlier press`);
+        await captureConfirmation(page, applicationId, attempt, userId);
+        return;
+      }
+      await block(applicationId, "already_applied_on_site", `You had already applied to this job on ${label} yourself`);
+      return;
+    }
+    if (read.state === "expired") {
+      await db.job.update({ where: { id: job.id }, data: { closedAt: new Date() } }).catch(() => undefined);
+      throw new NoRetryError(`This job is no longer open on ${label}`);
+    }
+    if (read.state === "company_site") throw new NoRetryError(`${label} sends this job's applications to the company's own site. Apply there.`);
+    if (read.state === "interest_only") throw new NoRetryError(`This ${label} job takes walk-ins ("I am interested"), not applications`);
+    if (read.state !== "apply") throw new Error(`${label}'s job page showed no Apply button`);
+
+    // The press may send it (a job with no questions applies at once): the submit rules first.
+    const submitCheck = await check("submit", { applicationId, isTest: profile.isTest, adapterSource: mock ? "mock" : site });
+    if (!submitCheck.ok) {
+      await setApp(applicationId, { status: "blocked", error: submitCheck.rule });
+      return;
+    }
+    await setApp(applicationId, { status: "filling" });
+    watch = new ApplyWatch(page, job.externalId);
+    await writeEvent(applicationId, SUBMIT_ATTEMPT, `Apply is being pressed on ${label}: from here the application may have been sent`);
+    maySent = true;
+    let step: NaukriStep = await pressApply(page, watch);
+    let asked = 0;
+    while (step.kind === "question") {
+      maySent = false;
+      asked += 1;
+      if (asked > SITE_MAX_QUESTIONS) throw new NotSentError(`${label} asked more than ${SITE_MAX_QUESTIONS} questions; nothing was sent`);
+      if (asked === 1) await writeEvent(applicationId, "inspect", `${label} opened its questions`);
+      const question = step.question;
+      const { resolved } = await resolveForm({ userId, source: site, fields: [question.field], profile, answers, job: jobInfo, draftEssays: true, log: resolveLog });
+      const value = resolved.values[0];
+      if (!value && !(question.skip && !question.field.required)) {
+        // Asked once, with the window closed first (finally): the next run presses Apply again and answers it from the bank.
+        const pending = resolved.pending.length > 0 ? resolved.pending : [{ key: question.field.label, label: question.field.label, type: question.field.type, options: question.field.options, required: question.field.required }];
+        await setApp(applicationId, { status: "needs_input", attempt: application.attempt, pendingQuestions: pending as Prisma.InputJsonValue, fields: filled as Prisma.InputJsonValue });
+        await writeEvent(applicationId, "ask_user", `${label} asked a question your agent could not answer`);
+        void notifyNeedsInput(applicationId, "answers");
+        return;
+      }
+      await setApp(applicationId, { status: "filling" });
+      step = await answer(page, watch, step, value ? value.value : null, asked);
+      maySent = true;
+      if (value) {
+        filled.push({ key: value.key, label: value.label, value: value.value, source: value.source, selector: value.selector, basis: value.basis });
+        await writeEvent(applicationId, "fill", `Filled ${value.key}`, undefined, { key: value.key, source: value.source, selector: value.selector, ...(value.basis ? { basis: value.basis } : {}) } as Prisma.InputJsonValue);
+      }
+    }
+    if (step.kind === "company_site") throw new NotSentError(`${label} sends this job's applications to the company's own site. Apply there.`);
+    if (step.kind === "stopped") throw await stopSite(step.stop, step.detail);
+    if (step.kind === "unclear") throw new MaybeSentError(`${label} did not confirm it (${step.detail}). Check ${label}'s "Applied" list or your email before applying again.`);
+    if (asked === 0) await writeEvent(applicationId, "inspect", "Found 0 fields");
+    await recordAfterSubmit(applicationId, { status: "submitted", submittedAt: new Date(), fields: filled as Prisma.InputJsonValue, pendingQuestions: [], error: null });
+    confirmedSent = true;
+    await writeEvent(applicationId, "submit", `Application submitted. Confirmation: ${step.evidence}`.slice(0, 300));
+    void sendPush(userId, { title: `Sent to ${jobInfo.company}`, body: `Your agent sent your ${jobInfo.title} application on ${label}.`, url: `/applications/${applicationId}`, tag: `app-${applicationId}` }).catch(() => undefined);
+    await captureConfirmation(page, applicationId, attempt, userId);
+  } catch (error) {
+    if (error instanceof CancelledError) throw error;
+    if (confirmedSent) {
+      console.error(`apply ${applicationId}: after the confirmed submit: ${error instanceof Error ? error.name : "error"}`);
+      return;
+    }
+    // A saved value fits none of the options on screen: a question is open, so nothing was sent; ask with its options.
+    if (error instanceof NeedsAnswerError) {
+      await setApp(applicationId, { status: "needs_input", attempt: application.attempt, pendingQuestions: [error.question] as Prisma.InputJsonValue });
+      await writeEvent(applicationId, "ask_user", `Saved answer did not fit "${error.question.label.slice(0, 60)}"`);
+      void notifyNeedsInput(applicationId, "answers");
+      return;
+    }
+    const message = error instanceof Error ? error.message : "apply failed";
+    await captureFailure(session, applicationId, attempt, userId, error);
+    if (error instanceof NotSentError || (!maySent && error instanceof NoRetryError)) {
+      await writeEvent(applicationId, "error", message);
+      await setApp(applicationId, { status: "failed", error: message });
+      return;
+    }
+    if (maySent) {
+      const uncertain = error instanceof MaybeSentError ? message : `Apply was pressed on ${label}, then: ${message.slice(0, 160)}. It may have been sent; check ${label}'s "Applied" list.`;
+      await writeEvent(applicationId, "verify", uncertain);
+      await recordAfterSubmit(applicationId, { status: "pending_verification", error: uncertain });
+      return;
+    }
+    if (attempt < rules.max_attempts) {
+      await writeEvent(applicationId, "retry", message);
+      await setApp(applicationId, { status: "queued", error: message });
+      await enqueueApply(applicationId, 20 * attempt);
+      return;
+    }
+    await writeEvent(applicationId, "error", message);
+    await setApp(applicationId, { status: "failed", error: message });
+  } finally {
+    watch?.stop();
+    // The refreshed sign-in goes back only while the account is still connected (a Disconnect mid-run stays done).
+    if (!mock && session && livePage(session.page)) {
+      const still = await db.siteConnection.findUnique({ where: { userId_site: { userId, site } }, select: { status: true } }).catch(() => null);
+      if (still?.status === "connected") await session.saveState().catch(() => false);
+    }
+    await session?.close();
   }
 }

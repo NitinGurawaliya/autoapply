@@ -177,12 +177,22 @@ Starts only when Phase J is done: T94 (Lever handoff), T95 (SmartRecruiters), T9
 
 Design: [docs/naukri/TDD.md](naukri/TDD.md) (final, 3 Nov). Tasks with their Do, the design sections each builds, Done-when and the Done lines: [docs/naukri/TASKS.md](naukri/TASKS.md). Status is marked there first, then on the line here. Order K1 → K2 → K4; K3 and K5 (LinkedIn) are designed after K4's real runs.
 
-- [ ] [K1 — Connect flow and tooling decision](naukri/TASKS.md#k1)
-- [ ] [K2 — Naukri job ingest](naukri/TASKS.md#k2)
+- [~] [K1 — Connect flow and tooling decision](naukri/TASKS.md#k1)
+- [~] [K2 — Naukri job ingest](naukri/TASKS.md#k2)
 - [ ] [K3 — LinkedIn job ingest](naukri/TASKS.md#k3)
-- [ ] [K4 — Naukri apply adapter](naukri/TASKS.md#k4)
-- [ ] [K4b — Mock Naukri drawer](naukri/TASKS.md#k4b)
+- [~] [K4 — Naukri apply adapter](naukri/TASKS.md#k4)
+- [ ] [K4c — Naukri jobs that apply on another board](naukri/TASKS.md#k4c)
+- [x] [K4b — Mock Naukri drawer](naukri/TASKS.md#k4b)
 - [ ] [K5 — LinkedIn Easy Apply adapter](naukri/TASKS.md#k5)
+- [ ] [K6 — Checks on the owner's account, through a proxy](naukri/TASKS.md#k6) (the myjobb way, owner 23 Nov, TDD §13)
+- [ ] [K7 — A residential proxy per user](naukri/TASKS.md#k7)
+- [ ] [K8 — Streamed Naukri sign-in on the phone](naukri/TASKS.md#k8)
+- [ ] [K9 — Connect from a computer: the extension](naukri/TASKS.md#k9)
+- [ ] [K10 — Keep alive and run in the cloud](naukri/TASKS.md#k10)
+- [ ] [K11 — Pilot of 20 accounts, then a load test](naukri/TASKS.md#k11)
+- [ ] [K12 — Workday apply adapter](naukri/TASKS.md#k12)
+- [ ] [K13 — Naukri as a company directory for our ATS ingest](naukri/TASKS.md#k13)
+- [ ] [K14 — Discovery by search bucket, in the cloud](naukri/TASKS.md#k14)
 
 ## Phase L — Resume tailored to each job (owner, 5 Nov)
 

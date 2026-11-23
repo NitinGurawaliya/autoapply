@@ -9,7 +9,7 @@ export { listingState } from "./listing";
 export type { ListingState } from "./listing";
 export { tagPosting } from "./tagging";
 export type { JobTags } from "./tagging";
-export { APPLY_BOARDS, daysAgoLabel, DEFAULT_FEED_DAYS, DEFAULT_PLACES, feedTracks, listFeed, parseFeedFilters, scoreJob, STAGES, tierOf } from "./match";
+export { APPLY_BOARDS, daysAgoLabel, DEFAULT_FEED_DAYS, FEED_BOARDS, feedBoardsFor, DEFAULT_PLACES, feedTracks, listFeed, parseFeedFilters, scoreJob, STAGES, tierOf } from "./match";
 export { AVOIDS, type Avoid, jobGate, readingGateOn, titleTrack, trackOf } from "./gate";
 export type { FeedFilters, FeedJob, FeedView, Tier } from "./match";
 export { ADJACENT as ADJACENT_TRACKS, classifyTitle, seniorityOf, TRACK_LABELS, TRACKS, trackFit, tracksFromProfile, tracksOf } from "./functions";

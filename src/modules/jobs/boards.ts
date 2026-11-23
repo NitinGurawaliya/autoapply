@@ -16,7 +16,7 @@ import { tagPosting } from "./tagging";
  * here plus a fetcher and an adapter (docs/INGEST_CONTRACT.md).
  */
 
-export type BoardSource = "greenhouse" | "lever" | "ashby" | "workday" | "zohorecruit" | "keka" | "smartrecruiters" | "workable";
+export type BoardSource = "greenhouse" | "lever" | "ashby" | "workday" | "zohorecruit" | "keka" | "smartrecruiters" | "workable" | "naukri";
 
 /** How discovery (discovery.ts) checks names against a board. */
 export type BoardDiscovery = {
@@ -57,6 +57,11 @@ export type Board = {
   /** How a company name or slug is written as this board's slug. */
   slugOf: (text: string) => string;
   discovery?: BoardDiscovery;
+  /**
+   * Read per user through the user's own signed-in account (Phase K: Naukri), never per company: its companies are stored
+   * inactive, so the company ingest never fetches them (ingest.ts ingestForUser reads them instead).
+   */
+  perUser?: boolean;
 };
 
 // Discovery is polite: a pause after every request it makes to a board.
@@ -359,7 +364,31 @@ export const BOARDS: Board[] = [
       },
     },
   },
+  {
+    // Naukri (Phase K, docs/naukri/TDD.md): read per user in the user's own signed-in window (ingest.ts ingestForUser,
+    // fetchers/naukri.ts), never per company and never by a crawl. Its company rows are inactive.
+    source: "naukri",
+    label: "Naukri",
+    perUser: true,
+    fetch: async () => {
+      throw new Error("naukri is read per user, through the user's own account");
+    },
+    stores: indiaEligible,
+    formHost: /^www\.naukri\.com$/i,
+    slugOf: (text) => text.trim(),
+  },
 ];
+
+/**
+ * The boards a Naukri listing may send the user to and still be applied by the agent: the ones with an adapter
+ * (modules/apply/pick.ts). A listing leaving for any other site (Workday, Darwinbox, a careers page) is not stored.
+ */
+const ADAPTER_BOARDS: readonly BoardSource[] = ["greenhouse", "lever", "ashby", "keka"];
+
+/** The board with an adapter whose application forms are on this host, or null. */
+export function adapterBoardOfHost(host: string): BoardSource | null {
+  return BOARDS.find((board) => ADAPTER_BOARDS.includes(board.source) && board.formHost.test(host))?.source ?? null;
+}
 
 /** The board a source names, or undefined (mock, or a board we no longer take). */
 export function boardOf(source: string) {

@@ -12,7 +12,7 @@ import { db } from "@/lib/db";
 import { describe, previewCount, type DescriptionBlock } from "@/lib/description";
 import { feedHref, feedQuery } from "@/lib/feed-url";
 import { daysSince, experienceChip, postedLabel, STAGE_LABEL, whereLabel } from "@/lib/job-facts";
-import { APPLY_BOARDS, DEFAULT_FEED_DAYS, DEFAULT_PLACES, listFeed, parseFeedFilters, type FeedView } from "@/modules/jobs";
+import { DEFAULT_FEED_DAYS, FEED_BOARDS, DEFAULT_PLACES, listFeed, parseFeedFilters, type FeedView } from "@/modules/jobs";
 import { formatSalary } from "@/modules/jobs/salary";
 import { FeedBackLink } from "./feed-back-link";
 import { JobActions, NextJobLink, type NextJob } from "./job-actions";
@@ -63,7 +63,7 @@ export default async function JobPage({ params, searchParams }: { params: Promis
   const view: FeedView = one(query.view) === "skipped" ? "skipped" : "new";
   const withView = (href: string) => (view === "skipped" ? `${href}${href.includes("?") ? "&" : "?"}view=skipped` : href);
   // Written like the feed's own URL (lib/feed-url.ts), so Back lands on the exact page the user left.
-  const backHref = withView(feedHref(filters, { boards: APPLY_BOARDS, places: DEFAULT_PLACES, days: DEFAULT_FEED_DAYS }));
+  const backHref = withView(feedHref(filters, { boards: FEED_BOARDS, places: DEFAULT_PLACES, days: DEFAULT_FEED_DAYS }));
 
   const [job, swipe, application, feed, profile] = await Promise.all([
     db.job.findUnique({
@@ -129,7 +129,7 @@ export default async function JobPage({ params, searchParams }: { params: Promis
   // the user swiped). Opened from elsewhere, the first job of the feed.
   const here = feed.findIndex((item) => item.id === job.id);
   const following = (here >= 0 ? feed.slice(here + 1) : feed).find((item) => item.id !== job.id);
-  const nextQuery = feedQuery(filters, { boards: APPLY_BOARDS, places: DEFAULT_PLACES, days: DEFAULT_FEED_DAYS });
+  const nextQuery = feedQuery(filters, { boards: FEED_BOARDS, places: DEFAULT_PLACES, days: DEFAULT_FEED_DAYS });
   const next: NextJob | null = following
     ? { id: following.id, href: withView(nextQuery ? `/jobs/${following.id}?${nextQuery}` : `/jobs/${following.id}`), company: following.company, title: following.title }
     : null;
