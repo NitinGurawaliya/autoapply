@@ -98,6 +98,13 @@ export function SignInStream({ site, label, onSettled, onClose, onCancel }: { si
   const [otpBusy, setOtpBusy] = useState(false);
   const [otpError, setOtpError] = useState("");
   const [codeSent, setCodeSent] = useState(false);
+  // The site's page is on screen for a check (OTP connect): say why, and offer the way back.
+  const [checking, setChecking] = useState(false);
+  // The card refreshes itself every few seconds and hands a new callback each time; the stream must not restart for it.
+  const onSettledRef = useRef(onSettled);
+  useEffect(() => {
+    onSettledRef.current = onSettled;
+  }, [onSettled]);
   const [resendIn, setResendIn] = useState(0);
 
   /**
@@ -112,11 +119,11 @@ export function SignInStream({ site, label, onSettled, onClose, onCancel }: { si
       if (ticket.status === "connected") setPhase({ name: "connected", accountLabel: ticket.accountLabel });
       else if (ticket.lastError?.includes("10 minutes")) setPhase({ name: "expired" });
       else setPhase({ name: "failed", message: ticket.lastError ?? "The sign-in did not finish." });
-      onSettled();
+      onSettledRef.current();
       return true;
     }
     return false;
-  }, [site, onSettled]);
+  }, [site]);
 
   // Ask for the pass, then open the stream; again on "Try again".
   useEffect(() => {
@@ -225,12 +232,14 @@ export function SignInStream({ site, label, onSettled, onClose, onCancel }: { si
   /** The site wants a check: its page is shown for it, then the user comes back to the code. */
   function showPage() {
     mode.current = "page";
+    setChecking(true);
     void post("input", { events: [], frames: true });
     setPhase({ name: "live" });
   }
 
   function backToCode() {
     mode.current = "otp";
+    setChecking(false);
     void post("input", { events: [], frames: false });
     setOtpError("");
     setPhase(codeSent ? { name: "code" } : { name: "number", saved: savedNumber });
@@ -539,7 +548,7 @@ export function SignInStream({ site, label, onSettled, onClose, onCancel }: { si
         className="pointer-events-none absolute top-0 left-0 size-px opacity-0"
         style={{ fontSize: 16 }}
       />
-      {mode.current === "otp" || codeSent ? (
+      {checking && phase.name === "live" ? (
         <div className="flex items-center justify-between gap-3">
           <p className="m-0 type-meta text-muted-foreground">{label} wants a quick check. Do it on the page, then carry on.</p>
           <Button type="button" variant="line" size="md" className="flex-none" onClick={backToCode}>

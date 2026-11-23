@@ -99,6 +99,12 @@ function install() {
 export function SignInStreamDemo() {
   const [run, setRun] = useState(0);
   const [open, setOpen] = useState(false);
+  // Re-renders every 3 s with new callbacks, as the Account card does while a sign-in is open (its poll).
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setTick((tick) => tick + 1), 3000);
+    return () => clearInterval(timer);
+  }, []);
   useEffect(install, []);
   return (
     <div className="flex flex-wrap gap-2">
