@@ -41,7 +41,26 @@ export function jobIdFromSlug(slug: string): string | null {
   return ID.test(id) ? id : null;
 }
 
-/** An absolute URL on this app (APP_URL), for the preview card and copied links. */
+/**
+ * This app's public origin. APP_URL tidied first: a stray space, newline or quotes pasted into a host's settings made
+ * `new URL` throw in the share page's metadata, a 500 for every visitor (23 Nov). Without a usable APP_URL, Vercel's
+ * own production host, else localhost.
+ */
+export function appOrigin(): string {
+  const raw = (process.env.APP_URL ?? "").trim().replace(/^["']+|["']+$/g, "").trim();
+  if (raw) {
+    try {
+      const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+      if (url.hostname) return url.origin;
+    } catch {
+      // Not a URL even with a scheme: fall through.
+    }
+  }
+  const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  return vercel ? `https://${vercel}` : "http://localhost:3000";
+}
+
+/** An absolute URL on this app, for the preview card, metadata and copied links. */
 export function absoluteUrl(path: string): string {
-  return `${(process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "")}${path}`;
+  return `${appOrigin()}${path}`;
 }

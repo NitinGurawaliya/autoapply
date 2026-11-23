@@ -1,6 +1,6 @@
 // Offline checks for share-link slugs (src/lib/job-slug.ts, Phase U2): the text is for people, the trailing id is the key.
 // npx tsx scripts/job-slug-test.ts
-import { jobIdFromSlug, jobPath, slugText } from "../src/lib/job-slug";
+import { absoluteUrl, appOrigin, jobIdFromSlug, jobPath, slugText } from "../src/lib/job-slug";
 import { shareLinksEnabled } from "../src/lib/share-gate";
 
 let failed = 0;
@@ -55,6 +55,47 @@ check("production, unset: off", gate("production", undefined) === false);
 check("production, 1: on", gate("production", "1") === true);
 check("development, unset: on", gate("development", undefined) === true);
 check("development, 0: off", gate("development", "0") === false);
+
+// APP_URL as people paste it into a host's settings (23 Nov: one with a stray character made every share page a 500).
+const origin = (value: string | undefined, vercel?: string) => {
+  const before = { APP_URL: env.APP_URL, V: env.VERCEL_PROJECT_PRODUCTION_URL };
+  if (value === undefined) delete env.APP_URL;
+  else env.APP_URL = value;
+  if (vercel === undefined) delete env.VERCEL_PROJECT_PRODUCTION_URL;
+  else env.VERCEL_PROJECT_PRODUCTION_URL = vercel;
+  const out = appOrigin();
+  if (before.APP_URL === undefined) delete env.APP_URL;
+  else env.APP_URL = before.APP_URL;
+  if (before.V === undefined) delete env.VERCEL_PROJECT_PRODUCTION_URL;
+  else env.VERCEL_PROJECT_PRODUCTION_URL = before.V;
+  return out;
+};
+const SITE = "https://autoapply-u74v.vercel.app";
+for (const [label, value] of [
+  ["clean", SITE],
+  ["trailing slash", `${SITE}/`],
+  ["trailing space", `${SITE} `],
+  ["trailing newline", `${SITE}\n`],
+  ["quoted", `"${SITE}"`],
+  ["no scheme", "autoapply-u74v.vercel.app"],
+  ["a path", `${SITE}/feed`],
+] as const) {
+  const got = origin(value);
+  check(`APP_URL ${label}`, got === SITE, got);
+}
+check("APP_URL unusable: Vercel's production host", origin("http://", "autoapply-u74v.vercel.app") === SITE, origin("http://", "autoapply-u74v.vercel.app"));
+check("no APP_URL anywhere: localhost", origin(undefined) === "http://localhost:3000");
+check("absoluteUrl never throws in metadata", (() => {
+  env.APP_URL = `${SITE} `;
+  try {
+    new URL(absoluteUrl("/"));
+    return true;
+  } catch {
+    return false;
+  } finally {
+    delete env.APP_URL;
+  }
+})());
 
 console.log(failed === 0 ? "PASS job-slug-test" : `FAIL job-slug-test (${failed})`);
 process.exit(failed === 0 ? 0 : 1);
