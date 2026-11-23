@@ -27,7 +27,7 @@ export const ANSWER_KEYS: AnswerKeyDef[] = [
 
   { key: "years_experience", type: "number", policy: "deterministic", synonyms: [/years?\s*(of\s*)?experience/i] },
   { key: "current_title", type: "text", policy: "deterministic", synonyms: [/current\s*title/i, /job\s*title/i] },
-  { key: "current_company", type: "text", policy: "deterministic", synonyms: [/current\s*(company|employer)/i] },
+  { key: "current_company", type: "text", policy: "deterministic", synonyms: [/^(?!.*\bnotice\b).*current\s*(company|employer)/i] },
   { key: "employment_type", type: "select", policy: "bank_or_ask", synonyms: [/employment\s*type/i] },
   // "Start date month / year" belong to a past job or degree (work and education history), not to when you can start.
   { key: "start_date", type: "text", policy: "deterministic", synonyms: [/start\s*date(?!\s*(month|year|of\s*(employment|study)))/i, /available\s*(from|to\s*start)/i] },
@@ -36,13 +36,16 @@ export const ANSWER_KEYS: AnswerKeyDef[] = [
   { key: "current_ctc", type: "text", policy: "bank_or_ask", synonyms: [/current\s*ctc/i, /current\s*salary/i, /present\s*ctc/i] },
   { key: "expected_ctc", type: "text", policy: "bank_or_ask", synonyms: [/expected\s*ctc/i, /expected\s*salary/i, /desired\s*(ctc|salary)/i] },
   { key: "salary_expectation", type: "text", policy: "bank_or_ask", synonyms: [/salary\s*expectation/i] },
-  { key: "notice_period", type: "number", policy: "bank_or_ask", synonyms: [/notice\s*period/i] },
+  // 23 Nov (Cotality on Workday): "how much notice would you need to give your current employer" took current_company.
+  { key: "notice_period", type: "number", policy: "bank_or_ask", synonyms: [/notice\s*period/i, /how much notice/i, /notice (would|do|will) you (need|have|require)/i] },
   { key: "work_authorization", type: "select", policy: "bank_or_ask", synonyms: [/work\s*authorization/i, /legally\s*authorized/i, /authori[sz]ed\s*to\s*work/i] },
   { key: "needs_sponsorship", type: "select", policy: "bank_or_ask", synonyms: [/sponsorship/i] },
   { key: "willing_to_relocate", type: "select", policy: "bank_or_ask", synonyms: [/relocat/i] },
   // Standing permission to tick required privacy / truthfulness / arbitration acknowledgements (modules/apply/acknowledgement.ts).
   // No synonyms: it is never a form label, only asked once and read by the resolver.
   { key: "accept_acknowledgements", type: "select", policy: "bank_or_ask", synonyms: [] },
+  // Phase V: may the agent make employer accounts (Workday and the like) for the user; asked once (modules/accounts/permission.ts).
+  { key: "create_employer_accounts", type: "select", policy: "bank_or_ask", synonyms: [] },
 
   { key: "gender", type: "select", policy: "default_only", default: EEO_DEFAULT, synonyms: [/\bgender\b/i] },
   { key: "race", type: "select", policy: "default_only", default: EEO_DEFAULT, synonyms: [/\brace\b/i] },

@@ -138,8 +138,10 @@ function fitNumber(value: string) {
  * A pay number box in rupees ("Current CTC (INR)", Bosch on SmartRecruiters, 17 Nov) takes rupees: "6" or "6 LPA" (lakh,
  * as onboarding states pay) becomes 600000; "600000" or "6,00,000" stays. A box that asks in lakh or LPA is left as is.
  */
-export function rupeesFor(label: string, raw: string) {
-  if (detectConcept(label) !== "compensation" || currencyOf(label) !== "INR" || /\b(lpa|lakhs?|lacs?|crores?)\b/i.test(label) || MONTHLY.test(label)) return null;
+export function rupeesFor(label: string, raw: string, assume: string | null = null) {
+  // A pay question that names no currency is in the candidate's own (23 Nov, Fractal on Workday: "What is your current
+  // annual salary?" took "6" from a 6 lakh answer).
+  if (detectConcept(label) !== "compensation" || (currencyOf(label) ?? assume) !== "INR" || /\b(lpa|lakhs?|lacs?|crores?)\b/i.test(label) || MONTHLY.test(label)) return null;
   const parsed = raw
     .trim()
     .toLowerCase()
@@ -158,8 +160,8 @@ const YEARLY_PAY_KEYS = new Set(["current_ctc", "expected_ctc", "salary_expectat
  * answer in lakh ("46lpa" is not 46 of anything else) and never a yearly answer for a monthly question. 17 Nov,
  * Miratech: "What are your financial expectations (monthly gross...)" took 46 from a saved "46lpa".
  */
-export function payNumber(label: string, raw: string, key: string) {
-  const rupees = rupeesFor(label, raw);
+export function payNumber(label: string, raw: string, key: string, assume: string | null = null) {
+  const rupees = rupeesFor(label, raw, assume);
   if (rupees) return rupees;
   if (/\d\s*(lpa|lakhs?|lacs?|l|cr|crores?)\b/i.test(raw)) return null;
   if (detectConcept(label) === "compensation" && MONTHLY.test(label) && YEARLY_PAY_KEYS.has(key)) return null;
@@ -271,7 +273,7 @@ export function resolveValues(
       // unticked while it counted as filled (17 Nov, NielsenIQ).
       if (field.type === "checkbox" && !/^(yes|no|true|false|y|n|1|0|checked|unchecked|agree|i agree|accept|accepted)$/i.test(raw.trim())) return false;
       let value =
-        field.type === "file" ? raw : field.type === "number" ? payNumber(field.label, raw, valueKey) : field.type === "checkbox-group" ? fitChoices(raw, field.options, eeo) : fitOption(raw, field.options, eeo);
+        field.type === "file" ? raw : field.type === "number" ? payNumber(field.label, raw, valueKey, homeCurrency(profile.country)) : !field.options?.length && field.type !== "checkbox" && rupeesFor(field.label, raw, homeCurrency(profile.country)) ? rupeesFor(field.label, raw, homeCurrency(profile.country)) : field.type === "checkbox-group" ? fitChoices(raw, field.options, eeo) : fitOption(raw, field.options, eeo);
       let reworded = false;
       if (value == null && field.options?.length) {
         const mapped = optionMatches?.get(optionKey(field.label, raw));

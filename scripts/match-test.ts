@@ -66,8 +66,8 @@ check("senior role for 1 yr dev stays under 40", senior.score < 40, `${senior.sc
 check("4 yr role stays under 40", four.score < 40, `${four.score}%`);
 check("entry role scores well", entry.score >= 60, `${entry.score}%`);
 check("graduate role scores well", grad.score >= 60, `${grad.score}%`);
-// Strict matching (9 Nov): a job asking more years than the candidate has is out, not a capped Stretch.
-check("2 yr ask is out for a 1 yr dev", twoYr.score === 0 && /2\+ years/.test(twoYr.reason), `${twoYr.score}% ${twoYr.reason}`);
+// One year of stretch (owner, 23 Nov; yearsReach): a 2-year ask stays for a 1-yr dev, scored on its fit; 3 years is out.
+check("2 yr ask stays for a 1 yr dev", twoYr.score >= 40, `${twoYr.score}% ${twoYr.reason}`);
 check("reason explains seniority", /years/i.test(senior.reason), senior.reason);
 
 // T82: tiers, by tracks (no vectors) and by meaning plus the model's verdict (semantic.ts).
@@ -113,7 +113,8 @@ check("strict: SDE II for a 1-yr dev is out, even judged good and close", judged
 check("strict: Software Engineer II for a 1-yr dev is out", judged("Software Engineer II", stack, nitin, "strong", 0.7).score === 0);
 check("strict: Software Development Engineer 2 (SDE 2) for a fresher is out", judged("Software Development Engineer 2 (SDE 2)", stack, fresher).score === 0);
 check("strict: a 3-year ask for a 1-yr dev is out", judged("Software Engineer 1", `${stack} 3+ years of experience.`, nitin, "stretch").score === 0);
-check("strict: a 2-year ask for the owner (years unknown = fresher) is out", judged("Software Engineer", `${stack} 2+ years of experience.`, owner, "stretch").score === 0);
+check("strict: a 3-year ask for the owner (years unknown = fresher) is out", judged("Software Engineer", `${stack} 3+ years of experience.`, owner, "stretch").score === 0);
+check("stretch: a 2-year ask for the owner (years unknown = fresher) stays", judged("Software Engineer", `${stack} 2+ years of experience.`, owner, "good").score > 0);
 check("strict: a 1-year ask for a fresher stays", judged("Frontend Developer", `${stack} 1+ years of experience.`, fresher).score >= 40);
 check("strict: a stated mid level with no years is out for a 1-yr dev", scoreFeatures({ title: "Engineer", seniority: "mid", requiredYears: null, country: "IN", remoteType: "unknown", skillHits: [], similarity: 0.6, judgement: { fit: "strong", why: "t" } }, nitin).score === 0);
 check("strict: Senior for 3 years is out, for 5 it stays", judged("Senior Software Engineer", stack, { ...nitin, yearsExperience: 3 }).score === 0 && judged("Senior Software Engineer", stack, { ...nitin, yearsExperience: 5 }).score >= 40);
@@ -122,7 +123,7 @@ check("strict: an intern role is out from 3 years", judged("Software Engineer In
 check("strict: an intern role stays for a fresher", tierOf(judged("Full Stack Development Intern", stack, fresher, "strong").score, 40) === "strong");
 const unstated = judged("React Engineer", stack, nitin, "strong", 0.7);
 check("strict: a job stating neither years nor level is never Strong", unstated.score > 0 && tierOf(unstated.score, 40) === "good", String(unstated.score));
-check("strict: bandMiss says why", bandMiss({ requiredYears: 2, seniority: "mid" }, 1) === "They want about 2+ years; you have 1" && bandMiss({ requiredYears: null, seniority: "senior" }, 1) === "A senior role, above your experience");
+check("strict: bandMiss says why", bandMiss({ requiredYears: 3, seniority: null }, 1) === "They want about 3+ years; you have 1" && bandMiss({ requiredYears: 2, seniority: null }, 1) === null && bandMiss({ requiredYears: 2, seniority: "mid" }, 1) === "A mid role, above your experience" && bandMiss({ requiredYears: null, seniority: "senior" }, 1) === "A senior role, above your experience");
 check("strict: years band", [yearsBand(0), yearsBand(1), yearsBand(1.9), yearsBand(3), yearsBand(null)].join() === "1,1,1,3,1");
 check("strict: levels for a 1-yr dev are intern and entry", levelsFor(1).join() === "intern,entry", levelsFor(1).join());
 check("strict: levels for 6 years", levelsFor(6).join() === "mid,senior,staff,manager", levelsFor(6).join());

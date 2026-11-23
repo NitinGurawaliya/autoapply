@@ -217,11 +217,11 @@ Order (owner, 9 Nov): measure and scale, seed every known company, then the boar
 
 Later, boards that need an employer account:
 
-- [ ] [M5 — Employer accounts: application password, vault, permission, the email step by the user](boards/TASKS.md#m5)
-- [ ] [M6 — Workday apply (K12 in the Naukri plan)](boards/TASKS.md#m6)
-- [ ] [M8 — SuccessFactors](boards/TASKS.md#m8)
-- [ ] [M10 — Darwinbox](boards/TASKS.md#m10)
-- [ ] [M15 — iCIMS (later)](boards/TASKS.md#m15)
+- [-] [M5 — Employer accounts: application password, vault, permission, the email step by the user (moved to Phase V: V1, V2)](boards/TASKS.md#m5)
+- [-] [M6 — Workday apply (K12 in the Naukri plan) (moved to Phase V: V3, V4)](boards/TASKS.md#m6)
+- [-] [M8 — SuccessFactors (moved to Phase V: V7)](boards/TASKS.md#m8)
+- [-] [M10 — Darwinbox (moved to Phase V: V5, V6)](boards/TASKS.md#m10)
+- [-] [M15 — iCIMS (later) (moved to Phase V: V8)](boards/TASKS.md#m15)
 
 Parked (owner, 9 Nov):
 
@@ -309,3 +309,16 @@ Design: [docs/share/TDD.md](share/TDD.md). Tasks: [docs/share/TASKS.md](share/TA
 - [~] [U8 — In-app browsers](share/TASKS.md#u8)
 - [x] [U9 — Sharing a job from the app](share/TASKS.md#u9)
 - [~] [U10 — End to end and switch-on](share/TASKS.md#u10)
+
+## Phase V — Boards that need an account: Workday, Darwinbox, SuccessFactors (owner, 21 Nov)
+
+Design: [docs/accounts/TDD.md](accounts/TDD.md) (v1, 21 Nov; replaces M5, M6, M8, M10, M15 for applying; decisions to close in its section 11). Tasks: [docs/accounts/TASKS.md](accounts/TASKS.md). Order V1 → V4, then V5 → V6, then V7; V8 only on numbers.
+
+- [~] [V1 — Vault, application password, permission](accounts/TASKS.md#v1)
+- [~] [V2 — The account step and a mock account board](accounts/TASKS.md#v2)
+- [ ] [V3 — Workday jobs fresh again](accounts/TASKS.md#v3)
+- [~] [V4 — Workday apply](accounts/TASKS.md#v4)
+- [ ] [V5 — Darwinbox reader](accounts/TASKS.md#v5)
+- [ ] [V6 — Darwinbox apply](accounts/TASKS.md#v6)
+- [ ] [V7 — SuccessFactors](accounts/TASKS.md#v7)
+- [ ] [V8 — iCIMS (only on numbers)](accounts/TASKS.md#v8)

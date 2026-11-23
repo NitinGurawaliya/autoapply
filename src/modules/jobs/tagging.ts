@@ -201,20 +201,23 @@ export function requiredYears(title: string, description: string): number | null
     const n = Number(raw);
     if (Number.isFinite(n) && n >= 0 && n <= 15) found.push(n);
   };
+  // The lower bound of a range always counts, never its upper end: every pattern below refuses a number that ends a
+  // range ("1–2", "1 to 2"). 23 Nov: "Experience: 1–2 Years" read as 2, the "experience … N years" pattern skipping
+  // past "1–" to the 2 (Nitin saw "Asks 2+ years" on 1-2 year jobs at Zoho and Keka employers).
   // "5+ years of relevant experience", "3-5 years' experience": the lower bound counts.
-  for (const m of text.matchAll(/(\d{1,2})\s*(?:\+|plus)?\s*(?:[-–]|to)?\s*\d{0,2}\s*\+?\s*(?:years?|yrs?)\b[^.\n]{0,50}?experience/gi)) add(m[1]);
+  for (const m of text.matchAll(/(?<!\d\s*(?:[-–—]|to)\s*)(\d{1,2})\s*(?:\+|plus)?\s*(?:[-–—]|to)?\s*\d{0,2}\s*\+?\s*(?:years?|yrs?)\b[^.\n]{0,50}?experience/gi)) add(m[1]);
   // "experience of at least 4 years"
-  for (const m of text.matchAll(/experience[^.\n]{0,40}?(\d{1,2})\s*\+?\s*(?:years?|yrs?)\b/gi)) add(m[1]);
+  for (const m of text.matchAll(/experience[^.\n]{0,40}?(?<!\d\s*(?:[-–—]|to)\s*)(\d{1,2})\s*\+?\s*(?:years?|yrs?)\b/gi)) add(m[1]);
   // "minimum 3 years", "at least 5 years"
-  for (const m of text.matchAll(/(?:minimum|at least|min\.?)\s*(?:of\s*)?(\d{1,2})\s*\+?\s*(?:years?|yrs?)\b/gi)) add(m[1]);
+  for (const m of text.matchAll(/(?:minimum|at least|min\.?)\s*(?:of\s*)?(?<!\d\s*(?:[-–—]|to)\s*)(\d{1,2})\s*\+?\s*(?:years?|yrs?)\b/gi)) add(m[1]);
   // "5+ years in Application Security", "7+ years designing…", "5 or more years in security", "5-8 years development":
   // a plus, a range or "or more" followed by the work itself. Never a company's own history ("20+ years in business").
   for (const m of text.matchAll(
-    /(\d{1,2})\s*(?:\+|plus|(?:[-–]|to)\s*\d{1,2}\s*\+?|or more)\s*(?:years?|yrs?)\b(?!\s+(?:of\s+)?(?:history|existence|business|operations?|legacy|trust|excellence|service|innovation|growth|ago|old|warranty|in business|in the market|in the industry serving))\s+(?:in|as|with|designing|building|developing|working|writing|professional|hands-on|coding|programming|development|engineering|industry|relevant|of\s+(?:professional|relevant|hands-on|industry|software|coding|programming|development|engineering|work))\b/gi,
+    /(?<!\d\s*(?:[-–—]|to)\s*)(\d{1,2})\s*(?:\+|plus|(?:[-–—]|to)\s*\d{1,2}\s*\+?|or more)\s*(?:years?|yrs?)\b(?!\s+(?:of\s+)?(?:history|existence|business|operations?|legacy|trust|excellence|service|innovation|growth|ago|old|warranty|in business|in the market|in the industry serving))\s+(?:in|as|with|designing|building|developing|working|writing|professional|hands-on|coding|programming|development|engineering|industry|relevant|of\s+(?:professional|relevant|hands-on|industry|software|coding|programming|development|engineering|work))\b/gi,
   ))
     add(m[1]);
   // "Experience: 1-5", "Experience required: 3+"
-  for (const m of text.matchAll(/experience(?:\s+required)?\s*[:\-–]\s*(\d{1,2})\s*(?:\+|(?:[-–]|to)\s*\d{1,2})/gi)) add(m[1]);
+  for (const m of text.matchAll(/experience(?:\s+required)?\s*[:\-–—]\s*(\d{1,2})\s*(?:\+|(?:[-–—]|to)\s*\d{1,2})/gi)) add(m[1]);
   const fromText = found.length ? Math.max(...found) : null;
   if (fromTitle == null) return fromText;
   if (fromText == null) return fromTitle;
