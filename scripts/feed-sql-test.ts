@@ -11,7 +11,7 @@ import { companyKey, feedHistory, loadRules, roleKey } from "../src/modules/gove
 import { candidateShows, companyResultsById, fitJobs, fitOn, judge, judgeJobs, listFeed, parseFeedFilters, profileVector, scoreJob, tracksOf } from "../src/modules/jobs";
 import { briefOf } from "../src/modules/profile/brief";
 import { jobGate, readingGateOn } from "../src/modules/jobs/gate";
-import { applyFeedFloor, dedupeListings, feedRows, feedTracks, levelsFor, yearsBand } from "../src/modules/jobs/match";
+import { applyFeedFloor, dedupeListings, feedFloor, feedRows, feedTracks, levelsFor, yearsBand, yearsReach } from "../src/modules/jobs/match";
 
 let failed = 0;
 function check(name: string, ok: boolean, detail = "") {
@@ -91,7 +91,7 @@ async function referenceFeed(userId: string) {
     db.job.findMany({
       // India and remote-from-India by default (T80).
       where: { source: { in: sources }, eligibility: { in: ["india", "remote_india"] }, ...(shown ? { track: { in: shown } } : {}),
-        AND: [{ OR: [{ experienceMin: null }, { experienceMin: { lte: yearsBand(years) } }] }, { OR: [{ seniority: null }, { seniority: { in: levelsFor(years) } }] }],
+        AND: [{ OR: [{ experienceMin: null }, { experienceMin: { lte: yearsReach(years) } }] }, { OR: [{ seniority: null }, { seniority: { in: levelsFor(years) } }] }],
         postedAt: { gte: new Date(Date.now() - filters.days * 864e5) }, closedAt: null, id: { notIn: swipes.map((s) => s.jobId) } },
       include: { company: { select: { name: true } } },
       orderBy: { id: "asc" }, // the same order feedRows reads, so ties break the same way
@@ -125,7 +125,11 @@ async function referenceFeed(userId: string) {
         ? await fitJobs({ userId, profileId: profile.id, brief: briefOf(profile), shows, years }, shortlist.map((job) => job.id), { judge: limit <= 150, lane: "interactive" })
         : await judgeJobs(profile, shortlist);
     scored = scoreAll();
-    if (scored.length >= 40 || limit >= closest.length || limit >= 450) break;
+    // As the feed (scoreFeed): with the floor, only cards that will show count toward 40 (23 Nov: with a larger pool the
+    // reference stopped a step early, counting every scored card, and judged fewer jobs than the feed).
+    const floor = feedFloor();
+    const showing = floor > 0 ? scored.filter((job) => job.mock || job.score >= floor).length : scored.length;
+    if (showing >= 40 || limit >= closest.length || limit >= 450) break;
   }
   function scoreAll() {
     return jobs

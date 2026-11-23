@@ -256,6 +256,16 @@ export function yearsBand(years: number | null | undefined) {
   return Math.max(1, Math.floor(years ?? 0));
 }
 
+/**
+ * The most years a job may ASK for and still show: one year past the band (owner, 23 Nov). With the band alone a 1-year
+ * candidate lost every "2 years" AI and software role closest to his resume (Nitin: 35 close jobs past the rules, 68
+ * with one year more; scripts/feed-gates-report.ts). The stated level stays strict (levelAllowed: no SDE II for 0-1
+ * years), and the score still counts the gap (experience part, the stretch tier).
+ */
+export function yearsReach(years: number | null | undefined) {
+  return yearsBand(years) + 1;
+}
+
 // The years a stated level needs (functions.ts seniorityOf; tagging.ts titleYears reads the same titles as II ≈ 2,
 // Senior ≈ 5, lead or manager ≈ 6). Interns are not shown from 3 years, entry roles not from 5.
 const LEVEL_MIN_YEARS: Record<string, number> = { intern: 0, entry: 0, mid: 2, senior: 5, staff: 6, manager: 6 };
@@ -289,7 +299,7 @@ export function feedTracks(tracks: string[], nearby = false): string[] | null {
 
 /** Why a job fails the years or level gate for this candidate, or null when it passes. */
 export function bandMiss(job: { requiredYears: number | null; seniority: string | null }, years: number | null | undefined) {
-  const band = yearsBand(years);
+  const band = yearsReach(years);
   if (job.requiredYears != null && job.requiredYears > band) return `They want about ${job.requiredYears}+ years; you have ${years ?? 0}`;
   if (!levelAllowed(job.seniority, years)) return job.seniority === "intern" || job.seniority === "entry" ? "An entry-level role, below your experience" : `A ${job.seniority} role, above your experience`;
   return null;
@@ -895,7 +905,7 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
       stages: filters.stages.length > 0 ? filters.stages : null,
       // The eval's own gate replaces the SQL track filter; it is applied to the rows below.
       tracks: evaluation?.gate ? null : shown,
-      band: { maxYears: yearsBand(years), levels: levelsFor(years) },
+      band: { maxYears: yearsReach(years), levels: levelsFor(years) },
       vector,
       cutoff,
       expMax: filters.expMax,
