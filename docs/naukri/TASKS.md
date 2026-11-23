@@ -61,10 +61,10 @@ Design: [13.11 Decision](TDD.md#1311-decision-owner-23-nov-2026-the-myjobb-way) 
 **Done when:** V1–V7 each have a measured answer with numbers in this entry's Done line, §13.2's assumed page weight is replaced by the measurement, and the owner has answered §13.15 items 1, 2 and 4 from them.
 
 <a id="k7"></a>
-### [ ] K7 — A residential proxy per user
-Do: `EgressProxy` model and migration (one per connected user: provider, sticky session key, city, released on Disconnect and account delete); provider credentials in env (ARCHITECTURE §11); `browser.ts` opens a Naukri context through the user's proxy, and a small HTTP client under `modules/apply/sites` does the same for request-level calls; nothing for Naukri leaves a worker's own address (a run without a proxy fails closed); per-user proxy bytes counted on `SourceRun` and the application's events.
+### [~] K7 — A residential proxy per user
+Do: one sticky session per user, named by an HMAC of site and user id (no table: the provider keys stickiness on the name; a table only if V1 needs addresses held for months); provider credentials in env (ARCHITECTURE §11); `browser.ts` opens a Naukri context through the user's proxy, and a small HTTP client under `modules/apply/sites` does the same for request-level calls; nothing for Naukri leaves a worker's own address (a run without a proxy fails closed); per-user proxy bytes counted on `SourceRun` and the application's events.
 Design: [13.12 Architecture](TDD.md#1312-architecture-connect-keep-alive-run) (Egress) · [13.11 Decision](TDD.md#1311-decision-owner-23-nov-2026-the-myjobb-way) item 3.
-**Done when:** `scripts/naukri-egress-test.ts` PASS (two users get different addresses, the same user keeps theirs across runs, a Naukri request with no proxy is refused before it leaves, Disconnect releases it); the owner's ingest run goes out through the owner's proxy with bytes recorded; typecheck and lint pass.
+**Done when:** `scripts/naukri-egress-test.ts` PASS (two users get different addresses, the same user keeps theirs across runs, a Naukri request with no proxy is refused before it leaves); the owner's ingest run goes out through the owner's proxy with bytes recorded; typecheck and lint pass.
 
 <a id="k8"></a>
 ### [ ] K8 — Streamed Naukri sign-in on the phone

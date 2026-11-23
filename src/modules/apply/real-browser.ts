@@ -17,7 +17,8 @@
  */
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { type ChildProcess, spawn } from "child_process";
-import { appendFileSync } from "fs";
+import { appendFileSync, existsSync, mkdtempSync, rmSync } from "fs";
+import { tmpdir } from "os";
 import path from "path";
 
 export interface StealthyBrowserSession {
@@ -67,6 +68,8 @@ export class StealthyBrowserManager {
   private browser: Browser | null = null;
   private endpoint: string | null = null;
   private buffer = "";
+  // A proxied launch's own working folder (SeleniumBase writes the proxy's sign-in extension there), removed on close.
+  private workDir: string | null = null;
   // Replies to commands arrive in order, one line each; each waiter takes the next "OK"/"ERR" line.
   private waiters: ((line: string) => void)[] = [];
 
@@ -104,7 +107,7 @@ export class StealthyBrowserManager {
   }
 
   /** Starts Chrome through SeleniumBase on the url and resolves with the DevTools endpoint once the page is open. */
-  async launch(url = "about:blank", userDataDir?: string): Promise<{ cdpEndpoint: string; cleanup: () => Promise<void> }> {
+  async launch(url = "about:blank", userDataDir?: string, proxy?: string): Promise<{ cdpEndpoint: string; cleanup: () => Promise<void> }> {
     const python = process.env.STEALTHY_PYTHON || "python";
     const readyMs = Number(process.env.STEALTHY_READY_MS) || 90_000;
     const args = [LAUNCHER];
@@ -112,7 +115,16 @@ export class StealthyBrowserManager {
     if (userDataDir) args.push("--profile", userDataDir);
     args.push(url);
     record(`#${this.id} launching SeleniumBase CDP mode${this.cdpPort ? ` on port ${this.cdpPort}` : ""}`);
-    const child = spawn(python, args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true, env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUNBUFFERED: "1" } });
+    // A signed-in site's proxy (modules/sources/egress.ts) goes in the launcher's environment, never its arguments, so the
+    // password is not in the process list.
+    const env: NodeJS.ProcessEnv = { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUNBUFFERED: "1" };
+    if (proxy) env.STEALTHY_PROXY = proxy;
+    else delete env.STEALTHY_PROXY;
+    // SeleniumBase writes an authenticated proxy as an extension under its working folder (downloaded_files/proxy_ext_dir),
+    // the password in it: each proxied launch gets a fresh folder of its own, so two users' runs never share that file,
+    // and it is deleted when this Chrome closes (cleanup).
+    if (proxy) this.workDir = mkdtempSync(path.join(tmpdir(), "stealthy-"));
+    const child = spawn(python, args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true, env, ...(this.workDir ? { cwd: this.workDir } : {}) });
     this.process = child;
 
     const ready = new Promise<void>((resolve, reject) => {
@@ -230,6 +242,20 @@ export class StealthyBrowserManager {
         }
       }
     }
+    // 4. A proxied launch's folder, with the proxy's password in it (Chrome may hold it a moment after exit on Windows).
+    const workDir = this.workDir;
+    this.workDir = null;
+    if (workDir) {
+      for (let tries = 0; tries < 5; tries += 1) {
+        try {
+          rmSync(workDir, { recursive: true, force: true });
+          break;
+        } catch {
+          await wait(1000);
+        }
+      }
+      if (existsSync(workDir)) record(`#${this.id} could not remove ${workDir}`);
+    }
   }
 
   /** Stealth mode is the default; STEALTHY_BROWSER=0 (or false) turns it off. */
@@ -263,7 +289,7 @@ export async function closeAllStealthyBrowsers() {
  * reason logged) when stealth mode is off or anything fails, so the caller decides (browser.ts: retry, or the Playwright
  * browser with STEALTHY_FALLBACK=1).
  */
-export async function openStealthyBrowser(url: string, owner: string, options: { savedState?: SavedBrowserState } = {}): Promise<StealthyBrowserSession | null> {
+export async function openStealthyBrowser(url: string, owner: string, options: { savedState?: SavedBrowserState; proxy?: string; proxyLabel?: string } = {}): Promise<StealthyBrowserSession | null> {
   if (!StealthyBrowserManager.isEnabled()) return null;
 
   const manager = getStealthyBrowserManager();
@@ -273,7 +299,8 @@ export async function openStealthyBrowser(url: string, owner: string, options: {
   };
   try {
     // Chrome starts on a blank tab so the owner's saved cookies are in place before the form loads.
-    const { cdpEndpoint } = await manager.launch("about:blank");
+    const { cdpEndpoint } = await manager.launch("about:blank", undefined, options.proxy);
+    if (options.proxyLabel) record(`#${manager.id} through ${options.proxyLabel}`);
     const browser = await manager.connectToStealthyBrowser(cdpEndpoint);
     const context = browser.contexts()[0] ?? (await browser.newContext());
     if (options.savedState?.cookies.length) {

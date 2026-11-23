@@ -60,10 +60,19 @@ def serve(sb, endpoint):
             say("ERR %s %s" % (command, str(error).replace("\n", " ")[:300]))
 
 
+def proxy_from_env():
+    """A signed-in site's proxy (src/modules/sources/egress.ts), from the environment so it is never in argv."""
+    import os
+
+    return os.environ.get("STEALTHY_PROXY", "").strip()
+
+
 def run_pure_cdp(args):
     from seleniumbase import sb_cdp
 
     kwargs = dict(headed=True, lang="en-US")
+    if proxy_from_env():
+        kwargs["proxy"] = proxy_from_env()
     if args.port:
         kwargs["port"] = args.port
     if args.profile:
@@ -86,6 +95,8 @@ def run_uc_mode(args):
         say("ERR this SeleniumBase has no sb_cdp; pass --port")
         sys.exit(2)
     kwargs = dict(uc=True, headed=True, test=False, chromium_arg="--remote-debugging-port=%d" % args.port)
+    if proxy_from_env():
+        kwargs["proxy"] = proxy_from_env()
     if args.profile:
         kwargs["user_data_dir"] = args.profile
     with SB(**kwargs) as sb:

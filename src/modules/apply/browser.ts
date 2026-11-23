@@ -4,6 +4,7 @@ import { chromium, type Browser, type BrowserContext, type Page } from "playwrig
 import { z } from "zod";
 import { seal, unseal } from "@/lib/sealed";
 import { storage } from "@/lib/storage";
+import { egressFor, EgressRefused } from "@/modules/sources/egress";
 import { onSiteDomain, siteStateKey, type Site } from "@/modules/sources/sites";
 import { NoRetryError } from "./adapter";
 import { openStealthyBrowser, stealthEnabled } from "./real-browser";
@@ -189,13 +190,24 @@ export async function openBrowser(
   const site = options.site;
   const stateKey = site ? siteStateKey(owner, site) : stateKeyFor(owner);
   const savedState = options.fresh ? undefined : await loadState(stateKey, site);
+  // A signed-in site leaves only from the user's own residential proxy (K7, docs/naukri/TDD.md 13.12): none configured,
+  // nothing opens. Every other run goes direct.
+  let egress: ReturnType<typeof egressFor> = null;
+  if (site) {
+    try {
+      egress = egressFor(owner, site);
+    } catch (error) {
+      if (error instanceof EgressRefused) throw new NoRetryError(error.message);
+      throw error;
+    }
+  }
 
   // The stealthy Chrome (real-browser.ts) is the default for every kind of run (main, handoff, window, a signed-in site)
   // since 17 Nov: Workable's Turnstile, Ashby's spam check and the rest see a person's Chrome. Each launch is a fresh
   // Chrome with no profile folder, so only the cookies passed here are in it. The Playwright browser below runs only
   // with STEALTHY_BROWSER=0 (stealth off) or STEALTHY_FALLBACK=1 (allowed when the stealthy Chrome cannot start).
   if (stealthEnabled()) {
-    const stealthy = await openStealthyBrowser(url, owner, { savedState });
+    const stealthy = await openStealthyBrowser(url, owner, { savedState, proxy: egress?.seleniumProxy, proxyLabel: egress?.label });
     if (stealthy) {
       let closed = false;
       const save = () => (closed ? Promise.resolve(false) : saveState(stealthy.context, stateKey, owner, site));
@@ -237,7 +249,8 @@ export async function openBrowser(
       const browser = await entry.browser;
       // A visible window takes the screen's size; headless (no screen) keeps the fixed page every form was tried at.
       const viewport = kind === "handoff" && canShowWindow() ? null : { width: 1280, height: 800 };
-      context = await browser.newContext({ viewport, ...(savedState ? { storageState: savedState } : {}) });
+      const proxy = egress ? { server: egress.server, username: egress.username, password: egress.password } : undefined;
+      context = await browser.newContext({ viewport, ...(savedState ? { storageState: savedState } : {}), ...(proxy ? { proxy } : {}) });
     } catch (error) {
       // The shared browser died between runs: launch a new one once.
       if (tries > 0 || !/has been closed|disconnected|crashed|Target closed/i.test(String(error))) throw error;
