@@ -27,6 +27,7 @@ import { JobCard } from "@/components/patterns/job-card";
 import { StackCount, SwipeStage } from "@/components/patterns/swipe-stage";
 import { AgentToast } from "@/components/patterns/agent-toast";
 import { AgentStatus } from "@/components/patterns/agent-status";
+import { EmployerAccounts } from "@/app/(app)/account/employer-accounts";
 import { AnimatePresence } from "framer-motion";
 import { SentToast } from "@/components/sent-celebration";
 import type { SentNews } from "@/components/applications-summary";
@@ -405,6 +406,17 @@ function Patterns() {
         <Section title="Drawings">
           <SignInArt />
           <ResumeSketch band={2} />
+        </Section>
+        <Section title="Employer accounts">
+          <EmployerAccounts passwordSet={false} accounts={[]} />
+          <EmployerAccounts
+            passwordSet
+            accounts={[
+              { id: "a", system: "workday", employer: "cotality", state: "active", createdDays: 0 },
+              { id: "b", system: "workday", employer: "bristolmyerssquibb", state: "needs_verification", createdDays: 1 },
+              { id: "c", system: "workday", employer: "otis", state: "exists_elsewhere", createdDays: 4 },
+            ]}
+          />
         </Section>
         <Section title="Sticky footer">
           <div className="-mx-6"><StickyFooter><Button variant="primary" size="xl" className="w-full">Looks right</Button></StickyFooter></div>

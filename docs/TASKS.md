@@ -299,10 +299,10 @@ Design: [docs/onboarding/TDD.md](onboarding/TDD.md). Tasks: [docs/onboarding/TAS
 
 Design: [docs/accounts/TDD.md](accounts/TDD.md) (v1, 21 Nov; replaces M5, M6, M8, M10, M15 for applying; decisions to close in its section 11). Tasks: [docs/accounts/TASKS.md](accounts/TASKS.md). Order U1 → U4, then U5 → U6, then U7; U8 only on numbers.
 
-- [ ] [U1 — Vault, application password, permission](accounts/TASKS.md#u1)
-- [ ] [U2 — The account step and a mock account board](accounts/TASKS.md#u2)
+- [~] [U1 — Vault, application password, permission](accounts/TASKS.md#u1)
+- [~] [U2 — The account step and a mock account board](accounts/TASKS.md#u2)
 - [ ] [U3 — Workday jobs fresh again](accounts/TASKS.md#u3)
-- [ ] [U4 — Workday apply](accounts/TASKS.md#u4)
+- [~] [U4 — Workday apply](accounts/TASKS.md#u4)
 - [ ] [U5 — Darwinbox reader](accounts/TASKS.md#u5)
 - [ ] [U6 — Darwinbox apply](accounts/TASKS.md#u6)
 - [ ] [U7 — SuccessFactors](accounts/TASKS.md#u7)

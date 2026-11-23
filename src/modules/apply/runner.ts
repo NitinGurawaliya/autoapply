@@ -4,9 +4,9 @@ import { db } from "@/lib/db";
 import { enqueueApply, HANDOFF_BOARDS, PERSON_HANDOFF } from "@/lib/queue";
 import { storage } from "@/lib/storage";
 import { notifyNeedsInput } from "@/lib/notify";
-import { ONE_TIME_CODE_KEY, upsert } from "@/modules/answers";
+import { EMPLOYER_VERIFIED_KEY, ONE_TIME_CODE_KEY, upsert } from "@/modules/answers";
 import { check, loadRules, writeEvent } from "@/modules/governance";
-import { BotCheckError, CaptchaRejectedError, MaybeSentError, NeedsAnswerError, NoRetryError, RefusedError, type FilledField, type PendingQuestion, type ResolvedValue } from "./adapter";
+import { AccountVerificationError, BotCheckError, CaptchaRejectedError, MaybeSentError, NeedsAnswerError, NoRetryError, RefusedError, type FilledField, type PendingQuestion, type ResolvedValue } from "./adapter";
 import { isLetterFile, LETTER_FILE, letterPdf } from "./letter";
 import { guessable, guessAnswers } from "./guess";
 import { decideAfterError, rerunsInRow, SUBMIT_ATTEMPT } from "./outcome";
@@ -300,6 +300,24 @@ async function execute(applicationId: string, options: { person?: boolean }) {
     await stopIfCancelled();
     // A handoff window is the person's from the moment it opens: a Submit pressed before the agent is ready still counts.
     if (handoff) stopWatchingSubmit = adapter.watchSubmit?.(session.page, () => void markAttempted());
+    // Boards that need an employer account (Phase U): sign in, or create the account, before the form is read.
+    if (adapter.prepare) {
+      const owner = await db.user.findUnique({ where: { id: application.userId }, select: { email: true } });
+      await adapter.prepare(session.page, {
+        userId: application.userId,
+        email: owner?.email ?? "",
+        company: job.company.name,
+        requestCode: codeRequester(applicationId),
+        announceHandoff: async (message) => {
+          await writeEvent(applicationId, "ask_user", message);
+          void sendPush(application.userId, { title: "SwipeApply needs you at your computer", body: message, url: `/applications/${applicationId}`, tag: `handoff-${applicationId}` }).catch(() => undefined);
+        },
+        log: async (type, message) => {
+          await writeEvent(applicationId, type, message);
+        },
+      });
+      await stopIfCancelled();
+    }
     const fields = await adapter.inspect(session.page);
     await stopIfCancelled();
     await writeEvent(applicationId, "inspect", `Found ${fields.length} fields`);
@@ -389,6 +407,13 @@ async function execute(applicationId: string, options: { person?: boolean }) {
         await writeEvent(applicationId, "ask_user", `Need ${next.pending.length} answers (next page)`);
         void notifyNeedsInput(applicationId, "answers");
         return;
+      }
+      // A resume asked for on a later page (Workday's My Experience, Phase U): uploaded first, as on the first page, when
+      // the first page had none.
+      const laterResume = !resume && !upload.cleanup ? next.values.find((value) => value.type === "file" && !isLetterFile(value)) : undefined;
+      if (laterResume) {
+        upload.cleanup = adapter.uploadFile ? await adapter.uploadFile(session.page, laterResume, resumeFile.bytes) : await uploadResume(session.page, laterResume, resumeFile.bytes);
+        filled.push({ key: laterResume.key, label: laterResume.label, value: laterResume.fileName ?? "resume.pdf", source: laterResume.source, selector: laterResume.selector });
       }
       filled.push(...(await adapter.fill(session.page, next.values.filter((value) => value.type !== "file"))));
       filled.push(...(await attachLetters(next.values)));
@@ -491,6 +516,18 @@ async function execute(applicationId: string, options: { person?: boolean }) {
         await writeEvent(applicationId, "submit", `Application submitted. Confirmation: ${evidence} after you pressed Submit`.slice(0, 300));
         return;
       }
+    }
+    // Phase U: the employer wants the user to verify their email before the account can be used. Nothing was sent; the
+    // card's Done (answers route, EMPLOYER_VERIFIED_KEY) runs the application again, which signs in.
+    if (error instanceof AccountVerificationError && !attempted) {
+      await setApp(applicationId, {
+        status: "needs_input",
+        attempt: application.attempt,
+        pendingQuestions: [{ key: EMPLOYER_VERIFIED_KEY, label: error.message, type: "select", options: ["Done"], required: true }] as Prisma.InputJsonValue,
+      });
+      await writeEvent(applicationId, "ask_user", `Verify your email for ${error.company}`);
+      void notifyNeedsInput(applicationId, "answers");
+      return;
     }
     if (error instanceof CaptchaRejectedError) {
       const retries = await db.applicationEvent.findMany({ where: { applicationId, type: "retry" }, orderBy: { createdAt: "desc" }, select: { message: true } });

@@ -66,8 +66,30 @@ export type SubmitContext = {
   markAttempted?(): void | Promise<void>;
 };
 
+/**
+ * Phase U (docs/accounts/TDD.md 4.5): what an account board's `prepare` gets before the form is read. The account step
+ * (accountStep.ts) uses it to sign in, or create the account, with the user's own email and application password.
+ */
+export type PrepareContext = {
+  userId: string;
+  email: string;
+  company: string;
+  /** Ask the user for a code the employer emailed them (the needs-you code sheet; the browser is held up to 10 min). */
+  requestCode(prompt: string): Promise<string | null>;
+  /** A person finishes a step in the window (a check that stopped the worker's click, an account we cannot sign in to). */
+  announceHandoff?(message: string): Promise<void>;
+  /** An event on the application's story (never with a password in it). */
+  log(type: string, message: string): Promise<void>;
+};
+
 export interface AtsAdapter {
-  source: "greenhouse" | "lever" | "ashby" | "keka" | "workable" | "zohorecruit" | "smartrecruiters" | "mock";
+  source: "greenhouse" | "lever" | "ashby" | "keka" | "workable" | "zohorecruit" | "smartrecruiters" | "workday" | "mock";
+  /**
+   * Boards that need an employer account (Workday, Phase U): runs after the form page opens and before `inspect`, and
+   * leaves the page on the form's first step, signed in. Throws AccountVerificationError when the user must verify
+   * their email first, AccountError when the account cannot be used.
+   */
+  prepare?(page: Page, ctx: PrepareContext): Promise<void>;
   /**
    * Fills and submits in the same real Chrome window as a handoff (visible where the worker has a screen, headless
    * where it has none), with the worker pressing Submit itself (25 Oct: Greenhouse, as Ashby).
@@ -146,3 +168,16 @@ export class CaptchaRejectedError extends RefusedError {}
  * at a worker with a screen (runner.ts; the queue job's `person`, lib/queue.ts).
  */
 export class BotCheckError extends NotSentError {}
+
+/**
+ * Phase U: the employer sent the user an email to verify the account we just created (or a sign-in says it is not
+ * verified yet). Nothing was sent; the run ends needs_input with a card, and the user's "Done" runs it again.
+ */
+export class AccountVerificationError extends Error {
+  constructor(public company: string, public email: string) {
+    super(`Verify your email for ${company}: open the email ${company} sent to ${email}, click its link, then press Done`);
+  }
+}
+
+/** Phase U: the employer account cannot be used (a refused password, a sign-up refused). Nothing was sent; not retried. */
+export class AccountError extends NoRetryError {}

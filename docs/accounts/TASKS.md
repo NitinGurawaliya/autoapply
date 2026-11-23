@@ -3,7 +3,7 @@
 Design: [docs/accounts/TDD.md](TDD.md). Order U1 → U2 → U3 → U4, then U5 → U6, then U7. U8 only on numbers. Replaces Phase M's M5, M6, M8, M10 and M15 for applying.
 
 <a id="u1"></a>
-### [ ] U1 — Vault, application password, permission
+### [~] U1 — Vault, application password, permission
 Do:
 - `EmployerAccount` model, `User.applicationSecret` / `applicationSecretSetAt`, migration `employer_accounts` (applied with `migrate deploy`, never `migrate dev` against Neon).
 - `src/modules/accounts/{index,vault,rules}.ts`: AES-256-GCM with `ACCOUNTS_KEY`; the rule (12+, upper, lower, digit, symbol); `accountFor`, `recordAccount`, state changes; the only module that decrypts.
@@ -17,7 +17,7 @@ Design: [4.1](TDD.md#41-components) · [4.3](TDD.md#43-data-model) · [4.8](TDD.
 - Typecheck and lint pass.
 
 <a id="u2"></a>
-### [ ] U2 — The account step and a mock account board
+### [~] U2 — The account step and a mock account board
 Do:
 - `src/modules/apply/accountStep.ts`: sign in, create, verify card, code through `requestCode`, `exists_elsewhere` handoff, password fields masked before any screenshot, events `account_created`, `account_signin`, `account_verify_asked`, `account_failed`.
 - The swipe gate: an account board needs the password set and `create_employer_accounts` = Yes; the permission sheet in the feed.
@@ -42,7 +42,7 @@ Design: [3.3](TDD.md#33-fresh-workday-jobs) · [2 fact 3](TDD.md#2-facts-the-des
 - Typecheck and lint pass.
 
 <a id="u4"></a>
-### [ ] U4 — Workday apply
+### [~] U4 — Workday apply
 Do: first read the open-source Workday code (boards/TDD §12) and note what to port, credited.
 - `adapters/workday.ts`: Apply Manually; `accountStep`; My Information, My Experience (resume upload, work and education rows from the resume), Application Questions, Voluntary Disclosures ("I do not wish to answer"), Self Identify ("I do not want to answer"), Review; the decoy field never filled; Submit; Workday's confirmation or refusal.
 - Hosts in `apply/urls.ts`; Workday into `APPLY_BOARDS` only after the checks below.
