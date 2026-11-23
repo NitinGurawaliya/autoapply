@@ -3,7 +3,7 @@
 // (modules/apply/board-reader.ts), the way past Cloudflare's refusal of this server's reads since 17 Nov. One Chrome,
 // one company at a time, recorded as one IngestRun; each company's tier and next read are recorded as in tick mode.
 // Needs a screen (the Chrome is a visible window) and Python with seleniumbase (docs/STEALTHY-BROWSER.md).
-//   npx tsx scripts/ingest-workday-browser.ts [--all] [--added-by import] [--slug nvidia.wd5/NVIDIAExternalCareerSite] [--limit 500] [--days 60]
+//   npx tsx scripts/ingest-workday-browser.ts [--all] [--added-by import] [--slug nvidia.wd5/NVIDIAExternalCareerSite[,other…]] [--limit 500] [--days 60]
 //     [--file workday.csv] [--shard 0/2] [--skip-read-since 2026-11-23T16:40:00Z]
 //   Default: the active Workday companies due now, most overdue first. --all: every active one. --file: the companies
 //   of a career-site CSV (scripts/import-workday-companies.ts), due or not. --shard k/n: every n-th company from the
@@ -40,7 +40,8 @@ async function main() {
       source: "workday",
       active: true,
       ...(addedBy ? { addedBy } : {}),
-      ...(slug ? { slug } : {}),
+      // One slug, or several comma-separated (a retry of the companies that failed).
+      ...(slug ? { slug: { in: slug.split(",").map((part) => part.trim()).filter(Boolean) } } : {}),
       ...(slugs ? { slug: { in: slugs, mode: "insensitive" as const } } : {}),
       ...(all || slug || slugs ? {} : { nextFetchAt: { lte: new Date() } }),
       // Not read since, or read with an error (spelled out: a NOT over nullable columns drops the never-read rows).

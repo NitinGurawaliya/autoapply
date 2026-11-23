@@ -378,12 +378,17 @@ async function fillOne(page: Page, value: ResolvedValue) {
       const input = block.locator('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([data-automation-id="beecatcher"])').first();
       // Workday asks the country code in its own box (Country Phone Code): the number goes in without it.
       // Workday checks a LinkedIn address as https://www.linkedin.com/... (23 Nov: "Invalid LinkedIn URL" without www).
+      // An address never holds a dash look-alike: 24 Nov, Nitin's LinkedIn slug had an en dash from his resume's PDF
+      // ("…/in/name–x/") and Workday answered "Invalid LinkedIn URL"; the hyphen is what the address has.
+      const url = (text: string) => text.trim().replace(/[‐-―−]/g, "-");
       const text =
         value.key === "phone"
           ? value.value.replace(/^\s*\+\d{1,3}[\s-]*/, "").replace(/[\s-]/g, "")
           : /linkedin\.com/i.test(value.value)
-            ? value.value.trim().replace(/^(https?:\/\/)?(www\.)?linkedin\.com/i, "https://www.linkedin.com")
-            : isNameField(value)
+            ? url(value.value).replace(/^(https?:\/\/)?(www\.)?linkedin\.com/i, "https://www.linkedin.com")
+            : /^\s*https?:\/\//i.test(value.value)
+              ? url(value.value)
+              : isNameField(value)
               ? nameCase(value.value)
               : value.value;
       await typeInto(input, text);
