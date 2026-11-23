@@ -11,7 +11,7 @@ import { companyKey, feedHistory, loadRules, roleKey } from "../src/modules/gove
 import { candidateShows, companyResultsById, fitJobs, fitOn, judge, judgeJobs, listFeed, parseFeedFilters, profileVector, scoreJob, tracksOf } from "../src/modules/jobs";
 import { briefOf } from "../src/modules/profile/brief";
 import { jobGate, readingGateOn } from "../src/modules/jobs/gate";
-import { applyFeedFloor, dedupeListings, feedFloor, feedRows, feedTracks, levelsFor, yearsBand, yearsReach } from "../src/modules/jobs/match";
+import { applyFeedFloor, dedupeListings, feedFloor, feedRows, feedTracks, levelsFor, yearsReach } from "../src/modules/jobs/match";
 
 let failed = 0;
 function check(name: string, ok: boolean, detail = "") {
