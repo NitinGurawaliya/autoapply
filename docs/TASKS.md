@@ -294,3 +294,18 @@ Design: [docs/onboarding/TDD.md](onboarding/TDD.md). Tasks: [docs/onboarding/TAS
 - [x] [S2 — One profile screen with the few answers every form needs](onboarding/TASKS.md#s2)
 - [x] [S3 — No "needs answers" line before the first swipe](onboarding/TASKS.md#s3)
 - [x] [S4 — The new onboarding, end to end](onboarding/TASKS.md#s4)
+
+## Phase U — Share links: from a LinkedIn or X post to a sent application (owner, 22 Nov)
+
+Design: [docs/share/TDD.md](share/TDD.md). Tasks: [docs/share/TASKS.md](share/TASKS.md), in build order, behind `SHARE_LINKS` until U10.
+
+- [~] [U1 — The share screens, drawn for approval](share/TASKS.md#u1)
+- [x] [U2 — The public job page](share/TASKS.md#u2)
+- [x] [U3 — The preview card](share/TASKS.md#u3)
+- [x] [U4 — Apply carries the job through Google and onboarding](share/TASKS.md#u4)
+- [x] [U5 — The claim and the landing](share/TASKS.md#u5)
+- [x] [U6 — Similar jobs instead of a dead end](share/TASKS.md#u6)
+- [x] [U7 — The funnel, counted](share/TASKS.md#u7)
+- [~] [U8 — In-app browsers](share/TASKS.md#u8)
+- [x] [U9 — Sharing a job from the app](share/TASKS.md#u9)
+- [~] [U10 — End to end and switch-on](share/TASKS.md#u10)

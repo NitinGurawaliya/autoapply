@@ -19,6 +19,7 @@ import { resolveForm } from "./resolveForm";
 import { formUrlAllowed } from "./urls";
 import { LockStopped, withSubmitLock } from "./submitLock";
 import { sendPush } from "@/lib/push";
+import { trackSubmitted } from "@/lib/funnel";
 
 /** The user (or a queue clear) cancelled this application while it was running. */
 export class CancelledError extends Error {
@@ -466,6 +467,8 @@ async function execute(applicationId: string, options: { person?: boolean }) {
     });
     confirmedSent = true;
     await writeEvent(applicationId, "submit", `Application submitted. Confirmation: ${result.evidence}`.slice(0, 300));
+    // A share link's application (Phase U7): its funnel's last step. Never throws.
+    void trackSubmitted(applicationId);
     // The big moment reaches the user even with the app closed (in the app, components/sent-celebration.tsx shows it).
     void sendPush(application.userId, { title: `Sent to ${jobInfo.company}`, body: `Your agent sent your ${jobInfo.title} application.`, url: `/applications/${applicationId}`, tag: `app-${applicationId}` }).catch(() => undefined);
     const shown = livePage(page) ?? page;
@@ -489,6 +492,7 @@ async function execute(applicationId: string, options: { person?: boolean }) {
       if (evidence) {
         await recordAfterSubmit(applicationId, { status: "submitted", submittedAt: new Date(), pendingQuestions: [], error: null });
         await writeEvent(applicationId, "submit", `Application submitted. Confirmation: ${evidence} after you pressed Submit`.slice(0, 300));
+        void trackSubmitted(applicationId);
         return;
       }
     }

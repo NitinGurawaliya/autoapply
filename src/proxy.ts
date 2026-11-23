@@ -1,6 +1,8 @@
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { mockFormEnabled } from "@/lib/mock-gate";
+import { shareLinksEnabled } from "@/lib/share-gate";
+import { newVisitorId, VISITOR_COOKIE, VISITOR_MAX_AGE_S } from "@/lib/visitor";
 
 export default auth(async (req) => {
   const { pathname } = req.nextUrl;
@@ -8,6 +10,18 @@ export default auth(async (req) => {
   if (pathname.startsWith("/mock")) return mockFormEnabled() ? NextResponse.next() : new NextResponse("Not found", { status: 404 });
   // The UI gallery (src/app/dev/ui) holds no data and is a 404 in production: open it without signing in in development.
   if (pathname.startsWith("/dev/") && process.env.NODE_ENV !== "production") return NextResponse.next();
+  // Share links (Phase U): public for everyone, signed in or not, with or without a profile; a 404 while switched off.
+  if (pathname.startsWith("/j/")) {
+    if (!shareLinksEnabled()) return new NextResponse("Not found", { status: 404 });
+    if (req.cookies.get(VISITOR_COOKIE)) return NextResponse.next();
+    // The funnel's random visitor id (U7): set on the response, and on this request so the page already sees it.
+    const id = newVisitorId();
+    const headers = new Headers(req.headers);
+    headers.set("cookie", [req.headers.get("cookie"), `${VISITOR_COOKIE}=${id}`].filter(Boolean).join("; "));
+    const response = NextResponse.next({ request: { headers } });
+    response.cookies.set(VISITOR_COOKIE, id, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: VISITOR_MAX_AGE_S });
+    return response;
+  }
 
   const signedIn = Boolean(req.auth?.user?.id);
 

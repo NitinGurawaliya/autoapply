@@ -6,6 +6,7 @@ import { check, historyFor, loadRules, writeEvent } from "@/modules/governance";
 import { APPLY_BOARDS, candidateShows, fitJobs, fitOn, jobSimilarity, judgeJobs, profileVector, readingGateOn, scoreJob, tracksOf } from "@/modules/jobs";
 import { briefOf } from "@/modules/profile/brief";
 import { lastRunMaySendTwice } from "./outcome";
+import { trackSubmitted } from "@/lib/funnel";
 
 export const CANCELLABLE = ["queued", "inspecting", "filling", "needs_input"];
 export const RETRYABLE = ["failed", "cancelled"];
@@ -148,6 +149,7 @@ export async function resolveVerification(applicationId: string, userId: string,
     const exists = await db.application.findFirst({ where: { id: applicationId, userId }, select: { id: true } });
     return exists ? ("not_pending" as const) : ("not_found" as const);
   }
+  if (sent) await trackSubmitted(applicationId);
   await writeEvent(
     applicationId,
     sent ? "submit" : "error",

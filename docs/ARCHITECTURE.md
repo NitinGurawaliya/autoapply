@@ -50,6 +50,7 @@ swipeapply/
       (app)/account/page.tsx         # export / delete my data (6.12)
       mock/greenhouse/page.tsx
       mock/submissions/page.tsx      # stored mock payloads, including resume file name
+      j/[slug]/page.tsx              # share link (Phase U, 6.23): a public job page, behind SHARE_LINKS
       api/
         auth/[...nextauth]/route.ts
         profile/resume/route.ts        # POST pdf → storage → parse → Profile
@@ -218,6 +219,8 @@ model IngestRun { id String @id; startedAt DateTime @default(now()); finishedAt 
   companies Int; failed Int; fetched Int; created Int; updated Int; closed Int; deleted Int; createdEligible Int }
 ```
 
+`FunnelEvent` (Phase U7, migration `20261123120000_share_funnel`): the share-link funnel, one row per visitor, job and step (unique), `step` view | apply_tap | signed_in | resume_read | profile_saved | queued | blocked | landed | submitted, `visitorId` random (`sa_vid`), `userId` set once signed in (SET NULL on account deletion), `source` from `?s=`, `detail` the rule or the application id. No name, email, phone, resume text or IP.
+
 ## 5. Canonical answer keys (`modules/answers/keys.ts`)
 
 Identity: `first_name last_name full_name email phone city country linkedin github portfolio resume`
@@ -234,7 +237,7 @@ Each key: `{key, type, synonyms: RegExp[], default?, policy: deterministic | ban
 
 ### 6.1 Onboarding
 1. `POST /api/profile/resume`: upload → `storage.put(`resumes/${userId}/resume.pdf`)` → `pdf-parse` → `llm.callJson(profileSchema)` → upsert Profile → seed Answer rows (identity/work keys, `source=resume`).
-2. Profile screen (`/onboarding/confirm`, step 2 of 2; Phase S, 21 Nov): the upload goes straight there when the read ends. It edits Profile (`PUT /api/profile`), then, while any of the standing keys is unsaved, writes `current_ctc expected_ctc notice_period employment_type preferred_location citizenship accept_acknowledgements` (`PUT /api/answers`, `source=user`). Only expected CTC is typed: under a year of experience current CTC is `0` and notice `Immediate`; job type `Full-time`, place and citizenship from the resume's country; consents pre-ticked. Then a full load of `/feed`. `/` and `/sign-in` still go to `/feed` once a Profile exists; `/onboarding/confirm` stays reachable to correct the parse.
+2. Profile screen (`/onboarding/confirm`, step 2 of 2; Phase S, 21 Nov): the upload goes straight there when the read ends. It edits Profile (`PUT /api/profile`), then, while any of the standing keys is unsaved, writes `current_ctc expected_ctc notice_period employment_type preferred_location citizenship accept_acknowledgements` (`PUT /api/answers`, `source=user`). Only expected CTC is typed: under a year of experience current CTC is `0` and notice `Immediate`; job type `Full-time`, place and citizenship from the resume's country; consents pre-ticked. Then a full load of `/feed`. `/` and `/sign-in` still go to `/feed` once a Profile exists; `/onboarding/confirm` stays reachable to correct the parse. Arrived from a share link's Apply (6.23), both steps show the job's strip above the step and Save goes back to that job's page instead of `/feed`.
 3. Moving abroad and sponsorship are no longer asked up front: `modules/apply/abroad.ts` asks them on the first form outside the home country. `/onboarding/questions` stays reachable for an old link but is out of the flow. The feed's "needs answers" line waits for the first swipe (`components/gaps-link.tsx`).
 
 ### 6.2 Job ingest (worker job `ingest`, payload `{days}`)
@@ -287,6 +290,7 @@ Applications UI (built to `design/applications.html` and `design/detail.html`): 
 ### 6.4 Swipe → queue
 1. `POST /api/swipes {jobId, direction}`. Left → Swipe row. Right → `governance.check('swipe_right')` (daily cap, min score, profile exists) → Application `queued` → `queue.enqueueApply(applicationId)`.
 2. Client polls `GET /api/applications/:id` every 1.5 s (SSE later).
+3. A share link's Apply (6.23) is the same right swipe: `POST /api/share/claim` calls `swipeRight` through `modules/share claimShare`, so every rule applies unchanged.
 
 ### 6.5 Apply runner (worker handler, stateless, re-runnable)
 ```
@@ -490,6 +494,10 @@ Decision: SmartRecruiters' Easy Apply (`oneclick-ui`) is applied to like any boa
 - **DataDome.** On opening, a challenge waits 2 minutes for a person in the window, then hands the run over (`BotCheckError`); it is never solved by the agent. After Submit, a reply of 200 from `/application` is the proof; when nothing is sent, the message names the questions the form marks.
 - **Checks.** `scripts/ats-smoke.ts` (`--fill-pending`, `--draft-essays`) reads every page and blocks the application POST.
 
+### 6.23 Share links: a job from a LinkedIn or X post (Phase U, owner, 22 Nov)
+
+Design: `docs/share/TDD.md`. A job's public page is `/j/<company>-<title>-<id>` (`lib/job-slug.ts`): the text is for people, the trailing id is the key, and a request with other text is redirected (308) to today's path, keeping its query. `app/j/[slug]/page.tsx` sits outside the signed-in shell and reads the job through `modules/jobs/public.ts publicJob` (named public columns only, never `raw`, `questions`, `embedding` or any user's data; the reading's summary and requirement lines parsed with Zod). States: open on a board in `APPLY_BOARDS` (facts, "What they ask for", the description folded, Apply); closed; a board the agent can't use; not found (404). A signed-in user with a profile also sees their match (`modules/share shareMatchScore`: the feed's cached score, else `candidateScore`, the number a swipe checks), streamed in. Metadata: title, description, canonical, Open Graph and Twitter card with absolute URLs from `APP_URL`, `noindex` in this phase. The route has no `loading.tsx` on purpose: a route-level loading boundary starts the response before the page can answer 308 or 404. The proxy lets `/j/` through for everyone when `shareLinksEnabled()` (`lib/share-gate.ts`, `SHARE_LINKS`), else answers 404. Apply (U4): the page's server action `applyFromShare` sets the intent cookie `sa_intent` (`lib/share-intent.ts`: the job id only, httpOnly, SameSite=Lax, 2 h; set only by that POST, never by a view) and then, signed out, calls `signIn("google", { redirectTo: <the job's path> })`, so Google's account chooser opens with no sign-in page between; signed in without a profile, it goes to `/onboarding/resume`; with one, back to the job. The page itself sends a signed-in user without a profile whose intent is this job to `/onboarding/resume` (the return from Google). `modules/share intentJob` gives the onboarding pages the job: `components/patterns/share-job-strip.tsx` above each step, the resume step's line "Used for this job and every one after it.", and the confirm form's `next` (button "Save and apply", a full load of the job's path). Claim (U5): `POST /api/share/claim` (session; the job from the body, else `sa_intent`) runs `modules/share claimShare` = `swipeRight`; an already swiped job answers with its application (`already`), so a reload never applies twice; the intent is cleared in every outcome but a failed queue. Responses: 200 `{ applicationId, already }`, 403 `{ blocked, applicationId }`, 400 `profile_required` / `no_job`, 401, 404, 500 `queue_failed`. On the page (`share-claim.tsx`) a user with a profile claims on load when the intent is this job (back from Google or onboarding), else on the Apply tap; sent opens `/applications/<id>?from=share` with a full load, a rule with an application reloads the page, which reads `shareOutcome` (the latest application: queued and on shows "Your agent has this one." and See your application; `blocked` shows the reason, `min_match_score` naming up to three required skills the resume doesn't show, the match muted, and See today's jobs). The application page with `from=share` adds `arrival-card.tsx`: the notifications switch and today's picks left (`modules/share todaysPicksLeft`, from `DailySet`), the one primary See today's jobs; only the picks when it didn't go through. Check: `scripts/share-claim-test.ts`. Similar jobs (U6): closed, a board the agent can't use, and a stopped application show "Open jobs like it" first, streamed in: `modules/jobs/similar.ts similarJobs` (nearest by `Job.embedding`, open, in `APPLY_BOARDS`, India or remote India, posted in the last 45 days, one per company, never the job's own company; 68 ms in Postgres without a vector index, 23 Nov), each opening its own share page. Check: `scripts/similar-jobs-test.ts`. Funnel (U7): the proxy sets `sa_vid` (`lib/visitor.ts`, random, httpOnly, 180 days) on the first share page a browser opens, on the response and on that request; `lib/funnel.ts track` writes a step once (`createMany` skipping duplicates), never throws, and web code calls it through `modules/share trackShareStep` inside `after()`: view (with the source) and signed_in (a signed-in user holding this job's intent) on the page, apply_tap in the Apply action and in the claim route for a profile user's tap (`auto: false`), resume_read and profile_saved in `POST /api/profile/resume` and `PUT /api/profile` only while an intent is set, queued and blocked in the claim route, landed on `/applications/<id>?from=share`; the worker writes submitted (`trackSubmitted`) after a confirmed submit or a verified one, for an application with a queued row. Report: `scripts/share-funnel.ts --days N`. Check: `scripts/share-funnel-test.ts`. In-app browsers (U8): Google refuses sign-in inside an app's web view, so for a signed-out visitor whose user agent is LinkedIn's, Instagram's, Facebook's or X's on Android (`lib/in-app-browser.ts`) the bar is `OpenInBrowser`: Android an `intent://` link to the same page in Chrome (falling back to the page), iPhone the two steps to open it in Safari; the view is recorded with `detail = in_app_browser`. Signed in, Apply needs no Google and stays. X on iPhone opens links in Safari's own view, where Google works. Check: `scripts/in-app-browser-test.ts`; the phones themselves are the owner's check. Sharing (U9): `/jobs/[id]` shows Share (`jobs/[id]/share-button.tsx`) for an open job in `APPLY_BOARDS` while share links are on; the link is the job's page on `APP_URL` with `?s=app` (`navigator.share`, else the clipboard, else a toast with the link). `scripts/share-link.ts <jobId> --s li|x|wa|copy` prints the link for the owner's posts. Preview card (U3): `app/j/[slug]/opengraph-image.tsx` (`ImageResponse`, 1200 × 630, always light; colours and the font loader in `lib/share-card.ts`: Schibsted Grotesk TTF fetched once per process from Google Fonts, the logo fetched as a data URL with a 3 s timeout, initials otherwise); a closed job says "Closed · see similar jobs". Check: `scripts/job-slug-test.ts`.
+
 ## 7. Governance (`config/rules.json` + `modules/governance/rules.ts`)
 
 ```json
@@ -536,6 +544,7 @@ AUTH_GOOGLE_SECRET=
 STORAGE_DRIVER=postgres          # postgres | s3 (later)
 ADMIN_EMAILS=                    # operators allowed to trigger ingest by hand (comma separated); empty means nobody
 ENABLE_MOCK_FORM=                # 1 only on a staging deploy that runs the end-to-end test; the mock form is off in production otherwise
+SHARE_LINKS=                     # share links /j/... (6.23): on in development, off in production unless 1; 0 turns them off anywhere
 VAPID_PUBLIC_KEY=                # browser push (lib/push.ts); generate once: npx web-push generate-vapid-keys. Off when empty
 VAPID_PRIVATE_KEY=
 VAPID_SUBJECT=mailto:you@example.com
@@ -549,7 +558,7 @@ INGEST_PER_HOST=4                # tick mode: reads of one board at once, across
 WORKER_NAME=                     # shown by /api/health; default the host name
 NOTIFY_WEBHOOK_URL=              # optional: email webhook for "needs you" (off when empty)
 NOTIFY_WEBHOOK_SECRET=
-APP_URL=http://localhost:3000    # used in links inside notification emails
+APP_URL=http://localhost:3000    # used in links inside notification emails, pushes and share links (preview card, copied links)
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4o-mini
 OPENAI_EMBEDDING_MODEL=          # optional, default text-embedding-3-small (answer memory, 6.19)

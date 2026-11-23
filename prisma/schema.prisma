@@ -28,6 +28,7 @@ model User {
   pushSubscriptions PushSubscription[]
   brief        CandidateBrief?
   dailySets    DailySet[]
+  funnelEvents FunnelEvent[]
 }
 
 // Phase P, P5 (modules/profile/brief.ts): what the agent knows about the candidate for judging fit: tracks, nearby,
@@ -580,4 +581,27 @@ model EvalJudgement {
 
   @@id([profileId, jobId, path])
   @@index([jobId])
+}
+
+// Share links (Phase U7, docs/share/TDD.md 4.2): one row per step a visitor reached for a shared job, at most once per
+// visitor, job and step. No personal data: the visitor id is random (the sa_vid cookie); the user id is set once
+// signed in and cleared if the account is deleted.
+model FunnelEvent {
+  id        String   @id @default(cuid())
+  at        DateTime @default(now())
+  // view | apply_tap | signed_in | resume_read | profile_saved | queued | blocked | landed | submitted
+  step      String
+  visitorId String
+  userId    String?
+  jobId     String
+  // li | x | wa | copy, from ?s= on the link; on the view step
+  source    String?
+  // the block rule, the application id (queued, landed, submitted), or "in_app_browser"
+  detail    String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([visitorId, jobId, step])
+  @@index([at, step])
+  @@index([detail])
 }
