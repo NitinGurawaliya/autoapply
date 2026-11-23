@@ -80,10 +80,14 @@ export function SignInStream({ site, label, onSettled, onClose, onCancel }: { si
   const frameRef = useRef<Frame | null>(null);
   const gesture = useRef<{ x: number; y: number; lastY: number; scrolled: boolean } | null>(null);
 
-  /** What the server says once the stream ends: connected, or why not. */
-  const settle = useCallback(async () => {
+  /**
+   * What the server says once the stream ends: connected, or why not. `active` is false once the run that asked was
+   * replaced (React runs an effect twice in development): a stale answer then changes nothing.
+   */
+  const settle = useCallback(async (active: () => boolean = () => true) => {
     const response = await fetch(`/api/sources/${site}/stream`, { cache: "no-store" }).catch(() => null);
     const ticket = response?.ok ? ((await response.json()) as StreamTicket) : null;
+    if (!active()) return true;
     if (ticket?.state === "ended") {
       if (ticket.status === "connected") setPhase({ name: "connected", accountLabel: ticket.accountLabel });
       else if (ticket.lastError?.includes("10 minutes")) setPhase({ name: "expired" });
@@ -99,6 +103,7 @@ export function SignInStream({ site, label, onSettled, onClose, onCancel }: { si
     let stopped = false;
     const controller = new AbortController();
     const started = Date.now();
+    const active = () => !stopped;
     async function run() {
       setPhase({ name: "loading" });
       // 1. The pass: the worker's address and a token for this window only.
@@ -106,13 +111,15 @@ export function SignInStream({ site, label, onSettled, onClose, onCancel }: { si
       while (!stopped) {
         const response = await fetch(`/api/sources/${site}/stream`, { cache: "no-store", signal: controller.signal }).catch(() => null);
         ticket = response?.ok ? ((await response.json()) as StreamTicket) : null;
+        // A run replaced meanwhile (its request aborted) must not paint over the one that replaced it.
+        if (stopped) return;
         if (!ticket) {
           setPhase({ name: "error", message: "Could not reach SwipeApply. Check your connection." });
           return;
         }
         if (ticket.state === "ready") break;
         if (ticket.state === "ended") {
-          await settle();
+          await settle(active);
           return;
         }
         if (Date.now() - started > SLOW_AFTER_MS) setPhase({ name: "slow" });
@@ -130,7 +137,7 @@ export function SignInStream({ site, label, onSettled, onClose, onCancel }: { si
       if (stopped) return;
       if (!response?.ok || !response.body) {
         // A stream that is gone (signed in a moment ago, or expired) reads as not found: ask how it ended.
-        if (!(await settle())) setPhase({ name: "error", message: `Could not open ${label}'s sign-in.` });
+        if (!(await settle(active))) setPhase({ name: "error", message: `Could not open ${label}'s sign-in.` });
         return;
       }
       let ended = false;
@@ -156,12 +163,12 @@ export function SignInStream({ site, label, onSettled, onClose, onCancel }: { si
         // The worker saves the sign-in after the stream ends: a few seconds before the connection says so.
         setPhase({ name: "saving" });
         for (let tries = 0; tries < 12 && !stopped; tries += 1) {
-          if (await settle()) return;
+          if (await settle(active)) return;
           await new Promise((resolve) => setTimeout(resolve, TICKET_POLL_MS));
         }
       }
       if (stopped) return;
-      if (!(await settle())) setPhase((current) => (current.name === "error" ? current : { name: "error", message: "The connection to the sign-in dropped." }));
+      if (!(await settle(active))) setPhase((current) => (current.name === "error" ? current : { name: "error", message: "The connection to the sign-in dropped." }));
     }
     void run();
     return () => {
