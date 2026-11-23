@@ -60,6 +60,31 @@ async function errorText(page: Page) {
   return texts.map((text) => text.trim()).filter((text) => text && !/successfully|uploaded$/i.test(text)).join(" | ");
 }
 
+/** A name field: Workday's own keys, or a label that names a part of a person's name (not a user name or an email). */
+function isNameField(value: ResolvedValue) {
+  if (/^(first|last|middle|full|preferred|given|family)_?name$/i.test(value.key)) return true;
+  return /\b(given|family|first|last|middle|preferred|legal|local)\b[^.?]{0,20}\bnames?\b/i.test(value.label) && !/user ?name|e-?mail/i.test(value.label);
+}
+
+/**
+ * "NITIN KUMAR" → "Nitin Kumar" (23 Nov, Nitin: Workday raised "Verify that the field First Name is correctly
+ * capitalized because it contains more than 2 capital letters" on every tenant, and the page read as refused). Only a
+ * name written in one case is changed: "McDonald", "de Souza" and initials stay as the person wrote them.
+ */
+export function nameCase(text: string) {
+  const letters = text.replace(/[^\p{L}]/gu, "");
+  if (letters.length < 2 || (letters !== letters.toUpperCase() && letters !== letters.toLowerCase())) return text;
+  return text.toLowerCase().replace(/(^|[\s'\-.])(\p{L})/gu, (_, before: string, letter: string) => before + letter.toUpperCase());
+}
+
+/**
+ * Workday's warnings ("Alerts Found", "Alert-First Name ...") do not stop a page: Save and Continue pressed again goes
+ * on. Its errors ("Errors Found", "Error-...", "Error: The field ... is required") do.
+ */
+export function onlyAlerts(text: string) {
+  return /\balerts? found\b|\balert-/i.test(text) && !/\berrors? found\b|\berror-|\berror:/i.test(text);
+}
+
 async function typeInto(input: Locator, value: string) {
   await input.click();
   await input.fill("");
@@ -358,7 +383,9 @@ async function fillOne(page: Page, value: ResolvedValue) {
           ? value.value.replace(/^\s*\+\d{1,3}[\s-]*/, "").replace(/[\s-]/g, "")
           : /linkedin\.com/i.test(value.value)
             ? value.value.trim().replace(/^(https?:\/\/)?(www\.)?linkedin\.com/i, "https://www.linkedin.com")
-            : value.value;
+            : isNameField(value)
+              ? nameCase(value.value)
+              : value.value;
       await typeInto(input, text);
       await input.press("Tab");
     }
@@ -508,6 +535,7 @@ export const workdayAdapter: AtsAdapter = {
       await page.locator(id("pageFooterNextButton")).first().click();
       const until = Date.now() + 30000;
       let moved = false;
+      let pressedPastAlerts = false;
       while (Date.now() < until) {
         await page.waitForTimeout(1000);
         if ((await activeStep(page)) !== before) {
@@ -515,6 +543,12 @@ export const workdayAdapter: AtsAdapter = {
           break;
         }
         const errors = await errorText(page);
+        // Warnings only: once more, as a person does after reading them.
+        if (errors && onlyAlerts(errors) && !pressedPastAlerts) {
+          pressedPastAlerts = true;
+          await page.locator(id("pageFooterNextButton")).first().click();
+          continue;
+        }
         if (errors) throw new Error(`Workday did not accept "${before || "this page"}": ${errors.slice(0, 900)}`);
       }
       if (!moved) throw new Error(`Workday stayed on "${before || "this page"}" after Save and Continue`);
@@ -532,7 +566,12 @@ export const workdayAdapter: AtsAdapter = {
       const before = await activeStep(page);
       await page.locator(id("pageFooterNextButton")).first().click();
       await page.waitForTimeout(3000);
-      const errors = await errorText(page);
+      let errors = await errorText(page);
+      if (errors && onlyAlerts(errors) && (await activeStep(page)) === before) {
+        await page.locator(id("pageFooterNextButton")).first().click();
+        await page.waitForTimeout(3000);
+        errors = await errorText(page);
+      }
       if (errors && (await activeStep(page)) === before) throw new Error(`Workday did not accept "${before}": ${errors.slice(0, 900)}`);
     }
     if (!/submit/i.test(await footerText(page))) throw new Error("Workday's Review page with Submit did not appear");
