@@ -36,7 +36,10 @@ async function consentGiven(userId: string) {
 }
 
 export async function runAccountStep(ctx: PrepareContext, system: AccountSystem, employer: string, page: AccountPage) {
-  const label = `${ctx.company}'s ${system === "workday" ? "Workday" : system} account`;
+  // Workday's internal company names carry a number first ("330779353 CoreLogic Solutions"): not shown to the user.
+  const company = ctx.company.replace(/^\d+\s+/, "");
+  ctx = { ...ctx, company };
+  const label = `${company}'s ${system === "workday" ? "Workday" : system} account`;
   if (await page.signedIn()) {
     await setAccountState(ctx.userId, system, employer, "active");
     await ctx.log("account_signin", `Already signed in to ${label}`);
@@ -62,8 +65,9 @@ export async function runAccountStep(ctx: PrepareContext, system: AccountSystem,
       await ctx.log("account_verify_asked", `${ctx.company} asks you to verify your email before signing in`);
       throw new AccountVerificationError(ctx.company, existing.email);
     }
-    // A row still "creating" whose sign-in is refused: the account was never made (the run stopped mid-create). Make it.
-    if (existing.state !== "creating") {
+    // A row still "creating" or "needs_verification" whose sign-in is refused may never have been made (a run stopped
+    // mid-create, or the employer's answer was misread): try creating it; "exists" from that is then the real answer.
+    if (existing.state !== "creating" && existing.state !== "needs_verification") {
       const why = outcome === "refused" ? "refused the saved password" : outcome === "exists" ? "says the account exists but refused it" : outcome.error;
       await setAccountState(ctx.userId, system, employer, "failed", why);
       await ctx.log("account_failed", `${label}: ${why}`);

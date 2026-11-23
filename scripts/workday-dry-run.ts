@@ -47,6 +47,7 @@ async function main() {
     let fields: FormField[] | null = await workdayAdapter.inspect(session.page);
     for (let page = 1; fields && page <= 10; page += 1) {
       console.log(`\n== page ${page}: ${fields.length} fields`);
+      for (const field of fields) console.log(`  field ${field.type}${field.required ? "*" : ""} ${field.hintKey ?? ""} "${field.label.slice(0, 50)}" options=${field.options?.slice(0, 4).join("/") ?? "-"}${(field.options?.length ?? 0) > 4 ? "/..." : ""}`);
       const { resolved } = await resolveForm({ userId: user.id, source: "workday", fields, profile, answers, job: jobInfo, draftEssays: true });
       for (const value of resolved.values) console.log(`  ${value.label.slice(0, 60)} = ${value.type === "file" ? "(file)" : value.value.slice(0, 60)} [${value.source}]`);
       for (const question of resolved.pending) console.log(`  PENDING: ${question.label.slice(0, 80)}`);

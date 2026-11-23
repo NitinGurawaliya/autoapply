@@ -39,7 +39,9 @@ export function workdayFormUrl(applyUrl: string) {
 export function readAccountMessage(text: string): AccountOutcome | null {
   const t = text.replace(/\s+/g, " ").trim();
   if (!t) return null;
-  if (/verify|verification|activate your account|sent (you )?an? (email|link)|check your (email|inbox)/i.test(t)) return "verify";
+  // Phrases only: the Create Account form's own label "Verify New Password" must not read as a verify-your-email message
+  // (23 Nov dry run: it did, before any message was shown).
+  if (/verify your (email|account|e-mail)|verification (email|link|code)|activate your account|account (is )?not (yet )?(verified|activated)|sent (you )?an? (email|link|verification)|check your (email|inbox)/i.test(t)) return "verify";
   if (/already (exists|in use|registered|been used)|account (with|for) this email|email address is (already|in use)/i.test(t)) return "exists";
   if (/password/i.test(t) && /(requirement|must|invalid|incorrect|wrong|not meet|doesn.t meet|does not match)/i.test(t)) return "refused";
   if (/incorrect|invalid (email|credentials|sign)|wrong|locked/i.test(t)) return "refused";
@@ -54,7 +56,8 @@ async function visible(page: Page, selector: string) {
 
 async function errorText(page: Page) {
   const texts = await page.locator(ERRORS).allInnerTexts().catch(() => [] as string[]);
-  return texts.map((text) => text.trim()).filter(Boolean).join(" | ");
+  // Workday announces good news in the same alert role ("resume.pdf successfully uploaded", 23 Nov): not an error.
+  return texts.map((text) => text.trim()).filter((text) => text && !/successfully|uploaded$/i.test(text)).join(" | ");
 }
 
 async function typeInto(input: Locator, value: string) {
@@ -116,31 +119,63 @@ function workdayAccountPage(page: Page): AccountPage {
 
 /** Reads the visible page's questions; each block gets a `data-swipe-field` index for its selector. */
 async function readPage(page: Page): Promise<FormField[]> {
+  // The footer shows before the page's questions are drawn (23 Nov dry run: My Information read as 0 fields).
+  await page.locator('[data-automation-id^="formField-"], input[data-automation-id="file-upload-input-ref"]').first().waitFor({ state: "visible", timeout: 20000 }).catch(() => undefined);
+  // Workday draws a page in stages (23 Nov: the radio group came after the first read): read once the number of
+  // question blocks has held for a moment.
+  let last = -1;
+  for (let tries = 0; tries < 15; tries += 1) {
+    await page.waitForTimeout(700);
+    const count = await page.locator('[data-automation-id^="formField-"]').count();
+    if (count === last && count > 0) break;
+    last = count;
+  }
   const raw = await page.evaluate((attr) => {
-    const root = document.querySelector('[data-automation-id="applyFlowPage"]') ?? document.body;
-    const blocks = [...root.querySelectorAll<HTMLElement>('[data-automation-id^="formField-"]')].filter((el) => !el.parentElement?.closest('[data-automation-id^="formField-"]') && el.offsetParent !== null);
+    // Each page has its own container (applyFlowMyInfoPage, ...): the whole body is read, the footer has no fields.
+    const root = document.querySelector('[data-automation-id^="applyFlow"][data-automation-id$="Page"]') ?? document.body;
+    const blocks = [...root.querySelectorAll<HTMLElement>('[data-automation-id^="formField-"]')].filter((el) => !el.parentElement?.closest('[data-automation-id^="formField-"]') && el.getClientRects().length > 0); // offsetParent is null for a display:contents fieldset (23 Nov: the radio group was dropped)
+    // No named helpers in here: the bundler wraps them in __name, which the page does not have (23 Nov).
     const out: Array<{ index: number; label: string; type: string; required: boolean; options: string[]; auto: string }> = [];
     blocks.forEach((el, index) => {
       el.setAttribute(attr, String(index));
-      const labelEl = el.querySelector("label, legend");
+      const labelEl = el.querySelector("legend") ?? el.querySelector("label");
       const label = (labelEl?.textContent ?? el.getAttribute("aria-label") ?? "").replace(/\s+/g, " ").trim();
-      const required = /\*/.test(label) || Boolean(el.querySelector('[aria-required="true"], [required]'));
+      const required = /\*/.test(label) || Boolean(el.querySelector('[aria-required="true"], [required]')) || /required/i.test(el.querySelector("button[aria-label]")?.getAttribute("aria-label") ?? "");
       const auto = el.getAttribute("data-automation-id") ?? "";
+      const listbox = el.querySelector<HTMLElement>('button[aria-haspopup="listbox"]');
+      const text = el.querySelector<HTMLInputElement>('input[type="text"], input:not([type]), input[type="email"], input[type="tel"]');
       let type = "text";
       let options: string[] = [];
+      let answered = false;
       if (el.querySelector('input[type="file"]')) type = "file";
-      else if (el.querySelector('button[aria-haspopup="listbox"]')) type = "select";
-      else if (el.querySelector('[data-uxi-widget-type="selectinput"], [data-automation-id="multiselectInputContainer"], [data-automation-id="searchBox"]')) type = "search";
-      else if (el.querySelector('input[type="radio"]')) {
+      else if (listbox) {
+        type = "select";
+        answered = !/select one/i.test(listbox.innerText) && listbox.innerText.trim() !== "";
+      } else if (el.querySelector('[data-uxi-widget-type="selectinput"], [data-automation-id="multiselectInputContainer"], [data-automation-id="searchBox"]')) {
+        type = "search";
+        answered = Boolean(el.querySelector('[data-automation-id="selectedItem"]'));
+      } else if (el.querySelector('input[type="radio"]')) {
         type = "radio";
-        options = [...el.querySelectorAll('input[type="radio"]')].map((input) => (input.closest("div")?.querySelector("label")?.textContent ?? input.getAttribute("aria-label") ?? "").trim()).filter(Boolean);
+        options = [...el.querySelectorAll('input[type="radio"]')].map((input) => ((input.id ? document.querySelector(`label[for="${CSS.escape(input.id)}"]`)?.textContent : null) ?? input.closest("div")?.querySelector("label")?.textContent ?? input.getAttribute("aria-label") ?? "").trim()).filter(Boolean);
+        answered = Boolean(el.querySelector('input[type="radio"]:checked'));
       } else if (el.querySelectorAll('input[type="checkbox"]').length > 1) {
         type = "checkbox-group";
-        options = [...el.querySelectorAll('input[type="checkbox"]')].map((input) => (input.closest("div")?.querySelector("label")?.textContent ?? input.getAttribute("aria-label") ?? "").trim()).filter(Boolean);
+        options = [...el.querySelectorAll('input[type="checkbox"]')].map((input) => ((input.id ? document.querySelector(`label[for="${CSS.escape(input.id)}"]`)?.textContent : null) ?? input.closest("div")?.querySelector("label")?.textContent ?? input.getAttribute("aria-label") ?? "").trim()).filter(Boolean);
       } else if (el.querySelector('input[type="checkbox"]')) type = "checkbox";
-      else if (el.querySelector('[data-automation-id^="dateSection"]')) type = "date";
-      else if (el.querySelector("textarea")) type = "textarea";
-      else if (!el.querySelector("input")) return;
+      else if (el.querySelector('[data-automation-id^="dateSection"]')) {
+        type = "date";
+        const parts = [...el.querySelectorAll<HTMLInputElement>('input[data-automation-id^="dateSection"]')];
+        answered = parts.length > 0 && parts.every((input) => input.value.trim() !== "" || Boolean(input.getAttribute("aria-valuenow")));
+      }
+      else if (el.querySelector("textarea")) {
+        type = "textarea";
+        answered = (el.querySelector("textarea")?.value ?? "").trim() !== "";
+      } else if (!text) return;
+      else answered = text.value.trim() !== "";
+      // Workday fills some itself (Country, the account's email, a returning candidate's details): left as they are.
+      if (answered) return;
+      // A phone extension is never ours to fill (23 Nov: "Phone Extension" took the phone number by its label).
+      if (/extension$/i.test(auto)) return;
       out.push({ index, label, type, required, options, auto });
     });
     // The resume input on My Experience is not always inside a formField block.
@@ -166,22 +201,37 @@ async function readPage(page: Page): Promise<FormField[]> {
 /** Standard keys from Workday's own field ids, so name, contact and resume map without the model. */
 function hintFor(auto: string, type: string): string | undefined {
   if (type === "file") return "resume";
+  // Two spellings seen: `legalNameSection_firstName` (older tenants) and `legalName--firstName` (Cotality, 23 Nov).
   const rules: Array<[RegExp, string]> = [
-    [/legalNameSection_firstName/i, "first_name"],
-    [/legalNameSection_lastName/i, "last_name"],
-    [/formField-email/i, "email"],
-    [/phone-?number/i, "phone"],
-    [/addressSection_city/i, "city"],
+    [/legalName(Section)?[-_]+firstName$/i, "first_name"],
+    [/legalName(Section)?[-_]+lastName$/i, "last_name"],
+    [/formField-email$/i, "email"],
+    [/formField-phone-?number$/i, "phone"],
+    [/formField-(addressSection_)?city$/i, "city"],
     [/countryDropdown|formField-country$/i, "country"],
     [/linkedin/i, "linkedin"],
   ];
   return rules.find(([pattern]) => pattern.test(auto))?.[1];
 }
 
+/**
+ * The options of the dropdown a button just opened: the list its `aria-controls` names, else a visible popup list.
+ * Not a prompt's own list of chosen items (`selectedItemList`): 23 Nov, the State dropdown read "India (+91)", the
+ * phone code chosen in another box, as its first option.
+ */
+async function openedOptions(page: Page, button: Locator) {
+  const controls = await button.getAttribute("aria-controls").catch(() => null);
+  if (controls) {
+    const owned = page.locator(`[id="${controls}"] [role="option"]`);
+    if (await owned.first().isVisible({ timeout: 3000 }).catch(() => false)) return owned;
+  }
+  return page.locator('[role="listbox"]:visible:not([data-automation-id="selectedItemList"]) [role="option"]:not([data-automation-id="selectedItem"])');
+}
+
 async function listboxOptions(page: Page, selector: string): Promise<string[]> {
   const button = page.locator(`${selector} button[aria-haspopup="listbox"]`).first();
   await button.click();
-  const list = page.locator('[role="listbox"] [role="option"]');
+  const list = await openedOptions(page, button);
   await list.first().waitFor({ state: "visible", timeout: 5000 });
   const options = (await list.allInnerTexts()).map((text) => text.trim()).filter((text) => text && !/^select one$/i.test(text));
   await page.keyboard.press("Escape");
@@ -197,8 +247,13 @@ async function fillOne(page: Page, value: ResolvedValue) {
   const block = page.locator(value.selector).first();
   switch (value.type) {
     case "select": {
-      await block.locator('button[aria-haspopup="listbox"]').first().click();
-      const list = page.locator('[role="listbox"] [role="option"]');
+      // The last dropdown's list must be gone before this one opens (23 Nov: a Yes/No question read the salary list
+      // still on screen and found no "Yes").
+      await page.locator('[role="listbox"]:visible:not([data-automation-id="selectedItemList"])').first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => undefined);
+      const opener = block.locator('button[aria-haspopup="listbox"]').first();
+      await opener.scrollIntoViewIfNeeded().catch(() => undefined);
+      await opener.click();
+      const list = await openedOptions(page, opener);
       await list.first().waitFor({ state: "visible", timeout: 5000 });
       const options = (await list.allInnerTexts()).map((text) => text.trim()).filter(Boolean);
       const pick = bestOption(options, value.value);
@@ -207,12 +262,18 @@ async function fillOne(page: Page, value: ResolvedValue) {
         throw new NeedsAnswerError({ key: value.key, label: value.label, type: "select", options: options.filter((option) => !/^select one$/i.test(option)), required: value.required ?? true });
       }
       await list.filter({ hasText: pick }).first().click();
+      await list.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => undefined);
       return;
     }
     case "radio": {
       const pick = bestOption(await block.locator("label").allInnerTexts(), value.value);
       if (!pick) throw new NeedsAnswerError({ key: value.key, label: value.label, type: "radio", options: (await block.locator("label").allInnerTexts()).map((text) => text.trim()).filter(Boolean), required: value.required ?? true });
-      await block.locator("label", { hasText: pick }).first().click();
+      // The radio input its label names, not the label: Workday's label never settles for a click (23 Nov, 30 s timeout).
+      const target = await block.locator("label", { hasText: pick }).first().getAttribute("for");
+      const radio = target ? page.locator(`[id="${target}"]`) : block.locator('input[type="radio"]').nth((await block.locator("label").allInnerTexts()).findIndex((text) => text.trim() === pick));
+      // A native click on the input: what the page's own handler listens to (Playwright's check did not register, 23 Nov).
+      await radio.first().evaluate((input) => (input as HTMLInputElement).click());
+      if (!(await radio.first().isChecked().catch(() => false))) throw new Error(`Workday did not take "${pick}" for "${value.label.slice(0, 60)}"`);
       return;
     }
     case "checkbox": {
@@ -233,7 +294,11 @@ async function fillOne(page: Page, value: ResolvedValue) {
       const [year, month, day] = date[0].includes("/") ? [date[2], date[1].padStart(2, "0"), undefined] : [date[1], date[2], date[3]];
       const part = async (name: string, text: string | undefined) => {
         const input = block.locator(`[data-automation-id="${name}"]`).first();
-        if (text && (await input.count()) > 0) await typeInto(input, text);
+        // A display layer sits over each date part (23 Nov: a click timed out): focus the input and type, as a keyboard does.
+        if (text && (await input.count()) > 0) {
+          await input.focus();
+          await page.keyboard.type(text, { delay: TYPE_DELAY });
+        }
       };
       await part("dateSectionMonth-input", month);
       await part("dateSectionDay-input", day);
@@ -250,15 +315,33 @@ async function fillOne(page: Page, value: ResolvedValue) {
         await typeInto(search, value.value);
         await page.keyboard.press("Enter");
         await page.waitForTimeout(1500);
-        const suggestions = page.locator('[data-automation-id="promptOption"], [role="listbox"] [role="option"]');
-        const texts = (await suggestions.allInnerTexts().catch(() => [] as string[])).map((text) => text.trim()).filter(Boolean);
-        const pick = bestOption(texts, value.value) ?? (texts.length === 1 ? texts[0] : undefined);
-        if (!pick) throw new NeedsAnswerError({ key: value.key, label: `${value.label} (nothing matched "${value.value.slice(0, 40)}")`, type: "text", required: value.required ?? true });
-        await suggestions.filter({ hasText: pick }).first().click();
+        // Only the open popup's entries: chosen items of other prompts ("India (+91)") are options too.
+        const suggestions = page.locator('[data-automation-id="promptOption"]:visible');
+        // A prompt can be a list inside a list ("How did you hear": a category, then the source): keep choosing until
+        // the block shows a chosen item, the matching entry first, else the only or first one at that level.
+        for (let level = 0; level < 3; level += 1) {
+          const texts = (await suggestions.allInnerTexts().catch(() => [] as string[])).map((text) => text.trim()).filter(Boolean);
+          const pick = bestOption(texts, value.value) ?? (level > 0 || texts.length === 1 ? texts[0] : undefined);
+          if (!pick) throw new NeedsAnswerError({ key: value.key, label: `${value.label} (nothing matched "${value.value.slice(0, 40)}")`, type: "text", required: value.required ?? true });
+          // The popup's own layer takes pointer events over its entries (23 Nov: a plain click timed out); the entry is
+          // visible and is the one a person clicks.
+          await suggestions.filter({ hasText: pick }).first().click({ force: true });
+          await page.waitForTimeout(1200);
+          if ((await block.locator('[data-automation-id="selectedItem"]').count()) > 0) break;
+        }
+        await page.keyboard.press("Escape").catch(() => undefined);
         return;
       }
       const input = block.locator('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([data-automation-id="beecatcher"])').first();
-      await typeInto(input, value.value);
+      // Workday asks the country code in its own box (Country Phone Code): the number goes in without it.
+      // Workday checks a LinkedIn address as https://www.linkedin.com/... (23 Nov: "Invalid LinkedIn URL" without www).
+      const text =
+        value.key === "phone"
+          ? value.value.replace(/^\s*\+\d{1,3}[\s-]*/, "").replace(/[\s-]/g, "")
+          : /linkedin\.com/i.test(value.value)
+            ? value.value.trim().replace(/^(https?:\/\/)?(www\.)?linkedin\.com/i, "https://www.linkedin.com")
+            : value.value;
+      await typeInto(input, text);
       await input.press("Tab");
     }
   }
@@ -339,7 +422,7 @@ export const workdayAdapter: AtsAdapter = {
           break;
         }
         const errors = await errorText(page);
-        if (errors) throw new Error(`Workday did not accept "${before || "this page"}": ${errors.slice(0, 300)}`);
+        if (errors) throw new Error(`Workday did not accept "${before || "this page"}": ${errors.slice(0, 900)}`);
       }
       if (!moved) throw new Error(`Workday stayed on "${before || "this page"}" after Save and Continue`);
       await page.waitForTimeout(1500);
@@ -357,7 +440,7 @@ export const workdayAdapter: AtsAdapter = {
       await page.locator(id("pageFooterNextButton")).first().click();
       await page.waitForTimeout(3000);
       const errors = await errorText(page);
-      if (errors && (await activeStep(page)) === before) throw new Error(`Workday did not accept "${before}": ${errors.slice(0, 300)}`);
+      if (errors && (await activeStep(page)) === before) throw new Error(`Workday did not accept "${before}": ${errors.slice(0, 900)}`);
     }
     if (!/submit/i.test(await footerText(page))) throw new Error("Workday's Review page with Submit did not appear");
     await ctx.markAttempted?.();

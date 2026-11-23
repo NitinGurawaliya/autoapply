@@ -41,6 +41,7 @@ check("message: verify", readAccountMessage("We've sent you an email. Please ver
 check("message: exists", readAccountMessage("An account with this email already exists.") === "exists");
 check("message: password rule", readAccountMessage("Password does not meet the requirements") === "refused");
 check("message: wrong sign-in", readAccountMessage("Wrong email address or password. Try again.") === "refused");
+check("message: the form label Verify New Password is not a verify message", readAccountMessage("Create Account Email Address* Password* Verify New Password*") !== "verify");
 check("message: none", readAccountMessage("  ") === null);
 check("message: other words kept", JSON.stringify(readAccountMessage("Service unavailable")) === JSON.stringify({ error: "Service unavailable" }));
 
