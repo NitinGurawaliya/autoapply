@@ -5,6 +5,7 @@ import { storage } from "@/lib/storage";
 import { CANCELLABLE, cancelApplication } from "@/modules/apply/lifecycle";
 import { SITE_INFO, SITES, siteStateKey, type Site } from "./sites";
 import { signStreamToken, STREAM_TOKEN_TTL_MS, streamIdOf, streamSecret } from "./stream-token";
+import { deleteLoginNumber } from "./login-number";
 
 /**
  * A user's connection to a signed-in job site (docs/naukri/TDD.md 4.4). Every status change goes through here. No
@@ -193,6 +194,8 @@ export async function runsToday(userId: string, site: Site, now = new Date()) {
  */
 export async function disconnect(userId: string, site: Site) {
   await storage.delete(siteStateKey(userId, site));
+  // The number it was connected with goes too (K8b).
+  await deleteLoginNumber(userId, site);
   await db.siteConnection.updateMany({
     where: { userId, site },
     data: { status: "disconnected", stateKey: null, accountLabel: null, pausedUntil: null, lastError: null, streamUrl: null },

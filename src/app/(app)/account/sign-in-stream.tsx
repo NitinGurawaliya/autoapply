@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FieldError } from "@/components/ui/field";
+import { FieldError, FieldLabel, InputBox } from "@/components/ui/field";
+import { OtpInput } from "@/components/ui/otp-input";
 import { Icon } from "@/components/ui/icons";
 import { AgentStatus } from "@/components/patterns/agent-status";
 import { InfoNote } from "@/components/patterns/content";
@@ -12,18 +13,25 @@ import type { StreamTicket } from "@/modules/sources";
 // our worker, shown here; the person's taps and keys go back to it. Frames come straight from the worker (server-sent
 // events over fetch, so the token rides in a header, not the address) and are only ever drawn, never kept. Keys go
 // through a hidden password box: phone keyboards do not learn or suggest from one, and it is emptied after every key.
+//
+// OTP connect (K8b, owner 23 Nov, docs/naukri/TDD.md 13.16) is the main path: the user types their mobile number and
+// then the code the site texts them, here; the worker enters both on the site's own page. The page itself is shown only
+// when the site asks for a check. Neither the number nor the code is kept in this page after it is sent.
 
 type Phase =
   | { name: "loading" }
   | { name: "slow" }
   | { name: "saving" }
   | { name: "live" }
+  | { name: "number"; saved: string | null }
+  | { name: "code" }
   | { name: "error"; message: string }
   | { name: "expired" }
   | { name: "connected"; accountLabel: string | null }
   | { name: "failed"; message: string };
 
 type Frame = { d: string; w: number; h: number };
+type OtpReply = { state: "code_sent" | "accepted" | "check" | "busy" } | { state: "refused"; message: string } | { state: "wait"; seconds: number };
 type InputEvent = { t: "tap"; x: number; y: number } | { t: "scroll"; x: number; y: number; dy: number } | { t: "text"; s: string } | { t: "key"; k: string };
 
 const TICKET_POLL_MS = 1500;
@@ -33,6 +41,9 @@ const FLUSH_MS = 40;
 const TAP_SLOP_PX = 10;
 const SENTINEL = "  ";
 const SPECIAL_KEYS = new Set(["Enter", "Backspace", "Tab", "ArrowLeft", "ArrowRight"]);
+// Naukri lets a new code be asked for after about 30 s.
+const RESEND_AFTER_S = 30;
+const CODE_LENGTH = 6;
 
 /** The page size to ask the worker for: the picture is drawn 1:1 in the sheet, so text on it reads at its own size. */
 function phoneViewport() {
@@ -79,6 +90,15 @@ export function SignInStream({ site, label, onSettled, onClose, onCancel }: { si
   const picture = useRef<HTMLImageElement>(null);
   const frameRef = useRef<Frame | null>(null);
   const gesture = useRef<{ x: number; y: number; lastY: number; scrolled: boolean } | null>(null);
+  // OTP connect: "otp" shows our own number and code screens, "page" the site's page (a check).
+  const mode = useRef<"otp" | "page">("page");
+  const [mobile, setMobile] = useState("");
+  const [code, setCode] = useState("");
+  const [savedNumber, setSavedNumber] = useState<string | null>(null);
+  const [otpBusy, setOtpBusy] = useState(false);
+  const [otpError, setOtpError] = useState("");
+  const [codeSent, setCodeSent] = useState(false);
+  const [resendIn, setResendIn] = useState(0);
 
   /**
    * What the server says once the stream ends: connected, or why not. `active` is false once the run that asked was
@@ -129,7 +149,8 @@ export function SignInStream({ site, label, onSettled, onClose, onCancel }: { si
       ticketRef.current = { url: ticket.url, token: ticket.token };
       // 2. The frames, straight from the worker.
       const size = phoneViewport();
-      const response = await fetch(`${ticket.url}?w=${size.width}&h=${size.height}`, {
+      // Frames off until the page itself is needed: the number and code screens are ours.
+      const response = await fetch(`${ticket.url}?w=${size.width}&h=${size.height}&frames=0`, {
         headers: { Authorization: `Bearer ${ticket.token}` },
         cache: "no-store",
         signal: controller.signal,
@@ -143,12 +164,22 @@ export function SignInStream({ site, label, onSettled, onClose, onCancel }: { si
       let ended = false;
       let replaced = false;
       await readEvents(response.body, (name, data) => {
-        if (name === "open") setPhase({ name: "live" });
-        else if (name === "frame") {
+        if (name === "open") {
+          const opened = JSON.parse(data) as { otp?: boolean; savedNumber?: string | null };
+          if (opened.otp) {
+            mode.current = "otp";
+            setSavedNumber(opened.savedNumber ?? null);
+            setPhase({ name: "number", saved: opened.savedNumber ?? null });
+          } else {
+            mode.current = "page";
+            void post("input", { events: [], frames: true });
+            setPhase({ name: "live" });
+          }
+        } else if (name === "frame") {
           const next = JSON.parse(data) as Frame;
           frameRef.current = next;
           setFrame(next);
-          setPhase((current) => (current.name === "live" ? current : { name: "live" }));
+          if (mode.current === "page") setPhase((current) => (current.name === "live" ? current : { name: "live" }));
         } else if (name === "end") ended = true;
         else if (name === "replaced") replaced = true;
       }).catch(() => undefined);
@@ -176,6 +207,73 @@ export function SignInStream({ site, label, onSettled, onClose, onCancel }: { si
       controller.abort();
     };
   }, [site, label, attempt, settle]);
+
+  /** A POST to the worker's stream with this sign-in's pass; the reply's JSON, or null when it did not answer. */
+  async function post(path: "input" | "login" | "code", body: unknown) {
+    const ticket = ticketRef.current;
+    if (!ticket) return null;
+    const response = await fetch(`${ticket.url}/${path}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${ticket.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    }).catch(() => null);
+    if (!response) return null;
+    return response.status === 204 ? {} : ((await response.json().catch(() => null)) as OtpReply | null);
+  }
+
+  /** The site wants a check: its page is shown for it, then the user comes back to the code. */
+  function showPage() {
+    mode.current = "page";
+    void post("input", { events: [], frames: true });
+    setPhase({ name: "live" });
+  }
+
+  function backToCode() {
+    mode.current = "otp";
+    void post("input", { events: [], frames: false });
+    setOtpError("");
+    setPhase(codeSent ? { name: "code" } : { name: "number", saved: savedNumber });
+  }
+
+  // The resend countdown.
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const timer = setTimeout(() => setResendIn((left) => left - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendIn]);
+
+  async function sendCode(useSaved: boolean) {
+    if (otpBusy) return;
+    setOtpBusy(true);
+    setOtpError("");
+    const reply = (await post("login", useSaved ? { saved: true } : { mobile })) as OtpReply | null;
+    setOtpBusy(false);
+    if (!reply) return setOtpError(`Could not reach ${label}'s sign-in. Try again.`);
+    if (reply.state === "code_sent") {
+      setCodeSent(true);
+      setCode("");
+      setResendIn(RESEND_AFTER_S);
+      setPhase({ name: "code" });
+    } else if (reply.state === "check") showPage();
+    else if (reply.state === "wait") setOtpError(`Wait ${reply.seconds} seconds, then ask again.`);
+    else if (reply.state === "refused") setOtpError(reply.message);
+  }
+
+  async function submitCode(value: string) {
+    if (otpBusy || value.length !== CODE_LENGTH) return;
+    setOtpBusy(true);
+    setOtpError("");
+    const reply = (await post("code", { code: value })) as OtpReply | null;
+    setOtpBusy(false);
+    if (!reply) return setOtpError(`Could not reach ${label}'s sign-in. Try again.`);
+    if (reply.state === "accepted") setPhase({ name: "saving" });
+    else if (reply.state === "check") showPage();
+    else if (reply.state === "refused") {
+      setOtpError(reply.message);
+      setCode("");
+    }
+  }
 
   async function flush() {
     flushTimer.current = null;
@@ -256,6 +354,104 @@ export function SignInStream({ site, label, onSettled, onClose, onCancel }: { si
 
   const size = typeof window === "undefined" ? { width: 350, height: 560 } : phoneViewport();
   const live = phase.name === "live" && frame;
+
+  if (phase.name === "number") {
+    const usable = /^\d{10}$/.test(mobile);
+    return (
+      <form
+        className="flex flex-col gap-4 pt-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void sendCode(false);
+        }}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="m-0 type-heading">Connect {label}</h2>
+          <Button type="button" variant="quiet" size="text" onClick={onCancel}>
+            Cancel
+          </Button>
+        </div>
+        <p className="m-0 type-body text-muted-foreground">{label} texts you a code. You type it here.</p>
+        {phase.saved ? (
+          <>
+            <Button type="button" variant="primary" size="xl" className="w-full" disabled={otpBusy} onClick={() => void sendCode(true)}>
+              {otpBusy ? "Asking for a code..." : `Text a code to ${phase.saved}`}
+            </Button>
+            {otpError ? <FieldError>{otpError}</FieldError> : null}
+            <Button type="button" variant="quiet" size="text" className="self-start" onClick={() => setPhase({ name: "number", saved: null })}>
+              Use another number
+            </Button>
+          </>
+        ) : (
+          <>
+            <div className="flex flex-col gap-2">
+              <FieldLabel htmlFor="naukri-mobile">Mobile number on your {label} account</FieldLabel>
+              <InputBox
+                id="naukri-mobile"
+                prefix="+91"
+                inputMode="numeric"
+                autoComplete="tel-national"
+                placeholder="10 digits"
+                value={mobile}
+                onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(-10))}
+                aria-invalid={Boolean(otpError) || undefined}
+              />
+              {otpError ? <FieldError>{otpError}</FieldError> : null}
+            </div>
+            <Button type="submit" variant="primary" size="xl" className="w-full" disabled={!usable || otpBusy}>
+              {otpBusy ? "Asking for a code..." : "Send code"}
+            </Button>
+          </>
+        )}
+        <InfoNote size="sm">We never ask for your {label} password.</InfoNote>
+      </form>
+    );
+  }
+
+  if (phase.name === "code") {
+    return (
+      <div className="flex flex-col gap-4 pt-4">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="m-0 type-heading">Enter the code</h2>
+          <Button type="button" variant="quiet" size="text" onClick={onCancel}>
+            Cancel
+          </Button>
+        </div>
+        <p className="m-0 type-body text-muted-foreground">{label} just texted it to your phone.</p>
+        <OtpInput
+          id="naukri-code"
+          label={`Code from ${label}`}
+          length={CODE_LENGTH}
+          value={code}
+          disabled={otpBusy}
+          onChange={(value) => {
+            const digits = value.replace(/\D/g, "");
+            setCode(digits);
+            if (digits.length === CODE_LENGTH) void submitCode(digits);
+          }}
+        />
+        {otpError ? <FieldError>{otpError}</FieldError> : null}
+        {otpBusy ? <AgentStatus text="Checking the code" size={32} /> : null}
+        <div className="flex items-center justify-between gap-3">
+          <Button type="button" variant="quiet" size="text" disabled={resendIn > 0 || otpBusy} onClick={() => void sendCode(!mobile)}>
+            {resendIn > 0 ? `Resend in 0:${String(resendIn).padStart(2, "0")}` : "Resend code"}
+          </Button>
+          <Button
+            type="button"
+            variant="quiet"
+            size="text"
+            onClick={() => {
+              setCodeSent(false);
+              setOtpError("");
+              setPhase({ name: "number", saved: null });
+            }}
+          >
+            Change number
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (phase.name === "connected") {
     return (
@@ -343,8 +539,16 @@ export function SignInStream({ site, label, onSettled, onClose, onCancel }: { si
         className="pointer-events-none absolute top-0 left-0 size-px opacity-0"
         style={{ fontSize: 16 }}
       />
+      {mode.current === "otp" || codeSent ? (
+        <div className="flex items-center justify-between gap-3">
+          <p className="m-0 type-meta text-muted-foreground">{label} wants a quick check. Do it on the page, then carry on.</p>
+          <Button type="button" variant="line" size="md" className="flex-none" onClick={backToCode}>
+            Done
+          </Button>
+        </div>
+      ) : null}
       <div className="flex items-center justify-between gap-3">
-        <InfoNote size="sm">You type your password and OTP. We never keep them.</InfoNote>
+        <InfoNote size="sm">You type into {label}&apos;s own page. We never keep it.</InfoNote>
         {live ? (
           <Button type="button" variant="line" size="md" className="flex-none" onClick={() => keyboard.current?.focus({ preventScroll: true })}>
             Keyboard

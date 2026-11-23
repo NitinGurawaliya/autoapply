@@ -1,10 +1,11 @@
 import { appUrl, sendPush } from "@/lib/push";
 import { enqueueSourceIngest } from "@/lib/queue";
 import { sealKeyReady } from "@/lib/sealed";
-import { failConnect, finishConnect, getConnection, setStreamUrl, SITE_INFO, siteStateKey, type Site } from "@/modules/sources";
+import { failConnect, finishConnect, getConnection, loginNumber, maskNumber, saveLoginNumber, setStreamUrl, SITE_INFO, siteStateKey, type Site } from "@/modules/sources";
 import { storage } from "@/lib/storage";
-import { openBrowser } from "../browser";
+import { livePage, openBrowser } from "../browser";
 import { waitForSignIn } from "./naukri";
+import { enterLoginCode, sendLoginCode } from "./naukriOtp";
 import { openStream, relayReady, type StreamOutcome } from "./relay";
 import { ScreenStream } from "./screen-stream";
 
@@ -21,6 +22,10 @@ export type ConnectOptions = { loginUrl?: string; waitForSignIn?: typeof waitFor
  * Streamed (K8, docs/naukri/TDD.md 13.12): on a worker running the relay, the window is sized to a phone and streamed to
  * the user's own phone (relay.ts); their taps and keys come back as input. Nothing of the login pages is stored, logged
  * or screenshotted. Without the relay, K1's window on this worker's own screen.
+ *
+ * OTP connect (K8b, owner 23 Nov, docs/naukri/TDD.md 13.16): on the same stream the phone sends the user's mobile number
+ * and then Naukri's code, and the worker enters them on Naukri's own login page (naukriOtp.ts). The code is typed and
+ * forgotten; the number is saved sealed only once the sign-in has worked. A check on the page is the user's, streamed.
  */
 export async function runConnect(userId: string, site: Site, options: ConnectOptions = {}) {
   const connection = await getConnection(userId, site);
@@ -40,11 +45,30 @@ export async function runConnect(userId: string, site: Site, options: ConnectOpt
   let screen: ScreenStream | null = null;
   let relay: ReturnType<typeof openStream> | null = null;
   let outcome: StreamOutcome = "failed";
+  // The number Naukri texted a code to (OTP connect): kept in memory until the sign-in is saved, then sealed.
+  let usedNumber: string | null = null;
   try {
     if (streamed) {
       screen = new ScreenStream(session.context);
       await screen.start(session.page);
-      relay = openStream(userId, site, screen, Date.now() + SIGN_IN_WAIT_MS);
+      const saved = await loginNumber(userId, site);
+      relay = openStream(userId, site, screen, Date.now() + SIGN_IN_WAIT_MS, {
+        savedNumber: saved ? maskNumber(saved) : null,
+        send: async (given) => {
+          const mobile = given ?? saved;
+          if (!mobile) return { state: "refused", message: "Enter your 10-digit mobile number." };
+          const page = livePage(session.page);
+          if (!page) return { state: "refused", message: "The sign-in closed. Connect again." };
+          const step = await sendLoginCode(page, mobile);
+          if (step.state === "code_sent") usedNumber = mobile;
+          return step;
+        },
+        enter: async (code) => {
+          const page = livePage(session.page);
+          if (!page) return { state: "refused", message: "The sign-in closed. Connect again." };
+          return enterLoginCode(page, code);
+        },
+      });
       if (!(await setStreamUrl(userId, site, relay.url))) {
         outcome = "cancelled";
         return "cancelled" as const;
@@ -54,7 +78,7 @@ export async function runConnect(userId: string, site: Site, options: ConnectOpt
     await sendPush(userId, {
       title: `Sign in to ${info.label}`,
       body: streamed
-        ? `${info.label}'s sign-in is ready in SwipeApply. You type your password and OTP yourself; your agent never types or keeps them.`
+        ? `Connect ${info.label} in SwipeApply: your mobile number, then the code ${info.label} texts you.`
         : `A Chrome window opened on your computer. Sign in to ${info.label} there; your agent never sees your password.`,
       url: appUrl("/account"),
       tag: `connect-${site}`,
@@ -87,6 +111,9 @@ export async function runConnect(userId: string, site: Site, options: ConnectOpt
       return "cancelled" as const;
     }
     outcome = "connected";
+    // OTP connect: the number is kept (sealed) so the next connect asks only for a code.
+    if (usedNumber) await saveLoginNumber(userId, site, usedNumber).catch(() => false);
+    usedNumber = null;
     console.log(`source-connect: ${site} connected for …${userId.slice(-6)}`);
     // The first look for jobs right away, so the feed fills without another press (the run's own budget and checks apply).
     await enqueueSourceIngest(userId, site).catch((error) => console.error(`source-connect: first ${site} run not queued: ${error instanceof Error ? error.message : error}`));

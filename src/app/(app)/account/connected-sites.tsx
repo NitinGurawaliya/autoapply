@@ -208,7 +208,7 @@ export function ConnectedSites({ initial }: { initial: SourcesOverview }) {
                 </span>
                 <span>It applies one job at a time, at a person&apos;s pace, and stops the moment {sheetFor.label} asks for a check.</span>
                 <span>
-                  You sign in on {sheetFor.label}&apos;s own page, shown here from a browser we run. You type your password and OTP yourself; we never type, keep or record them.
+                  You connect with your mobile number and the code {sheetFor.label} texts you. We enter them on {sheetFor.label}&apos;s own login for you and never ask for your password. The code is used once and not kept; your number is kept, encrypted, for the next time.
                 </span>
                 <span>After that we keep you signed in and use the account from our servers, through a home internet address in your city, until you disconnect.</span>
                 <span>

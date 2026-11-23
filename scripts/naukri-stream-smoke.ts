@@ -9,7 +9,9 @@
 //   login page reaches this process's log, stealthy-browser.log or storage. Then two more users sign in at the same
 //   time, each in their own window and stream: neither pass opens the other's stream, each page gets only its own
 //   user's typing, each saved sign-in holds only its own session, and each user has their own proxy session name.
-//   Opens Chrome windows for a few seconds.
+//   Then OTP connect (K8b) on a page laid out like Naukri's: a refused number, Naukri's wait, the number, a wrong code,
+//   the right code, connected, no page frame sent, the number kept sealed; connect again with the saved number; Disconnect
+//   deletes it. Opens Chrome windows for a minute or so.
 //   Its own throwaway users only; all removed at the end.
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
@@ -32,7 +34,7 @@ async function main() {
   const { openStream, relayReady, startRelay, stopRelay } = await import("../src/modules/apply/sites/relay");
   const { closeAllStealthyBrowsers } = await import("../src/modules/apply/real-browser");
   const { unseal } = await import("../src/lib/sealed");
-  const { disconnect, getConnection, sessionName, signStreamToken, siteStateKey, startConnect, streamIdOf, streamTicket } = await import("../src/modules/sources");
+  const { disconnect, getConnection, loginNumber, loginNumberKey, sessionName, signStreamToken, siteStateKey, startConnect, streamIdOf, streamTicket } = await import("../src/modules/sources");
   type Ticket = Awaited<ReturnType<typeof streamTicket>>;
 
   const stealthyLog = process.env.STEALTHY_LOG || path.resolve(process.cwd(), "stealthy-browser.log");
@@ -65,6 +67,9 @@ async function main() {
   const person = await makeUser("real", false);
   const userA = await makeUser("a", false);
   const userB = await makeUser("b", false);
+  const userC = await makeUser("c", false);
+  // OTP connect's number and codes, for the leak checks.
+  const otpValues: string[] = [];
   const fakeEnqueue = async () => "job";
   try {
     await startRelay();
@@ -227,18 +232,72 @@ async function main() {
     const [rowA, rowB] = await Promise.all([getConnection(userA.id, "naukri"), getConnection(userB.id, "naukri")]);
     check("both show Connected, streams closed", rowA?.status === "connected" && rowB?.status === "connected" && rowA.streamUrl === null && rowB.streamUrl === null);
     check("each user gets their own proxy session", sessionName(userA.id, "naukri") !== sessionName(userB.id, "naukri"));
+
+    // 9. OTP connect (K8b): the number, then the code, on a page laid out like Naukri's; no page frames to the phone.
+    const mobile = `9${String(Date.now()).slice(-9)}`;
+    check("OTP: connect starts", (await startConnect(userC.id, "naukri", fakeEnqueue)).ok);
+    const runC = runConnect(userC.id, "naukri", { loginUrl: login.otpUrl, waitForSignIn: fakeWaitForSignIn });
+    const ticketC = await readyTicket(userC.id);
+    if (ticketC.state !== "ready") {
+      check("OTP: pass ready", false, ticketC.state);
+      await disconnect(userC.id, "naukri");
+      await runC.catch(() => undefined);
+      return;
+    }
+    const phoneC = new Phone(ticketC.url, ticketC.token);
+    check("OTP: stream opens without frames", (await phoneC.open(PHONE, false)) === 200);
+    check("OTP: the stream offers a code sign-in, no saved number yet", await phoneC.until(() => phoneC.opened !== null, 10_000) && phoneC.opened?.otp === true && phoneC.opened.savedNumber === null, JSON.stringify(phoneC.opened));
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    const unknown = await phoneC.otp("login", { mobile: "1234567890" });
+    check("OTP: Naukri's refusal comes back in its words, no digits", unknown.reply?.state === "refused" && /not registered/i.test(unknown.reply.message ?? "") && !/\d/.test(unknown.reply.message ?? ""), JSON.stringify(unknown.reply));
+    // Naukri's own wait between codes holds on our side too.
+    const tooSoon = await phoneC.otp("login", { mobile });
+    check("OTP: a second ask within the wait is held", tooSoon.status === 429 && tooSoon.reply?.state === "wait", JSON.stringify(tooSoon));
+    await new Promise((resolve) => setTimeout(resolve, 25_500));
+    const sent = await phoneC.otp("login", { mobile });
+    check("OTP: Naukri texts a code to the number", sent.reply?.state === "code_sent" && login.sentTo().at(-1) === mobile, JSON.stringify(sent.reply));
+    const texted = login.codeFor(mobile) ?? "";
+    const wrong = await phoneC.otp("code", { code: texted === "111111" ? "222222" : "111111" });
+    check("OTP: a wrong code is refused with Naukri's words", wrong.reply?.state === "refused" && /invalid/i.test(wrong.reply.message ?? ""), JSON.stringify(wrong.reply));
+    const right = await phoneC.otp("code", { code: texted });
+    check("OTP: the right code is accepted", right.reply?.state === "accepted", JSON.stringify(right.reply));
+    const outcomeC = await runC;
+    check("OTP: connected", outcomeC === "connected", String(outcomeC));
+    check("OTP: no page frame reached the phone", phoneC.frames === 0, `${phoneC.frames}`);
+    await phoneC.close();
+    const savedMobile = await loginNumber(userC.id, "naukri");
+    check("OTP: the number is kept for next time", savedMobile === mobile);
+    const numberBlob = await storage.get(loginNumberKey(userC.id, "naukri"));
+    check("OTP: kept sealed, not readable in storage", Boolean(numberBlob) && !Buffer.from(numberBlob!.bytes).includes(Buffer.from(mobile)));
+
+    // 10. Connect again: the saved number, masked; a code is texted to it without typing it.
+    await startConnect(userC.id, "naukri", fakeEnqueue);
+    const againC = runConnect(userC.id, "naukri", { loginUrl: login.otpUrl, waitForSignIn: fakeWaitForSignIn });
+    const ticketC2 = await readyTicket(userC.id);
+    const phoneC2 = ticketC2.state === "ready" ? new Phone(ticketC2.url, ticketC2.token) : null;
+    if (phoneC2) await phoneC2.open(PHONE, false);
+    check("OTP again: the saved number shows masked", Boolean(phoneC2) && (await phoneC2!.until(() => phoneC2!.opened !== null, 10_000)) && phoneC2!.opened?.savedNumber === `+91 ••••• •${mobile.slice(-4)}`, JSON.stringify(phoneC2?.opened));
+    const viaSaved = phoneC2 ? await phoneC2.otp("login", { saved: true }) : null;
+    check("OTP again: a code goes to the saved number", viaSaved?.reply?.state === "code_sent" && login.sentTo().at(-1) === mobile, JSON.stringify(viaSaved?.reply));
+    tokens.push(...(ticketC2.state === "ready" ? [ticketC2.token] : []));
+    await disconnect(userC.id, "naukri");
+    check("OTP again: Disconnect cancels the sign-in", (await againC) === "cancelled");
+    await phoneC2?.close();
+    check("OTP: Disconnect deletes the saved number", (await loginNumber(userC.id, "naukri")) === null && (await storage.get(loginNumberKey(userC.id, "naukri"))) === null);
+    otpValues.push(mobile, texted);
   } finally {
     logs.stop();
     // 8. Nothing of the login pages in the log, stealthy-browser.log or storage.
     const logged = logs.text();
     const stealthy = existsSync(stealthyLog) ? readFileSync(stealthyLog).subarray(stealthyFrom).toString("utf8") : "";
-    const values = [typed, typedA, typedB].flatMap((set) => [set.user, set.pass, set.otp]);
+    const values = [...[typed, typedA, typedB].flatMap((set) => [set.user, set.pass, set.otp]), ...otpValues];
+    check("OTP values were collected for the leak checks", otpValues.length === 2);
     check("the log has lines from this run", logged.includes("relay: stream opened"));
     check("nothing typed reaches the log", values.every((value) => !logged.includes(value)));
     check("nothing typed reaches stealthy-browser.log", values.every((value) => !stealthy.includes(value)));
     check("no stream token reaches any log", tokens.length > 0 && tokens.every((token) => !logged.includes(token) && !stealthy.includes(token)));
     check("no frame reaches any log", !logged.includes("/9j/") && !stealthy.includes("/9j/"));
-    const everyone = [person.id, tester.id, userA.id, userB.id];
+    const everyone = [person.id, tester.id, userA.id, userB.id, userC.id];
     const blobs = await db.fileBlob.findMany({ where: { userId: { in: everyone } }, select: { key: true, bytes: true } });
     check("storage holds only the sealed sign-in", blobs.every((blob) => blob.key.startsWith("browser-state/")), blobs.map((blob) => blob.key).join(","));
     check("nothing typed or seen is in storage", blobs.every((blob) => values.every((value) => !Buffer.from(blob.bytes).includes(Buffer.from(value))) && !Buffer.from(blob.bytes).includes(Buffer.from("/9j/"))));
@@ -250,7 +309,7 @@ async function main() {
     await login.close();
     await closeAllStealthyBrowsers().catch(() => undefined);
     await db.workerBeat.deleteMany({ where: { id: SMOKE_BEAT } });
-    for (const user of [tester, person, userA, userB]) {
+    for (const user of [tester, person, userA, userB, userC]) {
       await db.$executeRaw`UPDATE pgboss.job SET state = 'cancelled', completed_on = now() WHERE state IN ('created', 'retry') AND data->>'userId' = ${user.id}`.catch(() => 0);
       await storage.deleteForUser(user.id);
       await db.rateEvent.deleteMany({ where: { key: { endsWith: user.id } } });

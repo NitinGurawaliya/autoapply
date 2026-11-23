@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { z } from "zod";
 import { streamSecret, verifyStreamToken, type Site } from "@/modules/sources";
+import type { OtpStep } from "./naukriOtp";
 import { inputEventSchema, viewportSchema, type ScreenStream } from "./screen-stream";
 
 /**
@@ -9,8 +10,11 @@ import { inputEventSchema, viewportSchema, type ScreenStream } from "./screen-st
  * WebSocket, no library). The phone talks to the worker that holds its window, directly: frames never pass through
  * the web app or Postgres.
  *
- *   GET  /stream/<sid>?w=&h=   frames as server-sent events (`frame`, then `end` with the outcome)
- *   POST /stream/<sid>/input   { events: [...], viewport? }: taps, scrolls, text, keys
+ *   GET  /stream/<sid>?w=&h=&frames=   server-sent events: `open` (the saved number, masked), `frame` (unless
+ *                                      frames=0), then `end` with the outcome
+ *   POST /stream/<sid>/input           { events: [...], viewport?, frames? }: taps, scrolls, text, keys; frames on/off
+ *   POST /stream/<sid>/login           { mobile } or { saved: true }: OTP connect (K8b), Naukri texts a code
+ *   POST /stream/<sid>/code            { code }: Naukri's code, entered on its page and forgotten
  *
  * Each needs `Authorization: Bearer <token>` (modules/sources/stream-token.ts) for that stream id and its user, and an
  * Origin of the app (APP_URL). A stream exists only while its connect job's window is open and ends with it. Nothing
@@ -23,6 +27,15 @@ import { inputEventSchema, viewportSchema, type ScreenStream } from "./screen-st
 
 export type StreamOutcome = "connected" | "failed" | "cancelled" | "expired";
 
+/** OTP connect (K8b): what the worker does with the number and the code. Neither is kept here. */
+export type OtpHandlers = {
+  /** The number to text a code to, or null for the saved one. */
+  send: (mobile: string | null) => Promise<OtpStep>;
+  enter: (code: string) => Promise<OtpStep>;
+  /** The saved number, masked ("+91 ••••• •4175"), or null. */
+  savedNumber: string | null;
+};
+
 type Entry = {
   userId: string;
   site: Site;
@@ -30,6 +43,14 @@ type Entry = {
   deadline: number;
   viewer: ServerResponse | null;
   unwatch: (() => void) | null;
+  otp: OtpHandlers | null;
+  /** Whether frames go to the phone: off while it shows its own number and code screens, on for the page. */
+  frames: boolean;
+  /** One OTP step at a time; how many of each so far (Naukri allows a few). */
+  busy: boolean;
+  sends: number;
+  codes: number;
+  lastSend: number;
 };
 
 const streams = new Map<string, Entry>();
@@ -38,7 +59,13 @@ let publicBase: string | null = null;
 
 const MAX_BODY_BYTES = 16 * 1024;
 const HEARTBEAT_MS = 15_000;
-const bodySchema = z.object({ events: z.array(inputEventSchema).max(64), viewport: viewportSchema.optional() });
+const bodySchema = z.object({ events: z.array(inputEventSchema).max(64), viewport: viewportSchema.optional(), frames: z.boolean().optional() });
+const loginSchema = z.union([z.object({ mobile: z.string().regex(/^\d{10}$/) }), z.object({ saved: z.literal(true) })]);
+const codeSchema = z.object({ code: z.string().regex(/^\d{4,8}$/) });
+// Naukri's own wait between codes is about 30 s; a few codes and a few tries are all a person needs.
+const MAX_SENDS = 4;
+const MAX_CODES = 5;
+const RESEND_AFTER_MS = 25_000;
 
 type Env = Record<string, string | undefined>;
 
@@ -100,10 +127,10 @@ export async function stopRelay() {
  * Registers a sign-in window's stream for one user until `deadline`. The returned `url` goes on the user's
  * SiteConnection (setStreamUrl); `end` tells the phone how it ended and closes everything.
  */
-export function openStream(userId: string, site: Site, stream: ScreenStream, deadline: number) {
+export function openStream(userId: string, site: Site, stream: ScreenStream, deadline: number, otp: OtpHandlers | null = null) {
   if (!publicBase) throw new Error("The relay is not running");
   const sid = randomBytes(16).toString("base64url");
-  streams.set(sid, { userId, site, stream, deadline, viewer: null, unwatch: null });
+  streams.set(sid, { userId, site, stream, deadline, viewer: null, unwatch: null, otp, frames: true, busy: false, sends: 0, codes: 0, lastSend: 0 });
   console.log(`relay: stream opened for …${userId.slice(-6)}`);
   return { sid, url: `${publicBase}/stream/${sid}`, end: (outcome: StreamOutcome) => endStream(sid, outcome) };
 }
@@ -154,7 +181,7 @@ async function readBody(req: IncomingMessage) {
 
 async function handle(req: IncomingMessage, res: ServerResponse, origin: string) {
   const url = new URL(req.url ?? "/", "http://relay");
-  const match = /^\/stream\/([A-Za-z0-9_-]{16,64})(\/input)?$/.exec(url.pathname);
+  const match = /^\/stream\/([A-Za-z0-9_-]{16,64})(\/input|\/login|\/code)?$/.exec(url.pathname);
   if (!match) {
     res.writeHead(404).end();
     return;
@@ -180,6 +207,15 @@ async function handle(req: IncomingMessage, res: ServerResponse, origin: string)
     return;
   }
 
+  if (input === "/login" || input === "/code") {
+    if (req.method !== "POST") {
+      res.writeHead(405).end();
+      return;
+    }
+    await otpStep(req, res, entry, input === "/login");
+    return;
+  }
+
   if (input) {
     if (req.method !== "POST") {
       res.writeHead(405).end();
@@ -198,6 +234,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, origin: string)
       return;
     }
     if (parsed.viewport) await entry.stream.resize(parsed.viewport).catch(() => undefined);
+    if (parsed.frames !== undefined) showFrames(entry, parsed.frames);
     const sent = parsed.events.length ? await entry.stream.input(parsed.events).catch(() => false) : true;
     res.writeHead(sent ? 204 : 409).end();
     return;
@@ -208,6 +245,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, origin: string)
     return;
   }
   const viewport = viewportSchema.safeParse({ width: url.searchParams.get("w"), height: url.searchParams.get("h") });
+  if (url.searchParams.get("frames") === "0") entry.frames = false;
   if (viewport.success) await entry.stream.resize(viewport.data).catch(() => undefined);
   // One viewer: a new one (a reload, a second tab) takes over and the old one is told.
   if (entry.viewer && !entry.viewer.writableEnded) {
@@ -216,7 +254,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, origin: string)
     entry.viewer.end();
   }
   res.writeHead(200, { "Content-Type": "text/event-stream", Connection: "keep-alive", "X-Accel-Buffering": "no" });
-  res.write(`event: open\ndata: ${JSON.stringify({ expiresAt: new Date(entry.deadline).toISOString() })}\n\n`);
+  res.write(`event: open\ndata: ${JSON.stringify({ expiresAt: new Date(entry.deadline).toISOString(), otp: Boolean(entry.otp), savedNumber: entry.otp?.savedNumber ?? null })}\n\n`);
   // Frames are dropped while the phone's connection is behind, never queued: the next one replaces them anyway.
   let blocked = false;
   res.on("drain", () => {
@@ -224,7 +262,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, origin: string)
   });
   entry.viewer = res;
   entry.unwatch = entry.stream.watch((frame) => {
-    if (blocked || res.writableEnded) return;
+    if (!entry.frames || blocked || res.writableEnded) return;
     blocked = !res.write(`event: frame\ndata: ${JSON.stringify({ d: frame.data, w: frame.width, h: frame.height })}\n\n`);
   });
   const heartbeat = setInterval(() => {
@@ -240,4 +278,70 @@ async function handle(req: IncomingMessage, res: ServerResponse, origin: string)
       entry.unwatch = null;
     }
   });
+}
+
+/** Frames on (the phone shows the page: a check) or off (its own screens). On sends the newest frame at once. */
+function showFrames(entry: Entry, on: boolean) {
+  const was = entry.frames;
+  entry.frames = on;
+  if (on && !was && entry.viewer && entry.unwatch) {
+    const viewer = entry.viewer;
+    entry.unwatch();
+    entry.unwatch = entry.stream.watch((frame) => {
+      if (!entry.frames || viewer.writableEnded) return;
+      viewer.write(`event: frame\ndata: ${JSON.stringify({ d: frame.data, w: frame.width, h: frame.height })}\n\n`);
+    });
+  }
+}
+
+/**
+ * OTP connect (K8b): the number or the code, handed to the worker's driver and answered with its outcome. The body is
+ * read, checked and passed on; nothing of it is logged or kept here.
+ */
+async function otpStep(req: IncomingMessage, res: ServerResponse, entry: Entry, login: boolean) {
+  const reply = (status: number, body: unknown) => {
+    res.writeHead(status, { "Content-Type": "application/json" }).end(JSON.stringify(body));
+  };
+  if (!entry.otp) return reply(409, { state: "refused", message: "This sign-in does not take a code." });
+  if (entry.busy) return reply(409, { state: "busy" });
+  const raw = await readBody(req);
+  let body: unknown = null;
+  try {
+    body = raw === null ? null : JSON.parse(raw);
+  } catch {
+    body = null;
+  }
+  if (login) {
+    const parsed = loginSchema.safeParse(body);
+    if (!parsed.success) return reply(400, { state: "refused", message: "Enter your 10-digit mobile number." });
+    if (entry.sends >= MAX_SENDS) return reply(429, { state: "refused", message: "That is enough codes for one sign-in. Connect again in a few minutes." });
+    const wait = entry.lastSend + RESEND_AFTER_MS - Date.now();
+    if (wait > 0) return reply(429, { state: "wait", seconds: Math.ceil(wait / 1000) });
+    entry.busy = true;
+    entry.sends += 1;
+    entry.lastSend = Date.now();
+    try {
+      const step = await entry.otp.send("mobile" in parsed.data ? parsed.data.mobile : null);
+      if (step.state === "check") showFrames(entry, true);
+      return reply(200, step);
+    } catch {
+      return reply(200, { state: "refused", message: "Naukri's login did not answer. Try again in a minute." });
+    } finally {
+      entry.busy = false;
+    }
+  }
+  const parsed = codeSchema.safeParse(body);
+  if (!parsed.success) return reply(400, { state: "refused", message: "Enter the code Naukri texted you." });
+  if (entry.codes >= MAX_CODES) return reply(429, { state: "refused", message: "Too many tries for one code. Ask Naukri for a new one." });
+  entry.busy = true;
+  entry.codes += 1;
+  try {
+    const step = await entry.otp.enter(parsed.data.code);
+    if (step.state === "check") showFrames(entry, true);
+    return reply(200, step);
+  } catch {
+    return reply(200, { state: "refused", message: "Naukri's login did not answer. Try again." });
+  } finally {
+    entry.busy = false;
+  }
 }

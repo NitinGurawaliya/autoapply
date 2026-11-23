@@ -72,6 +72,12 @@ Do: `source-connect` on a cloud worker with a display: a fresh Chrome context th
 Design: [13.12 Architecture](TDD.md#1312-architecture-connect-keep-alive-run) (Connect on a phone, Mobile UX) · [13.11 Decision](TDD.md#1311-decision-owner-23-nov-2026-the-myjobb-way) · [4.4 State machine](TDD.md#44-connection-state-machine) · [4.9 Security](TDD.md#49-security-and-privacy).
 **Done when:** the owner connects Naukri from their phone at 390 px through the stream, password and OTP typed by the owner, "Connected as <name>" shown, with no worker on the owner's laptop; nothing of the login pages is stored or logged (checked in the relay's and worker's logs); `naukri-connect-smoke` PASS with the stream; typecheck and lint pass.
 
+<a id="k8b"></a>
+### [~] K8b — Connect Naukri with a code (OTP), no Naukri page on the phone
+Do: on K8's relay, `POST /stream/<id>/login` (the mobile number, or the saved one) and `POST /stream/<id>/code` (Naukri's code), handled by the worker driving Naukri's own OTP login (`sites/naukriOtp.ts`) in the stealthy Chrome through the user's proxy; a challenge falls back to K8's page for that step; the number kept sealed (`browser-state/<userId>/naukri-login.json`); the Account sheet becomes number, then six-digit code, then "Connected as <name>"; CLAUDE.md and ARCHITECTURE §6.20 changed to the owner's OTP rule.
+Design: [13.16 OTP connect](TDD.md#1316-otp-connect-owner-23-nov-2026-after-the-first-live-try) · [13.12 Architecture](TDD.md#1312-architecture-connect-keep-alive-run) · [4.9 Security](TDD.md#49-security-and-privacy).
+**Done when:** the owner connects their real Naukri account from the app with their number and Naukri's code only, "Connected as <name>" shown; a local Naukri-like page passes the same flow in `naukri-stream-smoke` with the code and number absent from logs and storage (the number only sealed); typecheck and lint pass.
+
 <a id="k9"></a>
 ### [ ] K9 — Connect from a computer: the extension
 Do: only if K6's V1 shows a session made at home works through the user's proxy: a one-button MV3 extension (`extension/`): pairing by a one-time code from Account, "Connect Naukri" with consent, posts the browser's naukri.com cookies to `POST /api/sources/naukri/session` (Zod, naukri.com only, sealed at once, nothing else read, no other site's cookies); Disconnect from the app deletes the session.

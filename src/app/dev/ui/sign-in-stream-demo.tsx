@@ -8,7 +8,7 @@ import { SignInStream } from "@/app/(app)/account/sign-in-stream";
 // The streamed sign-in sheet (K8) in each of its states, with the pass and the worker's stream played by a stand-in
 // fetch for "demo" only: a drawn page instead of a real one, nothing leaves the page.
 
-type Scenario = "live" | "loading" | "connected" | "expired" | "error";
+type Scenario = "otp" | "otp saved" | "live" | "loading" | "connected" | "expired" | "error";
 let scenario: Scenario = "live";
 let installed = false;
 // Set once the connected scenario's stream ends: the pass then says connected, as the server would.
@@ -70,13 +70,25 @@ function install() {
     }
     if (url.startsWith("https://relay.demo/")) {
       if (url.includes("/input")) return new Response(null, { status: 204 });
+      // OTP connect: any number gets a code; 123456 is the right code.
+      if (url.endsWith("/login")) {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        return json({ state: "code_sent" });
+      }
+      if (url.endsWith("/code")) {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        const { code } = JSON.parse(String(init?.body ?? "{}")) as { code?: string };
+        return json(code === "123456" ? { state: "accepted" } : { state: "refused", message: "Invalid OTP. Please try again" });
+      }
       if (scenario === "error") throw new TypeError("demo: unreachable");
       ended = false;
       const size = new URL(url).searchParams;
       const width = Number(size.get("w")) || 350;
       const height = Number(size.get("h")) || 560;
       const frame = { d: drawFrame(width, height), w: width, h: height };
-      const events: Array<[string, unknown]> = [["open", {}], ...Array.from({ length: scenario === "connected" ? 4 : 600 }, (): [string, unknown] => ["frame", frame])];
+      const otp = scenario.startsWith("otp");
+      const opened = { otp, savedNumber: scenario === "otp saved" ? "+91 ••••• •4175" : null };
+      const events: Array<[string, unknown]> = [["open", opened], ...Array.from({ length: scenario === "connected" ? 4 : 600 }, (): [string, unknown] => ["frame", frame])];
       if (scenario === "connected") events.push(["end", { outcome: "connected" }]);
       return new Response(sse(events, 500, () => (ended = scenario === "connected")), { headers: { "Content-Type": "text/event-stream" } });
     }
@@ -90,7 +102,7 @@ export function SignInStreamDemo() {
   useEffect(install, []);
   return (
     <div className="flex flex-wrap gap-2">
-      {(["live", "loading", "connected", "expired", "error"] as const).map((name) => (
+      {(["otp", "otp saved", "live", "loading", "connected", "expired", "error"] as const).map((name) => (
         <Sheet key={name} open={open && scenario === name} onOpenChange={setOpen}>
           <SheetTrigger
             render={<Button variant="line" size="md" />}
