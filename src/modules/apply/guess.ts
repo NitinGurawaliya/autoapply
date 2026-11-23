@@ -127,6 +127,10 @@ export function guessable(field: Pick<FormField, "label" | "type" | "options">) 
   // Consent to texts, calls or marketing is the user's alone (CLAUDE.md: marketing opt-ins are never ticked for them). 23 Nov,
   // Cotality on Workday: "By providing your telephone number ... you consent to ..." was guessed Yes.
   if (/\bconsent\b[^.?]*\b(text|sms|messages?|calls?|contact|marketing)\b|\b(text messages?|sms|whatsapp)\b|\bopt.?in\b/i.test(field.label)) return false;
+  // 23 Nov, Fractal on Workday: a privacy question whose choices were to subscribe to marketing or not was guessed
+  // "subscribe", and a "Roll number / Seat Number / Registration Number" was made up. Both are the user's alone.
+  if (field.options?.some((option) => /subscribe|marketing|newsletter|promotional/i.test(option))) return false;
+  if (/\b(roll|seat|registration|enrol?ment|admission|student|employee|candidate|application)\s*(no\.?|number|id)\b|\bregistration\b.*\bnumber\b/i.test(field.label)) return false;
   return (field.options ?? []).filter((option) => SALUTATION.test(option.trim())).length < 2 && !selfIdList(field.options);
 }
 

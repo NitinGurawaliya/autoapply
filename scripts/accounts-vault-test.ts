@@ -3,7 +3,7 @@
 import { randomBytes } from "node:crypto";
 process.env.ACCOUNTS_KEY = randomBytes(32).toString("base64");
 import { decrypt, encrypt, generatePassword, passwordFitsRule, vaultReady } from "../src/modules/accounts/vault";
-import { readAccountMessage, workdayFormUrl, workdayTenant } from "../src/modules/apply/adapters/workday";
+import { readAccountMessage, workdayDate, workdayFormUrl, workdayTenant } from "../src/modules/apply/adapters/workday";
 
 let failed = 0;
 function check(name: string, ok: boolean, detail = "") {
@@ -42,6 +42,11 @@ check("message: exists", readAccountMessage("An account with this email already 
 check("message: password rule", readAccountMessage("Password does not meet the requirements") === "refused");
 check("message: wrong sign-in", readAccountMessage("Wrong email address or password. Try again.") === "refused");
 check("message: the form label Verify New Password is not a verify message", readAccountMessage("Create Account Email Address* Password* Verify New Password*") !== "verify");
+check("date: a bare year", JSON.stringify(workdayDate("2026")) === JSON.stringify({ year: "2026" }));
+check("date: month name", workdayDate("June 2026")?.month === "06");
+check("date: iso day", workdayDate("2026-06-30")?.day === "30");
+check("date: mm/yyyy", workdayDate("6/2026")?.month === "06");
+check("date: words refused", workdayDate("Immediately") === null);
 check("message: none", readAccountMessage("  ") === null);
 check("message: other words kept", JSON.stringify(readAccountMessage("Service unavailable")) === JSON.stringify({ error: "Service unavailable" }));
 

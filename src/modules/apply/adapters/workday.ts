@@ -299,14 +299,16 @@ async function fillOne(page: Page, value: ResolvedValue) {
       return;
     }
     case "radio": {
-      const pick = bestOption(await block.locator("label").allInnerTexts(), value.value);
-      if (!pick) throw new NeedsAnswerError({ key: value.key, label: value.label, type: "radio", options: (await block.locator("label").allInnerTexts()).map((text) => text.trim()).filter(Boolean), required: value.required ?? true });
-      // The radio input its label names, not the label: Workday's label never settles for a click (23 Nov, 30 s timeout).
-      const target = await block.locator("label", { hasText: pick }).first().getAttribute("for");
-      const radio = target ? page.locator(`[id="${target}"]`) : block.locator('input[type="radio"]').nth((await block.locator("label").allInnerTexts()).findIndex((text) => text.trim() === pick));
-      // A native click on the input: what the page's own handler listens to (Playwright's check did not register, 23 Nov).
-      await radio.first().evaluate((input) => (input as HTMLInputElement).click());
-      if (!(await radio.first().isChecked().catch(() => false))) throw new Error(`Workday did not take "${pick}" for "${value.label.slice(0, 60)}"`);
+      // Only the radio buttons' own labels: the question is a label too, and "No" once matched "DXC TechNOlogy" in it
+      // (23 Nov). The input is clicked natively, inside the page: Workday's label never settles for a click, and
+      // Playwright's check did not register.
+      const radios = block.locator('input[type="radio"]');
+      const choices = await radios.evaluateAll((inputs) => inputs.map((input) => ((input.id ? document.querySelector(`label[for="${CSS.escape(input.id)}"]`)?.textContent : null) ?? input.getAttribute("aria-label") ?? "").trim()));
+      const want = norm(value.value);
+      const at = choices.findIndex((text) => norm(text) === want) >= 0 ? choices.findIndex((text) => norm(text) === want) : choices.findIndex((text) => norm(text).startsWith(want) || want.startsWith(norm(text)));
+      if (at < 0) throw new NeedsAnswerError({ key: value.key, label: value.label, type: "radio", options: choices.filter(Boolean), required: value.required ?? true });
+      await radios.nth(at).evaluate((input) => (input as HTMLInputElement).click());
+      if (!(await radios.nth(at).isChecked().catch(() => false))) throw new Error(`Workday did not take "${choices[at]}" for "${value.label.slice(0, 60)}"`);
       return;
     }
     case "checkbox": {
@@ -322,9 +324,9 @@ async function fillOne(page: Page, value: ResolvedValue) {
       return;
     }
     case "date": {
-      const date = /^(\d{4})-(\d{2})(?:-(\d{2}))?/.exec(value.value) ?? /^(\d{1,2})\/(\d{4})$/.exec(value.value);
-      if (!date) throw new NeedsAnswerError({ key: value.key, label: `${value.label} (a date)`, type: "text", required: value.required ?? true });
-      const [year, month, day] = date[0].includes("/") ? [date[2], date[1].padStart(2, "0"), undefined] : [date[1], date[2], date[3]];
+      const parsed = workdayDate(value.value);
+      if (!parsed) throw new NeedsAnswerError({ key: value.key, label: `${value.label} (a date)`, type: "text", required: value.required ?? true });
+      const { year, month, day } = parsed;
       const part = async (name: string, text: string | undefined) => {
         const input = block.locator(`[data-automation-id="${name}"]`).first();
         // A display layer sits over each date part (23 Nov: a click timed out): focus the input and type, as a keyboard does.
@@ -345,24 +347,7 @@ async function fillOne(page: Page, value: ResolvedValue) {
       // A search box ("How did you hear about us?", skills): type, Enter, then the matching suggestion.
       const search = block.locator('[data-uxi-widget-type="selectinput"], [data-automation-id="searchBox"] input, [data-automation-id="multiselectInputContainer"] input').first();
       if ((await search.count()) > 0) {
-        await typeInto(search, value.value);
-        await page.keyboard.press("Enter");
-        await page.waitForTimeout(1500);
-        // Only the open popup's entries: chosen items of other prompts ("India (+91)") are options too.
-        const suggestions = page.locator('[data-automation-id="promptOption"]:visible');
-        // A prompt can be a list inside a list ("How did you hear": a category, then the source): keep choosing until
-        // the block shows a chosen item, the matching entry first, else the only or first one at that level.
-        for (let level = 0; level < 3; level += 1) {
-          const texts = (await suggestions.allInnerTexts().catch(() => [] as string[])).map((text) => text.trim()).filter(Boolean);
-          const pick = bestOption(texts, value.value) ?? (level > 0 || texts.length === 1 ? texts[0] : undefined);
-          if (!pick) throw new NeedsAnswerError({ key: value.key, label: `${value.label} (nothing matched "${value.value.slice(0, 40)}")`, type: "text", required: value.required ?? true });
-          // The popup's own layer takes pointer events over its entries (23 Nov: a plain click timed out); the entry is
-          // visible and is the one a person clicks.
-          await suggestions.filter({ hasText: pick }).first().click({ force: true });
-          await page.waitForTimeout(1200);
-          if ((await block.locator('[data-automation-id="selectedItem"]').count()) > 0) break;
-        }
-        await page.keyboard.press("Escape").catch(() => undefined);
+        await fillPrompt(page, block, search, value);
         return;
       }
       const input = block.locator('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([data-automation-id="beecatcher"])').first();
@@ -378,6 +363,76 @@ async function fillOne(page: Page, value: ResolvedValue) {
       await input.press("Tab");
     }
   }
+}
+
+/** The open popup's entries: never another box's chosen item, which Workday also marks as an option ("India (+91)"). */
+async function promptEntries(page: Page) {
+  return page.evaluate(() =>
+    [...document.querySelectorAll('[data-automation-id="promptOption"]')]
+      .filter((el) => (el as HTMLElement).getClientRects().length > 0 && !el.closest('[data-automation-id="selectedItem"], [data-automation-id="selectedItemList"]'))
+      .map((el) => (el.textContent ?? "").trim())
+      .filter(Boolean),
+  );
+}
+
+/** Words shared with the answer, for a list whose wording differs ("Computer Science" for "Computer Science and Engineering"). */
+function closestByWords(options: string[], value: string) {
+  const want = new Set(norm(value).split(/[^a-z0-9]+/).filter((word) => word.length > 2));
+  let best: string | undefined;
+  let score = 0;
+  for (const option of options) {
+    const shared = norm(option).split(/[^a-z0-9]+/).filter((word) => want.has(word)).length;
+    if (shared > score) [best, score] = [option, shared];
+  }
+  return best;
+}
+
+const HOW_HEARD = ["job board", "job portal", "job site", "online", "career site", "website", "linkedin", "naukri", "other"];
+
+/**
+ * A Workday prompt box ("How did you hear", Field of Study, skills): opened first, and the employer's own list chosen
+ * from, following a list inside a list to the end (a category, then the source); only when the answer is not in that
+ * list are its words typed as a search, the whole answer then shorter. 23 Nov: typing "Job" searched Workday's global
+ * list of job sites (DXC), while opening the box showed DXC's own list with "Job Board".
+ */
+async function fillPrompt(page: Page, block: Locator, search: Locator, value: ResolvedValue) {
+  const choose = (texts: string[]) =>
+    bestOption(texts, value.value) ?? closestByWords(texts, value.value) ?? (value.key === "how_heard" ? HOW_HEARD.map((word) => texts.find((text) => norm(text).includes(word))).find(Boolean) : undefined);
+  const chosen = async () => (await block.locator('[data-automation-id="selectedItem"]').count()) > 0;
+  const click = async (text: string) => {
+    // The popup's own layer takes pointer events over its entries; the last match is the popup's (a chosen item, if any,
+    // comes first on the page).
+    await page.locator('[data-automation-id="promptOption"]').filter({ hasText: text }).last().click({ force: true });
+    await page.waitForTimeout(1200);
+  };
+  await search.click();
+  await page.waitForTimeout(1500);
+  let texts = await promptEntries(page);
+  let pick = choose(texts);
+  if (!pick) {
+    const words = value.value.split(/\s+/).filter(Boolean);
+    for (const query of [...new Set([value.value, words.slice(0, 2).join(" "), words[0]].filter(Boolean))]) {
+      await typeInto(search, query);
+      await page.keyboard.press("Enter");
+      await page.waitForTimeout(1500);
+      texts = await promptEntries(page);
+      pick = choose(texts);
+      if (pick) break;
+    }
+  }
+  if (!pick) {
+    await page.keyboard.press("Escape").catch(() => undefined);
+    throw new NeedsAnswerError({ key: value.key, label: `${value.label} (nothing matched "${value.value.slice(0, 40)}")`, type: "text", required: value.required ?? true });
+  }
+  await click(pick);
+  // A category opens its own list: the closest entry there, else the first, until the box shows a chosen item.
+  for (let level = 0; level < 3 && !(await chosen()); level += 1) {
+    const inner = await promptEntries(page);
+    if (inner.length === 0) break;
+    await click(choose(inner) ?? inner[0]);
+  }
+  await page.keyboard.press("Escape").catch(() => undefined);
+  if (!(await chosen())) throw new Error(`Workday did not take "${pick}" for "${value.label.slice(0, 60)}"`);
 }
 
 async function activeStep(page: Page) {
@@ -501,3 +556,25 @@ export const workdayAdapter: AtsAdapter = {
     return said ? `Workday: "${said[0]}"` : null;
   },
 };
+
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+/**
+ * A date answer as Workday's parts (month, day and year inputs; education dates are often a year alone). Takes
+ * 2026-06-30, 2026-06, 06/2026, "June 2026" and a bare year (23 Nov, Fractal: "2026" for "To (Actual or Expected)").
+ */
+export function workdayDate(text: string): { year: string; month?: string; day?: string } | null {
+  const t = text.trim();
+  let m = /^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?/.exec(t);
+  if (m) return { year: m[1], month: m[2].padStart(2, "0"), day: m[3]?.padStart(2, "0") };
+  m = /^(\d{1,2})\/(\d{4})$/.exec(t);
+  if (m) return { year: m[2], month: m[1].padStart(2, "0") };
+  m = /^([a-z]{3})[a-z]*\.?\s+(\d{4})$/i.exec(t);
+  if (m && MONTHS.includes(m[1].toLowerCase())) return { year: m[2], month: String(MONTHS.indexOf(m[1].toLowerCase()) + 1).padStart(2, "0") };
+  // Day first, as written in India (a date of birth saved as "06-08-2003", 23 Nov).
+  m = /^(\d{1,2})[-./](\d{1,2})[-./](\d{4})$/.exec(t);
+  if (m) return { year: m[3], month: m[2].padStart(2, "0"), day: m[1].padStart(2, "0") };
+  m = /^(\d{4})$/.exec(t);
+  if (m) return { year: m[1] };
+  return null;
+}
