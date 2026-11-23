@@ -4,7 +4,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { revealApplicationPassword } from "@/modules/accounts";
 
 /**
- * Phase U, U1: the password the agent uses for the signed-in user's employer accounts (Workday and the others), shown to
+ * Phase V, V1: the password the agent uses for the signed-in user's employer accounts (Workday and the others), shown to
  * them alone so they can sign in to those accounts themselves. Made on first ask when none exists yet. POST, so it is
  * never cached or prefetched; rate-limited; never logged.
  */

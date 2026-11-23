@@ -260,7 +260,10 @@ export function ConfirmForm({
   trackOptions,
   suggestedTracks = [],
   nearbyTracks = {},
+  next,
 }: {
+  /** Where Save goes instead of the feed: the job of a share link's Apply (Phase U4). */
+  next?: { href: string };
   initial: ConfirmValues;
   answers: ApplyAnswers;
   trackOptions: Array<{ id: string; label: string }>;
@@ -371,9 +374,9 @@ export function ConfirmForm({
     // A full load, not router.push after forgetVisitedPages: that server action re-rendered this page, and the refresh
     // often won over the push, leaving the user here with the profile saved (e2e 18 Nov, 3 of 6 tries). A full load
     // also starts with no kept pages, which is what forgetting them was for.
-    // Straight to the feed: a full load shows the agent reading while today's set is built (Phase R, R4).
-    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- a full load on purpose (above)
-    window.location.assign(FEED);
+    // Straight to the feed: a full load shows the agent reading while today's set is built (Phase R, R4). From a share
+    // link's Apply, back to that job instead, which hands it to the agent (Phase U).
+    window.location.assign(next?.href ?? FEED);
   }
 
   const skills = values.skills.split(",").map((item) => item.trim()).filter(Boolean);
@@ -675,7 +678,7 @@ export function ConfirmForm({
         {/* Next to the button, so it is seen on a phone (it used to sit below the fold). */}
         {status === "answers" && unanswered.length > 0 ? <FieldError className="mb-2.5">Add your {unansweredText} to continue.</FieldError> : null}
         <Button variant="primary" size="xl" className="w-full" disabled={status === "saving"} onClick={() => void save()}>
-          {status === "saving" ? "Saving…" : answers.show ? "Start swiping" : "Looks right"}
+          {status === "saving" ? "Saving…" : next ? "Save and apply" : answers.show ? "Start swiping" : "Looks right"}
         </Button>
       </StickyFooter>
     </>

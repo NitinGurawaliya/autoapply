@@ -67,7 +67,7 @@ export type SubmitContext = {
 };
 
 /**
- * Phase U (docs/accounts/TDD.md 4.5): what an account board's `prepare` gets before the form is read. The account step
+ * Phase V (docs/accounts/TDD.md 4.5): what an account board's `prepare` gets before the form is read. The account step
  * (accountStep.ts) uses it to sign in, or create the account, with the user's own email and application password.
  */
 export type PrepareContext = {
@@ -85,7 +85,7 @@ export type PrepareContext = {
 export interface AtsAdapter {
   source: "greenhouse" | "lever" | "ashby" | "keka" | "workable" | "zohorecruit" | "smartrecruiters" | "workday" | "mock";
   /**
-   * Boards that need an employer account (Workday, Phase U): runs after the form page opens and before `inspect`, and
+   * Boards that need an employer account (Workday, Phase V): runs after the form page opens and before `inspect`, and
    * leaves the page on the form's first step, signed in. Throws AccountVerificationError when the user must verify
    * their email first, AccountError when the account cannot be used.
    */
@@ -170,7 +170,7 @@ export class CaptchaRejectedError extends RefusedError {}
 export class BotCheckError extends NotSentError {}
 
 /**
- * Phase U: the employer sent the user an email to verify the account we just created (or a sign-in says it is not
+ * Phase V: the employer sent the user an email to verify the account we just created (or a sign-in says it is not
  * verified yet). Nothing was sent; the run ends needs_input with a card, and the user's "Done" runs it again.
  */
 export class AccountVerificationError extends Error {
@@ -179,5 +179,5 @@ export class AccountVerificationError extends Error {
   }
 }
 
-/** Phase U: the employer account cannot be used (a refused password, a sign-up refused). Nothing was sent; not retried. */
+/** Phase V: the employer account cannot be used (a refused password, a sign-up refused). Nothing was sent; not retried. */
 export class AccountError extends NoRetryError {}

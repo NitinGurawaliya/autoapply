@@ -1,4 +1,4 @@
-# Boards that need an account: Workday, Darwinbox, SuccessFactors — technical design (Phase U)
+# Boards that need an account: Workday, Darwinbox, SuccessFactors — technical design (Phase V)
 
 v1, 21 Nov 2026. Builds on Phase M's design for employer accounts ([boards/TDD.md §3.2, §4.4, §4.6](../boards/TDD.md#32-boards-that-need-an-employer-account)) and replaces its tasks M5, M6, M8, M10 and M15 for applying. What changed since 9 Nov: Workday's bot check stopped our job reads (17 Nov); every application runs in the stealthy Chrome on a worker with a screen, on one `apply` queue (18 Nov); job reading runs on GitHub Actions (M21); Darwinbox moved its careers sites to a new app. Not Naukri or LinkedIn (Phase K).
 
@@ -123,7 +123,7 @@ Reader on the new app's `POST job/alljobs` (and the job detail call it makes), w
 - The application password is typed once by the user in Account, sent over HTTPS, encrypted at once, never returned except by "Show password" to the signed-in user, never logged, never in a screenshot (fields masked first), never in an event's text.
 - `ACCOUNTS_KEY` (32 random bytes, base64) lives in the web app's and the worker's env only; never in GitHub Actions (reading jobs needs no secrets of users). Rotating it re-encrypts the rows in a script.
 - A decrypted password is used only on the employer's own host (`formHost` of the board); the account step refuses any other host.
-- CLAUDE.md's rule "we never ask for, type, store or log their password" is about the user's own passwords on signed-in sources. The application password is a different thing the owner approved (9 Nov); U1 adds that sentence to CLAUDE.md's hard rules and ARCHITECTURE in the same change.
+- CLAUDE.md's rule "we never ask for, type, store or log their password" is about the user's own passwords on signed-in sources. The application password is a different thing the owner approved (9 Nov); V1 adds that sentence to CLAUDE.md's hard rules and ARCHITECTURE in the same change.
 
 ### 4.9 Failures
 
@@ -144,14 +144,14 @@ Events `account_created`, `account_signin`, `account_verify_asked`, `account_fai
 
 | Path | Task |
 |---|---|
-| `prisma/schema.prisma`, migration `employer_accounts` | U1 |
-| `src/modules/accounts/{index,vault,rules}.ts` | U1 |
-| `src/app/(app)/account/*` (password, accounts list), `src/app/api/accounts/*` | U1 |
-| `src/modules/apply/accountStep.ts`, `src/app/mock/account/*` | U2 |
-| `src/modules/apply/adapters/workday.ts`, `apply/urls.ts`, `jobs/match.ts` `APPLY_BOARDS` | U4 |
-| `src/modules/jobs/fetchers/darwinbox.ts`, `jobs/boards.ts` | U5 |
-| `src/modules/apply/adapters/darwinbox.ts` | U6 |
-| `src/modules/jobs/fetchers/successfactors.ts`, `apply/adapters/successfactors.ts` | U7 |
+| `prisma/schema.prisma`, migration `employer_accounts` | V1 |
+| `src/modules/accounts/{index,vault,rules}.ts` | V1 |
+| `src/app/(app)/account/*` (password, accounts list), `src/app/api/accounts/*` | V1 |
+| `src/modules/apply/accountStep.ts`, `src/app/mock/account/*` | V2 |
+| `src/modules/apply/adapters/workday.ts`, `apply/urls.ts`, `jobs/match.ts` `APPLY_BOARDS` | V4 |
+| `src/modules/jobs/fetchers/darwinbox.ts`, `jobs/boards.ts` | V5 |
+| `src/modules/apply/adapters/darwinbox.ts` | V6 |
+| `src/modules/jobs/fetchers/successfactors.ts`, `apply/adapters/successfactors.ts` | V7 |
 
 ### 4.12 Env
 
@@ -178,19 +178,19 @@ Events `account_created`, `account_signin`, `account_verify_asked`, `account_fai
 
 ## 8. Rollout
 
-U1 and U2 first (nothing visible to users until a board is in the feed). Workday into `APPLY_BOARDS` after its real application and two days of reads; Darwinbox and SuccessFactors the same way, one board at a time. Each board's first week: a daily look at accounts made versus applications sent.
+V1 and V2 first (nothing visible to users until a board is in the feed). Workday into `APPLY_BOARDS` after its real application and two days of reads; Darwinbox and SuccessFactors the same way, one board at a time. Each board's first week: a daily look at accounts made versus applications sent.
 
 ## 9. Risks
 
 - **Employer terms:** some employers' sites forbid accounts made "by automated means" (7 Nov). Mitigation: the user's standing permission, the user's own email, the account visible to the user; a list of employers to skip if one objects.
-- **Workday's checks tighten** and stop the worker's clicks: the board falls back to a person at the screen, which does not scale; measured in U4's dry runs.
+- **Workday's checks tighten** and stop the worker's clicks: the board falls back to a person at the screen, which does not scale; measured in V4's dry runs.
 - **Password reuse by users:** the screen says to use a new one; the rule makes reuse less likely, not impossible.
 - **One leak opens many accounts:** the key is only in two envs, the vault is the only decrypter, reveal is rate-limited.
 - **Verification fatigue:** a card per new employer. Measured; the automatic email step (boards/TDD M9) stays the owner's call.
 
 ## 10. Tasks
 
-[docs/accounts/TASKS.md](TASKS.md): U1–U8.
+[docs/accounts/TASKS.md](TASKS.md): U1–V8.
 
 ## 11. Decisions to close with the owner
 

@@ -217,11 +217,11 @@ Order (owner, 9 Nov): measure and scale, seed every known company, then the boar
 
 Later, boards that need an employer account:
 
-- [-] [M5 — Employer accounts: application password, vault, permission, the email step by the user (moved to Phase U: U1, U2)](boards/TASKS.md#m5)
-- [-] [M6 — Workday apply (K12 in the Naukri plan) (moved to Phase U: U3, U4)](boards/TASKS.md#m6)
-- [-] [M8 — SuccessFactors (moved to Phase U: U7)](boards/TASKS.md#m8)
-- [-] [M10 — Darwinbox (moved to Phase U: U5, U6)](boards/TASKS.md#m10)
-- [-] [M15 — iCIMS (later) (moved to Phase U: U8)](boards/TASKS.md#m15)
+- [-] [M5 — Employer accounts: application password, vault, permission, the email step by the user (moved to Phase V: V1, V2)](boards/TASKS.md#m5)
+- [-] [M6 — Workday apply (K12 in the Naukri plan) (moved to Phase V: V3, V4)](boards/TASKS.md#m6)
+- [-] [M8 — SuccessFactors (moved to Phase V: V7)](boards/TASKS.md#m8)
+- [-] [M10 — Darwinbox (moved to Phase V: V5, V6)](boards/TASKS.md#m10)
+- [-] [M15 — iCIMS (later) (moved to Phase V: V8)](boards/TASKS.md#m15)
 
 Parked (owner, 9 Nov):
 
@@ -295,15 +295,30 @@ Design: [docs/onboarding/TDD.md](onboarding/TDD.md). Tasks: [docs/onboarding/TAS
 - [x] [S3 — No "needs answers" line before the first swipe](onboarding/TASKS.md#s3)
 - [x] [S4 — The new onboarding, end to end](onboarding/TASKS.md#s4)
 
-## Phase U — Boards that need an account: Workday, Darwinbox, SuccessFactors (owner, 21 Nov)
+## Phase U — Share links: from a LinkedIn or X post to a sent application (owner, 22 Nov)
 
-Design: [docs/accounts/TDD.md](accounts/TDD.md) (v1, 21 Nov; replaces M5, M6, M8, M10, M15 for applying; decisions to close in its section 11). Tasks: [docs/accounts/TASKS.md](accounts/TASKS.md). Order U1 → U4, then U5 → U6, then U7; U8 only on numbers.
+Design: [docs/share/TDD.md](share/TDD.md). Tasks: [docs/share/TASKS.md](share/TASKS.md), in build order, behind `SHARE_LINKS` until U10.
 
-- [~] [U1 — Vault, application password, permission](accounts/TASKS.md#u1)
-- [~] [U2 — The account step and a mock account board](accounts/TASKS.md#u2)
-- [ ] [U3 — Workday jobs fresh again](accounts/TASKS.md#u3)
-- [~] [U4 — Workday apply](accounts/TASKS.md#u4)
-- [ ] [U5 — Darwinbox reader](accounts/TASKS.md#u5)
-- [ ] [U6 — Darwinbox apply](accounts/TASKS.md#u6)
-- [ ] [U7 — SuccessFactors](accounts/TASKS.md#u7)
-- [ ] [U8 — iCIMS (only on numbers)](accounts/TASKS.md#u8)
+- [~] [U1 — The share screens, drawn for approval](share/TASKS.md#u1)
+- [x] [U2 — The public job page](share/TASKS.md#u2)
+- [x] [U3 — The preview card](share/TASKS.md#u3)
+- [x] [U4 — Apply carries the job through Google and onboarding](share/TASKS.md#u4)
+- [x] [U5 — The claim and the landing](share/TASKS.md#u5)
+- [x] [U6 — Similar jobs instead of a dead end](share/TASKS.md#u6)
+- [x] [U7 — The funnel, counted](share/TASKS.md#u7)
+- [~] [U8 — In-app browsers](share/TASKS.md#u8)
+- [x] [U9 — Sharing a job from the app](share/TASKS.md#u9)
+- [~] [U10 — End to end and switch-on](share/TASKS.md#u10)
+
+## Phase V — Boards that need an account: Workday, Darwinbox, SuccessFactors (owner, 21 Nov)
+
+Design: [docs/accounts/TDD.md](accounts/TDD.md) (v1, 21 Nov; replaces M5, M6, M8, M10, M15 for applying; decisions to close in its section 11). Tasks: [docs/accounts/TASKS.md](accounts/TASKS.md). Order V1 → V4, then V5 → V6, then V7; V8 only on numbers.
+
+- [~] [V1 — Vault, application password, permission](accounts/TASKS.md#v1)
+- [~] [V2 — The account step and a mock account board](accounts/TASKS.md#v2)
+- [ ] [V3 — Workday jobs fresh again](accounts/TASKS.md#v3)
+- [~] [V4 — Workday apply](accounts/TASKS.md#v4)
+- [ ] [V5 — Darwinbox reader](accounts/TASKS.md#v5)
+- [ ] [V6 — Darwinbox apply](accounts/TASKS.md#v6)
+- [ ] [V7 — SuccessFactors](accounts/TASKS.md#v7)
+- [ ] [V8 — iCIMS (only on numbers)](accounts/TASKS.md#v8)

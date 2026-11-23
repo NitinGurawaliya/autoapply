@@ -23,4 +23,8 @@ export { warmFeeds } from "./warm";
 export { dailySetOn, dailyView, ensureDailySet, hasSetToday, isDefaultFeed, markRevealed, releaseMore } from "./daily";
 export type { DailyReveal, DailyStats, DailyView } from "./daily";
 export { fitJobs, fitOn, fitStats } from "./fit";
+export { publicJob } from "./public";
+export type { PublicJob } from "./public";
+export { similarJobs } from "./similar";
+export type { SimilarJob } from "./similar";
 export type { FitVerdict } from "./fit";

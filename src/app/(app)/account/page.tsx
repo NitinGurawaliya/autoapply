@@ -15,7 +15,7 @@ export default async function AccountPage() {
   // The brief is rebuilt from the profile on the way (a write only when it changed); a failure shows in its own card.
   const brief = profile ? await currentBrief(user.id).then((result) => ({ brief: result?.brief ?? null, learned: result?.learned ?? [], failed: false }), () => ({ brief: null, learned: [], failed: true }))
     : { brief: null, learned: [], failed: false };
-  // Phase U: the employer accounts the agent made, and whether their password exists yet (never the password itself here).
+  // Phase V: the employer accounts the agent made, and whether their password exists yet (never the password itself here).
   const [rows, password, allowed] = await Promise.all([accountRows(user.id), hasApplicationPassword(user.id), employerAccountsPermission(user.id)]);
   return (
     <>

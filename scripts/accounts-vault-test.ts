@@ -1,4 +1,4 @@
-// Phase U, U1/U4 (docs/accounts/TASKS.md): the vault, the password the agent makes, and Workday's URL and message
+// Phase V, V1/V4 (docs/accounts/TASKS.md): the vault, the password the agent makes, and Workday's URL and message
 // reading. Offline, no database. npx tsx scripts/accounts-vault-test.ts
 import { randomBytes } from "node:crypto";
 process.env.ACCOUNTS_KEY = randomBytes(32).toString("base64");

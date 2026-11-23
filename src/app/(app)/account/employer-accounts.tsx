@@ -19,7 +19,7 @@ const STATE: Record<string, string> = {
 const MASK = "••••••••••••••••";
 
 /**
- * Phase U, U1 (docs/accounts/TDD.md 5): the password your agent uses for employer accounts, and the accounts it made.
+ * Phase V, V1 (docs/accounts/TDD.md 5): the password your agent uses for employer accounts, and the accounts it made.
  * The password is fetched only when the user asks to see or copy it, and kept on screen only while shown.
  */
 export function EmployerAccounts({ accounts, passwordSet, allowed: allowedAtLoad }: { accounts: EmployerAccountRow[]; passwordSet: boolean; allowed: boolean | null }) {

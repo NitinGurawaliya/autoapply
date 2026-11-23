@@ -1,4 +1,4 @@
-// Phase U, U4: a Workday dry run on a real posting, in the stealthy Chrome, for one user. It signs in or creates the
+// Phase V, V4: a Workday dry run on a real posting, in the stealthy Chrome, for one user. It signs in or creates the
 // employer account (the real account step), reads and fills every page, and STOPS AT REVIEW: Submit is never pressed.
 // Prints each page's fields, values and sources; nothing is written to an application. Needs ACCOUNTS_KEY in .env.
 //   npx tsx scripts/workday-dry-run.ts --email <the user's email> --url <a Workday posting url>

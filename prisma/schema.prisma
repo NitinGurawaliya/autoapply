@@ -18,7 +18,7 @@ model User {
   createdAt     DateTime  @default(now())
   // The newest job a "new matches" push has covered (lib/push.ts, modules/jobs/warm.ts): later ones are new.
   matchesAlertedAt DateTime?
-  // Phase U, U1 (modules/accounts): the password the agent made for this user's employer accounts (Workday and the other
+  // Phase V, V1 (modules/accounts): the password the agent made for this user's employer accounts (Workday and the other
   // boards that need one), AES-256-GCM with ACCOUNTS_KEY. Shown to the user in Account; never logged.
   applicationSecret   String?
   applicationSecretAt DateTime?
@@ -33,6 +33,7 @@ model User {
   brief        CandidateBrief?
   dailySets    DailySet[]
   employerAccounts EmployerAccount[]
+  funnelEvents FunnelEvent[]
 }
 
 // Phase P, P5 (modules/profile/brief.ts): what the agent knows about the candidate for judging fit: tracks, nearby,
@@ -52,7 +53,7 @@ model CandidateBrief {
 }
 
 // Phase P, P7 (modules/jobs/daily.ts): the day's set of jobs, released four at a time. One row per user per India day.
-// Phase U, U1/U2: one account per (user, system, employer) the agent created or found on an employer's careers site.
+// Phase V, V1/V2: one account per (user, system, employer) the agent created or found on an employer's careers site.
 // `secret`: AES-256-GCM of the password used there (a copy of User.applicationSecret at creation); null when passwordless.
 model EmployerAccount {
   id         String    @id @default(cuid())
@@ -605,4 +606,27 @@ model EvalJudgement {
 
   @@id([profileId, jobId, path])
   @@index([jobId])
+}
+
+// Share links (Phase U7, docs/share/TDD.md 4.2): one row per step a visitor reached for a shared job, at most once per
+// visitor, job and step. No personal data: the visitor id is random (the sa_vid cookie); the user id is set once
+// signed in and cleared if the account is deleted.
+model FunnelEvent {
+  id        String   @id @default(cuid())
+  at        DateTime @default(now())
+  // view | apply_tap | signed_in | resume_read | profile_saved | queued | blocked | landed | submitted
+  step      String
+  visitorId String
+  userId    String?
+  jobId     String
+  // li | x | wa | copy, from ?s= on the link; on the view step
+  source    String?
+  // the block rule, the application id (queued, landed, submitted), or "in_app_browser"
+  detail    String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([visitorId, jobId, step])
+  @@index([at, step])
+  @@index([detail])
 }

@@ -28,7 +28,7 @@ const TYPICAL_MS = 20_000;
  * straight on to the profile screen, which shows what was found (no findings screen of its own). The wait shows the
  * page being read and a bar that fills with time, so it never looks stuck. The upload is POST /api/profile/resume.
  */
-export function ResumeUploadForm({ signOut }: { signOut: React.ReactNode }) {
+export function ResumeUploadForm({ signOut, forJob = false }: { signOut: React.ReactNode; forJob?: boolean }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [reading, setReading] = useState(false);
@@ -97,7 +97,7 @@ export function ResumeUploadForm({ signOut }: { signOut: React.ReactNode }) {
     <>
       <StepHeader step={1} of={2} />
       <ScreenBody>
-        <PageIntro title="Start with your resume" sub="We read it once, so you never retype your details again." />
+        <PageIntro title="Start with your resume" sub={forJob ? "Used for this job and every one after it." : "We read it once, so you never retype your details again."} />
         <input
           ref={input}
           id="resume"

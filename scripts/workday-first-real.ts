@@ -1,4 +1,4 @@
-// Phase U, U4: the first real Workday application (owner, 23 Nov: "Yes, send to Cotality" for Nitin). A right swipe
+// Phase V, V4: the first real Workday application (owner, 23 Nov: "Yes, send to Cotality" for Nitin). A right swipe
 // through swipeRight (every governance rule), then that one application run here by the real runner, in the stealthy
 // Chrome, through Submit. Workday is allowed for this process only (it is not in APPLY_BOARDS until this passes), and
 // the application is not put on the shared queue, so a worker on older code cannot take it. A question the run asks is

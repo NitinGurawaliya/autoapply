@@ -7,7 +7,7 @@ import { runAccountStep, type AccountOutcome, type AccountPage } from "../accoun
 import { MaybeSentError, NeedsAnswerError, RefusedError, type AtsAdapter, type FilledField, type FormField, type ResolvedValue } from "../adapter";
 
 /**
- * Workday (Phase U, U4; docs/accounts/TDD.md 4.6). "Apply Manually" is a wizard behind an employer account: Create
+ * Workday (Phase V, V4; docs/accounts/TDD.md 4.6). "Apply Manually" is a wizard behind an employer account: Create
  * Account/Sign In, My Information, My Experience, Application Questions, Voluntary Disclosures, (Self Identify), Review.
  * Every question is a `[data-automation-id^="formField-"]` block; the footer's `pageFooterNextButton` is "Save and
  * Continue" on each page and "Submit" on Review. Element ids checked live on 21-23 Nov (Cotality, wd115): the sign-up and

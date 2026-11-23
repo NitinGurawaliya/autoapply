@@ -1,4 +1,4 @@
--- Phase U, U1: the user's application password and their employer accounts (docs/accounts/TDD.md 4.3).
+-- Phase V, V1: the user's application password and their employer accounts (docs/accounts/TDD.md 4.3).
 ALTER TABLE "User" ADD COLUMN "applicationSecret" TEXT;
 ALTER TABLE "User" ADD COLUMN "applicationSecretAt" TIMESTAMP(3);
 

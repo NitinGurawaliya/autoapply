@@ -60,7 +60,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     return NextResponse.json({ ok: true, applicationId: application.id, expired: true });
   }
 
-  // Phase U: the user verified the email an employer sent for the account the agent made. Not an answer for the bank:
+  // Phase V: the user verified the email an employer sent for the account the agent made. Not an answer for the bank:
   // the application runs again and signs in (accountStep.ts); still unverified, it asks again.
   if (parsed.data.answers.some((row) => row.key === EMPLOYER_VERIFIED_KEY)) {
     await writeEvent(application.id, "answer", "You verified your email for the employer account");

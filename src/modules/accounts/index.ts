@@ -15,7 +15,7 @@ export type AccountSystem = "workday" | "darwinbox" | "successfactors";
 export type AccountState = "creating" | "needs_verification" | "active" | "exists_elsewhere" | "failed";
 
 /**
- * Phase U, U1: the user's application password, made on first need and kept encrypted (docs/accounts/TDD.md 3.1, owner
+ * Phase V, V1: the user's application password, made on first need and kept encrypted (docs/accounts/TDD.md 3.1, owner
  * 23 Nov: one per user, made by the agent, shown in Account). Returns the plain password for one use; never log it.
  */
 export async function applicationPassword(userId: string): Promise<string> {

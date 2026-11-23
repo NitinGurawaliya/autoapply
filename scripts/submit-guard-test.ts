@@ -71,8 +71,10 @@ check("no automatic retry or reopen after a possible submission (all 192 combina
 // Routing (18 Nov): one apply queue; the pre-18 Nov queues are still read by cancel and reap code and emptied by the worker.
 check("one apply queue, named apply", APPLY_QUEUE === "apply");
 check("every apply queue, old ones included, is read by code that cancels or reaps apply jobs", ["apply", "apply-handoff", "apply-unprotected", "apply-person"].every((queue) => APPLY_QUEUES.includes(queue)) && LEGACY_APPLY_QUEUES.length === 3);
-check("the boards applied on are one fixed list: Greenhouse, Ashby, Keka, Workable, SmartRecruiters, Zoho Recruit", [...APPLY_BOARDS].sort().join(",") === "ashby,greenhouse,keka,smartrecruiters,workable,zohorecruit");
-check("every board applied on but Greenhouse hands a challenge to the person", APPLY_BOARDS.filter((board) => board !== "greenhouse").every((board) => HANDOFF_BOARDS.includes(board)));
+check("the boards applied on are one fixed list: Greenhouse, Ashby, Keka, Workable, SmartRecruiters, Zoho Recruit, Workday", [...APPLY_BOARDS].sort().join(",") === "ashby,greenhouse,keka,smartrecruiters,workable,workday,zohorecruit");
+// Workday (Phase V, 23 Nov) has no third-party challenge: its own checks pass the worker's clicks, as on Greenhouse;
+// its two real submits ran this way. A check that stops it hands the window over through the account step.
+check("every board applied on but Greenhouse and Workday hands a challenge to the person", APPLY_BOARDS.filter((board) => board !== "greenhouse" && board !== "workday").every((board) => HANDOFF_BOARDS.includes(board)));
 
 // The last run's Submit attempt, read from events (for a cancelled application's Retry).
 const at = (seconds: number) => new Date(Date.UTC(2026, 9, 21, 10, 0, seconds));

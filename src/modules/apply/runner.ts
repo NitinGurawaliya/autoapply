@@ -21,6 +21,7 @@ import { resolveForm } from "./resolveForm";
 import { formUrlAllowed } from "./urls";
 import { LockStopped, withSubmitLock } from "./submitLock";
 import { sendPush } from "@/lib/push";
+import { trackSubmitted } from "@/lib/funnel";
 
 /** The user (or a queue clear) cancelled this application while it was running. */
 export class CancelledError extends Error {
@@ -302,7 +303,7 @@ async function execute(applicationId: string, options: { person?: boolean }) {
     await stopIfCancelled();
     // A handoff window is the person's from the moment it opens: a Submit pressed before the agent is ready still counts.
     if (handoff) stopWatchingSubmit = adapter.watchSubmit?.(session.page, () => void markAttempted());
-    // Boards that need an employer account (Phase U): sign in, or create the account, before the form is read.
+    // Boards that need an employer account (Phase V): sign in, or create the account, before the form is read.
     if (adapter.prepare) {
       const owner = await db.user.findUnique({ where: { id: application.userId }, select: { email: true } });
       await adapter.prepare(session.page, {
@@ -410,7 +411,7 @@ async function execute(applicationId: string, options: { person?: boolean }) {
         void notifyNeedsInput(applicationId, "answers");
         return;
       }
-      // A resume asked for on a later page (Workday's My Experience, Phase U): uploaded first, as on the first page, when
+      // A resume asked for on a later page (Workday's My Experience, Phase V): uploaded first, as on the first page, when
       // the first page had none.
       const laterResume = !resume && !upload.cleanup ? next.values.find((value) => value.type === "file" && !isLetterFile(value)) : undefined;
       if (laterResume) {
@@ -493,6 +494,8 @@ async function execute(applicationId: string, options: { person?: boolean }) {
     });
     confirmedSent = true;
     await writeEvent(applicationId, "submit", `Application submitted. Confirmation: ${result.evidence}`.slice(0, 300));
+    // A share link's application (Phase U7): its funnel's last step. Never throws.
+    void trackSubmitted(applicationId);
     // The big moment reaches the user even with the app closed (in the app, components/sent-celebration.tsx shows it).
     void sendPush(application.userId, { title: `Sent to ${jobInfo.company}`, body: `Your agent sent your ${jobInfo.title} application.`, url: `/applications/${applicationId}`, tag: `app-${applicationId}` }).catch(() => undefined);
     const shown = livePage(page) ?? page;
@@ -516,10 +519,11 @@ async function execute(applicationId: string, options: { person?: boolean }) {
       if (evidence) {
         await recordAfterSubmit(applicationId, { status: "submitted", submittedAt: new Date(), pendingQuestions: [], error: null });
         await writeEvent(applicationId, "submit", `Application submitted. Confirmation: ${evidence} after you pressed Submit`.slice(0, 300));
+        void trackSubmitted(applicationId);
         return;
       }
     }
-    // Phase U: the employer wants the user to verify their email before the account can be used. Nothing was sent; the
+    // Phase V: the employer wants the user to verify their email before the account can be used. Nothing was sent; the
     // card's Done (answers route, EMPLOYER_VERIFIED_KEY) runs the application again, which signs in.
     if (error instanceof AccountVerificationError && !attempted) {
       await setApp(applicationId, {

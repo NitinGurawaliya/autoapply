@@ -28,6 +28,6 @@ export function isCustomQuestionKey(key: string) {
 
 /** Pending-question key for a one-time code an ATS emails mid-submit. Never stored in the answer bank. */
 export const ONE_TIME_CODE_KEY = "security_code";
-// Phase U: the user verified the email an employer sent for the account the agent created (a card with Done). Never
+// Phase V: the user verified the email an employer sent for the account the agent created (a card with Done). Never
 // stored in the answer bank: the answers route runs the application again, which signs in.
 export const EMPLOYER_VERIFIED_KEY = "employer_account_verified";

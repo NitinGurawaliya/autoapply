@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes, randomInt } from "node:crypto";
 
 /**
- * Phase U, U1 (docs/accounts/TDD.md 4.8): the only place employer-account passwords are encrypted or read back.
+ * Phase V, V1 (docs/accounts/TDD.md 4.8): the only place employer-account passwords are encrypted or read back.
  * AES-256-GCM with ACCOUNTS_KEY (32 random bytes, base64), in the web app's and the worker's env only. Stored as
  * `v1:<iv>:<tag>:<ciphertext>` (base64 parts). A decrypted value lives in memory for one use and is never logged.
  */

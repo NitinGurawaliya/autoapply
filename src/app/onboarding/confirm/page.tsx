@@ -7,6 +7,8 @@ import { ADJACENT_TRACKS, feedTracks, TRACK_LABELS, TRACKS, tracksOf } from "@/m
 import { profileSchema } from "@/modules/profile";
 import { redirect } from "next/navigation";
 import { Screen } from "@/components/patterns/layout";
+import { ShareJobStrip } from "@/components/patterns/share-job-strip";
+import { intentJob } from "@/modules/share";
 import { ConfirmForm, type ApplyAnswers } from "./confirm-form";
 
 /**
@@ -58,9 +60,14 @@ export default async function ConfirmPage() {
     acknowledgementQuestion: ACKNOWLEDGEMENT_QUESTION,
   };
 
+  // Arrived from a share link's Apply (Phase U4): the job stays in view, and Save goes back to it instead of the feed.
+  const job = await intentJob();
+
   return (
     <Screen>
+      {job ? <ShareJobStrip company={job.company} logoUrl={job.logoUrl} title={job.title} /> : null}
       <ConfirmForm
+        next={job ? { href: job.path } : undefined}
         answers={answers}
         trackOptions={TRACKS.map((id) => ({ id, label: TRACK_LABELS[id] }))}
         // What the resume suggests today, offered when it differs from the saved fields (Phase N1).

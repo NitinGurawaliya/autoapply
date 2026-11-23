@@ -21,6 +21,8 @@ import { explainOutcome } from "@/lib/explain";
 import { groupFields } from "@/lib/field-groups";
 import { applicationVersion, STAGES, statusMeta } from "@/lib/status-meta";
 import { buildSteps } from "@/lib/steps";
+import { todaysPicksLeft, trackShareStep } from "@/modules/share";
+import { ArrivalCard } from "./arrival-card";
 
 const fieldsSchema = z.array(
   z.object({ key: z.string(), label: z.string(), value: z.string(), source: z.string(), selector: z.string().optional(), basis: z.string().optional() }),
@@ -64,12 +66,15 @@ function trustText(sources: string[]) {
   return `${guesses ? base.replace("Every answer", "The other answers") : base}${draftText}${guessText}`.trim();
 }
 
-export default async function ApplicationPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ debug?: string }> }) {
+export default async function ApplicationPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ debug?: string; from?: string }> }) {
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
   const { id } = await params;
   // The raw audit log is for the operator only (ADMIN_EMAILS) and only on ?debug=1 (24 Oct, owner).
-  const debug = isAdmin(user.email) && (await searchParams).debug === "1";
+  const query = await searchParams;
+  const debug = isAdmin(user.email) && query.debug === "1";
+  // Opened from a share link's Apply (Phase U5): the arrival card, with today's other picks.
+  const fromShare = query.from === "share";
   const application = await db.application.findFirst({
     where: { id, userId: user.id },
     include: { events: { orderBy: { createdAt: "asc" } } },
@@ -99,6 +104,8 @@ export default async function ApplicationPage({ params, searchParams }: { params
     );
   }
 
+  // Landed from a share link (Phase U7): the funnel's landing step.
+  if (fromShare) await trackShareStep("landed", { jobId: application.jobId, userId: user.id, detail: application.id });
   const parsed = fieldsSchema.safeParse(application.fields ?? []);
   const fields = parsed.success ? parsed.data : [];
   const groups = groupFields(fields);
@@ -187,6 +194,8 @@ export default async function ApplicationPage({ params, searchParams }: { params
             note={application.status === "blocked" ? "Nothing was sent. Your agent held it back before opening the form." : undefined}
           />
         ) : null}
+
+        {fromShare ? <ArrivalCard picksLeft={await todaysPicksLeft(user.id)} stopped={stopped} /> : null}
 
         {fields.length > 0 ? <TrustPanel className="mt-5" text={trustText(fields.map((field) => field.source))} counts={counts} /> : null}
 

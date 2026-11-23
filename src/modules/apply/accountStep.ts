@@ -3,7 +3,7 @@ import { accountFor, EMPLOYER_ACCOUNTS_KEY, EMPLOYER_ACCOUNTS_QUESTION, employer
 import { AccountError, AccountVerificationError, NeedsAnswerError, type PrepareContext } from "./adapter";
 
 /**
- * Phase U, U2 (docs/accounts/TDD.md 4.4, 4.5): the account step every account board shares. The board supplies the
+ * Phase V, V2 (docs/accounts/TDD.md 4.4, 4.5): the account step every account board shares. The board supplies the
  * page actions (`AccountPage`); this decides sign in or create, records the account's state, and turns the employer's
  * answer into the run's outcome. A password is typed only on the employer's own page and never written to an event.
  */

@@ -70,5 +70,5 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 export const getCurrentUser = cache(async () => {
   const session = await auth();
   if (!session?.user?.id) return null;
-  return { id: session.user.id, email: session.user.email ?? "", name: session.user.name ?? null };
+  return { id: session.user.id, email: session.user.email ?? "", name: session.user.name ?? null, hasProfile: Boolean(session.user.hasProfile) };
 });
