@@ -340,7 +340,14 @@ async function fillOne(page: Page, value: ResolvedValue) {
     }
     case "checkbox": {
       const box = block.locator('input[type="checkbox"]').first();
-      if (/^(y|yes|true|checked|1)$/i.test(value.value.trim()) && !(await box.isChecked())) await box.check({ force: true });
+      if (!/^(y|yes|true|checked|1)$/i.test(value.value.trim()) || (await box.isChecked())) return;
+      // Workday's styled box can swallow Playwright's click (24 Nov, Fractal: "Clicking the checkbox did not change its
+      // state"): then the input is clicked natively inside the page, as the radios are, and must read checked after.
+      await box.check({ force: true }).catch(async () => {
+        await box.evaluate((input) => (input as HTMLInputElement).click());
+        await page.waitForTimeout(400);
+      });
+      if (!(await box.isChecked().catch(() => false))) throw new Error(`Workday did not take the tick for "${value.label.slice(0, 60)}"`);
       return;
     }
     case "checkbox-group": {
