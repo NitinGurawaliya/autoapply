@@ -33,7 +33,14 @@ async function main() {
   if (!user || !job) throw new Error("user or job not found");
   (APPLY_BOARDS as string[]).push("workday");
 
-  const swiped = await swipeRight(user.id, job.id, async () => "local-run");
+  // Already swiped, and blocked only because a worker on older code had no Workday (board_not_supported, 23 Nov): the
+  // same application runs again here; the runner checks every rule again before it opens anything.
+  const existing = await db.application.findFirst({ where: { userId: user.id, jobId: job.id }, select: { id: true, status: true, error: true } });
+  let swiped: Awaited<ReturnType<typeof swipeRight>>;
+  if (existing && existing.status === "blocked" && existing.error === "board_not_supported") {
+    await db.application.update({ where: { id: existing.id }, data: { status: "queued", error: null } });
+    swiped = { ok: true, applicationId: existing.id };
+  } else swiped = await swipeRight(user.id, job.id, async () => "local-run");
   console.log(`swipe: ${JSON.stringify(swiped)}`);
   if (!swiped.ok) return;
   await runApplication(swiped.applicationId);

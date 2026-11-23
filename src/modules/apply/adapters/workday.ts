@@ -195,7 +195,33 @@ async function readPage(page: Page): Promise<FormField[]> {
     if (field.type === "select") options = await listboxOptions(page, selector).catch(() => undefined);
     fields.push({ selector, label: field.label.replace(/\*/g, "").trim(), type: field.type === "search" ? "text" : field.type, required: field.required, options, hintKey: hintFor(field.auto, field.type) });
   }
+  const step = await activeStep(page);
+  const seen = SEEN.get(page);
+  if (!seen || seen.step !== step) SEEN.set(page, { step, labels: new Set(fields.map((field) => field.label)), retried: new Set() });
+  else for (const field of fields) seen.labels.add(field.label);
   return fields;
+}
+
+/**
+ * The questions already handed to the runner on the page now showing. A question that appears only once another is
+ * answered (23 Nov, Cisco: "office # times per week") is found by reading the page again before Save and Continue;
+ * a required one we filled that still reads empty is handed back once more.
+ */
+const SEEN = new WeakMap<Page, { step: string; labels: Set<string>; retried: Set<string> }>();
+
+async function leftOnPage(page: Page): Promise<FormField[]> {
+  const before = SEEN.get(page);
+  const step = await activeStep(page);
+  if (!before || before.step !== step) return [];
+  const known = new Set(before.labels);
+  const retried = before.retried;
+  const fields = await readPage(page);
+  return fields.filter((field) => {
+    if (!known.has(field.label)) return true;
+    if (!field.required || retried.has(field.label)) return false;
+    retried.add(field.label);
+    return true;
+  });
 }
 
 /** Standard keys from Workday's own field ids, so name, contact and resume map without the model. */
@@ -263,6 +289,13 @@ async function fillOne(page: Page, value: ResolvedValue) {
       }
       await list.filter({ hasText: pick }).first().click();
       await list.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => undefined);
+      // The box must show the choice (23 Nov, Cisco: "Internship/Co-Op? = No" did not stick): once more by keyboard.
+      if (norm(await opener.innerText().catch(() => "")) !== norm(pick)) {
+        await opener.click();
+        const again = await openedOptions(page, opener);
+        await again.filter({ hasText: pick }).first().click({ force: true }).catch(() => undefined);
+        await page.waitForTimeout(600);
+      }
       return;
     }
     case "radio": {
@@ -410,6 +443,11 @@ export const workdayAdapter: AtsAdapter = {
   // Save and Continue until a page with questions, or Review (null): the runner answers and fills each page.
   async nextStep(page) {
     for (let hop = 0; hop < 8; hop += 1) {
+      // Questions that appeared after the answers on this page, or a required one that did not take: answered first.
+      if (hop === 0) {
+        const left = await leftOnPage(page);
+        if (left.length > 0) return left;
+      }
       if (/submit/i.test(await footerText(page))) return null;
       const before = await activeStep(page);
       await page.locator(id("pageFooterNextButton")).first().click();
