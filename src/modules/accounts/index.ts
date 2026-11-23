@@ -1,7 +1,15 @@
 import { db } from "@/lib/db";
+import { EMPLOYER_ACCOUNTS_KEY as EMPLOYER_ACCOUNTS_KEY_LOCAL, employerAccountsAllowed as employerAccountsAllowedLocal } from "./permission";
 import { decrypt, encrypt, generatePassword, vaultReady } from "./vault";
 
 export { generatePassword, passwordFitsRule, vaultReady } from "./vault";
+export { EMPLOYER_ACCOUNTS_KEY, EMPLOYER_ACCOUNTS_QUESTION, employerAccountsAllowed } from "./permission";
+
+/** The user's standing permission to make employer accounts: Yes, No, or not answered yet (null). */
+export async function employerAccountsPermission(userId: string) {
+  const row = await db.answer.findFirst({ where: { userId, key: EMPLOYER_ACCOUNTS_KEY_LOCAL }, orderBy: { updatedAt: "desc" }, select: { answer: true } });
+  return employerAccountsAllowedLocal(row?.answer);
+}
 
 export type AccountSystem = "workday" | "darwinbox" | "successfactors";
 export type AccountState = "creating" | "needs_verification" | "active" | "exists_elsewhere" | "failed";

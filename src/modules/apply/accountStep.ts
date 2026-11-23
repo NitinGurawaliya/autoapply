@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { accountFor, noteExistingAccount, setAccountState, startAccount, vaultReady, type AccountSystem } from "@/modules/accounts";
+import { accountFor, EMPLOYER_ACCOUNTS_KEY, EMPLOYER_ACCOUNTS_QUESTION, employerAccountsPermission, noteExistingAccount, setAccountState, startAccount, vaultReady, type AccountSystem } from "@/modules/accounts";
 import { AccountError, AccountVerificationError, NeedsAnswerError, type PrepareContext } from "./adapter";
 
 /**
@@ -75,7 +75,13 @@ export async function runAccountStep(ctx: PrepareContext, system: AccountSystem,
     }
   }
 
-  // No account yet: the employer's required privacy/terms box is ticked only under the user's standing permission.
+  // No account yet: made only under the user's standing permission to make employer accounts, asked once (the needs-you
+  // card, or Account). Nothing was sent; the user's answer runs the application again.
+  const allowed = await employerAccountsPermission(ctx.userId);
+  if (allowed === null) throw new NeedsAnswerError({ key: EMPLOYER_ACCOUNTS_KEY, label: EMPLOYER_ACCOUNTS_QUESTION, type: "select", options: ["Yes", "No"], required: true });
+  if (!allowed) throw new AccountError(`${company} needs an employer account, and you chose not to let your agent make them. Turn it on in Account to apply here. Nothing was sent.`);
+
+  // The employer's required privacy/terms box is ticked only under the user's standing permission.
   const consent = await consentGiven(ctx.userId);
   if (consent === null) {
     throw new NeedsAnswerError({ key: CONSENT_KEY, label: `${ctx.company}'s account form has a required privacy notice to accept. May your agent accept required privacy notices and terms for you?`, type: "select", options: ["Yes", "No"], required: true });

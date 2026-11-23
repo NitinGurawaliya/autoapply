@@ -44,6 +44,8 @@ export const ANSWER_KEYS: AnswerKeyDef[] = [
   // Standing permission to tick required privacy / truthfulness / arbitration acknowledgements (modules/apply/acknowledgement.ts).
   // No synonyms: it is never a form label, only asked once and read by the resolver.
   { key: "accept_acknowledgements", type: "select", policy: "bank_or_ask", synonyms: [] },
+  // Phase U: may the agent make employer accounts (Workday and the like) for the user; asked once (modules/accounts/permission.ts).
+  { key: "create_employer_accounts", type: "select", policy: "bank_or_ask", synonyms: [] },
 
   { key: "gender", type: "select", policy: "default_only", default: EEO_DEFAULT, synonyms: [/\bgender\b/i] },
   { key: "race", type: "select", policy: "default_only", default: EEO_DEFAULT, synonyms: [/\brace\b/i] },

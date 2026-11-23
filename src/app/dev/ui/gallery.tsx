@@ -408,9 +408,10 @@ function Patterns() {
           <ResumeSketch band={2} />
         </Section>
         <Section title="Employer accounts">
-          <EmployerAccounts passwordSet={false} accounts={[]} />
+          <EmployerAccounts passwordSet={false} allowed={null} accounts={[]} />
           <EmployerAccounts
             passwordSet
+            allowed
             accounts={[
               { id: "a", system: "workday", employer: "cotality", state: "active", createdDays: 0 },
               { id: "b", system: "workday", employer: "bristolmyerssquibb", state: "needs_verification", createdDays: 1 },

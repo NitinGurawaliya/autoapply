@@ -3,6 +3,8 @@
 import { randomBytes } from "node:crypto";
 process.env.ACCOUNTS_KEY = randomBytes(32).toString("base64");
 import { decrypt, encrypt, generatePassword, passwordFitsRule, vaultReady } from "../src/modules/accounts/vault";
+import { employerAccountsAllowed, EMPLOYER_ACCOUNTS_KEY } from "../src/modules/accounts/permission";
+import { getAnswerKey } from "../src/modules/answers";
 import { readAccountMessage, workdayDate, workdayFormUrl, workdayTenant } from "../src/modules/apply/adapters/workday";
 
 let failed = 0;
@@ -47,6 +49,8 @@ check("date: month name", workdayDate("June 2026")?.month === "06");
 check("date: iso day", workdayDate("2026-06-30")?.day === "30");
 check("date: mm/yyyy", workdayDate("6/2026")?.month === "06");
 check("date: words refused", workdayDate("Immediately") === null);
+check("permission: Yes, No and unanswered", employerAccountsAllowed("Yes") === true && employerAccountsAllowed("no") === false && employerAccountsAllowed(null) === null && employerAccountsAllowed(" ") === null);
+check("permission: a known answer key, so the needs-you card can save it", Boolean(getAnswerKey(EMPLOYER_ACCOUNTS_KEY)));
 check("message: none", readAccountMessage("  ") === null);
 check("message: other words kept", JSON.stringify(readAccountMessage("Service unavailable")) === JSON.stringify({ error: "Service unavailable" }));
 

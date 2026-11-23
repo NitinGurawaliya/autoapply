@@ -9,6 +9,8 @@ import { check, loadRules, writeEvent } from "@/modules/governance";
 import { AccountVerificationError, BotCheckError, CaptchaRejectedError, MaybeSentError, NeedsAnswerError, NoRetryError, RefusedError, type FilledField, type PendingQuestion, type ResolvedValue } from "./adapter";
 import { isLetterFile, LETTER_FILE, letterPdf } from "./letter";
 import { guessable, guessAnswers } from "./guess";
+import { ACKNOWLEDGEMENT_KEY } from "./acknowledgement";
+import { EMPLOYER_ACCOUNTS_KEY } from "@/modules/accounts/permission";
 import { decideAfterError, rerunsInRow, SUBMIT_ATTEMPT } from "./outcome";
 import { uploadResume } from "./adapters/mock";
 import { livePage, openBrowser } from "./browser";
@@ -553,7 +555,9 @@ async function execute(applicationId: string, options: { person?: boolean }) {
       const tried = await db.applicationEvent.count({ where: { applicationId, type: "retry", message: { startsWith: `${GUESS_RETRY} "${question.label.slice(0, 80)}"` } } });
       const asked = question.label.replace(/ \(nothing matched .*\)$/, "");
       const field = { selector: "", label: searchedNothing ? `${asked} (a search box: give the one word or place name to search for)` : asked, type: question.type, required: true, options: question.options };
-      const guess = tried === 0 && guessable(field) ? (await guessAnswers({ fields: [field], profile, answers, job: jobInfo }).catch(() => null))?.get(field.label) : undefined;
+      // A standing permission (accept acknowledgements, make employer accounts) is the user's to give: asked, never guessed.
+      const permission = question.key === ACKNOWLEDGEMENT_KEY || question.key === EMPLOYER_ACCOUNTS_KEY;
+      const guess = tried === 0 && !permission && guessable(field) ? (await guessAnswers({ fields: [field], profile, answers, job: jobInfo }).catch(() => null))?.get(field.label) : undefined;
       if (guess) {
         await upsert(application.userId, { key: question.key, question: question.label, answer: guess.answer, source: "guessed" });
         await writeEvent(applicationId, "retry", `${GUESS_RETRY} "${question.label.slice(0, 80)}": ${guess.answer.slice(0, 80)} (${guess.basis.slice(0, 120)})`);
