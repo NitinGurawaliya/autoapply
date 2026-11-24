@@ -93,10 +93,12 @@ Design: [13.12 Architecture](TDD.md#1312-architecture-connect-keep-alive-run) (K
 **Done when:** with the owner's laptop worker off, the owner's account refreshes, runs a job run and sends one real right swipe from the cloud through the owner's proxy, ending `submitted` with Naukri's reply and the answers' sources; an expired session ends in `needs_signin` with a push and nothing sent; `naukri-adapter-test` and `naukri-mock-smoke` still PASS; typecheck and lint pass.
 
 <a id="k10a"></a>
-### [~] K10a — The cloud worker image: the stealthy Chrome on a virtual screen
+### [x] K10a — The cloud worker image: the stealthy Chrome on a virtual screen
 Do: a `screen` stage in `Dockerfile.worker` (Xvfb, Python and SeleniumBase 4.58.0 in a venv, non-root, the relay port) with `scripts/screen-entrypoint.sh` starting the display; the default image stays the screenless reader; `ConnectOptions.firstRun` so checks queue no real read; DEPLOY, ARCHITECTURE §6.21 and CLAUDE.md's Testing line updated.
 Design: [13.12 Architecture](TDD.md#1312-architecture-connect-keep-alive-run) (cloud workers) · ARCHITECTURE §6.21.
 **Done when:** the image builds; inside it `canShowWindow()` is true and `naukri-stream-smoke` PASS (the stealthy Chrome under Xvfb, the relay, the OTP flow); typecheck and lint pass. Running it on a VM for real users is K10.
+Done 25 Nov: inside the image on Docker Desktop, `canShowWindow()` true on :99, the launcher READY, `naukri-stream-smoke` 78/78 PASS; a code change rebuilds in 17 s. Needs `--security-opt seccomp=unconfined` (Chrome's sandbox).
+Paths: `Dockerfile.worker` (target `screen`), `scripts/screen-entrypoint.sh`, `docs/DEPLOY.md`.
 
 <a id="k11"></a>
 ### [ ] K11 — Pilot of 20 accounts, then a load test
