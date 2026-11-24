@@ -45,6 +45,14 @@ async function main() {
   };
   check("unset: refused", refused({ SIGNED_IN_PROXY_SECRET: "k" }));
   check("no {session}: refused", refused({ ...env, SIGNED_IN_PROXY_URL: "http://u:p@gate.example.com:7000" }));
+  // IPRoyal: exactly 8 letters and digits, in the password, with the city and a 7-day lifetime.
+  const royal = { ...env, SIGNED_IN_PROXY_URL: "http://cust:pw_country-in_city-bengaluru_session-{session:8}_lifetime-7d@geo.iproyal.com:12321" };
+  const r1 = egressFor("user-a", "naukri", royal);
+  const r2 = egressFor("user-b", "naukri", royal);
+  const named = /_session-([a-z0-9]+)_lifetime-7d$/.exec(r1?.password ?? "")?.[1] ?? "";
+  check("{session:8}: exactly 8 letters and digits, in the password", /^[a-z0-9]{8}$/.test(named), named);
+  check("{session:8}: the same user keeps it, another user gets another", egressFor("user-a", "naukri", royal)?.password === r1?.password && r1?.password !== r2?.password);
+  check("{session:N} out of range: refused", refused({ ...env, SIGNED_IN_PROXY_URL: "http://u-{session:3}:p@gate.example.com:7000" }));
   check("no port: refused", refused({ ...env, SIGNED_IN_PROXY_URL: "http://u-{session}:p@gate.example.com" }));
   check("no secret: refused", refused({ SIGNED_IN_PROXY_URL: env.SIGNED_IN_PROXY_URL }));
 

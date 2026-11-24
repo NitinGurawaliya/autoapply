@@ -7,6 +7,7 @@ import { storage } from "@/lib/storage";
 import { egressFor, EgressRefused } from "@/modules/sources/egress";
 import { onSiteDomain, siteStateKey, type Site } from "@/modules/sources/sites";
 import { NoRetryError } from "./adapter";
+import { startForwarder, type Forwarder } from "./proxy-forwarder";
 import { openStealthyBrowser, stealthEnabled } from "./real-browser";
 
 export type OpenBrowser = {
@@ -207,7 +208,21 @@ export async function openBrowser(
   // Chrome with no profile folder, so only the cookies passed here are in it. The Playwright browser below runs only
   // with STEALTHY_BROWSER=0 (stealth off) or STEALTHY_FALLBACK=1 (allowed when the stealthy Chrome cannot start).
   if (stealthEnabled()) {
-    const stealthy = await openStealthyBrowser(url, owner, { savedState, proxy: egress?.seleniumProxy, proxyLabel: egress?.label });
+    // A proxy with a password reaches the stealthy Chrome through a local forwarder that signs in for it (K6, 24 Nov:
+    // SeleniumBase's own handling left our pages waiting). Chrome gets 127.0.0.1 with no password; socks5 and https
+    // upstreams keep SeleniumBase's own handling.
+    let forwarder: Forwarder | null = null;
+    let proxy = egress?.seleniumProxy;
+    if (egress?.username && egress.server.startsWith("http://")) {
+      const upstream = new URL(egress.server);
+      forwarder = await startForwarder({ host: upstream.hostname, port: Number(upstream.port), username: egress.username, password: egress.password });
+      proxy = `127.0.0.1:${forwarder.port}`;
+    }
+    const stealthy = await openStealthyBrowser(url, owner, { savedState, proxy, proxyLabel: egress?.label }).catch(async (error) => {
+      await forwarder?.close();
+      throw error;
+    });
+    if (!stealthy) await forwarder?.close();
     if (stealthy) {
       let closed = false;
       const save = () => (closed ? Promise.resolve(false) : saveState(stealthy.context, stateKey, owner, site));
@@ -224,6 +239,7 @@ export async function openBrowser(
             if (options.persist !== false) await saveState(stealthy.context, stateKey, owner, site);
           } finally {
             await stealthy.close();
+            await forwarder?.close();
           }
         },
       };

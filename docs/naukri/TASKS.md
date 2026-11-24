@@ -55,7 +55,7 @@ Design: with K3 in `docs/linkedin/`, after K4's real runs; reuses [4.7 Sequence:
 Designed in [TDD §13](TDD.md#13-naukri-for-a-million-users-the-users-own-session-run-from-our-cloud-decided-23-nov-2026); decided by the owner on 23 Nov, the myjobb way ([§13.11](TDD.md#1311-decision-owner-23-nov-2026-the-myjobb-way)): connect from the phone through a streamed sign-in (or the desktop extension), a residential proxy per user from the start, runs in our cloud. Open questions in [§13.15](TDD.md#1315-open-questions-for-the-owner). Starts after the job boards work (owner, 7 Nov). Order: K6 → K7 → K8 → K10 → K14 → K11; K9 when K6's V1 allows it; K4c, K13 and K12 (Naukri jobs on a company ATS) at any time, they need no Naukri session. Each is one session, plan first.
 
 <a id="k6"></a>
-### [ ] K6 — Checks on the owner's account, through a proxy
+### [~] K6 — Checks on the owner's account, through a proxy
 Do: with one residential proxy from the chosen provider (§13.15 item 1) and the owner's Naukri account, nothing pressed on a real job without the owner's yes for that job: V1 a session made through the proxy survives the proxy's address changing within the city, and a session made at home works through the proxy; V2 whether Naukri's own apply and chatbot requests carry a value the page makes (read in DevTools on one job); V3 a job with questions answered through to applied; V5 Naukri's own daily cap; V6 the share of Naukri-only listings over the owner's runs, by target system; V7 how long the refresh token lives unused; plus the bytes of a search page, a job page, a refresh and an apply, through the proxy.
 Design: [13.11 Decision](TDD.md#1311-decision-owner-23-nov-2026-the-myjobb-way) · [13.12 Architecture](TDD.md#1312-architecture-connect-keep-alive-run) · [13.15 checks](TDD.md#1315-open-questions-for-the-owner).
 **Done when:** V1–V7 each have a measured answer with numbers in this entry's Done line, §13.2's assumed page weight is replaced by the measurement, and the owner has answered §13.15 items 1, 2 and 4 from them.
@@ -91,6 +91,12 @@ Design: [13.12 Architecture](TDD.md#1312-architecture-connect-keep-alive-run) (C
 Do: `source-refresh` (Naukri's own refresh with the sealed session through the user's proxy, before each run, and on V7's cadence only if needed; a refused refresh → `needs_signin` and a push); `ingest-source` and Naukri applies taken by cloud workers with a display instead of the laptop (`WorkerBeat.hasScreen`, the browser per §13.15 item 3); apply at request level when V2 allows (a chatbot-JSON question parser beside `questionOf`, `readApplyReply` as evidence), else K4's page run; caps, pace, `check('submit')` and every event unchanged.
 Design: [13.12 Architecture](TDD.md#1312-architecture-connect-keep-alive-run) (Keep alive, Apply) · [13.13 What carries over](TDD.md#1313-what-carries-over-from-todays-code) · [4.7 Sequence: apply](TDD.md#47-sequence-apply-k4) · [4.8 Checks](TDD.md#48-checks-refusals-and-pace).
 **Done when:** with the owner's laptop worker off, the owner's account refreshes, runs a job run and sends one real right swipe from the cloud through the owner's proxy, ending `submitted` with Naukri's reply and the answers' sources; an expired session ends in `needs_signin` with a push and nothing sent; `naukri-adapter-test` and `naukri-mock-smoke` still PASS; typecheck and lint pass.
+
+<a id="k10a"></a>
+### [~] K10a — The cloud worker image: the stealthy Chrome on a virtual screen
+Do: a `screen` stage in `Dockerfile.worker` (Xvfb, Python and SeleniumBase 4.58.0 in a venv, non-root, the relay port) with `scripts/screen-entrypoint.sh` starting the display; the default image stays the screenless reader; `ConnectOptions.firstRun` so checks queue no real read; DEPLOY, ARCHITECTURE §6.21 and CLAUDE.md's Testing line updated.
+Design: [13.12 Architecture](TDD.md#1312-architecture-connect-keep-alive-run) (cloud workers) · ARCHITECTURE §6.21.
+**Done when:** the image builds; inside it `canShowWindow()` is true and `naukri-stream-smoke` PASS (the stealthy Chrome under Xvfb, the relay, the OTP flow); typecheck and lint pass. Running it on a VM for real users is K10.
 
 <a id="k11"></a>
 ### [ ] K11 — Pilot of 20 accounts, then a load test
