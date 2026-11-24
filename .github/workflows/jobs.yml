@@ -140,7 +140,9 @@ jobs:
       group: after-ingest
       cancel-in-progress: false
     env:
-      JOB_READINGS_PER_DAY: "4000"
+      # 12,000 since 24 Nov: ~2,500 India jobs arrive a day, and a catch-up read after midnight IST had spent 4,000 by
+      # 01:53, so nothing was read for 22 hours (one user's feed fell to 5 cards). About $0.35 per 1,000 jobs read.
+      JOB_READINGS_PER_DAY: "12000"
       AFTER_INGEST_RUN_MS: "2400000"
       LLM_BACKGROUND_CONCURRENT: "6"
     steps:

@@ -574,7 +574,7 @@ OPENAI_EMBEDDING_MODEL=          # optional, default text-embedding-3-small (ans
 OPENAI_VERIFY_MODEL=             # optional model for the answer-memory verify step (6.19); default OPENAI_MODEL
 ACCOUNTS_KEY=                    # 32 random bytes, base64: encrypts employer-account passwords (6.24); the same value on the web app and every worker; never in GitHub Actions
 SKILL_LEVELS_PER_RUN=            # optional, default 2000: jobs whose skills get required labels per ingest run (6.2); 0 = off
-JOB_READINGS_PER_DAY=4000        # Phase P: pool jobs the model may read per India day, all processes together (6.2 5d)
+JOB_READINGS_PER_DAY=12000       # Phase P: pool jobs the model may read per India day, all processes together (6.2 5d); 4000 until 24 Nov
 AFTER_INGEST_TICK_MS=480000      # the after-ingest tail's deadline behind a worker tick (6.2 5d)
 AFTER_INGEST_RUN_MS=2400000      # its deadline in the workflow's after-ingest job and run mode (6.2 5d)
 LLM_BACKGROUND_CONCURRENT=6      # background model calls at once per process (reading, skills labels, job embedding)

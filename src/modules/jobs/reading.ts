@@ -240,7 +240,8 @@ export async function readBatch(jobs: ReadingInput[]): Promise<Map<number, Readi
 
 /** How many more jobs may be read today (JOB_READINGS_PER_DAY, counted from readAt since midnight in India). */
 export async function readingBudgetLeft() {
-  const perDay = Number(process.env.JOB_READINGS_PER_DAY) || 4000;
+  // 12,000 since 24 Nov (4,000 ran out by 01:53 IST after a catch-up, and ~2,500 India jobs arrive a day).
+  const perDay = Number(process.env.JOB_READINGS_PER_DAY) || 12000;
   const [row] = await db.$queryRaw<Array<{ n: number }>>`SELECT count(*)::int AS n FROM "Job" WHERE "readAt" >= ${IST_DAY_START}`;
   return Math.max(0, perDay - (row?.n ?? 0));
 }
