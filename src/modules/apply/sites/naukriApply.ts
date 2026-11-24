@@ -1,4 +1,5 @@
 import type { Page, Response } from "playwright";
+import { customQuestionKey } from "@/modules/answers";
 import { NeedsAnswerError, NotSentError } from "../adapter";
 import { pageStop, type PageStop } from "./naukri";
 import { APPLY_CALL, dobParts, jobPageState, optionFor, optionsFor, questionOf, readApplyReply, RESPOND_CALL, type ApplyReply, type DrawerQuestion, type DrawerSnapshot, type JobPageSignals, type JobPageState } from "./naukriChat";
@@ -194,7 +195,9 @@ export async function answer(page: Page, watch: ApplyWatch, current: { question:
   const { question } = current;
   const since = { replies: watch.replies.length, messages: current.messages };
   const drawer = page.locator(DRAWER);
-  const pending = () => ({ key: question.field.label, label: question.field.label, type: question.field.type, options: question.field.options, required: question.field.required });
+  // Asked under the question's own key, as every adapter does: the answer bank takes standard keys and q_<hash> only
+  // (25 Nov: the label as key made the user's Save fail with 400).
+  const pending = () => ({ key: customQuestionKey(question.field.label), label: question.field.label, type: question.field.type, options: question.field.options, required: question.field.required });
 
   if (value === null) {
     if (!question.skip) throw new NeedsAnswerError(pending());
