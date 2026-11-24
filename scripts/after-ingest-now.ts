@@ -17,7 +17,7 @@ async function main() {
   const deadlineMs = Number.isFinite(minutes) && minutes > 0 ? minutes * 60_000 : afterIngestDeadline("run");
   await afterIngest({ deadlineMs, label: "run" });
   const coverage = await readingCoverage();
-  console.log(`reading coverage: ${coverage.current} of ${coverage.pool} pool jobs read, ${coverage.unread} unread, ${coverage.failing} failing`);
+  console.log(`reading coverage: ${coverage.current} of ${coverage.pool} pool jobs read, ${coverage.unread} unread (${coverage.noText} wait for a description), ${coverage.failing} failing`);
 }
 
 main()

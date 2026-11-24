@@ -42,7 +42,7 @@ async function main() {
     `tokens: ${llmUsage.calls} calls, input ${llmUsage.input}, output ${llmUsage.output}; per 1,000 jobs read: input ${per1000(llmUsage.input)}, output ${per1000(llmUsage.output)}, $${totals.read > 0 ? ((cost / totals.read) * 1000).toFixed(2) : "0"} ($${cost.toFixed(2)} this run)`,
   );
   const after = await readingCoverage();
-  console.log(`coverage: ${after.current} of ${after.pool} pool jobs read (${((100 * after.current) / Math.max(1, after.pool)).toFixed(1)} %), ${after.unread} unread, ${after.failing} failing`);
+  console.log(`coverage: ${after.current} of ${after.pool} pool jobs read (${((100 * after.current) / Math.max(1, after.pool)).toFixed(1)} %), ${after.unread} unread (${after.noText} wait for a description), ${after.failing} failing`);
 }
 
 main()
