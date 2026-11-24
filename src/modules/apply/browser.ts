@@ -239,6 +239,12 @@ export async function openBrowser(
             if (options.persist !== false) await saveState(stealthy.context, stateKey, owner, site);
           } finally {
             await stealthy.close();
+            if (forwarder) {
+              // Proxy traffic of this window (K7: what the provider bills a user's run), counts only.
+              const { up, down } = forwarder.bytes();
+              const size = (bytes: number) => (bytes < 1048576 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / 1048576).toFixed(1)} MB`);
+              console.log(`proxy: …${owner.slice(-6)} ${egress?.label.split(" session ")[1] ?? ""} ${size(up + down)} (${size(down)} down, ${size(up)} up)`);
+            }
             await forwarder?.close();
           }
         },

@@ -61,10 +61,12 @@ Design: [13.11 Decision](TDD.md#1311-decision-owner-23-nov-2026-the-myjobb-way) 
 **Done when:** V1–V7 each have a measured answer with numbers in this entry's Done line, §13.2's assumed page weight is replaced by the measurement, and the owner has answered §13.15 items 1, 2 and 4 from them.
 
 <a id="k7"></a>
-### [~] K7 — A residential proxy per user
+### [x] K7 — A residential proxy per user
 Do: one sticky session per user, named by an HMAC of site and user id (no table: the provider keys stickiness on the name; a table only if V1 needs addresses held for months); provider credentials in env (ARCHITECTURE §11); `browser.ts` opens a Naukri context through the user's proxy, and a small HTTP client under `modules/apply/sites` does the same for request-level calls; nothing for Naukri leaves a worker's own address (a run without a proxy fails closed); per-user proxy bytes counted on `SourceRun` and the application's events.
 Design: [13.12 Architecture](TDD.md#1312-architecture-connect-keep-alive-run) (Egress) · [13.11 Decision](TDD.md#1311-decision-owner-23-nov-2026-the-myjobb-way) item 3.
 **Done when:** `scripts/naukri-egress-test.ts` PASS (two users get different addresses, the same user keeps theirs across runs, a Naukri request with no proxy is refused before it leaves); the owner's ingest run goes out through the owner's proxy with bytes recorded; typecheck and lint pass.
+Done 25 Nov: IPRoyal residential (sticky, `{session:8}`, 7-day lifetime): two users on two Bengaluru home addresses (Hathway, Airtel), the same user keeps theirs; `naukri-egress-test` PASS (Playwright and stealthy); the owner's read through their proxy: 3 searches and 7 job pages, 43.6 MB, logged per window.
+Paths: `sources/egress.ts`, `apply/proxy-forwarder.ts` (the stealthy Chrome never gets the password), `apply/browser.ts`.
 
 <a id="k8"></a>
 ### [~] K8 — Streamed Naukri sign-in on the phone

@@ -14,22 +14,35 @@ import { connect, type AddressInfo, type Socket } from "node:net";
  */
 
 export type ForwarderUpstream = { host: string; port: number; username?: string; password?: string };
-export type Forwarder = { port: number; close: () => Promise<void> };
+/** `bytes`: what went to and came from the provider so far, the traffic it bills (counts only). */
+export type Forwarder = { port: number; bytes: () => { up: number; down: number }; close: () => Promise<void> };
 
 const HEADER_LIMIT = 16 * 1024;
 
 export async function startForwarder(upstream: ForwarderUpstream): Promise<Forwarder> {
   const auth = upstream.username ? `Basic ${Buffer.from(`${upstream.username}:${upstream.password ?? ""}`).toString("base64")}` : null;
   const sockets = new Set<Socket>();
+  // Bytes to and from the upstream: open sockets are read when asked, closed ones are added up as they close.
+  const counted = { up: 0, down: 0 };
+  const upstreamSockets = new Set<Socket>();
+  const track = (socket: Socket) => {
+    upstreamSockets.add(socket);
+    socket.once("close", () => {
+      counted.up += socket.bytesWritten;
+      counted.down += socket.bytesRead;
+      upstreamSockets.delete(socket);
+    });
+  };
   const server: Server = createServer((req, res) => {
     // Plain http: the request goes to the upstream proxy as is (absolute address), with the sign-in added.
     const headers = { ...req.headers };
     delete headers["proxy-authorization"];
     if (auth) headers["proxy-authorization"] = auth;
-    const forwarded = httpRequest({ host: upstream.host, port: upstream.port, method: req.method, path: req.url, headers }, (answer) => {
+    const forwarded = httpRequest({ host: upstream.host, port: upstream.port, method: req.method, path: req.url, headers, agent: false }, (answer) => {
       res.writeHead(answer.statusCode ?? 502, answer.headers);
       answer.pipe(res);
     });
+    forwarded.on("socket", track);
     forwarded.on("error", () => {
       if (!res.headersSent) res.writeHead(502);
       res.end();
@@ -47,6 +60,7 @@ export async function startForwarder(upstream: ForwarderUpstream): Promise<Forwa
     }
     const outbound = connect(upstream.port, upstream.host);
     sockets.add(outbound);
+    track(outbound);
     outbound.on("close", () => sockets.delete(outbound));
     const fail = () => {
       if (!client.destroyed) client.end("HTTP/1.1 502 Bad Gateway\r\n\r\n");
@@ -90,6 +104,15 @@ export async function startForwarder(upstream: ForwarderUpstream): Promise<Forwa
   const { port } = server.address() as AddressInfo;
   return {
     port,
+    bytes: () => {
+      let up = counted.up;
+      let down = counted.down;
+      for (const socket of upstreamSockets) {
+        up += socket.bytesWritten;
+        down += socket.bytesRead;
+      }
+      return { up, down };
+    },
     close: async () => {
       for (const socket of sockets) socket.destroy();
       await new Promise<void>((resolve) => server.close(() => resolve()));
