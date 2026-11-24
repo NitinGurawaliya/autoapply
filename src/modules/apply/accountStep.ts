@@ -106,7 +106,11 @@ export async function runAccountStep(ctx: PrepareContext, system: AccountSystem,
     throw new AccountError(`You already have a ${system === "workday" ? "Workday" : system} account at ${ctx.company} with ${ctx.email}. Sign in there yourself, or reset its password; nothing was sent.`);
   }
   const why = outcome === "refused" ? "refused the password" : outcome.error;
-  await setAccountState(ctx.userId, system, employer, "failed", why);
+  // No answer at all says nothing about whether the account was made (24 Nov, Zebra: the form "did not answer", the row
+  // went to failed, and every later run stopped at a refused sign-in without ever creating it): the row stays
+  // "creating", so the next run signs in and, refused, creates it; the employer's own "exists" then settles it.
+  const unknown = typeof outcome === "object" && /did not answer/i.test(outcome.error);
+  await setAccountState(ctx.userId, system, employer, unknown ? "creating" : "failed", why);
   await ctx.log("account_failed", `${label}: ${why}`);
   throw new AccountError(`${ctx.company}'s account form ${why}. Nothing was sent.`);
 }

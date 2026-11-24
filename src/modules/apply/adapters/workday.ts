@@ -114,9 +114,18 @@ async function accountOutcome(page: Page, timeoutMs = 30000): Promise<AccountOut
 }
 
 function workdayAccountPage(page: Page): AccountPage {
+  // Some tenants open on "Sign in with Google / Apple / LinkedIn, or Sign in with email" (24 Nov: Rockwell, BlackRock,
+  // Signify); the email form, with its Create Account link, shows only after "Sign in with email".
+  const emailForm = async () => {
+    const button = page.locator(id("SignInWithEmailButton")).first();
+    if (!(await button.isVisible().catch(() => false))) return;
+    await button.click();
+    await page.locator(`${id("signInSubmitButton")}, ${id("createAccountLink")}, ${id("createAccountSubmitButton")}`).first().waitFor({ state: "visible", timeout: 15000 }).catch(() => undefined);
+  };
   return {
     signedIn: async () => (await visible(page, id("pageFooterNextButton"))) && !(await visible(page, id("signInContent"))),
     signIn: async (email, password) => {
+      await emailForm();
       if (!(await visible(page, id("signInSubmitButton")))) {
         await page.locator(id("signInLink")).first().click();
         await page.locator(id("signInSubmitButton")).first().waitFor({ state: "attached", timeout: 15000 });
@@ -127,6 +136,7 @@ function workdayAccountPage(page: Page): AccountPage {
       return accountOutcome(page);
     },
     create: async (email, password, consent) => {
+      await emailForm();
       if (!(await visible(page, id("createAccountSubmitButton")))) {
         await page.locator(id("createAccountLink")).first().click();
         await page.locator(id("createAccountSubmitButton")).first().waitFor({ state: "attached", timeout: 15000 });
@@ -141,6 +151,9 @@ function workdayAccountPage(page: Page): AccountPage {
     },
   };
 }
+
+/** An upload that asks for an identity document, which the agent never sends. */
+const IDENTITY_UPLOAD = /national id|passport|aadha?ar|\bpan card\b|identity (document|card|proof)|proof of identity|government[- ]issued|driver'?s licen[cs]e|social security/i;
 
 /** Reads the visible page's questions; each block gets a `data-swipe-field` index for its selector. */
 async function readPage(page: Page): Promise<FormField[]> {
@@ -160,7 +173,7 @@ async function readPage(page: Page): Promise<FormField[]> {
     const root = document.querySelector('[data-automation-id^="applyFlow"][data-automation-id$="Page"]') ?? document.body;
     const blocks = [...root.querySelectorAll<HTMLElement>('[data-automation-id^="formField-"]')].filter((el) => !el.parentElement?.closest('[data-automation-id^="formField-"]') && el.getClientRects().length > 0); // offsetParent is null for a display:contents fieldset (23 Nov: the radio group was dropped)
     // No named helpers in here: the bundler wraps them in __name, which the page does not have (23 Nov).
-    const out: Array<{ index: number; label: string; type: string; required: boolean; options: string[]; auto: string }> = [];
+    const out: Array<{ index: number; label: string; type: string; required: boolean; options: string[]; auto: string; context: string }> = [];
     blocks.forEach((el, index) => {
       el.setAttribute(attr, String(index));
       const labelEl = el.querySelector("legend") ?? el.querySelector("label");
@@ -203,14 +216,22 @@ async function readPage(page: Page): Promise<FormField[]> {
       if (answered) return;
       // A phone extension is never ours to fill (23 Nov: "Phone Extension" took the phone number by its label).
       if (/extension$/i.test(auto)) return;
-      out.push({ index, label, type, required, options, auto });
+      // An upload box's own label is only "Upload a file (5MB max)": the section heading above it says what it is for
+      // (24 Nov, Newfold: "Resume/CV" and "Additional Attachments: Please provide all National ID's ...").
+      let context = "";
+      if (type === "file") {
+        const heads = [...root.querySelectorAll<HTMLElement>("h2, h3, h4")].filter((head) => head.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+        const head = heads[heads.length - 1];
+        context = head ? `${head.textContent ?? ""} ${(head.parentElement?.innerText ?? "").slice(0, 250)}`.replace(/\s+/g, " ").trim() : "";
+      }
+      out.push({ index, label, type, required, options, auto, context });
     });
     // The resume input on My Experience is not always inside a formField block.
     const file = document.querySelector<HTMLInputElement>('input[data-automation-id="file-upload-input-ref"]');
     if (file && !out.some((field) => field.type === "file")) {
       const holder = (file.closest("section, div") ?? file) as HTMLElement;
       holder.setAttribute(attr, "file");
-      out.push({ index: -1, label: "Resume/CV", type: "file", required: false, options: [], auto: "file-upload-input-ref" });
+      out.push({ index: -1, label: "Resume/CV", type: "file", required: false, options: [], auto: "file-upload-input-ref", context: "Resume/CV" });
     }
     return out;
   }, FIELD);
@@ -220,7 +241,19 @@ async function readPage(page: Page): Promise<FormField[]> {
     const selector = field.index < 0 ? `[${FIELD}="file"]` : `[${FIELD}="${field.index}"]`;
     let options = field.options.length > 0 ? field.options : undefined;
     if (field.type === "select") options = await listboxOptions(page, selector).catch(() => undefined);
-    fields.push({ selector, label: field.label.replace(/\*/g, "").trim(), type: field.type === "search" ? "text" : field.type, required: field.required, options, hintKey: hintFor(field.auto, field.type) });
+    let hintKey = hintFor(field.auto, field.type);
+    if (field.type === "file") {
+      const about = `${field.label} ${field.context}`;
+      // Identity documents are never sent (CLAUDE.md hard rules): a required one stops the run with the reason, an
+      // optional one is left empty, and the resume never goes into such a box.
+      if (IDENTITY_UPLOAD.test(about)) {
+        if (field.required) throw new Error(`Workday's form asks for an identity document as a required upload ("${field.context.slice(0, 90)}"); your agent never sends identity documents. Nothing was sent.`);
+        continue;
+      }
+      // Only a box about a resume takes the resume; any other upload is left to the resolver (a cover letter, say).
+      hintKey = /resume|\bcv\b|curriculum/i.test(about) || field.auto === "file-upload-input-ref" ? "resume" : undefined;
+    }
+    fields.push({ selector, label: field.label.replace(/\*/g, "").trim(), type: field.type === "search" ? "text" : field.type, required: field.required, options, hintKey });
   }
   const step = await activeStep(page);
   const seen = SEEN.get(page);
@@ -291,9 +324,40 @@ async function listboxOptions(page: Page, selector: string): Promise<string[]> {
   return [...new Set(options)];
 }
 
-function bestOption(options: string[], value: string) {
+export function bestOption(options: string[], value: string) {
   const want = norm(value);
-  return options.find((option) => norm(option) === want) ?? options.find((option) => norm(option).startsWith(want)) ?? options.find((option) => norm(option).includes(want) || want.includes(norm(option)));
+  // Past an exact match, only whole words count, and an option that negates ("Non-citizen (India)", "Not a veteran") is
+  // never taken for an answer that does not (24 Nov, ZEISS: "India" took "Non-citizen (British Indian Ocean
+  // Territory)" because "british indian" contains the letters "india").
+  const fair = options.filter((option) => negates(value) || !negates(option));
+  return (
+    options.find((option) => norm(option) === want) ??
+    fair.find((option) => norm(option).startsWith(want) && !/[a-z0-9]/.test(norm(option).charAt(want.length))) ??
+    fair.find((option) => hasWords(option, value) || hasWords(value, option))
+  );
+}
+
+const wordsOf = (text: string) => norm(text).split(/[^a-z0-9]+/).filter(Boolean);
+/** `haystack` holds `needle`'s words in order, as whole words ("Citizen (India)" holds "India"; "Indian" does not). */
+const hasWords = (haystack: string, needle: string) => {
+  const want = wordsOf(needle).join(" ");
+  return want !== "" && ` ${wordsOf(haystack).join(" ")} `.includes(` ${want} `);
+};
+/** "Non-citizen", "Not a protected veteran": a negating option. */
+const negates = (text: string) => wordsOf(text).some((word) => word === "non" || word === "not");
+
+/**
+ * Clicks the entry whose own text is exactly `text` (the last one when the page repeats it). Never a substring:
+ * Playwright's hasText matches inside words, and "Male" clicked "Female" (24 Nov, ZEISS's Gender showed "Female" for
+ * an answer of "Male"). False when no entry has that text.
+ */
+async function clickExact(items: Locator, text: string, options: { force?: boolean; last?: boolean } = {}) {
+  const texts = (await items.allInnerTexts()).map((entry) => norm(entry));
+  const want = norm(text);
+  const at = options.last ? texts.lastIndexOf(want) : texts.indexOf(want);
+  if (at < 0) return false;
+  await items.nth(at).click(options.force ? { force: true } : undefined);
+  return true;
 }
 
 async function fillOne(page: Page, value: ResolvedValue) {
@@ -305,7 +369,13 @@ async function fillOne(page: Page, value: ResolvedValue) {
       await page.locator('[role="listbox"]:visible:not([data-automation-id="selectedItemList"])').first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => undefined);
       const opener = block.locator('button[aria-haspopup="listbox"]').first();
       await opener.scrollIntoViewIfNeeded().catch(() => undefined);
-      await opener.click();
+      // A search box's popup left open can sit over the next dropdown (24 Nov, ZEISS: "Primary Nationality" under the
+      // Citizenship list never took a click in 30 s): close it and press the button itself.
+      await opener.click({ timeout: 8000 }).catch(async () => {
+        await page.keyboard.press("Escape").catch(() => undefined);
+        await page.waitForTimeout(400);
+        await opener.click({ force: true, timeout: 8000 });
+      });
       const list = await openedOptions(page, opener);
       await list.first().waitFor({ state: "visible", timeout: 5000 });
       const options = (await list.allInnerTexts()).map((text) => text.trim()).filter(Boolean);
@@ -314,14 +384,16 @@ async function fillOne(page: Page, value: ResolvedValue) {
         await page.keyboard.press("Escape");
         throw new NeedsAnswerError({ key: value.key, label: value.label, type: "select", options: options.filter((option) => !/^select one$/i.test(option)), required: value.required ?? true });
       }
-      await list.filter({ hasText: pick }).first().click();
+      await clickExact(list, pick);
       await list.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => undefined);
-      // The box must show the choice (23 Nov, Cisco: "Internship/Co-Op? = No" did not stick): once more by keyboard.
+      // The box must show the choice (23 Nov, Cisco: "Internship/Co-Op? = No" did not stick): once more, then a box that
+      // still shows something else stops the run rather than send a wrong answer.
       if (norm(await opener.innerText().catch(() => "")) !== norm(pick)) {
-        await opener.click();
+        await opener.click({ force: true });
         const again = await openedOptions(page, opener);
-        await again.filter({ hasText: pick }).first().click({ force: true }).catch(() => undefined);
+        await clickExact(again, pick, { force: true }).catch(() => false);
         await page.waitForTimeout(600);
+        if (norm(await opener.innerText().catch(() => "")) !== norm(pick)) throw new Error(`Workday did not take "${pick}" for "${value.label.slice(0, 60)}"`);
       }
       return;
     }
@@ -353,7 +425,7 @@ async function fillOne(page: Page, value: ResolvedValue) {
     case "checkbox-group": {
       for (const choice of value.value.split(/\n/).map((line) => line.trim()).filter(Boolean)) {
         const pick = bestOption(await block.locator("label").allInnerTexts(), choice);
-        if (pick) await block.locator("label", { hasText: pick }).first().click();
+        if (pick) await clickExact(block.locator("label"), pick);
       }
       return;
     }
@@ -421,7 +493,8 @@ function closestByWords(options: string[], value: string) {
   const want = new Set(norm(value).split(/[^a-z0-9]+/).filter((word) => word.length > 2));
   let best: string | undefined;
   let score = 0;
-  for (const option of options) {
+  // A negating option ("Non-citizen (…)") never wins on shared words for an answer that does not negate.
+  for (const option of options.filter((entry) => negates(value) || !negates(entry))) {
     const shared = norm(option).split(/[^a-z0-9]+/).filter((word) => want.has(word)).length;
     if (shared > score) [best, score] = [option, shared];
   }
@@ -442,8 +515,8 @@ async function fillPrompt(page: Page, block: Locator, search: Locator, value: Re
   const chosen = async () => (await block.locator('[data-automation-id="selectedItem"]').count()) > 0;
   const click = async (text: string) => {
     // The popup's own layer takes pointer events over its entries; the last match is the popup's (a chosen item, if any,
-    // comes first on the page).
-    await page.locator('[data-automation-id="promptOption"]').filter({ hasText: text }).last().click({ force: true });
+    // comes first on the page). The entry with exactly this text, never one that merely contains it.
+    if (!(await clickExact(page.locator('[data-automation-id="promptOption"]'), text, { force: true, last: true }))) throw new Error(`Workday's list for "${value.label.slice(0, 60)}" has no entry "${text}"`);
     await page.waitForTimeout(1200);
   };
   await search.click();
@@ -466,11 +539,17 @@ async function fillPrompt(page: Page, block: Locator, search: Locator, value: Re
     throw new NeedsAnswerError({ key: value.key, label: `${value.label} (nothing matched "${value.value.slice(0, 40)}")`, type: "text", required: value.required ?? true });
   }
   await click(pick);
-  // A category opens its own list: the closest entry there, else the first, until the box shows a chosen item.
+  // A category opens its own list: the closest entry there, until the box shows a chosen item. Its first entry is
+  // taken only for "How did you hear about us?"; a fact (a country, a citizenship) with no match there is asked.
   for (let level = 0; level < 3 && !(await chosen()); level += 1) {
     const inner = await promptEntries(page);
     if (inner.length === 0) break;
-    await click(choose(inner) ?? inner[0]);
+    const next = choose(inner) ?? (value.key === "how_heard" ? inner[0] : undefined);
+    if (!next) {
+      await page.keyboard.press("Escape").catch(() => undefined);
+      throw new NeedsAnswerError({ key: value.key, label: `${value.label} (nothing matched "${value.value.slice(0, 40)}")`, type: "text", required: value.required ?? true });
+    }
+    await click(next);
   }
   await page.keyboard.press("Escape").catch(() => undefined);
   if (!(await chosen())) throw new Error(`Workday did not take "${pick}" for "${value.label.slice(0, 60)}"`);
