@@ -41,6 +41,7 @@ const checks: Array<[string, boolean]> = [
   ["a SmartRecruiters job page is its company identifier", same(seedsFromText("https://jobs.smartrecruiters.com/Freshworks/744000159090559-senior").seeds, [{ source: "smartrecruiters", slug: "Freshworks" }])],
   ["a Workable job page is its account", same(seedsFromText("https://apply.workable.com/zifo/j/6A9E892A52/").seeds, [{ source: "workable", slug: "zifo" }])],
   ["the MIT and CC BY lists are allowed", allowedList("ats-scrapers").licence === "MIT" && allowedList("upstreamit").licence === "MIT" && allowedList("latmay").licence === "CC-BY-4.0"],
+  ["an unlicensed list passes only by the owner's recorded approval", allowedList("myjobb-company-names").ownerApproved?.startsWith("owner") === true],
   ["a non-commercial (CC BY-NC) list is refused", refused("feashliaa")],
   ["an unregistered list is refused", refused("some-new-list")],
   ["upstreamit's tenant|wdN|site lines are Workday slugs", same(seedsFromText("2020companies|wd1|external_careers\n23andme|wd5|23").seeds.map((seed) => seed.slug), ["2020companies.wd1/external_careers", "23andme.wd5/23"])],

@@ -3,9 +3,12 @@
  * Each is pinned to the version imported and carries its licence. Only lists we may use commercially are allowed (MIT,
  * CC BY with credit); a non-commercial list (CC BY-NC) is refused by name, so its slugs never reach discovery. We take
  * slugs and company names from these lists (facts), never job texts: every slug is checked on the board's own API.
+ *
+ * A list without such a licence passes only when the owner approved it by name (`ownerApproved`: who, when, what is
+ * taken): the decision is the owner's and is recorded here, beside the list.
  */
 
-export type SlugList = { name: string; licence: string; source: string; version: string; credit?: string };
+export type SlugList = { name: string; licence: string; source: string; version: string; credit?: string; ownerApproved?: string };
 
 const ALLOWED_LICENCES = new Set(["MIT", "CC-BY-4.0"]);
 
@@ -24,6 +27,15 @@ export const SLUG_LISTS: SlugList[] = [
   { name: "jobseek", licence: "MIT", source: "https://github.com/colophon-group/jobseek/blob/main/apps/crawler/data/boards.csv", version: "5fcebc679cf8bde9c9e04f1a2711f6f0a80c61e4" },
   { name: "open-ats-feed", licence: "MIT", source: "https://github.com/veresk06/open-ats-feed/tree/main/docs/data", version: "01b3908c8a8fe13bb4117cd2b2f7e2c7d489a108" },
   { name: "job-scraper", licence: "MIT", source: "https://github.com/chrisdothtml/job-scraper/blob/main/src/companies/seed.ts", version: "d016a7890346619f2b1999bd1b75a673c209a172" },
+  // Owner's decision, 24 Nov: company names only (slugs guessed from each name, every one checked on the board's own
+  // API); myjobb's slugs, URLs and job counts are not used. File naukri-companies.csv, 808 names, sha256 prefix below.
+  {
+    name: "myjobb-company-names",
+    licence: "none",
+    source: "myjobb.ai company pages (naukri-companies.csv from the owner)",
+    version: "sha256:0ec7f58d2d1f0bc9",
+    ownerApproved: "owner, 24 Nov 2026: names only",
+  },
   // Known and refused: its data is non-commercial only.
   { name: "feashliaa", licence: "CC-BY-NC-4.0", source: "https://github.com/Feashliaa/job-board-aggregator", version: "-" },
 ];
@@ -32,6 +44,6 @@ export const SLUG_LISTS: SlugList[] = [
 export function allowedList(name: string): SlugList {
   const list = SLUG_LISTS.find((item) => item.name === name);
   if (!list) throw new Error(`Unknown slug list "${name}": add it to slugSources/lists.ts with its licence first`);
-  if (!ALLOWED_LICENCES.has(list.licence)) throw new Error(`Slug list "${name}" is ${list.licence}: not allowed (commercial use)`);
+  if (!ALLOWED_LICENCES.has(list.licence) && !list.ownerApproved) throw new Error(`Slug list "${name}" is ${list.licence}: not allowed (commercial use)`);
   return list;
 }
