@@ -408,6 +408,9 @@ async function fillOne(page: Page, value: ResolvedValue) {
       // A search box's popup left open can sit over the next dropdown (24 Nov, ZEISS: "Primary Nationality" under the
       // Citizenship list never took a click in 30 s): close it and press the button itself.
       await markShownLists(page, value.selector);
+      // Workday reuses one popup for its lists and fills it after the click: what it showed before is read as stale
+      // (24 Nov, ZEISS: Primary Nationality read the Citizenship popup's "Citizen (India)" before its own countries).
+      const shownBefore = (await page.locator('[role="listbox"]:visible [role="option"]').allInnerTexts().catch(() => [] as string[])).join("|");
       await opener.click({ timeout: 8000 }).catch(async () => {
         await page.keyboard.press("Escape").catch(() => undefined);
         await page.waitForTimeout(400);
@@ -415,7 +418,15 @@ async function fillOne(page: Page, value: ResolvedValue) {
       });
       const list = await openedOptions(page, opener);
       await list.first().waitFor({ state: "visible", timeout: 5000 });
-      const options = (await list.allInnerTexts()).map((text) => text.trim()).filter(Boolean);
+      // The list is read once it has changed from before the click and held for one more look (up to 5 s).
+      let options: string[] = [];
+      for (let look = 0, previous = ""; look < 10; look += 1) {
+        options = (await list.allInnerTexts()).map((text) => text.trim()).filter(Boolean);
+        const now = options.join("|");
+        if (now !== "" && (now !== shownBefore || shownBefore === "") && now === previous) break;
+        previous = now;
+        await page.waitForTimeout(500);
+      }
       const pick = bestOption(options, value.value);
       if (!pick) {
         await page.keyboard.press("Escape");
