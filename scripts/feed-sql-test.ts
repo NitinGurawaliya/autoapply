@@ -99,7 +99,9 @@ async function referenceFeed(userId: string) {
     feedHistory(userId, loadRules().max_per_company_per_week),
     companyResultsById().catch(() => new Map<string, never>()),
   ]);
-  const jobs = gateOn ? found.filter((job) => jobGate(job, { tracks: shown }, { field: true }).pass) : found;
+  // The reference gate with the profile's "Never show me", as the feed's SQL gate applies it (24 Nov: an unread
+  // internship is now left out by its title level, so a reference without the avoid list kept cards the feed drops).
+  const jobs = gateOn ? found.filter((job) => jobGate(job, { tracks: shown, avoid: profile?.avoid ?? [] }, { field: true }).pass) : found;
   const minScore = loadRules().min_match_score;
   // Each job's closeness, one query; then the same shortlist the feed judges (the 150 closest still open to apply).
   const sims = new Map<string, number>();

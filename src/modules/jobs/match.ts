@@ -955,7 +955,7 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
           tracks: [...new Set([...tracks, ...filters.tracks])],
           shows,
         },
-        gateOn ? { job: { source: job.source, title: job.title, track: job.track, roleFamily: job.roleFamily, kind: job.kind, flags: job.flags, readingCurrent: job.readingCurrent }, tracks: shown, avoid: profile?.avoid ?? [], field: true } : undefined,
+        gateOn ? { job: { source: job.source, title: job.title, track: job.track, roleFamily: job.roleFamily, kind: job.kind, flags: job.flags, readingCurrent: job.readingCurrent, seniority: job.seniority }, tracks: shown, avoid: profile?.avoid ?? [], field: true } : undefined,
       );
       return {
         id: job.id,
