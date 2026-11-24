@@ -323,11 +323,24 @@ async function openedOptions(page: Page, button: Locator) {
     const owned = page.locator(`[id="${controls}"] [role="option"]`);
     if (await owned.first().isVisible({ timeout: 3000 }).catch(() => false)) return owned;
   }
-  return page.locator('[role="listbox"]:visible:not([data-automation-id="selectedItemList"]) [role="option"]:not([data-automation-id="selectedItem"])');
+  // Only a list that was not already showing before the click (markShownLists): 24 Nov, ZEISS's Primary Nationality
+  // read the Citizenship box's list, still on screen, and was offered "Citizen (India)".
+  return page.locator('[role="listbox"]:visible:not([data-automation-id="selectedItemList"]):not([data-swipe-stale]) [role="option"]:not([data-automation-id="selectedItem"])');
+}
+
+/** Marks every list on screen before a dropdown opens, so openedOptions takes only the one the click opened. */
+async function markShownLists(page: Page) {
+  await page.evaluate(() => {
+    document.querySelectorAll("[data-swipe-stale]").forEach((node) => node.removeAttribute("data-swipe-stale"));
+    document.querySelectorAll<HTMLElement>('[role="listbox"]').forEach((node) => {
+      if (node.getClientRects().length > 0) node.setAttribute("data-swipe-stale", "1");
+    });
+  }).catch(() => undefined);
 }
 
 async function listboxOptions(page: Page, selector: string): Promise<string[]> {
   const button = page.locator(`${selector} button[aria-haspopup="listbox"]`).first();
+  await markShownLists(page);
   await button.click();
   const list = await openedOptions(page, button);
   await list.first().waitFor({ state: "visible", timeout: 5000 });
@@ -389,6 +402,7 @@ async function fillOne(page: Page, value: ResolvedValue) {
       await opener.scrollIntoViewIfNeeded().catch(() => undefined);
       // A search box's popup left open can sit over the next dropdown (24 Nov, ZEISS: "Primary Nationality" under the
       // Citizenship list never took a click in 30 s): close it and press the button itself.
+      await markShownLists(page);
       await opener.click({ timeout: 8000 }).catch(async () => {
         await page.keyboard.press("Escape").catch(() => undefined);
         await page.waitForTimeout(400);
@@ -407,6 +421,7 @@ async function fillOne(page: Page, value: ResolvedValue) {
       // The box must show the choice (23 Nov, Cisco: "Internship/Co-Op? = No" did not stick): once more, then a box that
       // still shows something else stops the run rather than send a wrong answer.
       if (norm(await opener.innerText().catch(() => "")) !== norm(pick)) {
+        await markShownLists(page);
         await opener.click({ force: true });
         const again = await openedOptions(page, opener);
         await clickExact(again, pick, { force: true }).catch(() => false);
