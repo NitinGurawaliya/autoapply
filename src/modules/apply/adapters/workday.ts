@@ -98,11 +98,14 @@ async function pressGuarded(page: Page, button: string) {
   else await page.locator(id(button)).first().click();
 }
 
-async function accountOutcome(page: Page, timeoutMs = 30000): Promise<AccountOutcome> {
-  const until = Date.now() + timeoutMs;
+/** `back`: after Create Account, the page went back to a sign-in screen (checked from the third second on). */
+async function accountOutcome(page: Page, timeoutMs = 30000, backAtSignIn?: () => Promise<boolean>): Promise<AccountOutcome | "back"> {
+  const started = Date.now();
+  const until = started + timeoutMs;
   while (Date.now() < until) {
     await page.waitForTimeout(1000);
     if ((await visible(page, id("pageFooterNextButton"))) && !(await visible(page, id("signInContent")))) return "in";
+    if (backAtSignIn && Date.now() - started > 3000 && (await backAtSignIn())) return "back";
     const said = readAccountMessage(await errorText(page));
     if (said) return said;
     // A verify-your-email message can come as a page or a dialog, not an alert.
@@ -122,19 +125,24 @@ function workdayAccountPage(page: Page): AccountPage {
     await button.click();
     await page.locator(`${id("signInSubmitButton")}, ${id("createAccountLink")}, ${id("createAccountSubmitButton")}`).first().waitFor({ state: "visible", timeout: 15000 }).catch(() => undefined);
   };
+  const signIn = async (email: string, password: string) => {
+    await emailForm();
+    if (!(await visible(page, id("signInSubmitButton")))) {
+      await page.locator(id("signInLink")).first().click();
+      await page.locator(id("signInSubmitButton")).first().waitFor({ state: "attached", timeout: 15000 });
+    }
+    await typeInto(page.locator(`${id("signInContent")} ${id("email")}`).first(), email);
+    await typeInto(page.locator(`${id("signInContent")} ${id("password")}`).first(), password);
+    await pressGuarded(page, "signInSubmitButton");
+    // Without a sign-in check, accountOutcome never answers "back".
+    return (await accountOutcome(page)) as AccountOutcome;
+  };
+  /** The create form is gone and a sign-in screen is showing (the email form, or "Sign in with email"). */
+  const backAtSignIn = async () =>
+    !(await visible(page, id("createAccountSubmitButton"))) && ((await visible(page, id("SignInWithEmailButton"))) || (await visible(page, id("signInSubmitButton"))));
   return {
     signedIn: async () => (await visible(page, id("pageFooterNextButton"))) && !(await visible(page, id("signInContent"))),
-    signIn: async (email, password) => {
-      await emailForm();
-      if (!(await visible(page, id("signInSubmitButton")))) {
-        await page.locator(id("signInLink")).first().click();
-        await page.locator(id("signInSubmitButton")).first().waitFor({ state: "attached", timeout: 15000 });
-      }
-      await typeInto(page.locator(`${id("signInContent")} ${id("email")}`).first(), email);
-      await typeInto(page.locator(`${id("signInContent")} ${id("password")}`).first(), password);
-      await pressGuarded(page, "signInSubmitButton");
-      return accountOutcome(page);
-    },
+    signIn,
     create: async (email, password, consent) => {
       await emailForm();
       if (!(await visible(page, id("createAccountSubmitButton")))) {
@@ -147,7 +155,11 @@ function workdayAccountPage(page: Page): AccountPage {
       const box = page.locator(id("createAccountCheckbox")).first();
       if (consent && (await box.count()) > 0 && !(await box.isChecked().catch(() => false))) await box.check({ force: true });
       await pressGuarded(page, "createAccountSubmitButton");
-      return accountOutcome(page);
+      // Some tenants make the account and go back to their sign-in screen instead of opening the form (24 Nov: Zebra,
+      // Signify, BlackRock; read as "did not answer"): then the agent signs in with what it just made, and that answer
+      // (in, verify your email, refused) is the outcome.
+      const outcome = await accountOutcome(page, 30000, backAtSignIn);
+      return outcome === "back" ? signIn(email, password) : outcome;
     },
   };
 }
@@ -367,6 +379,12 @@ async function fillOne(page: Page, value: ResolvedValue) {
       // The last dropdown's list must be gone before this one opens (23 Nov: a Yes/No question read the salary list
       // still on screen and found no "Yes").
       await page.locator('[role="listbox"]:visible:not([data-automation-id="selectedItemList"])').first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => undefined);
+      // A search box's popup still open is closed first: its entries would be read as this dropdown's (24 Nov, ZEISS:
+      // "Primary Nationality" was offered the Citizenship list's "Citizen (India)").
+      if (await page.locator('[data-automation-id="promptOption"]').first().isVisible().catch(() => false)) {
+        await page.keyboard.press("Escape").catch(() => undefined);
+        await page.locator('[data-automation-id="promptOption"]').first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => undefined);
+      }
       const opener = block.locator('button[aria-haspopup="listbox"]').first();
       await opener.scrollIntoViewIfNeeded().catch(() => undefined);
       // A search box's popup left open can sit over the next dropdown (24 Nov, ZEISS: "Primary Nationality" under the
