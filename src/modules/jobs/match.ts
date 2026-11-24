@@ -821,11 +821,24 @@ export async function listFeed(userId: string, filters: FeedFilters, view: FeedV
 /** What a build found besides its cards (Phase R, the daily reveal): the gate pool (jobs in the user's fields) and a sample of it. */
 export type FeedPool = { pool: number; field: Array<{ company: string; logo: string | null }> };
 
+/** Whether a cached list shows a job the user has swiped since (any swipe; in the skipped view, a right one). One indexed read. */
+async function holdsSwiped(userId: string, jobs: FeedJob[], view: FeedView) {
+  if (jobs.length === 0) return false;
+  const swiped = await db.swipe.findFirst({
+    where: { userId, jobId: { in: jobs.map((job) => job.id) }, ...(view === "skipped" ? { direction: "right" } : {}) },
+    select: { jobId: true },
+  });
+  return swiped !== null;
+}
+
 export async function rankedFeed(userId: string, filters: FeedFilters = parseFeedFilters({}), view: FeedView = "new", build: FeedBuild = {}): Promise<{ jobs: FeedJob[]; degraded: boolean; found?: FeedPool }> {
   // A visit within a minute of the last one, with nothing changed since, reuses its result (lib/feed-cache.ts).
   const filtersKey = view === "new" ? JSON.stringify(filters) : `${JSON.stringify(filters)}|skipped`;
   const cached = cachedFeed<FeedJob[]>(userId, filtersKey);
-  if (cached) return { jobs: cached, degraded: cachedFeedDegraded(userId, filtersKey), found: cachedFeedExtra<FeedPool>(userId, filtersKey) };
+  // The cache lives in one server process, and a swipe drops its job only from the copy in the process that took it
+  // (dropFromFeed): on Vercel a refresh may land on another one whose copy still holds it (25 Nov: swiped cards came back
+  // on a refresh, with their applications already running). A copy holding a job swiped since is rebuilt instead.
+  if (cached && !(await holdsSwiped(userId, cached, view))) return { jobs: cached, degraded: cachedFeedDegraded(userId, filtersKey), found: cachedFeedExtra<FeedPool>(userId, filtersKey) };
   const run: ScoreRun = { degraded: false };
   const jobs = await scoreFeed(userId, filters, view, undefined, run, build);
   rememberFeed(userId, filtersKey, jobs, run.degraded, run.found);
