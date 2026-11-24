@@ -1,6 +1,11 @@
 # The SwipeApply worker (docs/DEPLOY.md): pg-boss jobs for apply, ingest, discovery and pre-scan, Playwright with
 # Chromium. The official Playwright image matches the playwright version in package.json, so its browsers fit.
-FROM mcr.microsoft.com/playwright:v1.63.0-noble
+#
+# Two images from this file:
+#   docker build -f Dockerfile.worker -t swipeapply-worker .                    # the default: reads jobs only (no screen)
+#   docker build -f Dockerfile.worker --target screen -t swipeapply-screen .    # K10a: a worker that applies, in the cloud
+# The layers that change least come first, so a code change rebuilds only the last few steps of either image.
+FROM mcr.microsoft.com/playwright:v1.63.0-noble AS deps
 
 WORKDIR /app
 ENV NODE_ENV=production \
@@ -11,14 +16,44 @@ COPY package.json package-lock.json ./
 COPY prisma ./prisma
 RUN npm ci --include=dev
 # Google Chrome for the visible window (modules/apply/browser.ts prefers it for handoffs), the browser the worker's own
-# Submit went through in on Windows at Ashby's "low" (27 Oct). Used only when the container is given a screen
-# (docs/DEPLOY.md, "Docker worker with a screen"); headless runs keep the bundled Chromium.
+# Submit went through in on Windows at Ashby's "low" (27 Oct). The stealthy Chrome (screen image below) drives it too.
 RUN npx playwright install --with-deps chrome
-
-COPY . .
-
 # Browser profiles (per-user cookies) on a volume when the host offers one; the worker works without it too.
 RUN mkdir -p /data/browser-profiles
+
+# K10a (docs/naukri/TASKS.md#k10a): what the worker with a screen adds. Every application and every signed-in site runs
+# in the stealthy Chrome (ARCHITECTURE 6.21: SeleniumBase starting the real Chrome, a visible window), which needs
+# Python, SeleniumBase and a display. Xvfb is the display: a screen in memory, so Chrome runs headed (not headless)
+# with nobody watching; browser.ts canShowWindow() sees its socket.
+FROM deps AS screen-tools
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends xvfb python3 python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+# SeleniumBase in its own environment (Ubuntu's Python refuses system-wide pip), pinned to the version the laptop runs.
+RUN python3 -m venv /opt/seleniumbase \
+    && /opt/seleniumbase/bin/pip install --no-cache-dir --retries 10 --timeout 60 "seleniumbase==4.58.0" \
+    && chown -R pwuser:pwuser /opt/seleniumbase
+
+# The screen worker: runs as the image's own non-root user (pwuser), as Chrome wants. Chrome keeps its own sandbox,
+# which needs `--security-opt seccomp=unconfined` on `docker run` (docs/DEPLOY.md). The relay for streamed and OTP
+# sign-ins listens on SOURCE_STREAM_PORT (8787 here).
+FROM screen-tools AS screen
+COPY . .
+ENV STEALTHY_PYTHON=/opt/seleniumbase/bin/python \
+    STEALTHY_LOG=/data/stealthy-browser.log \
+    SOURCE_STREAM_PORT=8787 \
+    SCREEN_SIZE=1920x1080x24
+# SeleniumBase writes its working folders beside the launcher's working directory; logs and profiles go to /data.
+RUN chmod +x scripts/screen-entrypoint.sh \
+    && chown pwuser:pwuser /app /data /data/browser-profiles
+USER pwuser
+EXPOSE 8787
+ENTRYPOINT ["scripts/screen-entrypoint.sh"]
+CMD ["node", "--import", "tsx", "src/worker/index.ts"]
+
+# The default image (built when no --target is given, as CI does): reads jobs only, no screen.
+FROM deps AS worker
+COPY . .
 # One Node process with tsx as a loader (not npm, not the tsx wrapper, which run the worker as a child and pass the
 # stop signal on a second time): the worker gets SIGTERM once and finishes the runs in progress (worker/index.ts).
 # Run with `init: true` or `docker run --init`. Same code as `npm run worker:prod`.

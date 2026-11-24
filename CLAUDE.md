@@ -106,7 +106,7 @@ npx playwright test
 
 - `scripts/*-test.ts` and `*-smoke.ts` are the backend checks; each prints a PASS/FAIL line.
 - `tests/smoke.spec.ts` is the end-to-end test on a test profile and the mock form (stretch T22).
-- Every application runs in the stealthy Chrome, a visible window, so the worker that applies needs a screen; a worker without one (Docker) reads jobs only.
+- Every application runs in the stealthy Chrome, a visible window, so the worker that applies needs a screen: a computer's, or Xvfb in the screen image (`Dockerfile.worker --target screen`); the default Docker image has none and reads jobs only.
 
 ## Env
 

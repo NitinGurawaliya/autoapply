@@ -12,8 +12,11 @@ import { ScreenStream } from "./screen-stream";
 /** How long the sign-in window waits for the person (docs/naukri/TDD.md 4.5). */
 export const SIGN_IN_WAIT_MS = 10 * 60 * 1000;
 
-/** For checks only: a local page instead of the site's login, and that page's own sign-in test. */
-export type ConnectOptions = { loginUrl?: string; waitForSignIn?: typeof waitForSignIn };
+/**
+ * For checks only: a local page instead of the site's login, that page's own sign-in test, and `firstRun: false` so a
+ * throwaway user's connect queues no real first read.
+ */
+export type ConnectOptions = { loginUrl?: string; waitForSignIn?: typeof waitForSignIn; firstRun?: boolean };
 
 /**
  * Connect a user's own account on a job site (worker, screen only): the login page in a fresh visible window, the person
@@ -116,7 +119,7 @@ export async function runConnect(userId: string, site: Site, options: ConnectOpt
     usedNumber = null;
     console.log(`source-connect: ${site} connected for …${userId.slice(-6)}`);
     // The first look for jobs right away, so the feed fills without another press (the run's own budget and checks apply).
-    await enqueueSourceIngest(userId, site).catch((error) => console.error(`source-connect: first ${site} run not queued: ${error instanceof Error ? error.message : error}`));
+    if (options.firstRun !== false) await enqueueSourceIngest(userId, site).catch((error) => console.error(`source-connect: first ${site} run not queued: ${error instanceof Error ? error.message : error}`));
     return "connected" as const;
   } finally {
     relay?.end(outcome);

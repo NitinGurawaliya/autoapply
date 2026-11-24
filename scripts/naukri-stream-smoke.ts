@@ -51,6 +51,12 @@ async function main() {
     await db.profile.create({ data: { userId: user.id, isTest, resumeKey: "x", resumeText: "x", fullName: `Stream ${label}`, email: user.email, skills: [], experience: [], education: [], rawJson: {} } });
     return user;
   }
+  // A connect run that fails early (the stealthy Chrome cannot start) must not end the process before the cleanup: the
+  // failure is seen where the run is awaited, and the throwaway users are still removed.
+  function guarded<T>(run: Promise<T>) {
+    run.catch(() => undefined);
+    return run;
+  }
   async function readyTicket(userId: string, ms = 120_000) {
     const deadline = Date.now() + ms;
     let ticket: Ticket = await streamTicket(userId, "naukri");
@@ -86,7 +92,7 @@ async function main() {
     const started = await startConnect(person.id, "naukri", fakeEnqueue);
     check("connect starts", started.ok);
     check("no pass before the window is open", (await streamTicket(person.id, "naukri")).state === "waiting");
-    const run = runConnect(person.id, "naukri", { loginUrl: login.url, waitForSignIn: fakeWaitForSignIn });
+    const run = guarded(runConnect(person.id, "naukri", { loginUrl: login.url, waitForSignIn: fakeWaitForSignIn, firstRun: false }));
     const ticket = await readyTicket(person.id);
     check("pass ready once the window is open", ticket.state === "ready", ticket.state);
     if (ticket.state !== "ready") {
@@ -151,7 +157,7 @@ async function main() {
 
     // 6. Cancel while signing in: the window closes, the phone is told, the address goes.
     await startConnect(person.id, "naukri", fakeEnqueue);
-    const second = runConnect(person.id, "naukri", { loginUrl: login.url, waitForSignIn: fakeWaitForSignIn });
+    const second = guarded(runConnect(person.id, "naukri", { loginUrl: login.url, waitForSignIn: fakeWaitForSignIn, firstRun: false }));
     const ticket2 = await readyTicket(person.id);
     const phone2 = ticket2.state === "ready" ? new Phone(ticket2.url, ticket2.token) : null;
     if (phone2) await phone2.open();
@@ -174,8 +180,8 @@ async function main() {
 
     // 8. Two users sign in at the same time, each in their own window and stream.
     check("two users connect at once", (await startConnect(userA.id, "naukri", fakeEnqueue)).ok && (await startConnect(userB.id, "naukri", fakeEnqueue)).ok);
-    const runA = runConnect(userA.id, "naukri", { loginUrl: login.url, waitForSignIn: fakeWaitForSignIn });
-    const runB = runConnect(userB.id, "naukri", { loginUrl: login.url, waitForSignIn: fakeWaitForSignIn });
+    const runA = guarded(runConnect(userA.id, "naukri", { loginUrl: login.url, waitForSignIn: fakeWaitForSignIn, firstRun: false }));
+    const runB = guarded(runConnect(userB.id, "naukri", { loginUrl: login.url, waitForSignIn: fakeWaitForSignIn, firstRun: false }));
     const [ticketA, ticketB] = await Promise.all([readyTicket(userA.id), readyTicket(userB.id)]);
     if (ticketA.state !== "ready" || ticketB.state !== "ready") {
       check("both passes ready", false, `${ticketA.state}, ${ticketB.state}`);
@@ -236,7 +242,7 @@ async function main() {
     // 9. OTP connect (K8b): the number, then the code, on a page laid out like Naukri's; no page frames to the phone.
     const mobile = `9${String(Date.now()).slice(-9)}`;
     check("OTP: connect starts", (await startConnect(userC.id, "naukri", fakeEnqueue)).ok);
-    const runC = runConnect(userC.id, "naukri", { loginUrl: login.otpUrl, waitForSignIn: fakeWaitForSignIn });
+    const runC = guarded(runConnect(userC.id, "naukri", { loginUrl: login.otpUrl, waitForSignIn: fakeWaitForSignIn, firstRun: false }));
     const ticketC = await readyTicket(userC.id);
     if (ticketC.state !== "ready") {
       check("OTP: pass ready", false, ticketC.state);
@@ -272,7 +278,7 @@ async function main() {
 
     // 10. Connect again: the saved number, masked; a code is texted to it without typing it.
     await startConnect(userC.id, "naukri", fakeEnqueue);
-    const againC = runConnect(userC.id, "naukri", { loginUrl: login.otpUrl, waitForSignIn: fakeWaitForSignIn });
+    const againC = guarded(runConnect(userC.id, "naukri", { loginUrl: login.otpUrl, waitForSignIn: fakeWaitForSignIn, firstRun: false }));
     const ticketC2 = await readyTicket(userC.id);
     const phoneC2 = ticketC2.state === "ready" ? new Phone(ticketC2.url, ticketC2.token) : null;
     if (phoneC2) await phoneC2.open(PHONE, false);
