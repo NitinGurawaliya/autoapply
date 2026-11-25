@@ -36,7 +36,7 @@ export async function runConnect(userId: string, site: Site, options: ConnectOpt
   if (connection?.status !== "connecting") return "skipped" as const;
   if (!sealKeyReady()) {
     console.error("source-connect: BROWSER_STATE_KEY is not set on this worker; a sign-in cannot be saved");
-    await failConnect(userId, site, "The worker on your computer is not set up to keep sign-ins yet. Try again once it is.");
+    await failConnect(userId, site, `${SITE_INFO[site].label} sign-in isn't available right now. Try again later.`);
     return "failed" as const;
   }
   const info = SITE_INFO[site];

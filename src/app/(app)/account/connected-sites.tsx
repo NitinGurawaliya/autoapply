@@ -25,7 +25,7 @@ const REFUSED: Record<string, string> = {
 
 const FETCH_REFUSED: Record<string, string> = {
   not_connected: "Connect the account first.",
-  no_screen_worker: "Start the worker on your computer first: your agent looks in a Chrome window there.",
+  no_screen_worker: "Your agent can't look right now. Try again in a few minutes.",
   daily_limit: "Your agent has already looked as often as it may today. It looks again tomorrow.",
   rate_limited: "Your agent looked a short while ago. Try again in a few hours.",
 };
@@ -117,7 +117,7 @@ export function ConnectedSites({ initial }: { initial: SourcesOverview }) {
         const body = (await response.json().catch(() => ({}))) as { error?: string };
         throw new Error(FETCH_REFUSED[body.error ?? ""] ?? "Could not start. Try again.");
       }
-      setNotice(`Your agent is looking on ${site.label} now, in the Chrome window on your computer. New jobs reach your feed in a few minutes.`);
+      setNotice(`Your agent is looking on ${site.label} now. New jobs reach your feed in a few minutes.`);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Could not start. Try again.");
     } finally {
