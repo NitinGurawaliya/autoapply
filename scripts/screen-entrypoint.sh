@@ -5,12 +5,19 @@
 set -e
 DISPLAY_NUMBER="${DISPLAY_NUMBER:-99}"
 export DISPLAY=":${DISPLAY_NUMBER}"
+# A restarted container keeps /tmp: the last run's lock and socket would make this Xvfb quit at once while the old
+# socket still looked like a screen (26 Nov: every Chrome then failed to start). Nothing else runs yet, so they are stale.
+rm -f "/tmp/.X${DISPLAY_NUMBER}-lock" "/tmp/.X11-unix/X${DISPLAY_NUMBER}"
 Xvfb "${DISPLAY}" -screen 0 "${SCREEN_SIZE:-1920x1080x24}" -nolisten tcp -ac >/tmp/xvfb.log 2>&1 &
+XVFB_PID=$!
 for _ in $(seq 1 50); do
   [ -S "/tmp/.X11-unix/X${DISPLAY_NUMBER}" ] && break
   sleep 0.1
 done
-if [ ! -S "/tmp/.X11-unix/X${DISPLAY_NUMBER}" ]; then
+sleep 0.3
+# Running, not exited: an exited Xvfb stays a zombie ("Z") until reaped, so `kill -0` alone would pass it.
+XVFB_STATE="$(ps -o stat= -p "${XVFB_PID}" 2>/dev/null | cut -c1)"
+if [ ! -S "/tmp/.X11-unix/X${DISPLAY_NUMBER}" ] || [ -z "${XVFB_STATE}" ] || [ "${XVFB_STATE}" = "Z" ]; then
   echo "screen: Xvfb did not start" >&2
   cat /tmp/xvfb.log >&2
   exit 1
