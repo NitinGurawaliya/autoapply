@@ -103,7 +103,8 @@ async function main() {
     await runApplication(app.id);
     const done = await db.application.findUniqueOrThrow({ where: { id: app.id } });
     check("run 2 is sent", done.status === "submitted", `${done.status} ${done.error ?? ""}`);
-    check("the mock received every answer in Naukri's own words", sent.length === 1 && sent[0].join("|") === "Yes|12 LPA|1 Month|07/04/1998", JSON.stringify(sent));
+    // Pay asked with no currency goes in the candidate's own, in rupees (valueResolver rupeesFor, 23 Nov): 12 LPA is 1200000.
+    check("the mock received every answer in Naukri's own words", sent.length === 1 && sent[0].join("|") === "Yes|1200000|1 Month|07/04/1998", JSON.stringify(sent));
     const fields = (done.fields as Array<{ key: string; source: string }>) ?? [];
     check("the application keeps the four answers with their sources, the date of birth as the user's", fields.length === 4 && fields.every((field) => field.source) && fields[3].source === "user", fields.map((field) => `${field.key}:${field.source}`).join(","));
     const events2 = await db.applicationEvent.findMany({ where: { applicationId: app.id, createdAt: { gt: first.updatedAt } } });

@@ -52,6 +52,10 @@ check("contract passes without the avoid", rule(pass(read({ kind: "contract" }),
 check("avoid contract removes contract", rule(pass(read({ kind: "contract" }), ["backend"], ["contract"])) === "avoid_contract");
 check("avoid intern removes internships", rule(pass(read({ kind: "intern" }), ["backend"], ["intern"])) === "avoid_intern");
 check("avoid commission_only removes the flag", rule(pass(read({ flags: ["commission_only"] }), ["backend"], ["commission_only"], false)) === "avoid_commission_only");
+// Until a job is read, the title's intern level stands in for the reading's kind (24 Nov: unread "AI Intern" reached the feed).
+check("avoid intern removes an unread internship by its title level", rule(pass(job({ seniority: "intern" }), ["backend"], ["intern"])) === "avoid_intern");
+check("an unread internship stays without the chip", rule(pass(job({ seniority: "intern" }), ["backend"], [])) === "pass");
+check("a read job's kind wins over the title level", rule(pass({ ...read({}), seniority: "intern" }, ["backend"], ["intern"])) === "pass");
 check("avoid intern leaves an employee job", rule(pass(read({}), ["backend"], ["intern", "contract", "commission_only"])) === "pass");
 
 // mock
@@ -72,10 +76,10 @@ const SETS: Array<{ name: string; tracks: string[] | null; avoid: string[] }> = 
 async function mirror() {
   const pool = (a: string) => Prisma.sql`${Prisma.raw(a)}."closedAt" IS NULL AND ${Prisma.raw(a)}.source = ANY(${[...APPLY_BOARDS]}::text[]) AND ${Prisma.raw(a)}.eligibility IN ('india', 'remote_india')`;
   const sampled = await db.$queryRaw<Row[]>`
-    (SELECT j.id, j.source, j.title, j.track, j.function, j."roleFamily", j.kind, j.flags, j."readingCurrent" FROM "Job" j
+    (SELECT j.id, j.source, j.title, j.track, j.function, j."roleFamily", j.kind, j.flags, j."readingCurrent", j.seniority FROM "Job" j
      WHERE ${pool("j")} ORDER BY md5(j.id || 'p3') LIMIT 350)
     UNION
-    (SELECT j.id, j.source, j.title, j.track, j.function, j."roleFamily", j.kind, j.flags, j."readingCurrent" FROM "Job" j
+    (SELECT j.id, j.source, j.title, j.track, j.function, j."roleFamily", j.kind, j.flags, j."readingCurrent", j.seniority FROM "Job" j
      WHERE ${pool("j")} AND j."readingCurrent" AND (j."roleFamily" = 'non_tech' OR coalesce(j.kind, 'employee') <> 'employee' OR cardinality(j.flags) > 0)
        AND j.id <> ALL(SELECT r.id FROM "Job" r WHERE ${pool("r")} ORDER BY md5(r.id || 'p3') LIMIT 350)
      ORDER BY md5(j.id || 'p3b') LIMIT 150)`;

@@ -24,6 +24,11 @@ for (const label of ["How many years of experience do you have with Kafka?", "Di
 }
 check("Indian disability wordings are the disability question (Decline to answer, never guessed)", ["Specially abled", "Differently-abled?", "Are you a PwD candidate?", "Physically challenged"].every((label) => matchKeyBySynonym(label) === "disability"));
 check("a file is never guessed", !guessable(field("Cover letter upload", "file")));
+// 23 Nov (Workday dry runs): identity-like numbers, SMS consent and marketing choices are the user's alone.
+for (const label of ["Enter the Roll number/ Seat Number / Registration Number of your highest qualification", "Student ID", "By providing your telephone number in this application, you consent to receive text messages"]) {
+  check(`never guessed: "${label.slice(0, 50)}"`, !guessable(field(label)));
+}
+check("a choice to subscribe to marketing is never guessed", !guessable({ label: "Fractal Analytics is committed to protecting your privacy", type: "select", options: ["I wish to subscribe for the marketing communications", "I do not wish to subscribe"] }));
 // 18 Nov, iion on Keka: pay is never guessed, in any currency or wording; it is asked.
 for (const label of ["Current Gross base Salary - Annual (USD)", "Expected Gross base Salary - Annual (USD)", "Salary expectation in EUR per year", "What is your current CTC (in LPA)?"]) {
   check(`pay is never guessed: "${label}"`, !guessable(field(label, "number")));

@@ -275,6 +275,16 @@ export function yearsBand(years: number | null | undefined) {
   return Math.max(1, Math.floor(years ?? 0));
 }
 
+/**
+ * The most years a job may ASK for and still show: one year past the band (owner, 23 Nov). With the band alone a 1-year
+ * candidate lost every "2 years" AI and software role closest to his resume (Nitin: 35 close jobs past the rules, 68
+ * with one year more; scripts/feed-gates-report.ts). The stated level stays strict (levelAllowed: no SDE II for 0-1
+ * years), and the score still counts the gap (experience part, the stretch tier).
+ */
+export function yearsReach(years: number | null | undefined) {
+  return yearsBand(years) + 1;
+}
+
 // The years a stated level needs (functions.ts seniorityOf; tagging.ts titleYears reads the same titles as II ≈ 2,
 // Senior ≈ 5, lead or manager ≈ 6). Interns are not shown from 3 years, entry roles not from 5.
 const LEVEL_MIN_YEARS: Record<string, number> = { intern: 0, entry: 0, mid: 2, senior: 5, staff: 6, manager: 6 };
@@ -308,7 +318,7 @@ export function feedTracks(tracks: string[], nearby = false): string[] | null {
 
 /** Why a job fails the years or level gate for this candidate, or null when it passes. */
 export function bandMiss(job: { requiredYears: number | null; seniority: string | null }, years: number | null | undefined) {
-  const band = yearsBand(years);
+  const band = yearsReach(years);
   if (job.requiredYears != null && job.requiredYears > band) return `They want about ${job.requiredYears}+ years; you have ${years ?? 0}`;
   if (!levelAllowed(job.seniority, years)) return job.seniority === "intern" || job.seniority === "entry" ? "An entry-level role, below your experience" : `A ${job.seniority} role, above your experience`;
   return null;
@@ -830,11 +840,24 @@ export async function listFeed(userId: string, filters: FeedFilters, view: FeedV
 /** What a build found besides its cards (Phase R, the daily reveal): the gate pool (jobs in the user's fields) and a sample of it. */
 export type FeedPool = { pool: number; field: Array<{ company: string; logo: string | null }> };
 
+/** Whether a cached list shows a job the user has swiped since (any swipe; in the skipped view, a right one). One indexed read. */
+async function holdsSwiped(userId: string, jobs: FeedJob[], view: FeedView) {
+  if (jobs.length === 0) return false;
+  const swiped = await db.swipe.findFirst({
+    where: { userId, jobId: { in: jobs.map((job) => job.id) }, ...(view === "skipped" ? { direction: "right" } : {}) },
+    select: { jobId: true },
+  });
+  return swiped !== null;
+}
+
 export async function rankedFeed(userId: string, filters: FeedFilters = parseFeedFilters({}), view: FeedView = "new", build: FeedBuild = {}): Promise<{ jobs: FeedJob[]; degraded: boolean; found?: FeedPool }> {
   // A visit within a minute of the last one, with nothing changed since, reuses its result (lib/feed-cache.ts).
   const filtersKey = view === "new" ? JSON.stringify(filters) : `${JSON.stringify(filters)}|skipped`;
   const cached = cachedFeed<FeedJob[]>(userId, filtersKey);
-  if (cached) return { jobs: cached, degraded: cachedFeedDegraded(userId, filtersKey), found: cachedFeedExtra<FeedPool>(userId, filtersKey) };
+  // The cache lives in one server process, and a swipe drops its job only from the copy in the process that took it
+  // (dropFromFeed): on Vercel a refresh may land on another one whose copy still holds it (25 Nov: swiped cards came back
+  // on a refresh, with their applications already running). A copy holding a job swiped since is rebuilt instead.
+  if (cached && !(await holdsSwiped(userId, cached, view))) return { jobs: cached, degraded: cachedFeedDegraded(userId, filtersKey), found: cachedFeedExtra<FeedPool>(userId, filtersKey) };
   const run: ScoreRun = { degraded: false };
   const jobs = await scoreFeed(userId, filters, view, undefined, run, build);
   rememberFeed(userId, filtersKey, jobs, run.degraded, run.found);
@@ -917,7 +940,7 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
       stages: filters.stages.length > 0 ? filters.stages : null,
       // The eval's own gate replaces the SQL track filter; it is applied to the rows below.
       tracks: evaluation?.gate ? null : shown,
-      band: { maxYears: yearsBand(years), levels: levelsFor(years) },
+      band: { maxYears: yearsReach(years), levels: levelsFor(years) },
       vector,
       cutoff,
       expMax: filters.expMax,
@@ -967,7 +990,7 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
           tracks: [...new Set([...tracks, ...filters.tracks])],
           shows,
         },
-        gateOn ? { job: { source: job.source, title: job.title, track: job.track, roleFamily: job.roleFamily, kind: job.kind, flags: job.flags, readingCurrent: job.readingCurrent }, tracks: shown, avoid: profile?.avoid ?? [], field: true } : undefined,
+        gateOn ? { job: { source: job.source, title: job.title, track: job.track, roleFamily: job.roleFamily, kind: job.kind, flags: job.flags, readingCurrent: job.readingCurrent, seniority: job.seniority }, tracks: shown, avoid: profile?.avoid ?? [], field: true } : undefined,
       );
       return {
         id: job.id,

@@ -47,6 +47,8 @@ export async function POST(req: Request) {
 
   const result = await swipeRight(user.id, jobId);
   if (result.ok) {
+    // As a skip does: a refresh within the cache's minute must not show the job being applied to (25 Nov).
+    dropFromFeed(user.id, jobId);
     learn(user.id);
     return NextResponse.json({ ok: true, applicationId: result.applicationId });
   }

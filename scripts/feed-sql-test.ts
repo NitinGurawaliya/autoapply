@@ -11,7 +11,7 @@ import { companyKey, feedHistory, loadRules, roleKey } from "../src/modules/gove
 import { candidateShows, companyResultsById, fitJobs, fitOn, judge, judgeJobs, listFeed, parseFeedFilters, profileVector, scoreJob, tracksOf } from "../src/modules/jobs";
 import { briefOf } from "../src/modules/profile/brief";
 import { jobGate, readingGateOn } from "../src/modules/jobs/gate";
-import { applyFeedFloor, dedupeListings, feedRows, feedTracks, levelsFor, yearsBand } from "../src/modules/jobs/match";
+import { applyFeedFloor, dedupeListings, feedBoardsFor, feedFloor, feedRows, feedTracks, levelsFor, yearsReach } from "../src/modules/jobs/match";
 
 let failed = 0;
 function check(name: string, ok: boolean, detail = "") {
@@ -76,7 +76,10 @@ async function referenceFeed(userId: string) {
   ]);
   const skills = Array.isArray(profile?.skills) ? (profile.skills as string[]) : [];
   const preferred = (answers[0]?.answer ?? "").split(",").map((item) => item.trim()).filter((item) => item === "India" || item === "US" || item === "Other");
-  const sources = profile?.isTest ? [...new Set([...filters.boards, "mock"])] : filters.boards;
+  // As the feed: a signed-in site (Naukri) only for a user connected to it (feedBoardsFor).
+  const visible = new Set(await feedBoardsFor(userId));
+  const boards = filters.boards.filter((board) => visible.has(board));
+  const sources = profile?.isTest ? [...new Set([...boards, "mock"])] : boards;
   const tracks = profile ? tracksOf(profile) : [];
   const shows = profile ? candidateShows(profile) : new Set<string>();
   // Strict matching (9 Nov): the user's own tracks (plus plain software roles for developers) and their years band are
@@ -91,7 +94,7 @@ async function referenceFeed(userId: string) {
     db.job.findMany({
       // India and remote-from-India by default (T80).
       where: { source: { in: sources }, eligibility: { in: ["india", "remote_india"] }, ...(shown ? { track: { in: shown } } : {}),
-        AND: [{ OR: [{ experienceMin: null }, { experienceMin: { lte: yearsBand(years) } }] }, { OR: [{ seniority: null }, { seniority: { in: levelsFor(years) } }] }],
+        AND: [{ OR: [{ experienceMin: null }, { experienceMin: { lte: yearsReach(years) } }] }, { OR: [{ seniority: null }, { seniority: { in: levelsFor(years) } }] }],
         postedAt: { gte: new Date(Date.now() - filters.days * 864e5) }, closedAt: null, id: { notIn: swipes.map((s) => s.jobId) } },
       include: { company: { select: { name: true } } },
       orderBy: { id: "asc" }, // the same order feedRows reads, so ties break the same way
@@ -99,7 +102,9 @@ async function referenceFeed(userId: string) {
     feedHistory(userId, loadRules().max_per_company_per_week),
     companyResultsById().catch(() => new Map<string, never>()),
   ]);
-  const jobs = gateOn ? found.filter((job) => jobGate(job, { tracks: shown }, { field: true }).pass) : found;
+  // The reference gate with the profile's "Never show me", as the feed's SQL gate applies it (24 Nov: an unread
+  // internship is now left out by its title level, so a reference without the avoid list kept cards the feed drops).
+  const jobs = gateOn ? found.filter((job) => jobGate(job, { tracks: shown, avoid: profile?.avoid ?? [] }, { field: true }).pass) : found;
   const minScore = loadRules().min_match_score;
   // Each job's closeness, one query; then the same shortlist the feed judges (the 150 closest still open to apply).
   const sims = new Map<string, number>();
@@ -125,7 +130,11 @@ async function referenceFeed(userId: string) {
         ? await fitJobs({ userId, profileId: profile.id, brief: briefOf(profile), shows, years }, shortlist.map((job) => job.id), { judge: limit <= 150, lane: "interactive" })
         : await judgeJobs(profile, shortlist);
     scored = scoreAll();
-    if (scored.length >= 40 || limit >= closest.length || limit >= 450) break;
+    // As the feed (scoreFeed): with the floor, only cards that will show count toward 40 (23 Nov: with a larger pool the
+    // reference stopped a step early, counting every scored card, and judged fewer jobs than the feed).
+    const floor = feedFloor();
+    const showing = floor > 0 ? scored.filter((job) => job.mock || job.score >= floor).length : scored.length;
+    if (showing >= 40 || limit >= closest.length || limit >= 450) break;
   }
   function scoreAll() {
     return jobs

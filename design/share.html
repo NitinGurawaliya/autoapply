@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Share links</title>
+<!-- Phase U1 mockup (docs/share/TDD.md §5): a job shared on LinkedIn or X, from the link to the application. Direction B tokens (globals.css [data-look="b"]). -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600&display=swap">
+<style>
+  .light {
+    --bg:#f6f4ef; --card:#fffefc; --muted:#eeebe4; --text:#1a1814; --muted-text:#77726a; --faint:#a8a39a;
+    --line:rgb(26 24 20 / 10%); --line-strong:rgb(26 24 20 / 18%); --input:rgb(26 24 20 / 22%);
+    --inv:#1a1814; --on-inv:#f6f4ef; --primary:#c2410c; --on-primary:#fffaf5; --brand-text:#b23c0b;
+    --track:rgb(26 24 20 / 8%); --bar:#1a1814; --dash:#bdb7ad;
+    --lift:0 0 0 0.5px rgb(26 24 20 / 8%), 0 1px 1px rgb(26 24 20 / 3%), 0 28px 56px -18px rgb(26 24 20 / 16%);
+  }
+  .dark {
+    --bg:#11100e; --card:#1b1916; --muted:#26231f; --text:#efebe5; --muted-text:#9d978e; --faint:#6a655e;
+    --line:rgb(239 235 229 / 9%); --line-strong:rgb(239 235 229 / 16%); --input:rgb(239 235 229 / 20%);
+    --inv:#efebe5; --on-inv:#11100e; --primary:#e2733f; --on-primary:#1a1814; --brand-text:#ec8a5a;
+    --track:rgb(239 235 229 / 9%); --bar:#efebe5; --dash:#4a453e;
+    --lift:0 0 0 0.5px rgb(255 255 255 / 6%), 0 28px 56px -18px rgb(0 0 0 / 60%), inset 0 1px 0 rgb(255 255 255 / 6%);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Schibsted Grotesk', system-ui, sans-serif; background: #d9d6cf; color: #1a1814; }
+  .page-head { padding: 24px 24px 0; }
+  .page-head h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.025em; margin: 0 0 6px; }
+  .page-head p { margin: 0; font-size: 14px; color: #4a453e; max-width: 860px; line-height: 1.5; }
+  .switch { margin-top: 14px; display: inline-flex; padding: 4px; border-radius: 999px; background: #fffefc; gap: 4px; }
+  .switch button { border: 0; background: none; padding: 8px 16px; border-radius: 999px; font: 500 14px 'Schibsted Grotesk', sans-serif; cursor: pointer; color: #1a1814; }
+  .switch button[aria-pressed="true"] { background: #1a1814; color: #f6f4ef; }
+  .row { display: flex; flex-wrap: wrap; gap: 32px; padding: 24px; align-items: flex-start; }
+  figure { margin: 0; }
+  figcaption { font-size: 13px; color: #4a453e; margin: 0 0 10px; max-width: 390px; line-height: 1.45; }
+  figcaption b { color: #1a1814; font-weight: 600; }
+
+  .phone { width: 390px; min-height: 780px; background: var(--bg); color: var(--text); border-radius: 24px; overflow: hidden; position: relative; display: flex; flex-direction: column; }
+  .scroll { flex: 1; padding: 0 20px 24px; }
+  .topbar { height: 52px; display: flex; align-items: center; justify-content: space-between; }
+  .wordmark { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; }
+  .mark { width: 22px; height: 22px; border-radius: 6px; background: var(--primary); }
+  .text-link { font-size: 15px; color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+  /* The company's own posting, opened in a new tab: a text link under the job's details, never a second button. */
+  .original { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin-top: 12px; }
+  .original svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; flex: none; }
+
+  .type-score { font-size: 40px; line-height: 1; font-weight: 500; letter-spacing: -0.035em; }
+  .type-heading { font-size: 24px; line-height: 1.2; font-weight: 600; letter-spacing: -0.025em; margin: 0; }
+  .type-section { font-size: 17px; line-height: 1.35; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+  .type-body { font-size: 15px; line-height: 1.5; margin: 0; }
+  .type-meta { font-size: 13px; line-height: 1.5; color: var(--muted-text); margin: 0; }
+
+  .head { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+  .tile { width: 44px; height: 44px; flex: none; border-radius: 10px; background: var(--inv); color: var(--on-inv); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 17px; }
+  .tile.sm { width: 36px; height: 36px; font-size: 14px; }
+  .co { flex: 1; min-width: 0; }
+  .co b { display: block; font-size: 15px; font-weight: 600; }
+  .match { text-align: right; }
+  .match .type-score { color: var(--brand-text); }
+  h1.type-heading { margin-top: 16px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .chip { font-size: 13px; padding: 4px 8px; border-radius: 6px; background: var(--muted); }
+  .chip.closed { background: transparent; box-shadow: inset 0 0 0 0.5px var(--line-strong); color: var(--muted-text); }
+  .summary { margin-top: 16px; }
+  .section { margin-top: 24px; }
+  .section h2 { margin-bottom: 10px; }
+  ul.asks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  ul.asks li { position: relative; padding-left: 18px; font-size: 15px; line-height: 1.5; }
+  ul.asks li::before { content: ""; position: absolute; left: 4px; top: 0.68em; width: 5px; height: 5px; border-radius: 50%; background: var(--text); }
+  .fold { margin-top: 10px; }
+  .fold p { color: var(--muted-text); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .fold a { display: inline-block; margin-top: 8px; }
+
+  .bar { position: sticky; bottom: 0; padding: 12px 20px 20px; background: var(--bg); border-top: 0.5px solid var(--line); }
+  .btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 52px; border-radius: 10px; border: 0; font: 600 17px 'Schibsted Grotesk', sans-serif; cursor: pointer; }
+  .btn.primary { background: var(--primary); color: var(--on-primary); }
+  .btn.outline { background: transparent; color: var(--text); box-shadow: inset 0 0 0 1px var(--input); }
+  .bar .type-meta { text-align: center; margin-top: 8px; }
+
+  .panel { background: var(--card); border-radius: 16px; box-shadow: var(--lift); padding: 16px; }
+  .panel.dashed { background: transparent; box-shadow: none; border: 1px dashed var(--dash); }
+  .panel .type-section + .type-body { margin-top: 4px; }
+  .notice { margin-top: 20px; }
+
+  .similar { display: flex; flex-direction: column; gap: 10px; }
+  .sim { display: flex; gap: 12px; align-items: center; padding: 12px; background: var(--card); border-radius: 16px; box-shadow: var(--lift); }
+  .sim .co b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sim .co span { font-size: 13px; color: var(--muted-text); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sim .n { font-size: 17px; font-weight: 500; color: var(--brand-text); font-variant-numeric: tabular-nums; }
+  .chev { width: 16px; height: 16px; stroke: var(--faint); fill: none; stroke-width: 2; flex: none; }
+
+  .steps { margin: 12px 0 0; padding-left: 20px; font-size: 15px; line-height: 1.5; }
+  .steps li + li { margin-top: 4px; }
+  kbd { font: 600 13px 'Schibsted Grotesk', sans-serif; padding: 1px 6px; border-radius: 6px; background: var(--muted); }
+
+  .strip { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 16px; background: var(--card); box-shadow: var(--lift); margin-top: 4px; }
+  .strip .co b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .strip .pill { font-size: 13px; padding: 3px 8px; border-radius: 6px; background: var(--muted); color: var(--muted-text); flex: none; }
+  .stephead { margin-top: 20px; }
+  .stephead .type-meta { margin-bottom: 4px; }
+  .drop { margin-top: 20px; height: 260px; border-radius: 16px; border: 1px dashed var(--dash); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; padding: 24px; }
+  .sketch { width: 64px; height: 80px; border-radius: 6px; background: var(--card); box-shadow: var(--lift); padding: 12px 10px; display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+  .sketch i { display: block; height: 4px; border-radius: 2px; background: var(--muted); }
+  .field { margin-top: 16px; }
+  .field label { display: block; font-size: 15px; font-weight: 500; margin-bottom: 6px; }
+  .input { height: 48px; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--input); display: flex; align-items: center; padding: 0 14px; font-size: 15px; background: var(--card); }
+  .input span { color: var(--faint); }
+  .sumcard .chips { margin-top: 10px; }
+  .check { display: flex; gap: 10px; align-items: flex-start; margin-top: 16px; font-size: 15px; line-height: 1.45; }
+  .box { width: 20px; height: 20px; flex: none; border-radius: 6px; background: var(--text); display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+  .box svg { width: 14px; height: 14px; stroke: var(--bg); stroke-width: 2.5; fill: none; }
+
+  .segs { display: flex; gap: 4px; width: 100%; }
+  .segs i { flex: 1; height: 4px; border-radius: 2px; background: var(--track); }
+  .segs i.on { background: var(--bar); }
+  .segs i.pulse { background: var(--bar); animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+  .sending { height: 52px; display: flex; flex-direction: column; justify-content: center; gap: 10px; }
+  .sending .type-body { font-weight: 500; }
+
+  .switchrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0 0; margin-top: 14px; border-top: 0.5px solid var(--line); }
+  .toggle { width: 44px; height: 26px; border-radius: 999px; background: var(--track); position: relative; flex: none; box-shadow: inset 0 0 0 0.5px var(--line-strong); }
+  .toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--card); box-shadow: 0 1px 2px rgb(0 0 0 / 20%); }
+  .arrival .btn { margin-top: 14px; }
+  .timeline { margin-top: 24px; display: flex; flex-direction: column; gap: 14px; }
+  .tl { display: flex; gap: 12px; align-items: center; font-size: 15px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text); flex: none; }
+  .dot.off { background: transparent; box-shadow: inset 0 0 0 1px var(--line-strong); }
+  .dot.now { animation: pulse 1.2s ease-in-out infinite; }
+  .tl .type-meta { margin-left: auto; }
+  .back { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 500; }
+  .back svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+  .skel { background: var(--muted); border-radius: 6px; }
+
+  .og { width: 600px; height: 315px; border-radius: 12px; overflow: hidden; background: #f6f4ef; color: #1a1814; padding: 32px 36px; display: flex; flex-direction: column; box-shadow: 0 0 0 0.5px rgb(26 24 20 / 12%); }
+  .og .top { display: flex; align-items: center; gap: 14px; }
+  .og .tile { width: 56px; height: 56px; border-radius: 12px; font-size: 22px; background: #1a1814; color: #f6f4ef; }
+  .og .company { font-size: 22px; font-weight: 600; }
+  .og .via { font-size: 16px; color: #77726a; }
+  .og .role { font-size: 40px; line-height: 1.1; font-weight: 600; letter-spacing: -0.03em; margin-top: 22px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .og .chips { margin-top: 14px; gap: 8px; }
+  .og .chip { font-size: 16px; padding: 5px 10px; background: #eeebe4; }
+  .og .foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; font-size: 17px; }
+  .og .foot .wordmark { font-size: 17px; }
+  .og .cta { background: #c2410c; color: #fffaf5; padding: 9px 16px; border-radius: 10px; font-weight: 600; }
+  .og.closedcard .cta { background: transparent; color: #77726a; box-shadow: inset 0 0 0 1px rgb(26 24 20 / 22%); }
+</style>
+</head>
+<body>
+<div class="page-head">
+  <h1>Share links</h1>
+  <p>A job posted on LinkedIn or X, from the click to the application. Phase U (docs/share/TDD.md §5). One primary action per screen. The job stays in view on every screen until the agent has it. The phones show 390 px; the preview card is drawn at half its 1200 × 630 size.</p>
+  <div class="switch" role="group" aria-label="Theme">
+    <button type="button" aria-pressed="true" data-theme="light">Light</button>
+    <button type="button" aria-pressed="false" data-theme="dark">Dark</button>
+  </div>
+</div>
+
+<div id="root" class="light">
+<div class="row">
+
+<!-- 1. Public job page, signed out -->
+<figure>
+  <figcaption><b>1. The job, signed out.</b> No match score: there is no profile yet. The summary and what they ask for come from the job's reading. One Apply button; the line under it is the whole pitch.</figcaption>
+  <div class="phone">
+    <div class="scroll">
+      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><a class="text-link">Sign in</a></div>
+      <div class="head">
+        <div class="tile">R</div>
+        <div class="co"><b>Razorpay</b><span class="type-meta">via Greenhouse · 2 days ago</span></div>
+      </div>
+      <h1 class="type-heading">Backend Engineer, Payments</h1>
+      <div class="chips"><span class="chip">Bengaluru</span><span class="chip">2–4 years</span><span class="chip">₹18–24 L a year</span></div>
+      <p class="type-body summary">Build the services that move money between merchants, banks and card networks, at a few thousand payments a second.</p>
+      <div class="section">
+        <h2 class="type-section">What they ask for</h2>
+        <ul class="asks">
+          <li>2+ years building backend services in production</li>
+          <li>Strong in Java or Go</li>
+          <li>Experience with relational databases and SQL</li>
+          <li>Bachelor's degree in Computer Science or similar</li>
+        </ul>
+      </div>
+      <div class="section">
+        <h2 class="type-section">About the role</h2>
+        <div class="fold"><p class="type-body">You will own services in the payments path end to end: design, build, run them in production and keep them fast. You will work with product and the platform team on the next version of our routing.</p><a class="text-link">Read the full description</a></div>
+        <a class="text-link original">View the original posting<svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>
+      </div>
+    </div>
+    <div class="bar">
+      <button class="btn primary">Apply</button>
+      <p class="type-meta">Upload your resume once. Your agent fills in the form and sends it.</p>
+    </div>
+  </div>
+</figure>
+
+<!-- 2. Signed in with a profile -->
+<figure>
+  <figcaption><b>2. The job, signed in.</b> Someone who already has a profile sees their match, as on the feed card. Apply sends it straight to their agent.</figcaption>
+  <div class="phone">
+    <div class="scroll">
+      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><a class="text-link">Your feed</a></div>
+      <div class="head">
+        <div class="tile">R</div>
+        <div class="co"><b>Razorpay</b><span class="type-meta">via Greenhouse · 2 days ago</span></div>
+        <div class="match"><div class="type-score">82</div><span class="type-meta">match</span></div>
+      </div>
+      <h1 class="type-heading">Backend Engineer, Payments</h1>
+      <div class="chips"><span class="chip">Bengaluru</span><span class="chip">2–4 years</span><span class="chip">₹18–24 L a year</span></div>
+      <p class="type-body summary">Build the services that move money between merchants, banks and card networks, at a few thousand payments a second.</p>
+      <div class="section">
+        <h2 class="type-section">What they ask for</h2>
+        <ul class="asks">
+          <li>2+ years building backend services in production</li>
+          <li>Strong in Java or Go</li>
+          <li>Experience with relational databases and SQL</li>
+        </ul>
+      </div>
+    </div>
+    <div class="bar">
+      <button class="btn primary">Apply</button>
+      <p class="type-meta">Your agent applies with your saved profile.</p>
+    </div>
+  </div>
+</figure>
+
+<!-- 3. Closed -->
+<figure>
+  <figcaption><b>3. Closed.</b> The same header, a plain line on what happened, then open jobs like it. Each opens its own share page.</figcaption>
+  <div class="phone">
+    <div class="scroll">
+      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><a class="text-link">Sign in</a></div>
+      <div class="head">
+        <div class="tile">R</div>
+        <div class="co"><b>Razorpay</b><span class="type-meta">via Greenhouse · 3 weeks ago</span></div>
+      </div>
+      <h1 class="type-heading">Backend Engineer, Payments</h1>
+      <div class="chips"><span class="chip closed">Closed</span><span class="chip">Bengaluru</span><span class="chip">2–4 years</span></div>
+      <div class="panel dashed notice">
+        <p class="type-section">This job has closed</p>
+        <p class="type-body">Razorpay stopped taking applications for it.</p>
+      </div>
+      <div class="section">
+        <h2 class="type-section">Open jobs like it</h2>
+        <div class="similar">
+          <div class="sim"><div class="tile sm">C</div><div class="co"><b>Backend Engineer</b><span>Cred · Bengaluru</span></div><svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+          <div class="sim"><div class="tile sm">J</div><div class="co"><b>Software Engineer II, Payments</b><span>Jupiter · Mumbai</span></div><svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+          <div class="sim"><div class="tile sm">P</div><div class="co"><b>Senior Backend Developer</b><span>PhonePe · Bengaluru</span></div><svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</figure>
+
+<!-- 4. Not applyable -->
+<figure>
+  <figcaption><b>4. A board the agent can't apply on.</b> Said once, plainly; then the same list. No Apply button that would lead nowhere.</figcaption>
+  <div class="phone">
+    <div class="scroll">
+      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><a class="text-link">Sign in</a></div>
+      <div class="head">
+        <div class="tile">S</div>
+        <div class="co"><b>Salesforce</b><span class="type-meta">via Workday · 1 day ago</span></div>
+      </div>
+      <h1 class="type-heading">Member of Technical Staff</h1>
+      <div class="chips"><span class="chip">Hyderabad</span><span class="chip">3–6 years</span></div>
+      <div class="panel dashed notice">
+        <p class="type-section">Your agent can't apply here yet</p>
+        <p class="type-body">Salesforce takes applications on Workday, which needs an account with each employer.</p>
+        <a class="text-link original">View the original posting<svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>
+      </div>
+      <div class="section">
+        <h2 class="type-section">Open jobs like it</h2>
+        <div class="similar">
+          <div class="sim"><div class="tile sm">A</div><div class="co"><b>Software Engineer, Platform</b><span>Atlassian · Bengaluru</span></div><svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+          <div class="sim"><div class="tile sm">P</div><div class="co"><b>Backend Engineer</b><span>Postman · Bengaluru</span></div><svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+          <div class="sim"><div class="tile sm">B</div><div class="co"><b>Software Development Engineer II</b><span>BrowserStack · Mumbai</span></div><svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</figure>
+
+<!-- 5. In-app browser, Android -->
+<figure>
+  <figcaption><b>5. Inside the LinkedIn app, Android.</b> Google sign-in is refused there. The button opens the same page in Chrome; the job is still there.</figcaption>
+  <div class="phone">
+    <div class="scroll">
+      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span></div>
+      <div class="head">
+        <div class="tile">R</div>
+        <div class="co"><b>Razorpay</b><span class="type-meta">via Greenhouse · 2 days ago</span></div>
+      </div>
+      <h1 class="type-heading">Backend Engineer, Payments</h1>
+      <div class="chips"><span class="chip">Bengaluru</span><span class="chip">2–4 years</span><span class="chip">₹18–24 L a year</span></div>
+      <p class="type-body summary">Build the services that move money between merchants, banks and card networks, at a few thousand payments a second.</p>
+      <div class="section">
+        <h2 class="type-section">What they ask for</h2>
+        <ul class="asks">
+          <li>2+ years building backend services in production</li>
+          <li>Strong in Java or Go</li>
+        </ul>
+      </div>
+    </div>
+    <div class="bar">
+      <button class="btn primary">Open in Chrome to apply</button>
+      <p class="type-meta">Google sign-in doesn't work inside the LinkedIn app.</p>
+    </div>
+  </div>
+</figure>
+
+<!-- 6. In-app browser, iPhone -->
+<figure>
+  <figcaption><b>6. Inside the LinkedIn app, iPhone.</b> A page can't open Safari by itself, so the bar says how, in two steps.</figcaption>
+  <div class="phone">
+    <div class="scroll">
+      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span></div>
+      <div class="head">
+        <div class="tile">R</div>
+        <div class="co"><b>Razorpay</b><span class="type-meta">via Greenhouse · 2 days ago</span></div>
+      </div>
+      <h1 class="type-heading">Backend Engineer, Payments</h1>
+      <div class="chips"><span class="chip">Bengaluru</span><span class="chip">2–4 years</span><span class="chip">₹18–24 L a year</span></div>
+      <p class="type-body summary">Build the services that move money between merchants, banks and card networks, at a few thousand payments a second.</p>
+    </div>
+    <div class="bar">
+      <p class="type-section">Open this page in Safari to apply</p>
+      <ol class="steps">
+        <li>Tap <kbd>•••</kbd> at the top right</li>
+        <li>Tap <b>Open in browser</b></li>
+      </ol>
+      <p class="type-meta" style="text-align:left">Google sign-in doesn't work inside the LinkedIn app.</p>
+    </div>
+  </div>
+</figure>
+
+<!-- 7. Onboarding, step 1, with the job strip -->
+<figure>
+  <figcaption><b>7. Resume, with the job in view.</b> The strip sits above the step; the rest of the screen is the Phase S upload, unchanged.</figcaption>
+  <div class="phone">
+    <div class="scroll">
+      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span></div>
+      <div class="strip">
+        <div class="tile sm">R</div>
+        <div class="co"><b>Backend Engineer, Payments</b><span class="type-meta">Razorpay</span></div>
+        <span class="pill">Applying</span>
+      </div>
+      <div class="stephead">
+        <p class="type-meta">Step 1 of 2</p>
+        <h1 class="type-heading" style="margin:0">Add your resume</h1>
+        <p class="type-body" style="margin-top:6px;color:var(--muted-text)">Used for this job and every one after it.</p>
+      </div>
+      <div class="drop">
+        <div class="sketch"><i style="width:60%"></i><i></i><i></i><i style="width:80%"></i><i></i></div>
+        <p class="type-section">Choose a PDF</p>
+        <p class="type-meta">From your phone, Drive or iCloud. Up to 5 MB.</p>
+      </div>
+    </div>
+  </div>
+</figure>
+
+<!-- 8. Onboarding, step 2, with the job strip -->
+<figure>
+  <figcaption><b>8. Your profile, with the job in view.</b> The Phase S screen; only the strip and the button's words change. Save goes back to the job, not the feed.</figcaption>
+  <div class="phone">
+    <div class="scroll">
+      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span></div>
+      <div class="strip">
+        <div class="tile sm">R</div>
+        <div class="co"><b>Backend Engineer, Payments</b><span class="type-meta">Razorpay</span></div>
+        <span class="pill">Applying</span>
+      </div>
+      <div class="stephead">
+        <p class="type-meta">Step 2 of 2</p>
+        <h1 class="type-heading" style="margin:0">Your profile</h1>
+      </div>
+      <div class="panel sumcard" style="margin-top:16px">
+        <p class="type-section">Asha Raman</p>
+        <p class="type-meta">Software Engineer · 3 years</p>
+        <div class="chips"><span class="chip">Java</span><span class="chip">Spring</span><span class="chip">PostgreSQL</span><span class="chip">Kafka</span><span class="chip">+6</span></div>
+        <a class="text-link" style="display:inline-block;margin-top:12px">Edit details</a>
+      </div>
+      <div class="field"><label>Expected CTC</label><div class="input"><span>₹ a year</span></div></div>
+      <div class="field"><label>Current CTC</label><div class="input">14,00,000</div></div>
+      <div class="check"><span class="box"><svg viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg></span><span>Tick routine consent boxes on forms for me</span></div>
+    </div>
+    <div class="bar"><button class="btn primary">Save and apply</button></div>
+  </div>
+</figure>
+
+<!-- 9. Sending -->
+<figure>
+  <figcaption><b>9. Back on the job, sending.</b> No second tap: the Apply bar turns into progress while the claim runs, then the application page opens.</figcaption>
+  <div class="phone">
+    <div class="scroll">
+      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><a class="text-link">Your feed</a></div>
+      <div class="head">
+        <div class="tile">R</div>
+        <div class="co"><b>Razorpay</b><span class="type-meta">via Greenhouse · 2 days ago</span></div>
+        <div class="match"><div class="type-score">82</div><span class="type-meta">match</span></div>
+      </div>
+      <h1 class="type-heading">Backend Engineer, Payments</h1>
+      <div class="chips"><span class="chip">Bengaluru</span><span class="chip">2–4 years</span><span class="chip">₹18–24 L a year</span></div>
+      <p class="type-body summary">Build the services that move money between merchants, banks and card networks, at a few thousand payments a second.</p>
+    </div>
+    <div class="bar">
+      <div class="sending"><div class="segs"><i class="on"></i><i class="pulse"></i><i></i></div><p class="type-body">Sending to your agent</p></div>
+    </div>
+  </div>
+</figure>
+
+<!-- 10. Not a fit -->
+<figure>
+  <figcaption><b>10. Not a match.</b> Governance's minimum score stopped it. The reason names what the job asks that the resume doesn't show; then jobs that do fit.</figcaption>
+  <div class="phone">
+    <div class="scroll">
+      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><a class="text-link">Your feed</a></div>
+      <div class="head">
+        <div class="tile">R</div>
+        <div class="co"><b>Razorpay</b><span class="type-meta">via Greenhouse · 2 days ago</span></div>
+        <div class="match"><div class="type-score" style="color:var(--muted-text)">31</div><span class="type-meta">match</span></div>
+      </div>
+      <h1 class="type-heading">Backend Engineer, Payments</h1>
+      <div class="panel dashed notice">
+        <p class="type-section">Your agent won't apply to this one</p>
+        <p class="type-body">It asks for Go and Kubernetes, which your resume doesn't show.</p>
+      </div>
+      <div class="section">
+        <h2 class="type-section">Jobs that fit you better</h2>
+        <div class="similar">
+          <div class="sim"><div class="tile sm">C</div><div class="co"><b>Java Backend Engineer</b><span>Cred · Bengaluru</span></div><span class="n">88</span></div>
+          <div class="sim"><div class="tile sm">Z</div><div class="co"><b>Software Engineer, Payments</b><span>Zeta · Bengaluru</span></div><span class="n">79</span></div>
+          <div class="sim"><div class="tile sm">G</div><div class="co"><b>SDE II, Backend</b><span>Groww · Bengaluru</span></div><span class="n">74</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="bar"><button class="btn primary">See today's jobs</button></div>
+  </div>
+</figure>
+
+<!-- 11. Arrival -->
+<figure>
+  <figcaption><b>11. Landed: the application page.</b> The arrival card on top of the existing page. The one primary action leads on to today's set, where the reveal plays.</figcaption>
+  <div class="phone">
+    <div class="scroll">
+      <div class="topbar"><span class="back"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>Applications</span></div>
+      <div class="panel arrival" style="margin-top:4px">
+        <div class="head" style="margin-top:0">
+          <div class="tile sm">R</div>
+          <div class="co"><b>Applying to Razorpay</b><span class="type-meta">Backend Engineer, Payments</span></div>
+        </div>
+        <div class="segs" style="margin-top:14px"><i class="on"></i><i class="pulse"></i><i></i></div>
+        <p class="type-meta" style="margin-top:8px">Reading the form</p>
+        <div class="switchrow"><span class="type-body">Tell me when it's sent</span><span class="toggle"></span></div>
+        <div class="switchrow"><span class="type-body">12 more picked for you today</span></div>
+        <button class="btn primary">See today's jobs</button>
+      </div>
+      <div class="timeline">
+        <div class="tl"><span class="dot"></span>Queued<span class="type-meta">just now</span></div>
+        <div class="tl"><span class="dot now"></span>Reading the form</div>
+        <div class="tl"><span class="dot off"></span>Filling in</div>
+        <div class="tl"><span class="dot off"></span>Sent</div>
+      </div>
+    </div>
+  </div>
+</figure>
+
+<!-- 12. Loading and error -->
+<figure>
+  <figcaption><b>12. Loading, and a claim that failed.</b> The page's skeleton; a failed claim keeps the job and offers Try again (the intent is kept).</figcaption>
+  <div class="phone">
+    <div class="scroll">
+      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span></div>
+      <div class="head"><div class="skel" style="width:44px;height:44px;border-radius:10px"></div><div class="co"><div class="skel" style="width:120px;height:14px"></div><div class="skel" style="width:90px;height:12px;margin-top:6px"></div></div></div>
+      <div class="skel" style="width:85%;height:24px;margin-top:20px"></div>
+      <div class="skel" style="width:55%;height:24px;margin-top:8px"></div>
+      <div class="chips"><div class="skel" style="width:80px;height:26px"></div><div class="skel" style="width:70px;height:26px"></div></div>
+      <div class="panel dashed notice" style="margin-top:120px">
+        <p class="type-section">That didn't go through</p>
+        <p class="type-body">We couldn't hand this job to your agent. Nothing was sent.</p>
+        <button class="btn outline" style="margin-top:12px">Try again</button>
+      </div>
+    </div>
+  </div>
+</figure>
+
+</div>
+
+<div class="row" style="padding-top:0">
+  <figure>
+    <figcaption><b>13. The preview card</b> (opengraph-image, 1200 × 630, shown at half). Always light: LinkedIn and X draw it on their own backgrounds.</figcaption>
+    <div class="og">
+      <div class="top"><div class="tile">R</div><div><div class="company">Razorpay</div><div class="via">via Greenhouse</div></div></div>
+      <div class="role">Backend Engineer, Payments</div>
+      <div class="chips"><span class="chip">Bengaluru</span><span class="chip">2–4 years</span><span class="chip">₹18–24 L a year</span></div>
+      <div class="foot"><span class="wordmark"><span class="mark" style="background:#c2410c"></span>SwipeApply</span><span class="cta">Apply in one tap</span></div>
+    </div>
+  </figure>
+  <figure>
+    <figcaption><b>14. The preview card, closed.</b> A link that spreads after the job closes still reads true.</figcaption>
+    <div class="og closedcard">
+      <div class="top"><div class="tile">R</div><div><div class="company">Razorpay</div><div class="via">via Greenhouse</div></div></div>
+      <div class="role">Backend Engineer, Payments</div>
+      <div class="chips"><span class="chip">Bengaluru</span><span class="chip">2–4 years</span></div>
+      <div class="foot"><span class="wordmark"><span class="mark" style="background:#c2410c"></span>SwipeApply</span><span class="cta">Closed · see similar jobs</span></div>
+    </div>
+  </figure>
+</div>
+</div>
+
+<script>
+  document.querySelectorAll('.switch button').forEach(function (button) {
+    button.addEventListener('click', function () {
+      document.getElementById('root').className = button.dataset.theme;
+      document.querySelectorAll('.switch button').forEach(function (b) { b.setAttribute('aria-pressed', String(b === button)); });
+    });
+  });
+</script>
+</body>
+</html>

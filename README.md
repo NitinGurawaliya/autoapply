@@ -59,7 +59,7 @@ A modular monolith in one repo, deployed as two services.
 | Worker | A separate Node process (`src/worker/index.ts`). Each run gets a real Google Chrome started by SeleniumBase in CDP mode (Python), which Playwright drives over DevTools, so job boards see a person's browser; shipped as `Dockerfile.worker` |
 | Files | `lib/storage.ts` over a `FileBlob` table (resumes, screenshots, browser cookies); an S3 driver can replace it |
 | Auth | Auth.js v5 with Google |
-| LLM | OpenAI Chat Completions (`gpt-4o-mini`, override with `OPENAI_MODEL`), JSON only and validated with Zod, all calls through `lib/llm.ts` |
+| LLM | OpenAI Chat Completions (`gpt-4o-mini`, override with `OPENAI_MODEL`), or Google Gemini with `LLM_PROVIDER=gemini` (`gemini-2.5-flash`, and `gemini-2.5-pro` for fit verdicts); JSON only and validated with Zod, all calls through `lib/llm.ts`. Embeddings stay on OpenAI |
 | Push | Web Push (VAPID) with a service worker |
 
 ### Code layout

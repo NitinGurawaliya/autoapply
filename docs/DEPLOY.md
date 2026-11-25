@@ -58,7 +58,8 @@ In Google Cloud Console, edit your OAuth client:
    | `STORAGE_DRIVER` | `postgres` |
    | `ADMIN_EMAILS` | your own email, so only you can trigger a manual ingest |
    | `ENABLE_MOCK_FORM` | leave unset in production; `1` only on a staging deploy used for the end-to-end test |
-   | `APP_URL` | `https://<your-domain>` (links in notification emails; worker too) |
+   | `APP_URL` | `https://<your-domain>` (links in notification emails, share links and their preview cards; worker too) |
+   | `SHARE_LINKS` | `1` to switch on the public share pages `/j/...` (docs/share/TDD.md); unset, they answer 404 |
    | `NOTIFY_WEBHOOK_URL`, `NOTIFY_WEBHOOK_SECRET` | optional, only if you want "needs you" emails (worker) |
    | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | browser push (step 0.6); web and worker |
 

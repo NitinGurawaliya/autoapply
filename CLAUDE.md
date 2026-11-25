@@ -54,7 +54,7 @@ Agents: one session per task, fresh context each time (the entry carries everyth
 
 ## Stack (do not swap)
 
-Next.js 16 App Router (`src/proxy.ts`, not middleware) · TypeScript strict · Tailwind + shadcn/ui · Framer Motion · Prisma + Postgres (Neon) · pg-boss · Playwright (Chromium) · Auth.js v5 + Google · `lib/storage.ts` (Postgres FileBlob driver; S3 later) · OpenAI Chat Completions (`gpt-4o-mini`, `OPENAI_MODEL` to override) · Zod · pdf-parse · tsx.
+Next.js 16 App Router (`src/proxy.ts`, not middleware) · TypeScript strict · Tailwind + shadcn/ui · Framer Motion · Prisma + Postgres (Neon) · pg-boss · Playwright (Chromium) · Auth.js v5 + Google · `lib/storage.ts` (Postgres FileBlob driver; S3 later) · OpenAI Chat Completions (`gpt-4o-mini`, `OPENAI_MODEL` to override), or Gemini with `LLM_PROVIDER=gemini` (ARCHITECTURE §8; embeddings stay on OpenAI) · Zod · pdf-parse · tsx.
 
 ## Commands
 
@@ -78,6 +78,7 @@ npx playwright test
 - Required privacy-notice, "my answers are true" and arbitration acknowledgements are ticked only under the user's standing permission (`accept_acknowledgements` = Yes, asked once); without it each is asked. Marketing opt-ins and certifications of facts (work authorization, age, record) are never auto-ticked. See `modules/apply/acknowledgement.ts`.
 - Every governance check writes an `ApplicationEvent`. Blocked runs end in `status = blocked` with the rule name.
 - Jobs come from public, no-login job APIs (Greenhouse, Lever, Ashby, SmartRecruiters, Keka, Workday, Zoho Recruit) and, from Phase K on, from Naukri and LinkedIn through the user's own signed-in account (ARCHITECTURE §6.20). Phase K starts only after Phase J is done (T94–T97: Lever, SmartRecruiters and Keka in `APPLY_BOARDS`, the board report written). Signed-in sources (owner, 23 Nov, "the myjobb way"; ARCHITECTURE §6.20): the user connects from our app with their mobile number and the code the site texts them (OTP connect), and the agent enters those two on the site's own login page in a browser we run; never a password. The code is kept in memory only for that sign-in: never stored, logged, reused or sent anywhere but the site's page. The number is kept sealed, like the session, for the next connect, and deleted on Disconnect. Where the site shows a check, that step is the user's, on the site's page streamed to them (or in a window on a computer with a screen); we never store, log, record or screenshot the login pages. We keep the connected session sealed and keep it alive with the site's own refresh until the user disconnects; a refused refresh is `needs_signin`, never a sign-in by us. Every request for a user's signed-in site leaves through that user's own residential proxy, never a worker's own address. We read only job listings and the user's own profile, never other people's profiles or messages.
+- Employer accounts (Phase V, ARCHITECTURE 6.24): the agent makes one password per user for employer accounts (Workday and the like), stores it encrypted (`modules/accounts`, `ACCOUNTS_KEY`, the only code that decrypts it), types it only on the employer's own sign-up and sign-in pages, and shows it to the user in Account. It is never logged, never in an event, never in a screenshot. This is not the user's own password, which the rule on signed-in sources above still covers.
 - No data in local files: companies, jobs, profiles, answers, applications → Postgres; resumes, screenshots → `lib/storage.ts` (FileBlob table; never the filesystem). Only `lib/storage.ts` touches `FileBlob`. Temp files for Playwright uploads are deleted in `finally`.
 - Resumes are personal data: never log resume text, phone numbers or emails.
 
@@ -85,7 +86,7 @@ npx playwright test
 
 - Modules in `src/modules/<name>` export through `index.ts`; imported by both `src/app/api/*` and `src/worker/*`. Modules never import from `app/`.
 - Playwright code lives only under `src/modules/apply` and runs only in the worker process. API routes enqueue; they never launch a browser.
-- All LLM calls go through `lib/llm.ts callJson(schema, system, user, {cacheKey})`. JSON-only prompts validated with Zod. No direct OpenAI calls outside `lib/llm.ts`.
+- All LLM calls go through `lib/llm.ts callJson(schema, system, user, {cacheKey})`. JSON-only prompts validated with Zod. No direct OpenAI or Gemini calls outside `lib/llm.ts`.
 - Field mapping order: synonym regex → `FieldMappingCache` → LLM (then write cache). Standard fields must map without the LLM.
 - The runner is stateless and re-runnable from the job URL. Never hold a browser open while waiting for the user.
 - Errors: catch at the runner level; `attempt < max_attempts` → `retry` event + re-enqueue; else `failed` + `error` + `error` event. Browser closed in `finally`.

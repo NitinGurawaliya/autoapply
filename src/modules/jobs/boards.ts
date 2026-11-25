@@ -7,7 +7,7 @@ import { fetchWorkday, workdayName, workdaySlugOf } from "./fetchers/workday";
 import { fetchKeka, kekaName, kekaSlugOf } from "./fetchers/keka";
 import { fetchZohoRecruit, zohoName, zohoSlugOf } from "./fetchers/zohorecruit";
 import { classifyTitle } from "./functions";
-import type { FetchedJob } from "./normalize";
+import type { BoardHttp, FetchedJob } from "./normalize";
 import { tagPosting } from "./tagging";
 
 /**
@@ -45,7 +45,7 @@ export type Board = {
   label: string;
   /** Every open job on the company's board. `known`: postings ingest already holds, which a board with a list-then-detail
    * API (Workday) returns from its list alone, marked `listOnly`, instead of reading each one again (M2). */
-  fetch: (slug: string, options?: { known?: ReadonlySet<string> }) => Promise<FetchedJob[]>;
+  fetch: (slug: string, options?: { known?: ReadonlySet<string>; http?: BoardHttp }) => Promise<FetchedJob[]>;
   /** A hash of the board's cheap list (ids and update times), for boards whose full read is heavy (Greenhouse, M2):
    * when it equals the company's `listHash`, nothing changed and the full read is skipped. */
   probe?: (slug: string) => Promise<string>;
@@ -194,7 +194,9 @@ export const BOARDS: Board[] = [
     // with jobs worldwide: only India-eligible jobs are stored (the fetcher already asks for the India facet).
     source: "workday",
     label: "Workday",
-    fetch: (slug, options) => fetchWorkday(slug, { known: options?.known }),
+    // `http`: the stealthy Chrome's transport when the read runs inside it (scripts/ingest-workday-browser.ts), the
+    // way past Cloudflare's refusal of this server; its requests are paced like the page's own, half a second apart.
+    fetch: (slug, options) => fetchWorkday(slug, { known: options?.known, http: options?.http, ...(options?.http ? { pauseMs: 500 } : {}) }),
     stores: indiaEligible,
     formHost: /^[a-z0-9-]+\.wd\d{1,3}\.myworkdayjobs\.com$/i,
     // "{tenant}.{wdN}/{site}"; the site keeps its case ("NVIDIAExternalCareerSite").

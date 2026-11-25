@@ -12,9 +12,12 @@ import { db } from "@/lib/db";
 import { describe, previewCount, type DescriptionBlock } from "@/lib/description";
 import { feedHref, feedQuery } from "@/lib/feed-url";
 import { daysSince, experienceChip, postedLabel, STAGE_LABEL, whereLabel } from "@/lib/job-facts";
-import { DEFAULT_FEED_DAYS, FEED_BOARDS, DEFAULT_PLACES, listFeed, parseFeedFilters, type FeedView } from "@/modules/jobs";
+import { APPLY_BOARDS, DEFAULT_FEED_DAYS, FEED_BOARDS, DEFAULT_PLACES, listFeed, parseFeedFilters, type FeedView } from "@/modules/jobs";
 import { formatSalary } from "@/modules/jobs/salary";
+import { absoluteUrl, jobPath } from "@/lib/job-slug";
+import { shareLinksEnabled } from "@/lib/share-gate";
 import { FeedBackLink } from "./feed-back-link";
+import { ShareButton } from "./share-button";
 import { JobActions, NextJobLink, type NextJob } from "./job-actions";
 import { JobFacts, MatchHero, ScoreBreakdown, Section, SkillsPanel, WhyMatch } from "./match-sections";
 
@@ -142,6 +145,11 @@ export default async function JobPage({ params, searchParams }: { params: Promis
           <Icon name="back" size={22} />
         </FeedBackLink>
         <span className="type-body font-medium">Feed</span>
+        <span className="flex-1" />
+        {/* Share links (Phase U9): only for an open job the agent applies to, while share pages are switched on. */}
+        {shareLinksEnabled() && !job.closedAt && APPLY_BOARDS.includes(job.source) ? (
+          <ShareButton url={absoluteUrl(`${jobPath({ id: job.id, title: job.title, company: job.company })}?s=app`)} title={`${job.title} at ${job.company.name}`} />
+        ) : null}
       </div>
       <div className="flex flex-1 flex-col px-6">
         <header className="flex flex-col pt-2">

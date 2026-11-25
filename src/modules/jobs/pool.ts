@@ -6,8 +6,9 @@ import { Prisma } from "@prisma/client";
 // 21 of 24, SmartRecruiters 12 of 12, Ashby 8 of 14, Workable 7 of 14 (the misses mostly not the board). Zoho Recruit
 // back in on 21 Nov (owner), with its CAPTCHA read by the worker as Keka's (adapters/zohorecruit.ts, M13b). Left out
 // until they prove themselves (INGEST_CONTRACT: a board goes in after real submits), their jobs still ingested: Lever
-// (none: hCaptcha), Workday (no adapter).
-const SHARED_BOARDS: readonly string[] = ["greenhouse", "ashby", "keka", "workable", "smartrecruiters", "zohorecruit"];
+// (none: hCaptcha). Workday in on 23 Nov (owner, Phase V): two real submits (Cisco, DXC) through adapters/workday.ts
+// with an employer account the agent makes under the user's permission (ARCHITECTURE 6.24).
+const SHARED_BOARDS: readonly string[] = ["greenhouse", "ashby", "keka", "workable", "smartrecruiters", "zohorecruit", "workday"];
 /**
  * Sites applied on through the user's own signed-in account (Phase K, docs/naukri/TDD.md 4.7): Naukri only where both
  * ENABLE_NAUKRI=1 and ENABLE_NAUKRI_APPLY=1, and then only for a user connected to it (modules/apply/sites/gate.ts).

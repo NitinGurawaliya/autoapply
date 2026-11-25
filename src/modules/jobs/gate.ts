@@ -18,6 +18,8 @@ export type GateJob = {
   kind?: string | null;
   flags?: string[] | null;
   readingCurrent?: boolean | null;
+  /** Job.seniority (functions.ts seniorityOf, from the title's words): "intern" stands in for the reading's kind until the job is read. */
+  seniority?: string | null;
 };
 
 /** The "Never show me" chips (P4): each value and what it removes. */
@@ -56,7 +58,8 @@ export type GateResult = { pass: true } | { pass: false; rule: GateRule };
  * track must be in `tracks` and, when the reading is current and names a family, so must that family; the reading can
  * take a job out, never put one in. `field: false` (the swipe check, which cannot know the Track filter the card was
  * shown under) enforces non-tech, gig, task, paid task and avoid only. Mock jobs always pass. Kind and flags count only
- * from a current reading.
+ * from a current reading; until a job is read, "Never show me: internships" goes by the title's intern level (24 Nov:
+ * unread "AI Intern" and "Software Developer Intern" reached a feed that said no internships).
  */
 export function jobGate(job: GateJob, who: { tracks: string[] | null; avoid?: readonly string[] | null }, options: { field: boolean }): GateResult {
   if (job.source === "mock") return { pass: true };
@@ -73,7 +76,7 @@ export function jobGate(job: GateJob, who: { tracks: string[] | null; avoid?: re
   if (flags.includes("paid_task")) return { pass: false, rule: "paid_task" };
   const avoid = who.avoid ?? [];
   if (avoid.includes("contract") && kind === "contract") return { pass: false, rule: "avoid_contract" };
-  if (avoid.includes("intern") && kind === "intern") return { pass: false, rule: "avoid_intern" };
+  if (avoid.includes("intern") && (current(job) ? kind === "intern" : job.seniority === "intern")) return { pass: false, rule: "avoid_intern" };
   if (avoid.includes("commission_only") && flags.includes("commission_only")) return { pass: false, rule: "avoid_commission_only" };
   return { pass: true };
 }
@@ -107,5 +110,6 @@ export function gateSql(who: { tracks: string[] | null; avoid?: readonly string[
       AND NOT ('contract' = ANY(${avoid}::text[]) AND coalesce(j.kind, '') = 'contract')
       AND NOT ('intern' = ANY(${avoid}::text[]) AND coalesce(j.kind, '') = 'intern')
       AND NOT ('commission_only' = ANY(${avoid}::text[]) AND 'commission_only' = ANY(j.flags))))
+    AND (j."readingCurrent" OR NOT ('intern' = ANY(${avoid}::text[]) AND coalesce(j.seniority, '') = 'intern'))
   ), false)`;
 }

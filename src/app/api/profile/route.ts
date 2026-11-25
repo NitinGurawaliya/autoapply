@@ -7,6 +7,7 @@ import { enqueuePrescan } from "@/lib/queue";
 import { AVOIDS, TRACKS } from "@/modules/jobs";
 import { remove, upsert } from "@/modules/answers";
 import { invalidLinks, profileSchema, resumeAnswers } from "@/modules/profile";
+import { trackShareStep } from "@/modules/share";
 
 /** The details resumeAnswers reads, from a stored profile. */
 function pick(row: { fullName: string; email: string; phone: string | null; city: string | null; country: string | null; linkedin: string | null; github: string | null; portfolio: string | null; yearsExperience: number | null; currentTitle: string | null; currentCompany: string | null }) {
@@ -112,5 +113,7 @@ export async function PUT(req: Request) {
   forgetFeed(user.id); // title, skills and years decide the feed's scores
   // Confirmed details change the verdicts' input: build the feed again in the worker before the user gets there.
   after(() => enqueuePrescan(user.id, "profile").catch(() => undefined));
+  // Arrived from a share link (Phase U7): the funnel's profile step. Nothing without the share intent.
+  await trackShareStep("profile_saved", { userId: user.id });
   return NextResponse.json(toJson(updated));
 }

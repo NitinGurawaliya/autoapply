@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { enqueueApply } from "@/lib/queue";
 import { db } from "@/lib/db";
-import { ONE_TIME_CODE_KEY, upsert } from "@/modules/answers";
+import { EMPLOYER_VERIFIED_KEY, ONE_TIME_CODE_KEY, upsert } from "@/modules/answers";
 import { writeEvent } from "@/modules/governance";
 
 // Matches CODE_WAIT_MS in modules/apply/runner.ts (not imported: the runner pulls Playwright into the web bundle).
@@ -58,6 +58,16 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     const retryJobId = await enqueueApply(application.id);
     if (!retryJobId) return NextResponse.json({ error: "queue_failed" }, { status: 500 });
     return NextResponse.json({ ok: true, applicationId: application.id, expired: true });
+  }
+
+  // Phase V: the user verified the email an employer sent for the account the agent made. Not an answer for the bank:
+  // the application runs again and signs in (accountStep.ts); still unverified, it asks again.
+  if (parsed.data.answers.some((row) => row.key === EMPLOYER_VERIFIED_KEY)) {
+    await writeEvent(application.id, "answer", "You verified your email for the employer account");
+    await db.application.update({ where: { id: application.id }, data: { status: "queued", pendingQuestions: [], error: null } });
+    const verifiedJobId = await enqueueApply(application.id);
+    if (!verifiedJobId) return NextResponse.json({ error: "queue_failed" }, { status: 500 });
+    return NextResponse.json({ ok: true, applicationId: application.id });
   }
 
   // The job these answers were given for: a question that depends on the company, city or country is only reused

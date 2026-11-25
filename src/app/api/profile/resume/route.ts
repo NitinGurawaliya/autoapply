@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { enqueuePrescan } from "@/lib/queue";
 import { rateLimit } from "@/lib/rate-limit";
 import { ingestResume } from "@/modules/profile";
+import { trackShareStep } from "@/modules/share";
 
 // Reading a resume (PDF text, then the model) can take longer than a serverless default (docs/DEPLOY.md).
 export const maxDuration = 60;
@@ -42,5 +43,7 @@ export async function POST(req: Request) {
   if (!result.ok) return NextResponse.json({ error: result.failure }, { status: 422 });
   // The worker builds the first feed while the user checks what we read (onboarding confirm and questions).
   after(() => enqueuePrescan(user.id, "resume").catch(() => undefined));
+  // Arrived from a share link (Phase U7): the funnel's resume step. Nothing without the share intent.
+  await trackShareStep("resume_read", { userId: user.id });
   return NextResponse.json({ ok: true, usedFallback: result.usedFallback, changes: result.changes });
 }

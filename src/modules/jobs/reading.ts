@@ -33,6 +33,13 @@ const MIN_LINE_CHARS = 8;
 const MAX_ATTEMPTS = 3;
 const CLAIM_MINUTES = 10;
 const RETRY_AFTER_HOURS = 24;
+/**
+ * A posting with less text than this is not sent to the model: given a title alone it answers nothing for the job
+ * (24 Nov: batches of empty Workday postings came back with 0 or 1 of 10), so every attempt failed and was retried each
+ * day. 744 pool jobs had no description then (660 Workday, whose detail fetch often fails). Such a job is read once
+ * ingest stores its text (the job_reading_stale trigger clears readingCurrent on a description change).
+ */
+const MIN_DESCRIPTION_CHARS = 50;
 export const READING_VERSION = 5;
 
 const NOW = Prisma.sql`(now() AT TIME ZONE 'UTC')`;
@@ -240,7 +247,8 @@ export async function readBatch(jobs: ReadingInput[]): Promise<Map<number, Readi
 
 /** How many more jobs may be read today (JOB_READINGS_PER_DAY, counted from readAt since midnight in India). */
 export async function readingBudgetLeft() {
-  const perDay = Number(process.env.JOB_READINGS_PER_DAY) || 4000;
+  // 12,000 since 24 Nov (4,000 ran out by 01:53 IST after a catch-up, and ~2,500 India jobs arrive a day).
+  const perDay = Number(process.env.JOB_READINGS_PER_DAY) || 12000;
   const [row] = await db.$queryRaw<Array<{ n: number }>>`SELECT count(*)::int AS n FROM "Job" WHERE "readAt" >= ${IST_DAY_START}`;
   return Math.max(0, perDay - (row?.n ?? 0));
 }
@@ -249,7 +257,8 @@ type Claimed = { id: string; title: string; description: string; hash: string };
 
 /**
  * Claims up to `limit` pool jobs that need a reading, newest first, for CLAIM_MINUTES: two processes never read the
- * same job. A job that failed MAX_ATTEMPTS times waits RETRY_AFTER_HOURS from its last failure.
+ * same job. A job that failed MAX_ATTEMPTS times waits RETRY_AFTER_HOURS from its last failure. A job with no
+ * description (under MIN_DESCRIPTION_CHARS) waits for one.
  */
 export async function claimJobs(limit: number, onlyIds?: string[]) {
   return db.$queryRaw<Claimed[]>`
@@ -259,6 +268,7 @@ export async function claimJobs(limit: number, onlyIds?: string[]) {
       -- The feed's pool, and jobs in an evaluation pool even once closed or old (P2: the eval's gates need their readings).
       WHERE (${poolSql("j")} OR EXISTS (SELECT 1 FROM "EvalPool" e WHERE e."jobId" = j.id))
         AND (j.reading IS NULL OR NOT j."readingCurrent")
+        AND length(coalesce(j.description, '')) >= ${MIN_DESCRIPTION_CHARS}::int
         AND (j."readClaimedUntil" IS NULL OR j."readClaimedUntil" < ${NOW})
         AND NOT (j."readAttempts" >= ${MAX_ATTEMPTS}::int AND j."readFailedAt" > ${NOW} - make_interval(hours => ${RETRY_AFTER_HOURS}::int))
         AND (${onlyIds ?? null}::text[] IS NULL OR j.id = ANY(${onlyIds ?? null}::text[]))
@@ -352,10 +362,12 @@ export async function readPendingJobs(options: { deadline?: number; max?: number
 
 /** How many pool jobs have a current reading, and how many are waiting for one. */
 export async function readingCoverage() {
-  const [row] = await db.$queryRaw<Array<{ pool: number; current: number; failing: number }>>`
+  const [row] = await db.$queryRaw<Array<{ pool: number; current: number; failing: number; noText: number }>>`
     SELECT count(*)::int AS pool,
            count(*) FILTER (WHERE j.reading IS NOT NULL AND j."readingCurrent")::int AS current,
-           count(*) FILTER (WHERE j."readAttempts" >= ${MAX_ATTEMPTS}::int)::int AS failing
+           count(*) FILTER (WHERE j."readAttempts" >= ${MAX_ATTEMPTS}::int)::int AS failing,
+           count(*) FILTER (WHERE NOT j."readingCurrent" AND length(coalesce(j.description, '')) < ${MIN_DESCRIPTION_CHARS}::int)::int AS "noText"
     FROM "Job" j WHERE ${poolSql("j")}`;
-  return { pool: row.pool, current: row.current, unread: row.pool - row.current, failing: row.failing };
+  // noText: unread jobs that wait for a description (never sent to the model), inside `unread`.
+  return { pool: row.pool, current: row.current, unread: row.pool - row.current, failing: row.failing, noText: row.noText };
 }
