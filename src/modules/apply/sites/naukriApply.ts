@@ -181,6 +181,34 @@ export async function pressApply(page: Page, watch: ApplyWatch): Promise<NaukriS
 
 const exact = (text: string) => new RegExp(`^\\s*${text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "i");
 
+/**
+ * The chip to press for `option`, found as drawerSnapshot read it: in the last visible chip list, by its visible text
+ * (25 Nov, Norvi Infotech: the click looked in the last chip list of any kind and by full text, which a multi-select
+ * chip's icon adds to, so it waited 30 s for a chip it never found). Null when it is not on screen.
+ */
+async function chipFor(page: Page, option: string) {
+  // A string, as drawerSnapshot's: the runner names functions with a helper the page does not have (__name).
+  const index = (await page.evaluate(`(() => {
+    const root = document.querySelector(${JSON.stringify(DRAWER)});
+    if (!root) return -1;
+    const clean = (value) => String(value || "").replace(/\\s+/g, " ").trim().toLowerCase();
+    const boxes = Array.from(root.querySelectorAll(".chatbot_Chips")).filter((element) => element.getClientRects().length > 0 && !element.closest(".d-none"));
+    const box = boxes[boxes.length - 1];
+    if (!box) return -1;
+    const wanted = clean(${JSON.stringify(option)});
+    return Array.from(box.querySelectorAll(".chatbot_Chip")).findIndex((chip) => clean(chip.innerText || chip.textContent) === wanted);
+  })()`)) as number;
+  return index < 0 ? null : page.locator(`${DRAWER} .chatbot_Chips:visible`).last().locator(".chatbot_Chip").nth(index);
+}
+
+async function pressChip(page: Page, option: string, label: string) {
+  const chip = await chipFor(page, option);
+  if (!chip) throw new NotSentError(`Naukri's "${label.slice(0, 60)}" no longer showed "${option.slice(0, 40)}"; nothing was sent`);
+  await chip.click({ timeout: 10_000 }).catch(() => {
+    throw new NotSentError(`Naukri's "${label.slice(0, 60)}" did not take the press on "${option.slice(0, 40)}"; nothing was sent`);
+  });
+}
+
 async function save(page: Page) {
   const button = page.locator(`${DRAWER} .sendMsg`).last();
   await button.click({ timeout: 10_000 });
@@ -225,13 +253,13 @@ export async function answer(page: Page, watch: ApplyWatch, current: { question:
       const option = optionFor(options, value);
       if (!option) throw new NeedsAnswerError(pending());
       // One chip is the answer: the click sends it.
-      await drawer.locator(".chatbot_Chips").last().locator(".chatbot_Chip").filter({ hasText: exact(option) }).first().click();
+      await pressChip(page, option, question.field.label);
       break;
     }
     case "multi_chips": {
       const picked = optionsFor(options, value);
       if (!picked) throw new NeedsAnswerError(pending());
-      for (const option of picked) await drawer.locator(".chatbot_Chips").last().locator(".chatbot_Chip").filter({ hasText: exact(option) }).first().click();
+      for (const option of picked) await pressChip(page, option, question.field.label);
       await save(page);
       break;
     }

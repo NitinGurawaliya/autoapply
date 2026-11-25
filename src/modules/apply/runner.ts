@@ -22,6 +22,7 @@ import { sendPush } from "@/lib/push";
 import { markStopped } from "@/modules/sources";
 import { isSignedInApplySite, runGate, type SignedInApplySite } from "./sites/gate";
 import { answer, ApplyWatch, pressApply, readJobPage, type NaukriStep } from "./sites/naukriApply";
+import { customQuestionKey } from "@/modules/answers";
 import type { Answer, Profile } from "@prisma/client";
 
 /** The user (or a queue clear) cancelled this application while it was running. */
@@ -812,7 +813,8 @@ async function runOnSite({ application, job, profile, answers, site, mock }: Sit
       const value = resolved.values[0];
       if (!value && !(question.skip && !question.field.required)) {
         // Asked once, with the window closed first (finally): the next run presses Apply again and answers it from the bank.
-        const pending = resolved.pending.length > 0 ? resolved.pending : [{ key: question.field.label, label: question.field.label, type: question.field.type, options: question.field.options, required: question.field.required }];
+        // Under the question's own q_<hash> key: the answer bank refuses a label as key, and the user's Save failed (25 Nov).
+        const pending = resolved.pending.length > 0 ? resolved.pending : [{ key: customQuestionKey(question.field.label), label: question.field.label, type: question.field.type, options: question.field.options, required: question.field.required }];
         await setApp(applicationId, { status: "needs_input", attempt: application.attempt, pendingQuestions: pending as Prisma.InputJsonValue, fields: filled as Prisma.InputJsonValue });
         await writeEvent(applicationId, "ask_user", `${label} asked a question your agent could not answer`);
         void notifyNeedsInput(applicationId, "answers");
@@ -828,6 +830,16 @@ async function runOnSite({ application, job, profile, answers, site, mock }: Sit
     }
     if (step.kind === "company_site") throw new NotSentError(`${label} sends this job's applications to the company's own site. Apply there.`);
     if (step.kind === "stopped") throw await stopSite(step.stop, step.detail);
+    if (step.kind === "unclear" && asked > 0) {
+      // After its questions Naukri's apply answer can come with no body (25 Nov: 2 of 2 such applies, both applied on
+      // Naukri). Its own job page then says whether it recorded the application: "Applied" is the proof.
+      await page.waitForTimeout(2500);
+      await page.goto(job.applyUrl, { waitUntil: "domcontentloaded", timeout: 45_000 }).catch(() => undefined);
+      const after = await readJobPage(page).catch(() => null);
+      if (after?.kind === "state" && after.state === "already_applied") {
+        step = { kind: "sent", evidence: `${label} shows this job as applied (its answer after the questions said nothing)` };
+      }
+    }
     if (step.kind === "unclear") throw new MaybeSentError(`${label} did not confirm it (${step.detail}). Check ${label}'s "Applied" list or your email before applying again.`);
     if (asked === 0) await writeEvent(applicationId, "inspect", "Found 0 fields");
     await recordAfterSubmit(applicationId, { status: "submitted", submittedAt: new Date(), fields: filled as Prisma.InputJsonValue, pendingQuestions: [], error: null });
