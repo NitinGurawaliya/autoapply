@@ -8,6 +8,7 @@ import { egressFor, EgressRefused } from "@/modules/sources/egress";
 import { onSiteDomain, siteStateKey, type Site } from "@/modules/sources/sites";
 import { NoRetryError } from "./adapter";
 import { startForwarder, type Forwarder } from "./proxy-forwarder";
+import { leanEnabled, leanPages } from "./sites/lean";
 import { openStealthyBrowser, stealthEnabled } from "./real-browser";
 
 export type OpenBrowser = {
@@ -218,7 +219,10 @@ export async function openBrowser(
       forwarder = await startForwarder({ host: upstream.hostname, port: Number(upstream.port), username: egress.username, password: egress.password });
       proxy = `127.0.0.1:${forwarder.port}`;
     }
-    const stealthy = await openStealthyBrowser(url, owner, { savedState, proxy, proxyLabel: egress?.label }).catch(async (error) => {
+    // A signed-in site's window loads only what its pages need (K15, sites/lean.ts).
+    let lean: Awaited<ReturnType<typeof leanPages>> | null = null;
+    const prepare = site && leanEnabled() ? async (context: BrowserContext) => void (lean = await leanPages(context, site)) : undefined;
+    const stealthy = await openStealthyBrowser(url, owner, { savedState, proxy, proxyLabel: egress?.label, prepare }).catch(async (error) => {
       await forwarder?.close();
       throw error;
     });
@@ -243,7 +247,10 @@ export async function openBrowser(
               // Proxy traffic of this window (K7: what the provider bills a user's run), counts only.
               const { up, down } = forwarder.bytes();
               const size = (bytes: number) => (bytes < 1048576 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / 1048576).toFixed(1)} MB`);
-              console.log(`proxy: …${owner.slice(-6)} ${egress?.label.split(" session ")[1] ?? ""} ${size(up + down)} (${size(down)} down, ${size(up)} up)`);
+              const leanNote = lean ? "; lean" : "";
+              console.log(`proxy: …${owner.slice(-6)} ${egress?.label.split(" session ")[1] ?? ""} ${size(up + down)} (${size(down)} down, ${size(up)} up)${leanNote}`);
+              // PROXY_HOSTS=1: where it went, the largest hosts (names only), to find traffic a window should not make.
+              if (process.env.PROXY_HOSTS === "1") console.log(`proxy hosts: ${[...forwarder.byHost().entries()].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([host, bytes]) => `${host} ${size(bytes)}`).join(", ")}`);
             }
             await forwarder?.close();
           }
@@ -281,6 +288,8 @@ export async function openBrowser(
     }
   }
   if (!context) throw new Error("Could not open a browser");
+  // The Playwright browser's signed-in windows are lean too (K15).
+  if (site && leanEnabled()) await leanPages(context, site);
   entry.open += 1;
   entry.opened += 1;
   if (entry.opened >= RECYCLE_AFTER) entry.retiring = true;

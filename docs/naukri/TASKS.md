@@ -102,6 +102,14 @@ Design: [13.12 Architecture](TDD.md#1312-architecture-connect-keep-alive-run) (c
 Done 25 Nov: inside the image on Docker Desktop, `canShowWindow()` true on :99, the launcher READY, `naukri-stream-smoke` 78/78 PASS; a code change rebuilds in 17 s. Needs `--security-opt seccomp=unconfined` (Chrome's sandbox).
 Paths: `Dockerfile.worker` (target `screen`), `scripts/screen-entrypoint.sh`, `docs/DEPLOY.md`.
 
+<a id="k15"></a>
+### [x] K15 — Lean Naukri pages: the least data through the proxy
+Do: owner, 25 Nov ("don't load the images, scripts, fonts and all"): every signed-in site window drops pictures, video, fonts, the site's log pings and ad and analytics services by Chrome's own URL blocking (`sites/lean.ts`, `Network.setBlockedURLs` on every page; Playwright's request interception hung the stealthy Chrome); the proxy forwarder refuses Chrome's own background services (`CHROME_BACKGROUND`); the site's own scripts, styles and data calls and reCAPTCHA are kept (its pages are drawn by its scripts); per-window proxy bytes logged, `PROXY_HOSTS=1` by host; `SIGNED_IN_LEAN=0` turns it off.
+Design: [13.11 Decision](TDD.md#1311-decision-owner-23-nov-2026-the-myjobb-way) ("no page images") · ARCHITECTURE §6.20 (Egress).
+**Done when:** `naukri-lean-test` PASS; the owner's small read through their proxy uses at least 80% less than the 43.6 MB measured before, with Naukri's search and job calls still answered; typecheck and lint pass.
+Done 25 Nov: small read 43.6 MB → 3.1 MB (3 searches, 10 job pages, search calls 200); a search page 14.8 → 1.1 MB: Chrome's optimization-guide downloads were 13.6 MB of it. `naukri-lean-test` PASS.
+Paths: `apply/sites/lean.ts`, `apply/proxy-forwarder.ts` (CHROME_BACKGROUND, bytes by host), `apply/browser.ts`, `apply/real-browser.ts` (prepare).
+
 <a id="k11"></a>
 ### [ ] K11 — Pilot of 20 accounts, then a load test
 Do: 20 users connect from their phones and run for a week; then a simulator drives connect, refresh, buckets and applies at 10k and 100k users' load (§13.2) against recorded replies; measure proxy GB a user a day, account checks per user, cloud worker hours, Postgres writes, LLM calls an apply; caps revisited; the next stage's changes proposed with numbers and ARCHITECTURE updated for what the owner accepts.

@@ -14,27 +14,50 @@ import { connect, type AddressInfo, type Socket } from "node:net";
  */
 
 export type ForwarderUpstream = { host: string; port: number; username?: string; password?: string };
+
+/**
+ * Chrome's own background services, refused by the forwarder (K15, 25 Nov): a fresh window downloaded Chrome's
+ * "optimization guide" models, 13.6 MB of a 14.8 MB Naukri search page through the paid proxy (Naukri itself: about
+ * 1 MB). None of it is a site's page; refusing it here changes nothing Chrome shows a site. Not refused: Google's
+ * reCAPTCHA and sign-in (www.google.com, www.gstatic.com, accounts.google.com).
+ */
+export const CHROME_BACKGROUND = /^(optimizationguide-pa|update|safebrowsing|content-autofill|clientservices|chromewebstore|chromereporting-pa|edgedl\.me\.gvt1|redirector\.gvt1|[a-z0-9-]+\.gvt1)\.(googleapis\.com|com)$|^clients[0-9]*\.google\.com$|^android\.clients\.google\.com$|(^|\.)gvt[12]\.com$/i;
 /** `bytes`: what went to and came from the provider so far, the traffic it bills (counts only). */
-export type Forwarder = { port: number; bytes: () => { up: number; down: number }; close: () => Promise<void> };
+export type Forwarder = { port: number; bytes: () => { up: number; down: number }; byHost: () => Map<string, number>; close: () => Promise<void> };
 
 const HEADER_LIMIT = 16 * 1024;
 
-export async function startForwarder(upstream: ForwarderUpstream): Promise<Forwarder> {
+export async function startForwarder(upstream: ForwarderUpstream, refuse: RegExp | null = CHROME_BACKGROUND): Promise<Forwarder> {
   const auth = upstream.username ? `Basic ${Buffer.from(`${upstream.username}:${upstream.password ?? ""}`).toString("base64")}` : null;
   const sockets = new Set<Socket>();
   // Bytes to and from the upstream: open sockets are read when asked, closed ones are added up as they close.
   const counted = { up: 0, down: 0 };
   const upstreamSockets = new Set<Socket>();
-  const track = (socket: Socket) => {
+  // Bytes by destination host (host names only), to see where a window's traffic goes.
+  const hosts = new Map<string, number>();
+  const track = (socket: Socket, host = "http") => {
     upstreamSockets.add(socket);
     socket.once("close", () => {
       counted.up += socket.bytesWritten;
       counted.down += socket.bytesRead;
+      hosts.set(host, (hosts.get(host) ?? 0) + socket.bytesRead + socket.bytesWritten);
       upstreamSockets.delete(socket);
     });
   };
+  const refused = (host: string) => Boolean(refuse?.test(host));
   const server: Server = createServer((req, res) => {
     // Plain http: the request goes to the upstream proxy as is (absolute address), with the sign-in added.
+    let plainHost = "";
+    try {
+      plainHost = new URL(req.url ?? "").hostname;
+    } catch {
+      plainHost = "";
+    }
+    if (refused(plainHost)) {
+      hosts.set(`refused ${plainHost}`, (hosts.get(`refused ${plainHost}`) ?? 0) + 1);
+      res.writeHead(403).end();
+      return;
+    }
     const headers = { ...req.headers };
     delete headers["proxy-authorization"];
     if (auth) headers["proxy-authorization"] = auth;
@@ -58,9 +81,15 @@ export async function startForwarder(upstream: ForwarderUpstream): Promise<Forwa
       client.end("HTTP/1.1 400 Bad Request\r\n\r\n");
       return;
     }
+    if (refused(target.replace(/:\d+$/, ""))) {
+      const name = `refused ${target.replace(/:\d+$/, "")}`;
+      hosts.set(name, (hosts.get(name) ?? 0) + 1);
+      client.end("HTTP/1.1 403 Forbidden\r\n\r\n");
+      return;
+    }
     const outbound = connect(upstream.port, upstream.host);
     sockets.add(outbound);
-    track(outbound);
+    track(outbound, target.replace(/:\d+$/, ""));
     outbound.on("close", () => sockets.delete(outbound));
     const fail = () => {
       if (!client.destroyed) client.end("HTTP/1.1 502 Bad Gateway\r\n\r\n");
@@ -104,6 +133,7 @@ export async function startForwarder(upstream: ForwarderUpstream): Promise<Forwa
   const { port } = server.address() as AddressInfo;
   return {
     port,
+    byHost: () => new Map(hosts),
     bytes: () => {
       let up = counted.up;
       let down = counted.down;

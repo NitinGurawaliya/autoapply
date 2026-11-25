@@ -289,7 +289,11 @@ export async function closeAllStealthyBrowsers() {
  * reason logged) when stealth mode is off or anything fails, so the caller decides (browser.ts: retry, or the Playwright
  * browser with STEALTHY_FALLBACK=1).
  */
-export async function openStealthyBrowser(url: string, owner: string, options: { savedState?: SavedBrowserState; proxy?: string; proxyLabel?: string } = {}): Promise<StealthyBrowserSession | null> {
+export async function openStealthyBrowser(
+  url: string,
+  owner: string,
+  options: { savedState?: SavedBrowserState; proxy?: string; proxyLabel?: string; prepare?: (context: BrowserContext) => Promise<void> } = {},
+): Promise<StealthyBrowserSession | null> {
   if (!StealthyBrowserManager.isEnabled()) return null;
 
   const manager = getStealthyBrowserManager();
@@ -306,6 +310,8 @@ export async function openStealthyBrowser(url: string, owner: string, options: {
     if (options.savedState?.cookies.length) {
       await context.addCookies(options.savedState.cookies).catch((error) => record(`#${manager.id} saved cookies not restored (${error instanceof Error ? error.message : String(error)})`));
     }
+    // Before the first page: what the caller sets on the context (a signed-in site's lean pages, sites/lean.ts).
+    if (options.prepare) await options.prepare(context);
     // The form opens through SeleniumBase (its playwright ReadMe: sb.goto over page.goto for stealth); Playwright's
     // own goto is the fallback when the launcher cannot.
     const reply = await manager.command(`GOTO ${url}`, 60_000);
