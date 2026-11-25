@@ -25,10 +25,12 @@ Design: its own short TDD in `docs/linkedin/`, written after K4's real runs; reu
 **Done when:** as K2 for LinkedIn.
 
 <a id="k4"></a>
-### [~] K4 — Naukri apply adapter
+### [x] K4 — Naukri apply adapter
 Do: recon (5 Nov: Naukri's own job-page and drawer scripts, read signed out, nothing pressed) gives the drawer markup and the apply and bot calls, copied into the mock Naukri page (`app/mock/naukri/mock.ts`, K4b); the owner's first real submit confirms them; `stepwise`/`advance` in the runner; the adapter with questions through the answer bank and `needs_input` for the rest; routing, pace and connection checks; `explain.ts`/`steps.ts` copy.
 Design: [4.7 Sequence: apply](TDD.md#47-sequence-apply-k4) · [4.8 Checks, refusals and pace](TDD.md#48-checks-refusals-and-pace) · [7 Testing](TDD.md#7-testing) · [8 Rollout](TDD.md#8-rollout) · [11 Decisions](TDD.md#11-decisions-closed-with-the-owner-3-nov) items 1 and 2.
 **Done when:** `naukri-adapter-test` PASS; `naukri-dry-run` on 3 real jobs reaches Apply signed in and presses nothing; one real right-swipe by the owner ends `submitted` with Naukri's confirmation and screenshot and the questions with sources on the application page; a question it could not answer went through "Needs you" once; `ENABLE_NAUKRI=1` and Naukri in `applyBoardsFor`.
+Done 25 Nov: 8 real right swipes from the owner's account (3 at home on 23 Nov, 5 through their IPRoyal proxy on 24 Nov), all ending Sent with Naukri's 200 or its "Applied" mark and a screenshot; ISS Softtech's "Preferred Work Location" went through "Needs you" and was sent with the answer; `naukri-dry-run` 3/3 with lean pages (~750 KB a job page); `naukri-adapter-test` PASS. Fixed: q_<hash> keys for asked questions, unreadable apply answers recorded by shape.
+Paths: `apply/sites/naukriApply.ts`, `apply/sites/naukriChat.ts`.
 
 <a id="k4c"></a>
 ### [ ] K4c — Naukri jobs that apply on another board
