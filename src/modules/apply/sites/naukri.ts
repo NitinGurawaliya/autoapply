@@ -99,10 +99,12 @@ export async function pageStop(page: Page): Promise<{ stop: PageStop; detail: st
 /** A response Naukri's own page received: its status decides; 406 is Naukri's "recaptcha required", 403 a refusal. */
 async function readCall(page: Page, url: string, call: RegExp): Promise<PageRead> {
   const awaited = page.waitForResponse((response) => call.test(response.url()) && response.request().method() === "GET", { timeout: 30000 });
+  // Handled at once: when it times out while the page is still loading, an unhandled rejection ended the whole worker
+  // process (25 Nov, a slow page through the proxy). It is still awaited below.
+  awaited.catch(() => undefined);
   try {
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
   } catch {
-    awaited.catch(() => undefined);
     return { ok: false, ...(await pageStop(page)) };
   }
   const response = await awaited.catch(() => null);
