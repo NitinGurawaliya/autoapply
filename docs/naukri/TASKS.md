@@ -14,10 +14,11 @@ Design: [3 Options and decision](TDD.md#3-options-and-decision) · [4.1 Componen
 Done 25 Nov: the owner's account connected (K8b, OTP) and used by every later read and apply, at home and through the proxy; `naukri-connect-smoke` 20/20 PASS, the streamed sign-in included. The connect flow's tooling decision (our own Playwright code, not webcmd) stands in ARCHITECTURE §6.20.
 
 <a id="k2"></a>
-### [~] K2 — Naukri job ingest
+### [x] K2 — Naukri job ingest
 Do: `sites/naukri.ts` and `sites/ingest.ts` (the run, under `modules/apply` because it drives the window), `fetchers/naukri.ts`, the board entry, `storeSiteListings` with `SourceRun`, the "fetch now" route moved here from K1, Naukri in the feed only (applying stays off until K4), the cron tick and the on-demand route, `applyBoardsFor`, the "via Naukri" feed chip and filter, the 14-day close.
 Design: [4.6 Sequence: ingest](TDD.md#46-sequence-per-user-ingest-k2) · [4.8 Checks, refusals and pace](TDD.md#48-checks-refusals-and-pace) · [4.10 Failure handling](TDD.md#410-failure-handling) · [4.11 Observability](TDD.md#411-observability) · [7 Testing](TDD.md#7-testing).
 **Done when:** `naukri-listing-test` PASS; `naukri-ingest-smoke` for the owner stores Naukri jobs that show in their feed with tiers and "via Naukri" and stops at the budget with a `budget` event; a second, unconnected user sees none; a Workday-redirect job is not stored and a Greenhouse-redirect job carries `applyVia = greenhouse`.
+Done 25 Nov: `naukri-ingest-smoke` and `naukri-listing-test` PASS; the owner's real reads stored Naukri jobs (87 new on one wide read) and stopped at their budget (`SourceRun.stopReason` budget); 4 Naukri jobs in the owner's ranked feed; searches widened to the user's city plus Bengaluru, Pune, Hyderabad and remote (owner, 23 Nov).
 
 <a id="k3"></a>
 ### [ ] K3 — LinkedIn job ingest
