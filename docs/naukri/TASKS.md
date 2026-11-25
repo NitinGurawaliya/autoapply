@@ -93,7 +93,7 @@ Design: [13.12 Architecture](TDD.md#1312-architecture-connect-keep-alive-run) (C
 **Done when:** the owner connects from desktop Chrome and the next run reads and applies through the owner's proxy with that session; a cookie for any other site sent to the route is refused; typecheck and lint pass.
 
 <a id="k10"></a>
-### [ ] K10 — Keep alive and run in the cloud
+### [~] K10 — Keep alive and run in the cloud
 Do: `source-refresh` (Naukri's own refresh with the sealed session through the user's proxy, before each run, and on V7's cadence only if needed; a refused refresh → `needs_signin` and a push); `ingest-source` and Naukri applies taken by cloud workers with a display instead of the laptop (`WorkerBeat.hasScreen`, the browser per §13.15 item 3); apply at request level when V2 allows (a chatbot-JSON question parser beside `questionOf`, `readApplyReply` as evidence), else K4's page run; caps, pace, `check('submit')` and every event unchanged.
 Design: [13.12 Architecture](TDD.md#1312-architecture-connect-keep-alive-run) (Keep alive, Apply) · [13.13 What carries over](TDD.md#1313-what-carries-over-from-todays-code) · [4.7 Sequence: apply](TDD.md#47-sequence-apply-k4) · [4.8 Checks](TDD.md#48-checks-refusals-and-pace).
 **Done when:** with the owner's laptop worker off, the owner's account refreshes, runs a job run and sends one real right swipe from the cloud through the owner's proxy, ending `submitted` with Naukri's reply and the answers' sources; an expired session ends in `needs_signin` with a push and nothing sent; `naukri-adapter-test` and `naukri-mock-smoke` still PASS; typecheck and lint pass.

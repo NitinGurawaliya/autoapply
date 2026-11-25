@@ -189,7 +189,7 @@ Design: [docs/naukri/TDD.md](naukri/TDD.md) (final, 3 Nov). Tasks with their Do,
 - [~] [K8 — Streamed Naukri sign-in on the phone](naukri/TASKS.md#k8)
 - [x] [K8b — Connect Naukri with a code (OTP)](naukri/TASKS.md#k8b)
 - [ ] [K9 — Connect from a computer: the extension](naukri/TASKS.md#k9)
-- [ ] [K10 — Keep alive and run in the cloud](naukri/TASKS.md#k10)
+- [~] [K10 — Keep alive and run in the cloud](naukri/TASKS.md#k10)
 - [x] [K10a — The cloud worker image: the stealthy Chrome on a virtual screen](naukri/TASKS.md#k10a)
 - [x] [K15 — Lean Naukri pages: the least data through the proxy](naukri/TASKS.md#k15)
 - [ ] [K11 — Pilot of 20 accounts, then a load test](naukri/TASKS.md#k11)

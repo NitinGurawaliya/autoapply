@@ -51,6 +51,8 @@ type Entry = {
   sends: number;
   codes: number;
   lastSend: number;
+  /** How the stream ended, once it has: a code step still waiting then answers by it. */
+  outcome?: StreamOutcome;
 };
 
 const streams = new Map<string, Entry>();
@@ -138,6 +140,7 @@ export function openStream(userId: string, site: Site, stream: ScreenStream, dea
 function endStream(sid: string, outcome: StreamOutcome) {
   const entry = streams.get(sid);
   if (!entry) return;
+  entry.outcome = outcome;
   streams.delete(sid);
   entry.unwatch?.();
   if (entry.viewer && !entry.viewer.writableEnded) {
@@ -340,6 +343,11 @@ async function otpStep(req: IncomingMessage, res: ServerResponse, entry: Entry, 
     if (step.state === "check") showFrames(entry, true);
     return reply(200, step);
   } catch {
+    // The sign-in check can see the user signed in and close the window while this step still waits on the page
+    // (25 Nov, in the screen image): the code worked, so it answers so. A page that broke as it left the login gets a
+    // few seconds for that check.
+    for (let waited = 0; !entry.outcome && waited < 5000; waited += 250) await new Promise((done) => setTimeout(done, 250));
+    if (entry.outcome === "connected") return reply(200, { state: "accepted" });
     return reply(200, { state: "refused", message: "Naukri's login did not answer. Try again." });
   } finally {
     entry.busy = false;
