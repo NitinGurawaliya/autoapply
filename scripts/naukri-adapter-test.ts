@@ -41,6 +41,9 @@ function pure() {
   check("reply: the drawer wins over a 200", readApplyReply(200, { jobs: [{ jobId: "7", status: 200 }], chatbotResponse: { speechResponse: [] } }, "7").kind === "questions");
   check("reply: company site", readApplyReply(200, { jobs: [{ jobId: "7", status: 302 }], applyRedirectUrl: "https://example.com" }, "7").kind === "company_site");
   check("reply: 406 is a check", readApplyReply(406, null, "7").kind === "refused");
+  check("reply: one job without its id, 200: sent", readApplyReply(200, { jobs: [{ status: 200 }] }, "7").kind === "sent");
+  const odd = readApplyReply(200, { result: { applied: true, message: "secret text" } }, "7");
+  check("reply: an unknown shape is recorded by its keys, no values", odd.kind === "unclear" && /object\{result:object\{applied,message\}\}/.test(odd.detail) && !odd.detail.includes("secret"), odd.kind === "unclear" ? odd.detail : odd.kind);
   check("reply: another job's 200 is not ours", readApplyReply(200, { jobs: [{ jobId: "8", status: 200 }] }, "7").kind === "unclear");
   check("reply: not JSON", readApplyReply(200, "<html>", "7").kind === "unclear");
 

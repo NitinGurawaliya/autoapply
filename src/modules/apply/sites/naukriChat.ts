@@ -37,11 +37,24 @@ export function jobPageState(signals: JobPageSignals): JobPageState {
 
 const applyReplySchema = z
   .object({
-    jobs: z.array(z.object({ jobId: z.union([z.string(), z.number()]).transform(String), status: z.number().nullable().optional() }).passthrough()).nullable().optional(),
+    jobs: z.array(z.object({ jobId: z.union([z.string(), z.number()]).transform(String).optional(), status: z.number().nullable().optional() }).passthrough()).nullable().optional(),
     chatbotResponse: z.unknown().optional(),
     applyRedirectUrl: z.string().nullable().optional(),
   })
   .passthrough();
+
+/**
+ * The shape of an answer we could not read, for the next fix: key names and value types only, never a value (25 Nov:
+ * an apply after the drawer's questions answered in a shape nobody had recorded). "object{jobs:array[object{jobId,status}]}".
+ */
+export function shapeOf(value: unknown, depth = 0): string {
+  if (Array.isArray(value)) return depth > 2 ? "array" : `array[${value.length ? shapeOf(value[0], depth + 1) : ""}]`;
+  if (value === null) return "null";
+  if (typeof value !== "object") return typeof value;
+  const keys = Object.keys(value as Record<string, unknown>).slice(0, 12);
+  if (depth > 1) return `object{${keys.join(",")}}`;
+  return `object{${keys.map((key) => (["object"].includes(typeof (value as Record<string, unknown>)[key]) && (value as Record<string, unknown>)[key] !== null ? `${key}:${shapeOf((value as Record<string, unknown>)[key], depth + 1)}` : key)).join(",")}}`;
+}
 
 /** Naukri's apply service answered: sent, the drawer opened, the company's site, or nothing that says either. */
 export type ApplyReply =
@@ -56,14 +69,17 @@ export function readApplyReply(httpStatus: number, body: unknown, jobId: string)
   if (httpStatus === 403) return { kind: "refused", detail: "Naukri refused the apply (403)" };
   if (httpStatus < 200 || httpStatus >= 300) return { kind: "unclear", detail: `Naukri's apply service answered ${httpStatus}` };
   const parsed = applyReplySchema.safeParse(body);
-  if (!parsed.success) return { kind: "unclear", detail: "Naukri's apply answer was not in the expected shape" };
+  if (!parsed.success) return { kind: "unclear", detail: `Naukri's apply answer was not in the expected shape (${shapeOf(body).slice(0, 160)})` };
   const reply = parsed.data;
   if (reply.chatbotResponse) return { kind: "questions" };
   const mine = reply.jobs?.find((job) => job.jobId === jobId);
   if (mine?.status === 200) return { kind: "sent", evidence: `Naukri's apply service answered 200 for job ${jobId}` };
+  // The answer to this job's own apply request, naming one job without its id: that job is this one.
+  const only = reply.jobs?.length === 1 && reply.jobs[0].jobId === undefined ? reply.jobs[0] : null;
+  if (only?.status === 200) return { kind: "sent", evidence: "Naukri's apply service answered 200 for the one job in its answer" };
   if (reply.applyRedirectUrl) return { kind: "company_site", url: reply.applyRedirectUrl };
   if (mine) return { kind: "unclear", detail: `Naukri's apply service answered ${mine.status ?? "no status"} for this job` };
-  return { kind: "unclear", detail: "Naukri's apply answer did not name this job" };
+  return { kind: "unclear", detail: `Naukri's apply answer did not name this job (${shapeOf(body).slice(0, 160)})` };
 }
 
 /** What the drawer shows now, read off the page (naukriApply.ts drawerSnapshot). */
