@@ -7,10 +7,11 @@ Order K1 → K2 → K4, one session each, plan first, the Done-when check run an
 Starts only when Phase J is done: T94 (Lever handoff), T95 (SmartRecruiters), T96 (Keka) in `APPLY_BOARDS`, T97 (board report). Rules in CLAUDE.md and ARCHITECTURE §6.20.
 
 <a id="k1"></a>
-### [~] K1 — Connect flow and tooling decision
+### [x] K1 — Connect flow and tooling decision
 Do: `SiteConnection` schema and migration, the per-site rules, site-scoped encrypted browser state in `lib/storage.ts`, `modules/sources`, three routes (list, connect, disconnect; the "fetch now" ingest route moved to K2, since it queues work only K2's handler runs), the `source-connect` queue with its screen-only handler and `hasScreen` beat, the Account card and sheet; ARCHITECTURE §6.20 and §11 record the choice.
 Design: [3 Options and decision](TDD.md#3-options-and-decision) · [4.1 Components](TDD.md#41-components) · [4.2 Queues](TDD.md#42-queues-pg-boss) · [4.3 Data model](TDD.md#43-data-model-prisma-additions) · [4.4 State machine](TDD.md#44-connection-state-machine) · [4.5 Sequence: Connect](TDD.md#45-sequence-connect-k1) · [4.9 Security](TDD.md#49-security-and-privacy) · [4.12 Code map](TDD.md#412-code-map) · [4.13 Env](TDD.md#413-env-architecture-11-additions) · [5 UI](TDD.md#5-ui) · [6 API](TDD.md#6-api).
-**Done when:** the owner connects Naukri in the handoff window without typing anything into our app; `naukri-connect-smoke` PASS (a worker restart keeps the session, Disconnect deletes the blob, a test profile is refused); typecheck and lint pass.
+**Done when:** the owner connects Naukri ~~in the handoff window without typing anything into our app~~ (superseded by the owner's 23 Nov decision: OTP connect in our app, K8b) and the saved sign-in is used by later runs; `naukri-connect-smoke` PASS (a worker restart keeps the session, Disconnect deletes the blob, a test profile is refused); typecheck and lint pass.
+Done 25 Nov: the owner's account connected (K8b, OTP) and used by every later read and apply, at home and through the proxy; `naukri-connect-smoke` 20/20 PASS, the streamed sign-in included. The connect flow's tooling decision (our own Playwright code, not webcmd) stands in ARCHITECTURE §6.20.
 
 <a id="k2"></a>
 ### [~] K2 — Naukri job ingest

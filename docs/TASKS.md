@@ -177,7 +177,7 @@ Starts only when Phase J is done: T94 (Lever handoff), T95 (SmartRecruiters), T9
 
 Design: [docs/naukri/TDD.md](naukri/TDD.md) (final, 3 Nov). Tasks with their Do, the design sections each builds, Done-when and the Done lines: [docs/naukri/TASKS.md](naukri/TASKS.md). Status is marked there first, then on the line here. Order K1 → K2 → K4; K3 and K5 (LinkedIn) are designed after K4's real runs.
 
-- [~] [K1 — Connect flow and tooling decision](naukri/TASKS.md#k1)
+- [x] [K1 — Connect flow and tooling decision](naukri/TASKS.md#k1)
 - [~] [K2 — Naukri job ingest](naukri/TASKS.md#k2)
 - [ ] [K3 — LinkedIn job ingest](naukri/TASKS.md#k3)
 - [x] [K4 — Naukri apply adapter](naukri/TASKS.md#k4)
