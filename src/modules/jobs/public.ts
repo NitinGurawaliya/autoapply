@@ -33,6 +33,8 @@ export type PublicJob = {
   requirements: string[];
   /** The agent applies on this job's board. */
   applyable: boolean;
+  /** The company's own posting (its board's public page), for "View the original posting"; null unless https. */
+  postingUrl: string | null;
 };
 
 export async function publicJob(id: string): Promise<PublicJob | null> {
@@ -53,13 +55,14 @@ export async function publicJob(id: string): Promise<PublicJob | null> {
       salaryMax: true,
       salaryCurrency: true,
       salaryPeriod: true,
+      applyUrl: true,
       reading: true,
       readingCurrent: true,
       company: { select: { name: true, logoUrl: true } },
     },
   });
   if (!job) return null;
-  const { reading, readingCurrent, ...rest } = job;
+  const { reading, readingCurrent, applyUrl, ...rest } = job;
   const parsed = readingCurrent && reading != null ? readingSchema.safeParse(reading) : null;
   const read = parsed?.success ? parsed.data : null;
   return {
@@ -67,5 +70,6 @@ export async function publicJob(id: string): Promise<PublicJob | null> {
     summary: read?.summary.trim() || null,
     requirements: (read?.requirements ?? []).map((line) => line.trim()).filter(Boolean).slice(0, 6),
     applyable: APPLY_BOARDS.includes(job.source),
+    postingUrl: /^https:\/\//i.test(applyUrl) ? applyUrl : null,
   };
 }

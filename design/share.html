@@ -40,6 +40,9 @@
   .wordmark { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; }
   .mark { width: 22px; height: 22px; border-radius: 6px; background: var(--primary); }
   .text-link { font-size: 15px; color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+  /* The company's own posting, opened in a new tab: a text link under the job's details, never a second button. */
+  .original { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin-top: 12px; }
+  .original svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; flex: none; }
 
   .type-score { font-size: 40px; line-height: 1; font-weight: 500; letter-spacing: -0.035em; }
   .type-heading { font-size: 24px; line-height: 1.2; font-weight: 600; letter-spacing: -0.025em; margin: 0; }
@@ -182,6 +185,7 @@
       <div class="section">
         <h2 class="type-section">About the role</h2>
         <div class="fold"><p class="type-body">You will own services in the payments path end to end: design, build, run them in production and keep them fast. You will work with product and the platform team on the next version of our routing.</p><a class="text-link">Read the full description</a></div>
+        <a class="text-link original">View the original posting<svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>
       </div>
     </div>
     <div class="bar">
@@ -264,6 +268,7 @@
       <div class="panel dashed notice">
         <p class="type-section">Your agent can't apply here yet</p>
         <p class="type-body">Salesforce takes applications on Workday, which needs an account with each employer.</p>
+        <a class="text-link original">View the original posting<svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>
       </div>
       <div class="section">
         <h2 class="type-section">Open jobs like it</h2>

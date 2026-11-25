@@ -18,7 +18,7 @@ import { headers } from "next/headers";
 import { applyFromShare } from "./actions";
 import { ApplySubmit } from "./apply-button";
 import { ShareClaim } from "./share-claim";
-import { OpenInBrowser, ShareAbout, ShareBar, ShareJobHeader, ShareNotice, ShareScore, ShareSummary, ShareTopBar, SimilarJobs, SimilarJobsLoading } from "./share-sections";
+import { OpenInBrowser, ShareAbout, ShareBar, ShareJobHeader, ShareNotice, ShareOriginal, ShareScore, ShareSummary, ShareTopBar, SimilarJobs, SimilarJobsLoading } from "./share-sections";
 
 type Props = { params: Promise<{ slug: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> };
 
@@ -125,6 +125,8 @@ export default async function SharePage({ params, searchParams }: Props) {
       ) : !job.applyable ? (
         <ShareNotice title="Your agent can't apply here yet">
           {job.company.name} takes applications on {board ?? "its own site"}, which needs an account with each employer.
+          <br />
+          <ShareOriginal job={job} />
         </ShareNotice>
       ) : stopped ? (
         <StoppedNotice outcome={stopped} />
@@ -138,6 +140,7 @@ export default async function SharePage({ params, searchParams }: Props) {
       ) : null}
       <ShareSummary job={job} />
       {open ? <ShareAbout job={job} /> : null}
+      {open ? <ShareOriginal job={job} /> : null}
       <div className="flex-1" />
 
       {open ? (

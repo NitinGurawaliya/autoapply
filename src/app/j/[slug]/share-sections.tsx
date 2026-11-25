@@ -151,6 +151,22 @@ export function ShareAbout({ job, folded = true }: { job: PublicJob; folded?: bo
   );
 }
 
+/** The company's own posting, in a new tab: a text link, never a second button. Not for a closed job (it is gone there). */
+export function ShareOriginal({ job }: { job: PublicJob }) {
+  if (job.closedAt || !job.postingUrl) return null;
+  return (
+    <a
+      href={job.postingUrl}
+      target="_blank"
+      rel="noopener noreferrer nofollow"
+      className="mt-1 inline-flex min-h-11 items-center gap-1.5 self-start type-body font-medium underline decoration-1 underline-offset-4"
+    >
+      View the original posting
+      <Icon name="external" size={16} />
+    </a>
+  );
+}
+
 /** What happened to this job, in a dashed panel: closed, a board the agent can't use, not a match, a failed claim. */
 export function ShareNotice({ title, children, className }: { title: string; children?: ReactNode; className?: string }) {
   return (
