@@ -6,14 +6,17 @@ import { Screen } from "@/components/patterns/layout";
 import { applyFromShare } from "@/app/j/[slug]/actions";
 import { ShareNotice, ShareTopBar } from "@/app/j/[slug]/share-sections";
 import { CompanyMark } from "@/components/ui/marks";
+import { getCurrentUser } from "@/lib/auth";
+import { cachedFeedScore } from "@/lib/feed-cache";
+import { statusMeta } from "@/lib/status-meta";
 import { boardLabel } from "@/lib/board-label";
 import { departmentLabel, isDepartment } from "@/lib/department";
 import { daysSince, postedLabel } from "@/lib/job-facts";
 import { absoluteUrl, jobPath } from "@/lib/job-slug";
 import { shareLinksEnabled } from "@/lib/share-gate";
-import { employerPage, parseEmployerFilters, type EmployerJobRow } from "@/modules/jobs/employer-pages";
+import { employerPage, myApplicationsAt, parseEmployerFilters, type EmployerJobRow, type MyApplication } from "@/modules/jobs/employer-pages";
 import { companyHref, CountHeading, Crumbs, Filters, JsonLd, Pager } from "../parts";
-import { JobCard, JobCards } from "../job-cards";
+import { JobCard, JobCards, type JobStatus } from "../job-cards";
 
 type Query = Record<string, string | string[] | undefined>;
 type Props = { params: Promise<{ slug: string }>; searchParams: Promise<Query> };
@@ -54,7 +57,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
 function factsOf(job: EmployerJobRow): string[] {
   const place = job.location || "Location not listed";
   const where = job.remoteType === "remote" && !/remote/i.test(place) ? `${place}, remote` : place;
-  return [where, job.experience, postedLabel(daysSince(job.postedAt)), job.salary].filter((fact): fact is string => Boolean(fact));
+  return [where, job.experience, postedLabel(daysSince(job.postedAt))].filter((fact): fact is string => Boolean(fact));
 }
 
 /** /companies/<slug> (design/companies.html 3 to 5): one employer, its open jobs from every board, India first. */
@@ -64,7 +67,15 @@ export default async function CompanyPage({ params, searchParams }: Props) {
   const found = await load(slug, pageOf(query), filters.q, filters.department ?? "");
   if (!found) notFound();
   if (found.kind === "redirect") permanentRedirect(`/companies/${found.slug}`);
-  const { employer, india, abroad, page, pages, total, indiaTotal, all, departments } = found;
+  const { employer, india, abroad, page, pages, total, indiaTotal, all, newThisWeek, departments } = found;
+  // Signed in: what they have already done at this employer, and the match the app has already worked out for them.
+  const user = await getCurrentUser();
+  const mine = user ? await myApplicationsAt(user.id, employer.id, [...india, ...abroad].map((job) => job.id)) : null;
+  const statusOf = (application: MyApplication | undefined): JobStatus | null => {
+    if (!application) return null;
+    const meta = statusMeta(application.status);
+    return { label: meta.label, group: meta.group, href: `/applications/${application.applicationId}` };
+  };
   const linked = shareLinksEnabled();
   const boards = listed(employer.boards.map((source) => boardLabel(source) ?? source));
   const url = absoluteUrl(`/companies/${employer.slug}`);
@@ -80,6 +91,9 @@ export default async function CompanyPage({ params, searchParams }: Props) {
           departmentLabel={departmentLabel(job.department)}
           isNew={job.isNew}
           facts={factsOf(job)}
+          salary={job.salary}
+          score={user?.hasProfile ? cachedFeedScore(user.id, job.id) : null}
+          status={statusOf(mine?.byJob.get(job.id))}
           href={linked ? `${jobPath({ id: job.id, title: job.title, company: { name: job.companyName } })}?s=co` : null}
           apply={linked && job.applyable ? applyFromShare.bind(null, job.id) : null}
         />
@@ -107,12 +121,12 @@ export default async function CompanyPage({ params, searchParams }: Props) {
           ],
         }}
       />
-      <ShareTopBar right="sign-in" />
+      <ShareTopBar right={user ? "feed" : "sign-in"} />
       <Crumbs />
-      <header className="flex items-center gap-3.5 pt-2 lg:gap-5">
+      <header className="flex items-center gap-4 pt-2 lg:gap-6">
         <CompanyMark name={employer.name} logoUrl={employer.logoUrl} size={56} />
         <div className="flex min-w-0 flex-1 flex-col">
-          <h1 className="m-0 type-heading break-words lg:text-[32px]">{employer.name}</h1>
+          <h1 className="m-0 type-heading break-words lg:type-hero">{employer.name}</h1>
           {employer.domain ? (
             <a href={`https://${employer.domain}`} target="_blank" rel="noopener nofollow" className="truncate type-meta text-muted-foreground underline decoration-1 underline-offset-4">
               {employer.domain}
@@ -120,13 +134,40 @@ export default async function CompanyPage({ params, searchParams }: Props) {
           ) : null}
         </div>
       </header>
-      <div className="mt-3.5 flex flex-col gap-0.5">
-        <span className="type-section">
-          {employer.openJobs.toLocaleString("en-IN")} open {employer.openJobs === 1 ? "job" : "jobs"}
-        </span>
-        {boards ? <span className="type-meta text-muted-foreground">Hires through {boards}</span> : null}
-        <span className="type-meta text-muted-foreground">Upload your resume once. Your agent fills in the forms and sends them.</span>
-      </div>
+      <dl className="m-0 mt-6 flex gap-8 border-y border-line py-4 lg:gap-12">
+        {[
+          { n: employer.openJobs, label: employer.openJobs === 1 ? "Open role" : "Open roles" },
+          { n: departments.length, label: departments.length === 1 ? "Department" : "Departments" },
+          ...(newThisWeek > 0 ? [{ n: newThisWeek, label: "New this week" }] : []),
+        ].map((stat) => (
+          <div key={stat.label} className="flex flex-col gap-1">
+            <dt className="order-2 type-label text-muted-foreground">{stat.label}</dt>
+            <dd className="m-0 type-heading tabular-nums">{stat.n.toLocaleString("en-IN")}</dd>
+          </div>
+        ))}
+      </dl>
+      {boards ? <p className="m-0 mt-3 type-meta text-muted-foreground">Hires through {boards}</p> : null}
+      {user ? (
+        <div className="mt-4 rounded-card bg-surface p-4 ring-1 ring-line">
+          {mine && mine.applied > 0 ? (
+            <p className="m-0 type-body">
+              <span className="font-semibold">
+                You have applied to {mine.applied} {mine.applied === 1 ? "job" : "jobs"} here
+              </span>
+              {mine.sent > 0 ? `, ${mine.sent} sent` : ""}.{" "}
+              <Link href="/applications" className="underline decoration-1 underline-offset-4">
+                See your applications
+              </Link>
+            </p>
+          ) : user.hasProfile ? (
+            <p className="m-0 type-body">Your agent fills in the form and sends it. Tap Apply on any role.</p>
+          ) : (
+            <p className="m-0 type-body">Upload your resume once and your agent can apply to any of these. Tap Apply to start.</p>
+          )}
+        </div>
+      ) : (
+        <p className="m-0 mt-3 type-meta text-muted-foreground">Upload your resume once. Your agent fills in the forms and sends them.</p>
+      )}
 
       <Filters slug={employer.slug} name={employer.name} departments={departments} all={all} filters={filters} />
 

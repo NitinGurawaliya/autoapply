@@ -13,7 +13,7 @@ export const EMPLOYERS_PER_PAGE = 200;
 export const JOBS_PER_PAGE = 50;
 
 export type EmployerRow = { slug: string; name: string; logoUrl: string | null; openJobs: number; openIndia: number; places: string };
-export type EmployerHead = Omit<EmployerRow, "places"> & { domain: string | null; boards: string[] };
+export type EmployerHead = Omit<EmployerRow, "places"> & { id: string; domain: string | null; boards: string[] };
 export type EmployerJobRow = {
   id: string;
   title: string;
@@ -46,6 +46,8 @@ export type EmployerPage =
       indiaTotal: number;
       /** Jobs matching the search, in any department. */
       all: number;
+      /** Open jobs (any search or department) posted in the last 7 days. */
+      newThisWeek: number;
       /** Each department that has a job matching the search, biggest first. */
       departments: Array<{ id: DepartmentId; label: string; count: number }>;
       filters: EmployerFilters;
@@ -205,11 +207,9 @@ export async function employerPage(slug: string, page: number, filters: Employer
     SELECT j.source FROM "Company" c JOIN "Job" j ON j."companyId" = c.id
     WHERE c."employerId" = ${employer.id} AND j."closedAt" IS NULL AND j.source <> ALL(${PRIVATE}::text[]) AND c."lastFetchedAt" > now() - interval '3 days'
     GROUP BY j.source ORDER BY count(*) DESC, j.source`;
-  const { id: _id, ...head } = employer;
-  void _id;
   return {
     kind: "page",
-    employer: { ...head, boards: boards.map((row) => row.source) },
+    employer: { ...employer, boards: boards.map((row) => row.source) },
     india: slice.filter((row) => row.india).map(card),
     abroad: slice.filter((row) => !row.india).map(card),
     page: at,
@@ -217,9 +217,32 @@ export async function employerPage(slug: string, page: number, filters: Employer
     total: shown.length,
     indiaTotal: shown.filter((row) => row.india).length,
     all: matching.length,
+    newThisWeek: rows.filter((row) => row.postedAt.getTime() >= Date.now() - 7 * 24 * 60 * 60 * 1000).length,
     departments,
     filters,
   };
+}
+
+export type MyApplication = { applicationId: string; status: string };
+
+/**
+ * What a signed-in person has already done at this employer: their latest application to each of these jobs, and how
+ * many jobs here they have applied to (those still counting: not failed, blocked or cancelled) and how many were sent.
+ */
+export async function myApplicationsAt(userId: string, employerId: string, jobIds: string[]): Promise<{ byJob: Map<string, MyApplication>; applied: number; sent: number }> {
+  const [latest, [totals]] = await Promise.all([
+    jobIds.length === 0
+      ? Promise.resolve([] as Array<{ jobId: string; id: string; status: string }>)
+      : db.$queryRaw<Array<{ jobId: string; id: string; status: string }>>`
+          SELECT DISTINCT ON (a."jobId") a."jobId", a.id, a.status FROM "Application" a
+          WHERE a."userId" = ${userId} AND a."jobId" = ANY(${jobIds}::text[]) ORDER BY a."jobId", a."createdAt" DESC`,
+    db.$queryRaw<Array<{ applied: number; sent: number }>>`
+      SELECT count(DISTINCT a."jobId") FILTER (WHERE a.status NOT IN ('failed', 'blocked', 'cancelled'))::int AS applied,
+             count(DISTINCT a."jobId") FILTER (WHERE a.status = 'submitted')::int AS sent
+      FROM "Application" a JOIN "Job" j ON j.id = a."jobId" JOIN "Company" c ON c.id = j."companyId"
+      WHERE a."userId" = ${userId} AND c."employerId" = ${employerId}`,
+  ]);
+  return { byJob: new Map(latest.map((row) => [row.jobId, { applicationId: row.id, status: row.status }])), applied: totals?.applied ?? 0, sent: totals?.sent ?? 0 };
 }
 
 // The sitemaps (W7): the listed employers, and the open jobs whose page carries JobPosting data (an open job of a public

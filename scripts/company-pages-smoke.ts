@@ -1,6 +1,7 @@
 // The public company pages over HTTP, signed out (src/app/companies, docs/employers/TDD.md 4.9, W6). Throwaway employers
 // and jobs (names carry a stamp), deleted at the end. Start the app first, then:
 //   BASE=http://localhost:3000 npx tsx scripts/company-pages-smoke.ts
+import { randomBytes } from "node:crypto";
 import { db } from "../src/lib/db";
 import { companyPagesEnabled } from "../src/lib/company-pages-gate";
 import { refreshEmployerCounts } from "../src/modules/jobs/employers";
@@ -11,15 +12,15 @@ function ok(name: string, pass: boolean, detail = "") {
   if (!pass) failed += 1;
   console.log(`${pass ? "ok  " : "FAIL"} ${name}${detail ? ` (${detail})` : ""}`);
 }
-async function get(path: string, manual = false) {
-  const response = await fetch(`${BASE}${path}`, { redirect: manual ? "manual" : "follow", headers: { "user-agent": "company-pages-smoke" } });
+async function get(path: string, manual = false, cookie = "") {
+  const response = await fetch(`${BASE}${path}`, { redirect: manual ? "manual" : "follow", headers: { "user-agent": "company-pages-smoke", ...(cookie ? { cookie } : {}) } });
   return { status: response.status, location: response.headers.get("location"), body: await response.text() };
 }
 
 async function main() {
   const stamp = Date.now();
   const now = new Date();
-  const ids = { employers: [] as string[], companies: [] as string[], jobs: [] as string[] };
+  const ids = { employers: [] as string[], companies: [] as string[], jobs: [] as string[], users: [] as string[] };
   const employer = async (key: string, domain: string | null) => {
     const row = await db.employer.create({ data: { slug: `w6-${key}-${stamp}`, name: `W6 ${key} ${stamp}`, nameKey: `w6${key}${stamp}`, domain } });
     ids.employers.push(row.id);
@@ -45,7 +46,7 @@ async function main() {
     await job(gh.id, "g1", "greenhouse", `W6 Greenhouse Role ${stamp}`);
     await job(lever.id, "l1", "lever", `W6 Lever Role ${stamp}`);
     await job(lever.id, "l2", "lever", `W6 Abroad Role ${stamp}`, "abroad");
-    await job(gh.id, "s1", "greenhouse", `W6 Senior Account Executive ${stamp}`);
+    const sentJob = await job(gh.id, "s1", "greenhouse", `W6 Senior Account Executive ${stamp}`);
     await job(naukriCo.id, "n1", "naukri", `W6 NAUKRI ONLY JOB ${stamp}`);
     const naukriOnly = await employer("naukrionly", null);
     const nk2 = await company("nk2", naukriOnly.id, "naukri");
@@ -84,6 +85,19 @@ async function main() {
     ok("a search with no match says so and offers all jobs", none.status === 200 && none.body.includes("No jobs match") && none.body.includes("Show all"));
     ok("the plain page is indexable", /<meta name="robots" content="index, follow"/.test(page.body));
 
+    // Signed in: a person with a profile and one sent application here.
+    const user = await db.user.create({ data: { email: `w6-${stamp}@swipeapply.local`, name: "W6 Person" } });
+    ids.users.push(user.id);
+    await db.profile.create({ data: { userId: user.id, resumeKey: `resumes/${user.id}/resume.pdf`, resumeText: "x", fullName: "W6 Person", email: user.email, skills: [], experience: [], education: [], rawJson: {} } });
+    const token = randomBytes(16).toString("hex");
+    await db.session.create({ data: { sessionToken: token, userId: user.id, expires: new Date(Date.now() + 600_000) } });
+    await db.application.create({ data: { userId: user.id, jobId: sentJob.id, status: "submitted", fields: [], pendingQuestions: [], submittedAt: new Date() } });
+    const signedIn = await get(`/companies/w6-multi-${stamp}`, false, `authjs.session-token=${token}`);
+    ok("signed in: the top bar says Your feed, not Sign in", signedIn.status === 200 && signedIn.body.includes("Your feed") && !/>Sign in</.test(signedIn.body));
+    ok("signed in: a line says what they have done here", /You have applied to 1 job here/.test(signedIn.body.replace(/<!-- -->/g, "")));
+    ok("signed in: the job they applied to shows Sent in place of Apply", /Sent/.test(signedIn.body) && (signedIn.body.match(/\$ACTION_\d+:0/g) ?? []).length < (page.body.match(/\$ACTION_\d+:0/g) ?? []).length);
+    ok("signed out: no personal line and no Sent", !/You have applied/.test(page.body) && !/>Sent</.test(page.body));
+
     ok("a Naukri-only employer is a 404", (await get(`/companies/w6-naukrionly-${stamp}`)).status === 404);
     const everything = [index, page, await get("/companies/browse/w")].map((r) => r.body).join("\n");
     ok("no response mentions naukri.com", !/naukri\.com/i.test(everything));
@@ -111,6 +125,7 @@ async function main() {
     if (saved.pages === undefined) delete env.COMPANY_PAGES;
     ok("the gate: 0 is off, 1 is on, unset is off in production and on in development", !off && on && !prod && dev, `${off} ${on} ${prod} ${dev}`);
   } finally {
+    await db.user.deleteMany({ where: { id: { in: ids.users } } });
     await db.job.deleteMany({ where: { id: { in: ids.jobs } } });
     await db.company.deleteMany({ where: { id: { in: ids.companies } } });
     await db.employer.deleteMany({ where: { id: { in: ids.employers } } });

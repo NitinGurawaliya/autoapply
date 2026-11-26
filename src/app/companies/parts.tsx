@@ -74,9 +74,9 @@ export function EmployerList({ rows }: { rows: EmployerRow[] }) {
 /** "In India 38": a heading with its count. */
 export function CountHeading({ children, count }: { children: ReactNode; count: number }) {
   return (
-    <h2 className="m-0 mb-2.5 flex items-baseline justify-between gap-2 type-section">
+    <h2 className="m-0 mb-3 flex items-baseline justify-between gap-2 type-section">
       {children}
-      <span className="type-meta font-normal text-muted-foreground">{count.toLocaleString("en-IN")}</span>
+      <span className="type-label text-muted-foreground">{count.toLocaleString("en-IN")} {count === 1 ? "role" : "roles"}</span>
     </h2>
   );
 }
@@ -105,17 +105,17 @@ export function Filters({ slug, name, departments, all, filters }: { slug: strin
     <div className="mt-6 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between lg:gap-4">
       <nav aria-label="Departments" className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none] lg:mx-0 lg:min-w-0 lg:flex-1 lg:flex-wrap lg:overflow-visible lg:px-0 lg:pb-0">
         <Link href={companyHref(slug, { ...filters, department: null })} className={chip(!filters.department)} aria-current={!filters.department ? "true" : undefined}>
-          All <span className={cn(!filters.department ? "opacity-70" : "text-muted-foreground")}>{all.toLocaleString("en-IN")}</span>
+          All <span className={cn("font-mono type-meta", !filters.department ? "opacity-70" : "text-muted-foreground")}>{all.toLocaleString("en-IN")}</span>
         </Link>
         {departments.map((department) => (
           <Link key={department.id} href={companyHref(slug, { ...filters, department: department.id })} className={chip(filters.department === department.id)} aria-current={filters.department === department.id ? "true" : undefined}>
-            {department.label} <span className={cn(filters.department === department.id ? "opacity-70" : "text-muted-foreground")}>{department.count.toLocaleString("en-IN")}</span>
+            {department.label} <span className={cn("font-mono type-meta", filters.department === department.id ? "opacity-70" : "text-muted-foreground")}>{department.count.toLocaleString("en-IN")}</span>
           </Link>
         ))}
       </nav>
       <form method="get" action={`/companies/${slug}`} role="search" className="relative flex-none lg:w-72">
         {filters.department ? <input type="hidden" name="f" value={filters.department} /> : null}
-        <Icon name="search" size={18} className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-faint" />
+        <Icon name="search" size={18} className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-faint" />
         <input
           type="search"
           name="q"
@@ -124,7 +124,7 @@ export function Filters({ slug, name, departments, all, filters }: { slug: strin
           placeholder={`Search ${name} jobs`}
           aria-label={`Search ${name} jobs`}
           enterKeyHint="search"
-          className="h-11 w-full rounded-control bg-surface pr-3.5 pl-10 type-body text-foreground ring-1 ring-input placeholder:text-faint focus-visible:outline-2 focus-visible:outline-ring"
+          className="h-11 w-full rounded-full bg-surface pr-4 pl-11 type-body text-foreground ring-1 ring-input placeholder:text-faint focus-visible:outline-2 focus-visible:outline-ring"
         />
       </form>
     </div>

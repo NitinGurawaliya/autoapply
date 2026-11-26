@@ -5,12 +5,12 @@ import Link from "next/link";
 import { useFormStatus } from "react-dom";
 import { cn } from "cn";
 import { Icon } from "@/components/ui/icons";
-import { Tag } from "@/components/ui/chip";
 import type { DepartmentId } from "@/lib/department";
 
-// The company page's job cards (design/companies.html, Phase W5): a department tile, the title with a few facts, and
-// an Apply button on every card. The card nearest the middle of the screen is the active one while scrolling: its
-// button grows to "Apply with agent" and the card lifts, so the one the reader is on always shows what Apply does.
+// The company page's job cards (design/companies.html, Phase W5): a tile and label in the department's own hue, the
+// title, a line of facts, and on the right the person's match when the app has worked it out, then Apply (or what already
+// happened). The card nearest the middle of the screen is the active one while scrolling: it lifts, takes a bar in its
+// hue, and its button grows to "Apply with agent", so the one the reader is on always shows what Apply does.
 
 const ActiveJob = createContext<string | null>(null);
 
@@ -56,13 +56,13 @@ export function JobCards({ children, className }: { children: ReactNode; classNa
 }
 
 const svg = (paths: ReactNode) => (
-  <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     {paths}
   </svg>
 );
 
-/** A drawing for each department, one stroke weight, on a quiet tile. */
-function DepartmentIcon({ id }: { id: DepartmentId }) {
+/** A drawing for each department, one stroke weight, in the department's hue. */
+export function DepartmentIcon({ id }: { id: DepartmentId }) {
   switch (id) {
     case "engineering":
       return svg(<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14" />);
@@ -71,15 +71,15 @@ function DepartmentIcon({ id }: { id: DepartmentId }) {
     case "product":
       return svg(<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3zM12 12l8-4.5M12 12L4 7.5M12 12v9" />);
     case "design":
-      return <Icon name="pen" size={22} />;
+      return <Icon name="pen" size={24} />;
     case "sales":
-      return <Icon name="target" size={22} />;
+      return <Icon name="target" size={24} />;
     case "marketing":
       return svg(<path d="M4 10v4h3l7 4V6L7 10H4zM17 9a4 4 0 0 1 0 6" />);
     case "finance":
       return svg(<path d="M6 4h12M6 9h12M9 4c5 0 7 2 7 5s-2 5-7 5l7 6" />);
     case "people":
-      return <Icon name="person" size={22} />;
+      return <Icon name="person" size={24} />;
     case "operations":
       return svg(
         <>
@@ -105,7 +105,10 @@ function ApplyButton({ active }: { active: boolean }) {
       type="submit"
       disabled={pending}
       aria-busy={pending}
-      className="group/apply flex h-11 w-full items-center justify-center gap-2 rounded-control bg-inverse px-5 type-body font-semibold text-inverse-foreground transition-[background-color,box-shadow,transform] duration-200 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:scale-[0.98] disabled:opacity-60 lg:w-auto"
+      className={cn(
+        "flex h-11 w-full items-center justify-center gap-2 rounded-full bg-inverse px-5 type-body font-semibold text-inverse-foreground transition-[box-shadow,transform] duration-200 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:scale-[0.98] disabled:opacity-60 lg:w-auto",
+        active && "shadow-lift",
+      )}
     >
       <span>{pending ? "Opening…" : "Apply"}</span>
       {pending ? null : (
@@ -118,41 +121,83 @@ function ApplyButton({ active }: { active: boolean }) {
   );
 }
 
+/** What already happened to a job for the signed-in person: the application's status, in the app's own words. */
+export type JobStatus = { label: string; group: "needs" | "progress" | "sent" | "failed"; href: string };
+
+function StatusLink({ status }: { status: JobStatus }) {
+  const base = "flex h-11 w-full items-center justify-center gap-2 rounded-full px-5 type-body font-semibold lg:w-auto";
+  if (status.group === "needs") {
+    return (
+      <Link href={status.href} className={cn(base, "bg-primary text-primary-foreground")}>
+        {status.label}
+        <Icon name="arrowRight" size={16} />
+      </Link>
+    );
+  }
+  if (status.group === "sent") {
+    return (
+      <Link href={status.href} className={cn(base, "text-foreground ring-1 ring-line-strong active:bg-sunk")}>
+        <Icon name="check" size={16} />
+        {status.label}
+      </Link>
+    );
+  }
+  if (status.group === "progress") {
+    return (
+      <Link href={status.href} className={cn(base, "text-foreground ring-1 ring-line-strong active:bg-sunk")}>
+        <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-foreground" />
+        {status.label}
+      </Link>
+    );
+  }
+  return (
+    <Link href={status.href} className={cn(base, "border border-dashed border-dash text-muted-foreground active:bg-sunk")}>
+      {status.label}
+    </Link>
+  );
+}
+
 export type JobCardProps = {
   id: string;
   title: string;
   department: DepartmentId;
   departmentLabel: string;
   isNew: boolean;
-  /** Place, experience, how long ago, pay: whichever the posting gives. */
+  /** Place, experience, how long ago: whichever the posting gives. */
   facts: string[];
+  /** The board's own pay field, formatted, or null. */
+  salary: string | null;
   /** The job's own page, or null while share pages are off. */
   href: string | null;
   /** Hands the job to Apply (the server action, bound to this job), or null when the agent cannot apply on its board. */
   apply: (() => Promise<void>) | null;
+  /** The signed-in person's match, when the app has already worked it out for them. */
+  score: number | null;
+  /** What already happened to this job for the signed-in person. */
+  status: JobStatus | null;
 };
 
-export function JobCard({ id, title, department, departmentLabel, isNew, facts, href, apply }: JobCardProps) {
+export function JobCard({ id, title, department, departmentLabel, isNew, facts, salary, href, apply, score, status }: JobCardProps) {
   const activeId = useContext(ActiveJob);
   const active = activeId === id;
   return (
     <li
       data-job-id={id}
       className={cn(
-        "relative rounded-card bg-surface ring-1 ring-line transition-[box-shadow,transform] duration-200 ease-out",
+        `dept-${department} relative rounded-card bg-surface ring-1 ring-line transition-[box-shadow,transform] duration-200 ease-out`,
         active && "shadow-lift ring-line-strong lg:-translate-y-px",
       )}
     >
-      <span aria-hidden="true" className={cn("absolute top-4 bottom-4 left-0 w-[3px] rounded-r-full bg-foreground transition-opacity duration-200", active ? "opacity-100" : "opacity-0")} />
-      <div className="flex flex-col gap-3.5 p-4 lg:flex-row lg:items-center lg:gap-5 lg:p-5">
-        <div className="flex min-w-0 flex-1 gap-3.5">
-          <span className="flex size-11 flex-none items-center justify-center rounded-control bg-sunk text-foreground">
+      <span aria-hidden="true" className={cn("dept-bar absolute top-4 bottom-4 left-0 w-0.75 rounded-r-full transition-opacity duration-200", active ? "opacity-100" : "opacity-0")} />
+      <div className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:gap-6 lg:p-5">
+        <div className="flex min-w-0 flex-1 gap-4">
+          <span className="dept-tint flex size-12 flex-none items-center justify-center rounded-control">
             <DepartmentIcon id={department} />
           </span>
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-            <span className="flex items-center gap-2 type-meta text-muted-foreground">
-              {departmentLabel}
-              {isNew ? <Tag className="h-5 px-1.5">New</Tag> : null}
+            <span className="type-label flex items-center gap-2">
+              <span className="dept-ink">{departmentLabel}</span>
+              {isNew ? <span className="text-brand-text">New</span> : null}
             </span>
             <h3 className="m-0 line-clamp-2 type-section text-balance" title={title}>
               {href ? (
@@ -163,26 +208,33 @@ export function JobCard({ id, title, department, departmentLabel, isNew, facts, 
                 title
               )}
             </h3>
-            <ul className="m-0 mt-0.5 flex list-none flex-wrap gap-1.5 p-0">
-              {facts.map((fact) => (
-                <li key={fact}>
-                  <Tag className="max-w-full truncate" title={fact}>
-                    {fact}
-                  </Tag>
-                </li>
-              ))}
-            </ul>
+            <p className="m-0 type-meta text-muted-foreground">
+              {facts.join(" · ")}
+              {salary ? <span className="ml-2 font-mono text-foreground">{salary}</span> : null}
+            </p>
           </div>
         </div>
-        {apply ? (
-          <form action={apply} className="flex-none">
-            <ApplyButton active={active} />
-          </form>
-        ) : href ? (
-          <Link href={href} className="flex h-11 flex-none items-center justify-center rounded-control px-5 type-body font-semibold text-foreground ring-1 ring-line-strong active:bg-sunk lg:w-auto">
-            View job
-          </Link>
-        ) : null}
+        <div className="flex flex-none items-center justify-between gap-4 lg:justify-end">
+          {score != null && !status ? (
+            <span className="flex items-baseline gap-1.5 lg:flex-col lg:items-end lg:gap-0">
+              <span className="type-heading text-brand-text tabular-nums">{score}</span>
+              <span className="type-meta text-muted-foreground">match</span>
+            </span>
+          ) : (
+            <span className="lg:hidden" />
+          )}
+          {status ? (
+            <StatusLink status={status} />
+          ) : apply ? (
+            <form action={apply} className="min-w-0 flex-1 lg:flex-none">
+              <ApplyButton active={active} />
+            </form>
+          ) : href ? (
+            <Link href={href} className="flex h-11 w-full items-center justify-center rounded-full px-5 type-body font-semibold text-foreground ring-1 ring-line-strong active:bg-sunk lg:w-auto">
+              View job
+            </Link>
+          ) : null}
+        </div>
       </div>
     </li>
   );

@@ -568,3 +568,57 @@
     text-wrap: balance;
   }
 }
+
+/* Company pages (Phase W, design/companies.html): one hue per department, as a label, a tile tint and the active card's
+   bar. `--dept` is the ink of the hue (dark enough on the page in light, light enough in dark); the tint is that hue at
+   20% over whatever it sits on. Only the company pages use these. */
+.dept-engineering { --dept: #3f6b3a; }
+.dept-data { --dept: #2f6485; }
+.dept-product { --dept: #8a5a1b; }
+.dept-design { --dept: #9a3d68; }
+.dept-sales { --dept: #a4491f; }
+.dept-marketing { --dept: #b13a3a; }
+.dept-finance { --dept: #6b6a1f; }
+.dept-people { --dept: #5d4a8c; }
+.dept-operations { --dept: #2f6d66; }
+.dept-other { --dept: #6b665d; }
+.dark .dept-engineering { --dept: #9bc596; }
+.dark .dept-data { --dept: #8fbddb; }
+.dark .dept-product { --dept: #dcb27a; }
+.dark .dept-design { --dept: #e2a0c0; }
+.dark .dept-sales { --dept: #e8a27e; }
+.dark .dept-marketing { --dept: #eba0a0; }
+.dark .dept-finance { --dept: #cfcf86; }
+.dark .dept-people { --dept: #bba9e6; }
+.dark .dept-operations { --dept: #8cc9c1; }
+.dark .dept-other { --dept: #b3ada2; }
+@layer components {
+  .dept-tint {
+    background: color-mix(in srgb, var(--dept) 20%, transparent);
+    color: var(--dept);
+  }
+  .dept-ink {
+    color: var(--dept);
+  }
+  .dept-bar {
+    background: var(--dept);
+  }
+}
+
+/* A small uppercase label in the mono face (department, counts): the page's one voice besides the grotesk. */
+@utility type-label {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* The company name at the top of a company page on a wide screen (Phase W, design/companies.html). */
+@utility type-hero {
+  font-size: 2rem;
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}

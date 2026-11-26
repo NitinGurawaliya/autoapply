@@ -486,6 +486,8 @@ The table in §4.1, plus the scripts:
   - Apply is `applyFromShare` (Google, then onboarding or the job); a job on a board the agent cannot apply on shows "View job" instead;
   - the card nearest the middle of the screen is active while scrolling: it lifts, takes an ink bar, and its button grows to "Apply with agent";
   - phones 390 px; from 1024 px the column is 896 px and a card reads left to right.
+  - signed in (session read, so the page is dynamic anyway): "Your feed" in the top bar; a line with how many jobs here they applied to and how many were sent; a job they already applied to shows its status in place of Apply (Sent, Needs you, Didn't go through, In progress, linking to the application); the match shows only where `cachedFeedScore` already holds one for them (computing it for every card would run the matching, with a model call, per job);
+  - the hero: three numbers (open roles, departments, new this week) with mono labels, then the chips and search.
   The department is a display grouping from the title and the stored function (`lib/department.ts`); the next phase's fields replace it.
 - States:
   - loading skeletons;

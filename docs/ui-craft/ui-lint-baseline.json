@@ -23,6 +23,12 @@
  "src/app/(auth)/sign-in/page.tsx": {
   "pill": 1
  },
+ "src/app/companies/job-cards.tsx": {
+  "pill": 4
+ },
+ "src/app/companies/parts.tsx": {
+  "pill": 2
+ },
  "src/app/dev/ui/gallery.tsx": {
   "pill": 1
  },
@@ -40,9 +46,6 @@
  },
  "src/app/mock/submissions/page.tsx": {
   "px": 1
- },
- "src/app/onboarding/resume/upload-form.tsx": {
-  "pill": 1
  },
  "src/components/notifications.tsx": {
   "pill": 2
