@@ -1,7 +1,7 @@
 // Duplicate-role and per-company guards, daily counter, and the feed hiding applied roles.
 // Uses fixture jobs on the test account; nothing is queued or sent. npx tsx scripts/guards-test.ts
 import { db } from "../src/lib/db";
-import { appliedRoleKeys, check, companyKey, dailyUsage, historyFor, roleKey } from "../src/modules/governance";
+import { appliedRoleKeys, check, dailyUsage, employerKey, historyFor, roleKey } from "../src/modules/governance";
 import { listFeed, parseFeedFilters } from "../src/modules/jobs";
 
 let failed = 0;
@@ -39,7 +39,8 @@ async function main() {
   try {
     // The feed only returns the top 40, so fixtures are checked through the same key the feed filters on.
     const feedHas = async (id: string) => (await listFeed(user.id, parseFeedFilters({ days: "30" }))).some((job) => job.id === id);
-    const key = (job: { title: string }) => roleKey(companyKey(company.name), job.title);
+    // The guard counts the employer (W4); this fixture company is not linked, so it counts as its own board account.
+    const key = (job: { title: string }) => roleKey(employerKey({ employerId: null, companyId: company.id }), job.title);
     ok("before applying, no role at the company is marked applied", !(await appliedRoleKeys(user.id)).has(key(jobs.a)));
 
     const first = await apply(jobs.a.id, "submitted");

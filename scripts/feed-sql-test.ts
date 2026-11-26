@@ -7,7 +7,7 @@
 // npx tsx scripts/feed-sql-test.ts            (old judge)
 // RELEVANCE_FIT=1 npx tsx scripts/feed-sql-test.ts   (fit path)
 import { db } from "../src/lib/db";
-import { companyKey, feedHistory, loadRules, roleKey } from "../src/modules/governance";
+import { employerKey, feedHistory, loadRules, roleKey } from "../src/modules/governance";
 import { candidateShows, companyResultsById, fitJobs, fitOn, judge, judgeJobs, listFeed, parseFeedFilters, profileVector, scoreJob, tracksOf } from "../src/modules/jobs";
 import { briefOf } from "../src/modules/profile/brief";
 import { jobGate, readingGateOn } from "../src/modules/jobs/gate";
@@ -96,7 +96,7 @@ async function referenceFeed(userId: string) {
       where: { source: { in: sources }, eligibility: { in: ["india", "remote_india"] }, ...(shown ? { track: { in: shown } } : {}),
         AND: [{ OR: [{ experienceMin: null }, { experienceMin: { lte: yearsReach(years) } }] }, { OR: [{ seniority: null }, { seniority: { in: levelsFor(years) } }] }],
         postedAt: { gte: new Date(Date.now() - filters.days * 864e5) }, closedAt: null, id: { notIn: swipes.map((s) => s.jobId) } },
-      include: { company: { select: { name: true } } },
+      include: { company: { select: { name: true, employerId: true } } },
       orderBy: { id: "asc" }, // the same order feedRows reads, so ties break the same way
     }),
     feedHistory(userId, loadRules().max_per_company_per_week),
@@ -113,7 +113,9 @@ async function referenceFeed(userId: string) {
       SELECT id, (1 - (embedding <=> ${vector}::halfvec))::float8 AS s FROM "Job" WHERE id = ANY(${jobs.map((job) => job.id)}::text[]) AND embedding IS NOT NULL`;
     for (const row of rows) sims.set(row.id, row.s);
   }
-  const open = (job: (typeof jobs)[number]) => !history.roles.has(roleKey(companyKey(job.company.name), job.title)) && !history.companiesAtCap.has(companyKey(job.company.name));
+  // The guards count the employer (W4), its own board account until the company is linked.
+  const employerOf = (job: (typeof jobs)[number]) => employerKey({ employerId: job.company.employerId, companyId: job.companyId });
+  const open = (job: (typeof jobs)[number]) => !history.roles.has(roleKey(employerOf(job), job.title)) && !history.companiesAtCap.has(employerOf(job));
   const closest = jobs
     .filter((job) => sims.has(job.id) && sims.get(job.id)! >= 0.35 && job.source !== "mock" && open(job))
     .sort((a, b) => sims.get(b.id)! - sims.get(a.id)! || (a.id < b.id ? -1 : 1));
@@ -144,12 +146,12 @@ async function referenceFeed(userId: string) {
       const daysAgo = Math.max(0, Math.floor((Date.now() - job.postedAt.getTime()) / 864e5));
       return {
         id: job.id, company: job.company.name, location: job.location, source: job.source, daysAgo, score: match.score, reason: match.reason, skillHits: match.skillHits.slice(0, 4),
-        roleKey: roleKey(companyKey(job.company.name), job.title), verdict: judge(results.get(job.companyId)), mock: job.source === "mock",
+        roleKey: roleKey(employerOf(job), job.title), employer: employerOf(job), verdict: judge(results.get(job.companyId)), mock: job.source === "mock",
       };
     })
     .filter((job) => job.mock || job.score >= minScore)
     .filter((job) => !history.roles.has(job.roleKey))
-    .filter((job) => !history.companiesAtCap.has(companyKey(job.company)));
+    .filter((job) => !history.companiesAtCap.has(job.employer));
   }
   return applyFeedFloor(
     dedupeListings(scored)

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { daysAgoLabel } from "@/lib/days";
 import { cachedFeed, cachedFeedDegraded, cachedFeedExtra, rememberFeed } from "@/lib/feed-cache";
-import { companyKey, feedHistory, loadRules, roleKey } from "@/modules/governance";
+import { employerKey, feedHistory, loadRules, roleKey } from "@/modules/governance";
 // The brief file itself, not the profile index (which pulls in resume parsing).
 import { briefOf } from "@/modules/profile/brief";
 import { fitJobs, fitOn, type FitStore, type FitWho } from "./fit";
@@ -630,7 +630,7 @@ function daysAgo(postedAt: Date) {
 }
 
 /** Boards we can apply through, best first; when one role is listed on two of them, the best listing is the card. */
-const BOARD_RANK: Record<string, number> = { greenhouse: 0, ashby: 1, lever: 2, mock: 3 };
+const BOARD_RANK: Record<string, number> = { greenhouse: 0, ashby: 1, lever: 2, smartrecruiters: 3, keka: 4, workday: 5, workable: 6, zohorecruit: 7, naukri: 8, mock: 9 };
 
 /**
  * Keeps one listing per company and title, so one role listed on two boards, or in several cities, is one card (20 Nov:
@@ -664,6 +664,8 @@ export type FeedRow = {
   applyUrl: string;
   postedAt: Date;
   companyId: string;
+  /** The real employer of the company (Phase W): the duplicate guard and the weekly cap count it, not the name. Null until linked. */
+  employerId: string | null;
   company: string;
   stage: string | null;
   logoUrl: string | null;
@@ -758,7 +760,7 @@ export async function feedRows(input: {
     ),
     candidates AS (
       SELECT j.id, j.title, j."contentHash", j.location, j.source, j.country, j."remoteType", j."experienceMin", j."applyUrl", j."postedAt",
-             j."companyId", c.name AS company, c.stage, c."logoUrl", j.track, j.seniority, j."firstSeenAt", coalesce(h.hits, '{}') AS hits,
+             j."companyId", c."employerId", c.name AS company, c.stage, c."logoUrl", j.track, j.seniority, j."firstSeenAt", coalesce(h.hits, '{}') AS hits,
              j.skills, j."skillsRequired", j."skillsHash", j."salaryMin", j."salaryMax", j."salaryCurrency", j."salaryPeriod",
              j."roleFamily", j.kind, j.flags, j."readingCurrent",
              CASE WHEN ${input.vector}::text IS NULL OR j.embedding IS NULL THEN NULL
@@ -965,7 +967,7 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
 
   // The closest jobs (by meaning) that the user can still apply to are judged by the model against the resume
   // (semantic.ts, cached); jobs further away are left out. Mock jobs and jobs without a vector are scored by tracks.
-  const open = (job: FeedRow) => Boolean(evaluation) || (!history.roles.has(roleKey(companyKey(job.company), job.title)) && !history.companiesAtCap.has(companyKey(job.company)));
+  const open = (job: FeedRow) => Boolean(evaluation) || (!history.roles.has(roleKey(employerKey(job), job.title)) && !history.companiesAtCap.has(employerKey(job)));
   const closest = jobs
     .filter((job) => job.similarity != null && job.source !== "mock" && open(job))
     .sort((a, b) => b.similarity! - a.similarity! || (a.id < b.id ? -1 : 1));
@@ -1012,7 +1014,9 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
         // New to us AND recently posted: a company added today brings old postings, and "New" beside "Posted 52d ago"
         // read as a contradiction (16 Oct QA).
         isNew: Date.now() - job.firstSeenAt.getTime() < 24 * 60 * 60 * 1000 && Date.now() - job.postedAt.getTime() < 7 * 24 * 60 * 60 * 1000,
-        roleKey: roleKey(companyKey(job.company), job.title),
+        roleKey: roleKey(employerKey(job), job.title),
+        // Who the weekly cap counts (the employer, W4); not shown on the card.
+        employer: employerKey(job),
         verdict: judge(results.get(job.companyId)),
         mock: job.source === "mock",
         breakdown: match.breakdown,
@@ -1028,7 +1032,7 @@ async function scoreFeed(userId: string, filters: FeedFilters, view: FeedView, e
     .filter((job) => job.mock || job.score >= minScore)
     .filter((job) => Boolean(evaluation) || !history.roles.has(job.roleKey))
     // A company already at its weekly limit: a swipe would be blocked, so its jobs wait until the week is over.
-    .filter((job) => Boolean(evaluation) || !history.companiesAtCap.has(companyKey(job.company)))
+    .filter((job) => Boolean(evaluation) || !history.companiesAtCap.has(job.employer))
     .filter((job) => filters.expMax == null || job.requiredYears == null || job.requiredYears <= filters.expMax);
 
   // The closest SHORTLIST are judged; when that leaves fewer than a deck of cards (the user swiped most of them), the

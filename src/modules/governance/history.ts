@@ -13,7 +13,16 @@ export function companyKey(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
-/** Same company and same normalised title is the same role, even when two boards list it under different ids. */
+/**
+ * The employer of a job's company for the duplicate-role guard and the weekly cap (Phase W, docs/employers/TDD.md 4.8):
+ * the employer, so one business on two boards is one and two businesses with one name are two; its own board account
+ * until the company is linked. Never the name.
+ */
+export function employerKey(row: { employerId: string | null; companyId: string }) {
+  return row.employerId ? `e:${row.employerId}` : `c:${row.companyId}`;
+}
+
+/** Same employer and same normalised title is the same role, even when two boards list it under different ids. */
 export function roleKey(company: string, title: string) {
   const normalised = title
     .toLowerCase()
@@ -38,10 +47,10 @@ export async function dailySent(userId: string, client: Reader = db) {
   return client.application.count({ where: { userId, status: "submitted", submittedAt: { gte: startOfTodayUtc() } } });
 }
 
-/** This user's counted applications with their job title and company name, in one round trip (a join, not two reads). */
+/** This user's counted applications with their job title and employer, in one round trip (a join, not two reads). */
 async function countedApplications(userId: string, client: Reader = db) {
-  return client.$queryRaw<Array<{ title: string; companyName: string; createdAt: Date }>>`
-    SELECT j."title" AS "title", c."name" AS "companyName", a."createdAt" AS "createdAt"
+  return client.$queryRaw<Array<{ title: string; employerId: string | null; companyId: string; createdAt: Date }>>`
+    SELECT j."title" AS "title", c."employerId" AS "employerId", j."companyId" AS "companyId", a."createdAt" AS "createdAt"
     FROM "Application" a
     JOIN "Job" j ON j."id" = a."jobId"
     JOIN "Company" c ON c."id" = j."companyId"
@@ -51,7 +60,7 @@ async function countedApplications(userId: string, client: Reader = db) {
 /** Roles this user has already applied to (or is applying to), as roleKey values. */
 export async function appliedRoleKeys(userId: string) {
   const apps = await countedApplications(userId);
-  return new Set(apps.map((app) => roleKey(companyKey(app.companyName), app.title)));
+  return new Set(apps.map((app) => roleKey(employerKey(app), app.title)));
 }
 
 /**
@@ -65,7 +74,7 @@ export async function feedHistory(userId: string, perCompanyPerWeek: number, now
   const roles = new Set<string>();
   const thisWeek = new Map<string, number>();
   for (const app of apps) {
-    const company = companyKey(app.companyName);
+    const company = employerKey(app);
     roles.add(roleKey(company, app.title));
     if (app.createdAt >= weekAgo) thisWeek.set(company, (thisWeek.get(company) ?? 0) + 1);
   }
@@ -80,27 +89,27 @@ const IN_FLIGHT = ["queued", "inspecting", "filling"];
  * What the swipe-time rules need to know about this user's history with one job's role and company, in one statement:
  * inside the swipe's transaction a Promise.all of four reads still ran one after another on its one connection, four
  * round trips of 0.3-0.45 s each (1 Nov). The counts are dailyUsage's and the in-flight count; the counted applications
- * come back as one list, compared by companyKey/roleKey here as before. Times cross as UTC epoch milliseconds, so the
+ * come back as one list, compared by employerKey/roleKey here. Times cross as UTC epoch milliseconds, so the
  * raw statement cannot shift them by a server time zone. `client` is the swipe's transaction when given.
  */
 export async function historyFor(userId: string, job: { title: string; companyId: string }, now = new Date(), client: Reader = db) {
   const weekAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
-  const [row] = await client.$queryRaw<Array<{ companyName: string | null; inFlight: number; applicationsToday: number; apps: Array<{ title: string; companyName: string; at: number }> }>>`
+  const [row] = await client.$queryRaw<Array<{ employerId: string | null; inFlight: number; applicationsToday: number; apps: Array<{ title: string; companyId: string; employerId: string | null; at: number }> }>>`
     SELECT
-      (SELECT co."name" FROM "Company" co WHERE co."id" = ${job.companyId}) AS "companyName",
+      (SELECT co."employerId" FROM "Company" co WHERE co."id" = ${job.companyId}) AS "employerId",
       (COUNT(a."id") FILTER (WHERE a."status" = ANY(${IN_FLIGHT})))::int AS "inFlight",
       (COUNT(a."id") FILTER (WHERE a."createdAt" >= (to_timestamp(${startOfTodayUtc().getTime()}::double precision / 1000) AT TIME ZONE 'UTC') AND a."status" <> 'blocked'))::int AS "applicationsToday",
-      COALESCE(json_agg(json_build_object('title', j."title", 'companyName', c."name", 'at', (extract(epoch FROM a."createdAt") * 1000)::bigint)) FILTER (WHERE a."status" = ANY(${COUNTED})), '[]'::json) AS "apps"
+      COALESCE(json_agg(json_build_object('title', j."title", 'companyId', j."companyId", 'employerId', c."employerId", 'at', (extract(epoch FROM a."createdAt") * 1000)::bigint)) FILTER (WHERE a."status" = ANY(${COUNTED})), '[]'::json) AS "apps"
     FROM "Application" a
     JOIN "Job" j ON j."id" = a."jobId"
     JOIN "Company" c ON c."id" = j."companyId"
     WHERE a."userId" = ${userId}`;
-  const thisCompany = companyKey(row?.companyName ?? job.companyId);
+  const thisCompany = employerKey({ employerId: row?.employerId ?? null, companyId: job.companyId });
   const key = roleKey(thisCompany, job.title);
   let duplicateRole = false;
   let companyWeekCount = 0;
   for (const app of row?.apps ?? []) {
-    if (companyKey(app.companyName) !== thisCompany) continue;
+    if (employerKey(app) !== thisCompany) continue;
     if (roleKey(thisCompany, app.title) === key) duplicateRole = true;
     if (Number(app.at) >= weekAgo) companyWeekCount += 1;
   }

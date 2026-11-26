@@ -95,7 +95,7 @@ Done 27 Nov: `migrate status` was clean before; `migrate deploy` applied `202611
 - typecheck and lint pass.
 
 <a id="w4"></a>
-### [ ] W4 — The feed and the guards count the employer, not the name
+### [~] W4 — The feed and the guards count the employer, not the name
 **Do:**
 - `src/modules/governance/history.ts` (`employerKey`, and the three readers).
 - `src/modules/governance/index.ts`.
