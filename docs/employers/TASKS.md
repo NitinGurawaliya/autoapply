@@ -114,7 +114,7 @@ Done 27 Nov: `migrate status` was clean before; `migrate deploy` applied `202611
 Done 27 Nov: `feed-dedupe-test` PASS (11), `guards-test` PASS, `feed-sql-test` PASS (12). Feeds of the 6 most active real accounts, origin/main code against this branch (employers partly linked, 7,600 rows relinked): 5, 40, 5, 6, 15, 40 cards before and after, the same job ids; one account differed by a card between two runs of the same old code (new jobs arriving), not by this change. Cross-board duplicates are rare today (6 open pairs), so little changes yet. A same-name, same-title role on two boards with no found domain is now two cards and no longer shares a duplicate guard: that is the decision (names never merge).
 
 <a id="w5"></a>
-### [~] W5 — The company pages, drawn for approval
+### [x] W5 — The company pages, drawn for approval
 **Do:**
 - `design/companies.html`.
 - One line in `docs/DESIGN.md`.
@@ -123,6 +123,8 @@ Done 27 Nov: `feed-dedupe-test` PASS (11), `guards-test` PASS, `feed-sql-test` P
 **Design:** [10.6 Build sheet](TDD.md#106-w5--drawing) · [5 UI](TDD.md#5-ui).
 
 **Done when:** the owner approves the drawing (their words quoted in the Done line).
+
+Done 27 Nov: `design/companies.html`, revised three times the same day on the owner's reference (job cards with their own Apply, a hue per department, mono labels, hero numbers, signed-in frame). Owner, 27 Nov: "it's good for now. Can always change it later. I just want the functionality to be working for now."
 
 <a id="w6"></a>
 ### [x] W6 — `/companies` A–Z and `/companies/<slug>`
