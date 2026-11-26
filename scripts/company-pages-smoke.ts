@@ -45,6 +45,7 @@ async function main() {
     await job(gh.id, "g1", "greenhouse", `W6 Greenhouse Role ${stamp}`);
     await job(lever.id, "l1", "lever", `W6 Lever Role ${stamp}`);
     await job(lever.id, "l2", "lever", `W6 Abroad Role ${stamp}`, "abroad");
+    await job(gh.id, "s1", "greenhouse", `W6 Senior Account Executive ${stamp}`);
     await job(naukriCo.id, "n1", "naukri", `W6 NAUKRI ONLY JOB ${stamp}`);
     const naukriOnly = await employer("naukrionly", null);
     const nk2 = await company("nk2", naukriOnly.id, "naukri");
@@ -68,6 +69,20 @@ async function main() {
     ok("a Naukri job of the same employer is not on it", !page.body.includes("NAUKRI ONLY JOB"));
     ok("it carries Organization data", page.body.includes('"@type":"Organization"') && page.body.includes(`https://w6multi${stamp}.example.com`));
     ok("its jobs link to their own pages with ?s=co (share pages on)", /href="\/j\/[^"]*\?s=co"/.test(page.body));
+
+    // The department chips, the search and the filter (a view of the same page: not indexed).
+    ok("it shows department chips with counts", page.body.includes("Sales &amp; Business") && page.body.includes("Other roles") && /All[\s\S]{0,80}4/.test(page.body.replace(/<!-- -->/g, "")));
+    ok("it has a search box for the company's jobs", /type="search"[^>]*name="q"|name="q"[^>]*type="search"/.test(page.body));
+    ok("each job has an Apply form (a server action) and the cards say what they are", /\$ACTION_\d+:0/.test(page.body) && page.body.includes("Sales &amp; Business") && page.body.includes("with agent"));
+    const searched = await get(`/companies/w6-multi-${stamp}?q=lever`);
+    ok("?q= narrows the jobs by title", searched.body.includes(`W6 Lever Role ${stamp}`) && !searched.body.includes(`W6 Greenhouse Role ${stamp}`));
+    ok("a search is a view, not a page to index", /<meta name="robots" content="noindex/.test(searched.body));
+    const sales = await get(`/companies/w6-multi-${stamp}?f=sales`);
+    ok("?f= shows one department", sales.body.includes(`W6 Senior Account Executive ${stamp}`) && !sales.body.includes(`W6 Lever Role ${stamp}`));
+    ok("an unknown department is ignored", (await get(`/companies/w6-multi-${stamp}?f=nonsense`)).body.includes(`W6 Lever Role ${stamp}`));
+    const none = await get(`/companies/w6-multi-${stamp}?q=zzzzqq`);
+    ok("a search with no match says so and offers all jobs", none.status === 200 && none.body.includes("No jobs match") && none.body.includes("Show all"));
+    ok("the plain page is indexable", /<meta name="robots" content="index, follow"/.test(page.body));
 
     ok("a Naukri-only employer is a 404", (await get(`/companies/w6-naukrionly-${stamp}`)).status === 404);
     const everything = [index, page, await get("/companies/browse/w")].map((r) => r.body).join("\n");

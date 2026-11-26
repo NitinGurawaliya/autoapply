@@ -112,12 +112,49 @@
   .skel { background: var(--muted); border-radius: 6px; animation: pulse 1.2s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: 0.45; } }
   .skel.tile { background: var(--muted); border-radius: 10px; }
+
+  /* The company page (W5 revision, 27 Nov): department chips with counts, a search, and a card per job with its own Apply.
+     The card nearest the middle of the screen is active: it lifts, gets an ink bar, and its button reads "Apply with agent". */
+  .deptbar { display: flex; gap: 8px; overflow-x: auto; margin: 24px -20px 0; padding: 0 20px 4px; scrollbar-width: none; }
+  .deptbar.wrap { flex-wrap: wrap; overflow: visible; margin: 0; padding: 0; }
+  .dchip { flex: none; height: 40px; display: inline-flex; align-items: center; gap: 6px; padding: 0 14px; border-radius: 999px; background: var(--card); box-shadow: inset 0 0 0 1px var(--input); font-size: 15px; font-weight: 500; white-space: nowrap; }
+  .dchip i { font-style: normal; color: var(--muted-text); }
+  .dchip.on { background: var(--inv); color: var(--on-inv); box-shadow: none; }
+  .dchip.on i { color: var(--on-inv); opacity: 0.7; }
+  .search { position: relative; margin-top: 12px; }
+  .search .box { height: 44px; border-radius: 10px; background: var(--card); box-shadow: inset 0 0 0 1px var(--input); display: flex; align-items: center; gap: 10px; padding: 0 14px; font-size: 15px; color: var(--faint); }
+  .search svg { width: 18px; height: 18px; stroke: var(--faint); fill: none; stroke-width: 2; flex: none; }
+  .jobs { display: flex; flex-direction: column; gap: 12px; }
+  .jcard { position: relative; background: var(--card); border-radius: 16px; box-shadow: inset 0 0 0 1px var(--line); padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .jcard.active { box-shadow: 0 0 0 1px var(--line-strong), var(--lift); }
+  .jcard.active::before { content: ""; position: absolute; left: 0; top: 16px; bottom: 16px; width: 3px; border-radius: 0 3px 3px 0; background: var(--text); }
+  .jtop { display: flex; gap: 14px; min-width: 0; flex: 1; }
+  .jtile { width: 44px; height: 44px; flex: none; border-radius: 10px; background: var(--muted); display: flex; align-items: center; justify-content: center; }
+  .jtile svg { width: 22px; height: 22px; stroke: var(--text); fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+  .jbody { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .jdept { font-size: 13px; color: var(--muted-text); display: flex; align-items: center; gap: 8px; }
+  .jdept .new { font-size: 13px; padding: 0 6px; height: 20px; display: inline-flex; align-items: center; border-radius: 6px; background: var(--muted); color: var(--text); }
+  .jbody h3 { margin: 0; font-size: 17px; line-height: 1.35; font-weight: 600; letter-spacing: -0.01em; }
+  .jbody .chips { margin-top: 2px; }
+  .jbody .chip { height: 28px; display: inline-flex; align-items: center; padding: 0 10px; font-size: 13px; background: var(--muted); border-radius: 6px; }
+  .apply { height: 44px; width: 100%; border: 0; border-radius: 10px; background: var(--inv); color: var(--on-inv); font: 600 15px 'Schibsted Grotesk', sans-serif; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; }
+  .apply .more { display: none; align-items: center; gap: 8px; }
+  .jcard.active .apply .more { display: inline-flex; }
+  .apply svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .wide { width: 1100px; background: var(--bg); color: var(--text); border-radius: 12px; overflow: hidden; display: flex; justify-content: center; padding-bottom: 32px; }
+  .wide .col { width: 896px; padding: 0 32px; }
+  .wide .toolrow { margin-top: 24px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .wide .toolrow .search { margin: 0; width: 288px; flex: none; }
+  .wide .jcard { flex-direction: row; align-items: center; gap: 20px; padding: 20px; }
+  .wide .apply { width: auto; padding: 0 20px; flex: none; }
+  .wide h1.type-heading { font-size: 32px; }
+  .skeleton-card { background: var(--card); border-radius: 16px; box-shadow: inset 0 0 0 1px var(--line); padding: 16px; display: flex; gap: 14px; }
 </style>
 </head>
 <body>
 <div class="page-head">
   <h1>Company pages</h1>
-  <p>The public A–Z of employers with open jobs, and one page per employer with its jobs from every board. Phase W (docs/employers/TDD.md §5). Signed out, no tab bar; one primary action per screen, and it is on the company page only. Naukri listings never appear. The phones show 390 px; the last frame is the desktop column.</p>
+  <p>The public A–Z of employers with open jobs, and one page per employer with its jobs from every board. Phase W (docs/employers/TDD.md §5). Signed out, no tab bar. The company page has an Apply on every job card (the one on the card nearest the middle of the screen reads "Apply with agent"); no other screen has an action. Naukri listings never appear. The phones show 390 px; the last frame is the wide desktop layout.</p>
   <div class="switch" role="group" aria-label="Theme">
     <button type="button" aria-pressed="true" data-theme="light">Light</button>
     <button type="button" aria-pressed="false" data-theme="dark">Dark</button>
@@ -181,91 +218,28 @@
 
 <!-- 3. A company, many jobs -->
 <figure>
-  <figcaption><b>3. /companies/razorpay.</b> One company, every board it hires through. India first, then "Outside India". Each row opens the job's page; Apply lives there. The only button is the one that starts the agent.</figcaption>
-  <div class="phone">
-    <div class="scroll">
-      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><a class="text-link">Sign in</a></div>
-      <div class="crumbs"><a class="text-link">Companies</a><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
-      <div class="head">
-        <span class="tile lg">R</span>
-        <div class="co"><h1 class="type-heading">Razorpay</h1><a class="text-link type-meta" style="color:var(--muted-text)">razorpay.com</a></div>
-      </div>
-      <div class="facts"><span class="big"><span class="num">41</span> open jobs</span><span class="type-meta">Hires through Greenhouse and Workday</span></div>
-      <div class="section">
-        <h2 class="type-section">In India <span class="type-meta num">38</span></h2>
-        <div class="list">
-          <a class="item job"><span class="top"><span class="role">Backend Engineer, Payments</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span><span class="type-meta">Bengaluru, 2 days ago</span></a>
-          <a class="item job"><span class="top"><span class="role">Senior Site Reliability Engineer, Infrastructure and Platform Reliability</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span><span class="type-meta">Bengaluru, 3 days ago</span></a>
-          <a class="item job"><span class="top"><span class="role">Product Designer</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span><span class="type-meta">Remote in India, 5 days ago</span></a>
-          <a class="item job"><span class="top"><span class="role">Data Analyst, Risk</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span><span class="type-meta">Bengaluru, 1 week ago</span></a>
-        </div>
-        <div class="pager"><span class="type-meta">1 to 4 of 38</span><a class="text-link tap">Next page</a></div>
-      </div>
-      <div class="section" style="margin-top:20px">
-        <h2 class="type-section">Outside India <span class="type-meta num">3</span></h2>
-        <div class="list">
-          <a class="item job"><span class="top"><span class="role">Engineering Manager</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span><span class="type-meta">Singapore, 4 days ago</span></a>
-        </div>
-      </div>
-    </div>
-    <div class="bar">
-      <a class="btn primary">Let your agent apply</a>
-      <p class="type-meta">Upload your resume once. Your agent fills in the forms and sends them.</p>
-    </div>
-  </div>
+  <figcaption><b>3. /companies/razorpay.</b> Department chips with counts and a search of this company's jobs. Every job is a card with its own Apply. The card nearest the middle of the screen is active as you scroll: it lifts, takes an ink bar and its button grows to "Apply with agent". India first, then "Outside India".</figcaption>
+  <div class="phone"><div class="scroll"><div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><a class="text-link">Sign in</a></div><div class="crumbs"><a class="text-link">Companies</a><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div><div class="head"><span class="tile lg">R</span><div class="co"><h1 class="type-heading">Razorpay</h1><a class="text-link type-meta" style="color:var(--muted-text)">razorpay.com</a></div></div><div class="facts"><span class="big"><span class="num">21</span> open jobs</span><span class="type-meta">Hires through Greenhouse</span><span class="type-meta">Upload your resume once. Your agent fills in the forms and sends them.</span></div><div class="deptbar"><span class="dchip on">All <i>21</i></span><span class="dchip">Product <i>4</i></span><span class="dchip">Finance <i>4</i></span><span class="dchip">Engineering <i>3</i></span><span class="dchip">Operations <i>3</i></span><span class="dchip">Marketing <i>2</i></span><span class="dchip">Sales &amp; Business <i>2</i></span><span class="dchip">Other roles <i>3</i></span></div><div class="search"><div class="box"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg> Search Razorpay jobs</div></div>
+    <div class="section" style="margin-top:24px"><h2 class="type-section">In India <span class="type-meta num">18</span></h2><div class="jobs"><article class="jcard"><div class="jtop"><span class="jtile"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg></span><div class="jbody"><span class="jdept">Operations<span class="new">New</span></span><h3>Associate, Business Operations</h3><div class="chips"><span class="chip">Bengaluru</span><span class="chip">Fresher</span><span class="chip">Posted today</span></div></div></div><button class="apply">Apply<span class="more">with agent <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></button></article><article class="jcard active"><div class="jtop"><span class="jtile"><svg viewBox="0 0 24 24"><path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/></svg></span><div class="jbody"><span class="jdept">Engineering<span class="new">New</span></span><h3>Lead Software Development Engineer</h3><div class="chips"><span class="chip">Bengaluru</span><span class="chip">6+ yrs</span><span class="chip">Posted 1 day ago</span></div></div></div><button class="apply">Apply<span class="more">with agent <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></button></article><article class="jcard"><div class="jtop"><span class="jtile"><svg viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3zM12 12l8-4.5M12 12L4 7.5M12 12v9"/></svg></span><div class="jbody"><span class="jdept">Product<span class="new">New</span></span><h3>Product Manager II - AI</h3><div class="chips"><span class="chip">Bengaluru</span><span class="chip">6+ yrs</span><span class="chip">Posted 1 day ago</span></div></div></div><button class="apply">Apply<span class="more">with agent <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></button></article></div></div>
+    <div class="section"><h2 class="type-section">Outside India <span class="type-meta num">3</span></h2><div class="jobs"><article class="jcard"><div class="jtop"><span class="jtile"><svg viewBox="0 0 24 24"><path d="M4 10v4h3l7 4V6L7 10H4zM17 9a4 4 0 0 1 0 6"/></svg></span><div class="jbody"><span class="jdept">Marketing</span><h3>Manager, Product Marketing</h3><div class="chips"><span class="chip">Singapore</span><span class="chip">4+ yrs</span><span class="chip">Posted 4 days ago</span><span class="chip">S$ 90K a year</span></div></div></div><button class="apply">Apply<span class="more">with agent <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></button></article></div></div>
+  </div></div>
 </figure>
 
 <!-- 4. One job -->
 <figure>
-  <figcaption><b>4. A company with one job.</b> Listed like any other (decision: one open job is enough). No second heading; the count says "1 open job".</figcaption>
-  <div class="phone">
-    <div class="scroll">
-      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><a class="text-link">Sign in</a></div>
-      <div class="crumbs"><a class="text-link">Companies</a><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
-      <div class="head">
-        <span class="tile lg logo"><i style="width:26px;height:26px"></i></span>
-        <div class="co"><h1 class="type-heading">Jupiter</h1><a class="text-link type-meta" style="color:var(--muted-text)">jupiter.money</a></div>
-      </div>
-      <div class="facts"><span class="big"><span class="num">1</span> open job</span><span class="type-meta">Hires through Keka</span></div>
-      <div class="section">
-        <div class="list">
-          <a class="item job"><span class="top"><span class="role">Android Engineer</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span><span class="type-meta">Bengaluru, 6 days ago</span></a>
-        </div>
-      </div>
-    </div>
-    <div class="bar">
-      <a class="btn primary">Let your agent apply</a>
-      <p class="type-meta">Upload your resume once. Your agent fills in the forms and sends them.</p>
-    </div>
-  </div>
+  <figcaption><b>4. A company with one job.</b> Listed like any other (one open job is enough). The single card is the active one.</figcaption>
+  <div class="phone"><div class="scroll"><div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><a class="text-link">Sign in</a></div><div class="crumbs"><a class="text-link">Companies</a><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div><div class="head"><span class="tile lg">J</span><div class="co"><h1 class="type-heading">Jupiter Money</h1><a class="text-link type-meta" style="color:var(--muted-text)">jupiter.money</a></div></div><div class="facts"><span class="big"><span class="num">1</span> open job</span><span class="type-meta">Hires through Keka</span><span class="type-meta">Upload your resume once. Your agent fills in the forms and sends them.</span></div><div class="deptbar"><span class="dchip on">All <i>1</i></span><span class="dchip">Engineering <i>1</i></span></div><div class="search"><div class="box"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg> Search Jupiter Money jobs</div></div>
+    <div class="section" style="margin-top:24px"><h2 class="type-section">In India <span class="type-meta num">1</span></h2><div class="jobs"><article class="jcard active"><div class="jtop"><span class="jtile"><svg viewBox="0 0 24 24"><path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/></svg></span><div class="jbody"><span class="jdept">Engineering</span><h3>Android Engineer</h3><div class="chips"><span class="chip">Bengaluru</span><span class="chip">3+ yrs</span><span class="chip">Posted 6 days ago</span></div></div></div><button class="apply">Apply<span class="more">with agent <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></button></article></div></div>
+  </div></div>
 </figure>
 
 <!-- 5. Only outside India -->
 <figure>
   <figcaption><b>5. Jobs only outside India.</b> The India section is replaced by one plain line, so nobody wonders where it went. The jobs stay listed.</figcaption>
-  <div class="phone">
-    <div class="scroll">
-      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><a class="text-link">Sign in</a></div>
-      <div class="crumbs"><a class="text-link">Companies</a><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
-      <div class="head">
-        <span class="tile lg">G</span>
-        <div class="co"><h1 class="type-heading">Glide</h1><a class="text-link type-meta" style="color:var(--muted-text)">glideapps.com</a></div>
-      </div>
-      <div class="facts"><span class="big"><span class="num">6</span> open jobs</span><span class="type-meta">Hires through Ashby</span></div>
-      <div class="panel dashed notice"><h2 class="type-section">None in India right now</h2><p class="type-body">Its open jobs are in other countries.</p></div>
-      <div class="section" style="margin-top:20px">
-        <h2 class="type-section">Outside India <span class="type-meta num">6</span></h2>
-        <div class="list">
-          <a class="item job"><span class="top"><span class="role">Staff Software Engineer</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span><span class="type-meta">San Francisco, 2 days ago</span></a>
-          <a class="item job"><span class="top"><span class="role">Customer Success Manager</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span><span class="type-meta">Remote in the US, 1 week ago</span></a>
-        </div>
-      </div>
-    </div>
-    <div class="bar">
-      <a class="btn primary">Let your agent apply</a>
-      <p class="type-meta">Upload your resume once. Your agent fills in the forms and sends them.</p>
-    </div>
-  </div>
+  <div class="phone"><div class="scroll"><div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><a class="text-link">Sign in</a></div><div class="crumbs"><a class="text-link">Companies</a><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div><div class="head"><span class="tile lg">G</span><div class="co"><h1 class="type-heading">Glide</h1><a class="text-link type-meta" style="color:var(--muted-text)">glideapps.com</a></div></div><div class="facts"><span class="big"><span class="num">6</span> open jobs</span><span class="type-meta">Hires through Ashby</span><span class="type-meta">Upload your resume once. Your agent fills in the forms and sends them.</span></div><div class="deptbar"><span class="dchip on">All <i>6</i></span><span class="dchip">Engineering <i>3</i></span><span class="dchip">Sales &amp; Business <i>2</i></span><span class="dchip">Other roles <i>1</i></span></div><div class="search"><div class="box"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg> Search Glide jobs</div></div>
+    <div class="panel dashed notice"><h2 class="type-section">None in India right now</h2><p class="type-body">Its open jobs are in other countries.</p></div>
+    <div class="section"><h2 class="type-section">Outside India <span class="type-meta num">6</span></h2><div class="jobs"><article class="jcard active"><div class="jtop"><span class="jtile"><svg viewBox="0 0 24 24"><path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/></svg></span><div class="jbody"><span class="jdept">Engineering</span><h3>Staff Software Engineer</h3><div class="chips"><span class="chip">San Francisco</span><span class="chip">8+ yrs</span><span class="chip">Posted 2 days ago</span><span class="chip">$210K a year</span></div></div></div><button class="apply">Apply<span class="more">with agent <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></button></article><article class="jcard"><div class="jtop"><span class="jtile"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.5"/></svg></span><div class="jbody"><span class="jdept">Sales &amp; Business</span><h3>Customer Success Manager</h3><div class="chips"><span class="chip">Remote, US</span><span class="chip">3+ yrs</span><span class="chip">Posted 1 week ago</span></div></div></div><button class="apply">Apply<span class="more">with agent <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></button></article></div></div>
+  </div></div>
 </figure>
 
 <!-- 6. A letter with none -->
@@ -304,24 +278,17 @@
 
 <!-- 8. Loading -->
 <figure>
-  <figcaption><b>8. Loading.</b> The company page's shape in grey: header, count, a few rows. The letter and index pages use the same row skeleton.</figcaption>
-  <div class="phone">
-    <div class="scroll">
-      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><span class="skel" style="width:48px;height:16px"></span></div>
-      <div class="head" style="margin-top:52px">
-        <span class="skel tile lg"></span>
-        <div class="co"><div class="skel" style="height:24px;width:60%"></div><div class="skel" style="height:14px;width:36%;margin-top:8px"></div></div>
-      </div>
-      <div class="skel" style="height:20px;width:30%;margin-top:18px"></div>
-      <div class="skel" style="height:14px;width:55%;margin-top:8px"></div>
-      <div class="skel" style="height:20px;width:26%;margin-top:32px"></div>
-      <div class="list" style="margin-top:12px">
-        <div class="item job"><div class="skel" style="height:16px;width:70%"></div><div class="skel" style="height:12px;width:40%"></div></div>
-        <div class="item job"><div class="skel" style="height:16px;width:55%"></div><div class="skel" style="height:12px;width:34%"></div></div>
-        <div class="item job"><div class="skel" style="height:16px;width:64%"></div><div class="skel" style="height:12px;width:38%"></div></div>
-      </div>
+  <figcaption><b>8. Loading.</b> The company page's shape in grey: header, count, a few cards. The index and letter pages use the same row skeleton.</figcaption>
+  <div class="phone"><div class="scroll">
+    <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><span class="skel" style="width:48px;height:16px"></span></div>
+    <div class="head" style="margin-top:52px"><span class="skel tile lg"></span><div class="co"><div class="skel" style="height:24px;width:60%"></div><div class="skel" style="height:14px;width:36%;margin-top:8px"></div></div></div>
+    <div class="skel" style="height:20px;width:30%;margin-top:18px"></div>
+    <div class="skel" style="height:14px;width:55%;margin-top:8px"></div>
+    <div class="jobs" style="margin-top:28px">
+      <div class="skeleton-card"><span class="skel" style="width:44px;height:44px;border-radius:10px;flex:none"></span><div style="flex:1"><div class="skel" style="height:12px;width:30%"></div><div class="skel" style="height:18px;width:80%;margin-top:10px"></div><div class="skel" style="height:24px;width:60%;margin-top:10px"></div></div></div>
+      <div class="skeleton-card"><span class="skel" style="width:44px;height:44px;border-radius:10px;flex:none"></span><div style="flex:1"><div class="skel" style="height:12px;width:26%"></div><div class="skel" style="height:18px;width:64%;margin-top:10px"></div><div class="skel" style="height:24px;width:52%;margin-top:10px"></div></div></div>
     </div>
-  </div>
+  </div></div>
 </figure>
 
 <!-- 9. Error -->
@@ -342,28 +309,14 @@
 
 <!-- 10. Desktop -->
 <figure>
-  <figcaption><b>10. Desktop.</b> The same column, centred at 480 px on the page background, as the feed and the share page. Nothing is added at the sides.</figcaption>
-  <div class="desktop">
-    <div class="col">
-      <div class="scroll">
-        <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><a class="text-link">Sign in</a></div>
-        <div class="crumbs"><a class="text-link">Companies</a><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
-        <div class="head">
-          <span class="tile lg">R</span>
-          <div class="co"><h1 class="type-heading">Razorpay</h1><a class="text-link type-meta" style="color:var(--muted-text)">razorpay.com</a></div>
-        </div>
-        <div class="facts"><span class="big"><span class="num">41</span> open jobs</span><span class="type-meta">Hires through Greenhouse and Workday</span></div>
-        <div class="section">
-          <h2 class="type-section">In India <span class="type-meta num">38</span></h2>
-          <div class="list">
-            <a class="item job"><span class="top"><span class="role">Backend Engineer, Payments</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span><span class="type-meta">Bengaluru, 2 days ago</span></a>
-            <a class="item job"><span class="top"><span class="role">Product Designer</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span><span class="type-meta">Remote in India, 5 days ago</span></a>
-          </div>
-        </div>
-      </div>
-      <div class="bar"><a class="btn primary">Let your agent apply</a></div>
-    </div>
-  </div>
+  <figcaption><b>10. Desktop.</b> A wider column (896 px) so the cards read left to right: department tile, title and facts, Apply on the right. The chips wrap and the search sits beside them. Phones keep the 390 px column.</figcaption>
+  <div class="wide"><div class="col">
+    <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><a class="text-link">Sign in</a></div><div class="crumbs"><a class="text-link">Companies</a><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+    <div class="head" style="gap:20px"><span class="tile lg">B</span><div class="co"><h1 class="type-heading">Bosch Group</h1><a class="text-link type-meta" style="color:var(--muted-text)">bosch.com</a></div></div>
+    <div class="facts"><span class="big"><span class="num">534</span> open jobs</span><span class="type-meta">Hires through SmartRecruiters</span><span class="type-meta">Upload your resume once. Your agent fills in the forms and sends them.</span></div>
+    <div class="toolrow"><div class="deptbar wrap" style="flex:1"><span class="dchip on">All <i>534</i></span><span class="dchip">Engineering <i>231</i></span><span class="dchip">Other roles <i>190</i></span><span class="dchip">Data &amp; AI <i>42</i></span><span class="dchip">Operations <i>35</i></span><span class="dchip">Sales &amp; Business <i>12</i></span><span class="dchip">Finance <i>9</i></span><span class="dchip">Product <i>6</i></span><span class="dchip">Design <i>5</i></span><span class="dchip">Marketing <i>3</i></span><span class="dchip">People <i>1</i></span></div><div class="search"><div class="box"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg> Search Bosch Group jobs</div></div></div>
+    <div class="section" style="margin-top:24px"><h2 class="type-section">In India <span class="type-meta num">534</span></h2><div class="jobs"><article class="jcard"><div class="jtop"><span class="jtile"><svg viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3zM12 12l8-4.5M12 12L4 7.5M12 12v9"/></svg></span><div class="jbody"><span class="jdept">Other roles<span class="new">New</span></span><h3>IN_RBIC_Assistant Manager_SAP Support and Co-ordination</h3><div class="chips"><span class="chip">Pune, Maharashtra, India</span><span class="chip">4+ yrs</span><span class="chip">Posted today</span></div></div></div><button class="apply">Apply<span class="more">with agent <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></button></article><article class="jcard active"><div class="jtop"><span class="jtile"><svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg></span><div class="jbody"><span class="jdept">Data &amp; AI<span class="new">New</span></span><h3>Power BI</h3><div class="chips"><span class="chip">Bengaluru</span><span class="chip">2+ yrs</span><span class="chip">Posted today</span></div></div></div><button class="apply">Apply<span class="more">with agent <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></button></article><article class="jcard"><div class="jtop"><span class="jtile"><svg viewBox="0 0 24 24"><path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/></svg></span><div class="jbody"><span class="jdept">Engineering<span class="new">New</span></span><h3>System Requirement Engineer</h3><div class="chips"><span class="chip">Coimbatore</span><span class="chip">Posted today</span></div></div></div><button class="apply">Apply<span class="more">with agent <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></button></article></div></div>
+  </div></div>
 </figure>
 
 </div>

@@ -1,13 +1,11 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { cn } from "cn";
-import { buttonVariants } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
 import { CompanyMark } from "@/components/ui/marks";
-import { daysSince, postedLabel } from "@/lib/job-facts";
-import { jobPath } from "@/lib/job-slug";
 export { JsonLd } from "@/components/patterns/json-ld";
-import { LETTERS, type EmployerJobRow, type EmployerRow } from "@/modules/jobs/employer-pages";
+import type { DepartmentId } from "@/lib/department";
+import { LETTERS, type EmployerFilters, type EmployerRow } from "@/modules/jobs/employer-pages";
 
 // The company pages' parts (design/companies.html, Phase W5): public, outside the signed-in shell.
 
@@ -73,48 +71,6 @@ export function EmployerList({ rows }: { rows: EmployerRow[] }) {
   );
 }
 
-const where = (job: EmployerJobRow) => {
-  const place = job.location || "Location not listed";
-  return job.remoteType === "remote" && !/remote/i.test(place) ? `${place}, remote` : place;
-};
-
-/**
- * One card of jobs: title, place and age. Each opens the job's own page, where Apply is; while share pages are switched
- * off (`linked` false) the rows are plain text, not links to a 404.
- */
-export function JobList({ jobs, linked }: { jobs: EmployerJobRow[]; linked: boolean }) {
-  return (
-    <ul className="m-0 list-none overflow-hidden rounded-card bg-surface p-0 shadow-lift">
-      {jobs.map((job) => {
-        const body = (
-          <>
-            <span className="flex items-start gap-3">
-              <span className="line-clamp-2 min-w-0 flex-1 type-body font-medium" title={job.title}>
-                {job.title}
-              </span>
-              {linked ? <Icon name="chevronRight" size={16} className="mt-1 flex-none text-faint" /> : null}
-            </span>
-            <span className="truncate type-meta text-muted-foreground">
-              {where(job)}, {postedLabel(daysSince(job.postedAt)).replace(/^Posted /, "")}
-            </span>
-          </>
-        );
-        return (
-          <li key={job.id} className="border-t border-line first:border-t-0">
-            {linked ? (
-              <Link href={`${jobPath({ id: job.id, title: job.title, company: { name: job.companyName } })}?s=co`} className="flex min-h-16 flex-col gap-1 px-3.5 py-3 active:bg-sunk">
-                {body}
-              </Link>
-            ) : (
-              <div className="flex min-h-16 flex-col gap-1 px-3.5 py-3">{body}</div>
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
 /** "In India 38": a heading with its count. */
 export function CountHeading({ children, count }: { children: ReactNode; count: number }) {
   return (
@@ -125,12 +81,61 @@ export function CountHeading({ children, count }: { children: ReactNode; count: 
   );
 }
 
-/** Previous and next page links under a list; nothing for one page. */
-export function Pager({ base, page, pages }: { base: string; page: number; pages: number }) {
-  if (pages <= 1) return null;
-  const href = (n: number) => (n <= 1 ? base : `${base}?page=${n}`);
+/** The address of a company page with its search and department (and a page number past the first). */
+export function companyHref(slug: string, filters: EmployerFilters, page = 1): string {
+  const params = new URLSearchParams();
+  if (filters.q) params.set("q", filters.q);
+  if (filters.department) params.set("f", filters.department);
+  if (page > 1) params.set("page", String(page));
+  const query = params.toString();
+  return `/companies/${slug}${query ? `?${query}` : ""}`;
+}
+
+/**
+ * The department chips with their counts (a filter, so they are pills, the selected one filled) and a search of this
+ * company's jobs. Plain links and a GET form: they work without scripts and a filtered page has its own address.
+ */
+export function Filters({ slug, name, departments, all, filters }: { slug: string; name: string; departments: Array<{ id: DepartmentId; label: string; count: number }>; all: number; filters: EmployerFilters }) {
+  const chip = (selected: boolean) =>
+    cn(
+      "inline-flex h-10 flex-none items-center gap-1.5 rounded-full px-3.5 type-body font-medium whitespace-nowrap active:bg-line",
+      selected ? "bg-inverse text-inverse-foreground active:bg-inverse" : "bg-surface text-foreground ring-1 ring-input",
+    );
   return (
-    <div className="mt-3 flex items-center justify-between">
+    <div className="mt-6 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between lg:gap-4">
+      <nav aria-label="Departments" className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none] lg:mx-0 lg:min-w-0 lg:flex-1 lg:flex-wrap lg:overflow-visible lg:px-0 lg:pb-0">
+        <Link href={companyHref(slug, { ...filters, department: null })} className={chip(!filters.department)} aria-current={!filters.department ? "true" : undefined}>
+          All <span className={cn(!filters.department ? "opacity-70" : "text-muted-foreground")}>{all.toLocaleString("en-IN")}</span>
+        </Link>
+        {departments.map((department) => (
+          <Link key={department.id} href={companyHref(slug, { ...filters, department: department.id })} className={chip(filters.department === department.id)} aria-current={filters.department === department.id ? "true" : undefined}>
+            {department.label} <span className={cn(filters.department === department.id ? "opacity-70" : "text-muted-foreground")}>{department.count.toLocaleString("en-IN")}</span>
+          </Link>
+        ))}
+      </nav>
+      <form method="get" action={`/companies/${slug}`} role="search" className="relative flex-none lg:w-72">
+        {filters.department ? <input type="hidden" name="f" value={filters.department} /> : null}
+        <Icon name="search" size={18} className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-faint" />
+        <input
+          type="search"
+          name="q"
+          defaultValue={filters.q}
+          maxLength={80}
+          placeholder={`Search ${name} jobs`}
+          aria-label={`Search ${name} jobs`}
+          enterKeyHint="search"
+          className="h-11 w-full rounded-control bg-surface pr-3.5 pl-10 type-body text-foreground ring-1 ring-input placeholder:text-faint focus-visible:outline-2 focus-visible:outline-ring"
+        />
+      </form>
+    </div>
+  );
+}
+
+/** Previous and next page links under a list (`href` gives each page's address); nothing for one page. */
+export function Pager({ href, page, pages }: { href: (page: number) => string; page: number; pages: number }) {
+  if (pages <= 1) return null;
+  return (
+    <div className="mt-4 flex items-center justify-between">
       {page > 1 ? (
         <Link href={href(page - 1)} className="flex min-h-11 items-center type-body underline decoration-1 underline-offset-4">
           Previous page
@@ -148,18 +153,6 @@ export function Pager({ base, page, pages }: { base: string; page: number; pages
       ) : (
         <span />
       )}
-    </div>
-  );
-}
-
-/** The sticky bottom bar of a company page: the one action, which starts the agent. */
-export function ApplyBar() {
-  return (
-    <div className="sticky bottom-0 z-10 -mx-5 mt-8 border-t border-line bg-background/90 px-5 pt-3 pb-[max(20px,env(safe-area-inset-bottom))] backdrop-blur-md">
-      <Link href="/sign-in" className={cn(buttonVariants({ variant: "primary", size: "xl" }), "w-full")}>
-        Let your agent apply
-      </Link>
-      <p className="m-0 mt-2 text-center type-meta text-muted-foreground">Upload your resume once. Your agent fills in the forms and sends them.</p>
     </div>
   );
 }

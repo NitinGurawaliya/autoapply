@@ -480,10 +480,13 @@ The table in §4.1, plus the scripts:
 - `/companies`: title "Companies hiring", the letter strip, and "Most hiring in India" (logo tile, name, "N open jobs").
 - Letter page: the same rows, alphabetical, paged.
 - Company page:
-  - the header (logo tile, name, website as a quiet link, "N open jobs");
-  - "Hires through Greenhouse and Workday";
-  - job rows like the feed's compact row (role, place chips, "x days ago"), India first, then "Outside India";
-  - one prompt: "Let your agent apply", which opens `/sign-in` (signed in, the proxy sends that to `/feed`).
+  - the header (tile, name, website as a quiet link, "N open jobs", the boards it hires through, one line on what Apply does);
+  - department chips with counts (a filter: pills, the selected one filled) and a search of this company's jobs, both plain links and a GET form (`?f=`, `?q=`); a filtered view is not indexed;
+  - jobs India first, then "Outside India", each a card: department tile, department with a "New" tag (posted in the last 3 days), the title, chips (place, experience, how long ago, the board's pay), and its own Apply;
+  - Apply is `applyFromShare` (Google, then onboarding or the job); a job on a board the agent cannot apply on shows "View job" instead;
+  - the card nearest the middle of the screen is active while scrolling: it lifts, takes an ink bar, and its button grows to "Apply with agent";
+  - phones 390 px; from 1024 px the column is 896 px and a card reads left to right.
+  The department is a display grouping from the title and the stored function (`lib/department.ts`); the next phase's fields replace it.
 - States:
   - loading skeletons;
   - a letter with no companies ("No companies under Q yet");

@@ -55,7 +55,7 @@ export default async function LetterPage({ params, searchParams }: Props) {
           </p>
           <div className="mt-5">
             <EmployerList rows={rows} />
-            <Pager base={base} page={page} pages={pages} />
+            <Pager href={(n) => (n <= 1 ? base : `${base}?page=${n}`)} page={page} pages={pages} />
             <Link href="/companies" className="flex min-h-11 items-center type-body underline decoration-1 underline-offset-4">
               All companies
             </Link>

@@ -139,7 +139,7 @@ Done 27 Nov: `migrate status` was clean before; `migrate deploy` applied `202611
 - Screenshots at 390 px, light and dark, match W5's drawing.
 - typecheck and lint pass.
 
-Done 27 Nov: `company-pages-smoke` PASS (18 checks, signed out, against `next dev`). Screenshots at 390 px on real data: `/companies` (dark), `/companies/razorpay` (dark), `/companies/browse/r` (light), matching the W5 drawing (W5 itself not yet approved). A `loading.tsx` made `notFound()` answer 200, so existence is checked in layouts above the loading screens (TDD 10.7). Pages are dynamic (`?page=`), no `revalidate`.
+Done 27 Nov (revised the same day after the owner asked for job cards with their own Apply, department filters and search): `company-pages-smoke` PASS (28 checks, signed out, against `next dev`); `department-test` PASS (29). The company page now has a card per job (department tile, New, chips, Apply that grows to "Apply with agent" on the card in view), chips with counts, a search, and a 896 px column from 1024 px up. Screenshots at 390 px on real data: `/companies` (dark), `/companies/razorpay` (dark), `/companies/browse/r` (light), matching the W5 drawing (W5 itself not yet approved). A `loading.tsx` made `notFound()` answer 200, so existence is checked in layouts above the loading screens (TDD 10.7). Pages are dynamic (`?page=`), no `revalidate`.
 
 <a id="w7"></a>
 ### [x] W7 — Found by search: JobPosting on job pages, sitemap and robots
