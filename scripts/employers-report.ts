@@ -1,7 +1,8 @@
 // Employers report (docs/employers/TDD.md 4.11). Read-only.
 //   npx tsx scripts/employers-report.ts --coverage     per board: rows, rows with an open job, how many have a domain, by basis
-// W3 adds the employer totals and the lists for the owner's review below the coverage block.
+//   npx tsx scripts/employers-report.ts                the coverage block, then employer totals and the lists for the owner's review
 import { db } from "../src/lib/db";
+import { plainName } from "../src/modules/jobs/logos";
 
 async function coverage() {
   // "Listing": the row has a stored open job, the rows that become pages (lastFetchCount also counts abroad jobs we do not store).
@@ -45,10 +46,84 @@ async function coverage() {
   console.log(`TOTAL rows ${total.rows}, checked ${total.checked}, listing ${total.listing}, listing with a domain ${total.listing_domain} (${pct(total.listing_domain, total.listing)}), generic names ${total.generic}`);
 }
 
+const wordsOf = (name: string) => new Set(plainName(name).toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length >= 2));
+const squash = (name: string) => plainName(name).toLowerCase().replace(/[^a-z0-9]/g, "");
+/** Whether two names share a word, or one contains the other ("razorpay" in "razorpaysoftware"). */
+function related(a: string, b: string) {
+  const wa = wordsOf(a);
+  if ([...wordsOf(b)].some((word) => wa.has(word))) return true;
+  const ka = squash(a);
+  const kb = squash(b);
+  return ka.length >= 3 && kb.length >= 3 && (ka.includes(kb) || kb.includes(ka));
+}
+const show = (lines: string[], max = 30) => {
+  for (const line of lines.slice(0, max)) console.log(`  ${line}`);
+  if (lines.length > max) console.log(`  ... and ${lines.length - max} more`);
+  if (lines.length === 0) console.log("  (none)");
+};
+
+async function employers() {
+  const [totals] = await db.$queryRaw<Array<{ employers: number; multi: number; with_domain: number; listed: number; open_jobs: number; open_india: number; aliases: number }>>`
+    SELECT (SELECT count(*) FROM "Employer")::int AS employers,
+      (SELECT count(*) FROM (SELECT "employerId" FROM "Company" WHERE "employerId" IS NOT NULL GROUP BY 1 HAVING count(*) > 1) m)::int AS multi,
+      (SELECT count(*) FROM "Employer" WHERE domain IS NOT NULL)::int AS with_domain,
+      (SELECT count(*) FROM "Employer" WHERE "openJobs" > 0)::int AS listed,
+      (SELECT coalesce(sum("openJobs"), 0) FROM "Employer")::int AS open_jobs,
+      (SELECT coalesce(sum("openIndia"), 0) FROM "Employer")::int AS open_india,
+      (SELECT count(*) FROM "EmployerAlias")::int AS aliases`;
+  console.log(`
+EMPLOYERS ${JSON.stringify(totals)}`);
+  const [unlinked] = await db.$queryRaw<Array<{ n: number }>>`SELECT count(*)::int AS n FROM "Company" WHERE "employerId" IS NULL`;
+  console.log(`companies without an employer: ${unlinked?.n ?? 0}`);
+
+  const rows = await db.$queryRaw<Array<{ employerId: string; ename: string; edomain: string | null; eslug: string; source: string; slug: string; name: string; domainBasis: string | null }>>`
+    SELECT c."employerId", e.name AS ename, e.domain AS edomain, e.slug AS eslug, c.source, c.slug, c.name, c."domainBasis"
+    FROM "Company" c JOIN "Employer" e ON e.id = c."employerId"
+    WHERE c."employerId" IN (SELECT "employerId" FROM "Company" WHERE "employerId" IS NOT NULL GROUP BY 1 HAVING count(*) > 1)
+    ORDER BY e.name, c.source`;
+  const disagree: string[] = [];
+  const byEmployer = new Map<string, typeof rows>();
+  for (const row of rows) byEmployer.set(row.employerId, [...(byEmployer.get(row.employerId) ?? []), row]);
+  for (const group of byEmployer.values()) {
+    const odd = group.filter((row) => !related(row.name, group[0]!.ename) && !group.some((other) => other !== row && related(other.name, row.name)));
+    if (odd.length > 0) disagree.push(`${group[0]!.edomain ?? "-"} "${group[0]!.ename}": ${odd.map((row) => `${row.source}/${row.slug} "${row.name}" (${row.domainBasis ?? "-"})`).join("; ")}`);
+  }
+  console.log(`
+NAMES DISAGREE: rows joined by a domain whose name shares nothing with the employer's or its other rows (${disagree.length})`);
+  show(disagree);
+
+  const same = await db.$queryRaw<Array<{ nameKey: string; n: number; list: string }>>`
+    SELECT "nameKey", count(*)::int AS n, string_agg(coalesce(domain, '(no domain)') || ' /' || slug, '  |  ' ORDER BY slug) AS list
+    FROM "Employer" GROUP BY "nameKey" HAVING count(*) > 1 AND count(DISTINCT coalesce(domain, id)) > 1 ORDER BY count(*) DESC, "nameKey" LIMIT 200`;
+  console.log(`
+SAME NAME, OTHER DOMAIN: employers with one name key and different domains (${same.length}, first 200)`);
+  show(same.map((row) => `${row.nameKey} x${row.n}: ${row.list}`));
+
+  const lone = await db.$queryRaw<Array<{ name: string; slug: string; domain_employer: string; domain: string }>>`
+    SELECT l.name, l.slug, d.slug AS domain_employer, d.domain
+    FROM "Employer" l JOIN "Employer" d ON d."nameKey" = l."nameKey" AND d.domain IS NOT NULL
+    WHERE l.domain IS NULL ORDER BY l.name LIMIT 200`;
+  console.log(`
+ONE-ROW EMPLOYERS WITH NO DOMAIN whose name equals a domain employer's (${lone.length}, first 200): candidates for employer-set.ts`);
+  show(lone.map((row) => `${row.slug} (no domain) ~ ${row.domain_employer} ${row.domain}`));
+
+  const naukri = await db.$queryRaw<Array<{ name: string; slug: string; domain: string | null; rows_in_employer: number }>>`
+    SELECT c.name, c.slug, c.domain, (SELECT count(*)::int FROM "Company" o WHERE o."employerId" = c."employerId") AS rows_in_employer
+    FROM "Company" c WHERE c.source = 'naukri' AND c."domainBasis" = 'redirect' ORDER BY c.name`;
+  console.log(`
+NAUKRI ROWS JOINED BY A REDIRECT (${naukri.length})`);
+  show(naukri.map((row) => `${row.name} (${row.slug}) → ${row.domain}, ${row.rows_in_employer} rows in that employer`));
+
+  const generic = await db.$queryRaw<Array<{ source: string; slug: string; name: string }>>`
+    SELECT source, slug, name FROM "Company" WHERE lower(trim(name)) IN ('careers', 'career', 'jobs', 'job', 'career portal', 'careers page', 'job openings', 'current openings', 'openings', 'home', 'join us', '') ORDER BY source, slug`;
+  console.log(`
+GENERIC NAMES LEFT (${generic.length})`);
+  show(generic.map((row) => `${row.source}/${row.slug} "${row.name}"`), 15);
+}
+
 async function main() {
-  const onlyCoverage = process.argv.includes("--coverage");
   await coverage();
-  if (!onlyCoverage) console.log("(employer totals and review lists arrive with W3)");
+  if (!process.argv.includes("--coverage")) await employers();
   await db.$disconnect();
 }
 

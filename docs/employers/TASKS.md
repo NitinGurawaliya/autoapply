@@ -78,7 +78,7 @@ Done 27 Nov: `migrate status` was clean before; `migrate deploy` applied `202611
 - typecheck and lint pass.
 
 <a id="w3"></a>
-### [ ] W3 — Employers built from the domains, kept linked at every ingest
+### [~] W3 — Employers built from the domains, kept linked at every ingest
 **Do:**
 - `src/modules/jobs/employers.ts`.
 - `linkPending` in the ingest tick; hourly `refreshEmployerCounts` in `after-ingest.ts`.

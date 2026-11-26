@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { pushDailySets } from "./daily";
+import { refreshEmployerCounts } from "./employers";
 import { readPendingJobs } from "./reading";
 import { embedPendingJobs, labelPendingSkills } from "./semantic";
 import { warmFeeds } from "./warm";
@@ -9,6 +10,8 @@ import { warmFeeds } from "./warm";
 const DELETE_CLOSED_AFTER_DAYS = 7;
 const CLEANUP_EVERY_MS = 60 * 60 * 1000;
 let lastCleanup = 0;
+// Each employer's open public job counts (Phase W, docs/employers/TDD.md 4.6): the company pages read them, hourly.
+let lastEmployerCounts = 0;
 
 /**
  * Closed jobs nobody swiped or applied to, closed more than DELETE_CLOSED_AFTER_DAYS ago: deleted to keep the table
@@ -74,6 +77,10 @@ export async function afterIngest(options: { deadlineMs: number; label?: string 
   if (Date.now() - lastCleanup > CLEANUP_EVERY_MS) {
     lastCleanup = Date.now();
     out.deleted = await deleteOldClosedJobs().catch((error) => (note("cleanup", error), null));
+  }
+  if (Date.now() - lastEmployerCounts > CLEANUP_EVERY_MS) {
+    lastEmployerCounts = Date.now();
+    await refreshEmployerCounts().catch((error) => note("employer counts", error));
   }
   out.ms = Date.now() - started;
   console.log(

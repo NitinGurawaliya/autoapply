@@ -3,6 +3,7 @@ import { enqueueIngestCompanies } from "@/lib/queue";
 import { dueCompanies, startTickRun } from "@/modules/jobs";
 import { afterIngest, afterIngestDeadline } from "@/modules/jobs/after-ingest";
 import { refreshCompanyFacts } from "@/modules/jobs/company-facts";
+import { linkPending } from "@/modules/jobs/employers";
 import { refreshLogos } from "@/modules/jobs/logos";
 
 // How many due companies one tick sends at most: 2,000 every 5 minutes reads 20,000 newly seeded companies within an
@@ -19,6 +20,9 @@ let logosRunning = false;
 // background, never two sweeps at once. FACTS_PER_TICK=0 turns it off.
 const FACTS_PER_TICK = () => Math.min(Math.max(Number(process.env.FACTS_PER_TICK) || 40, 0), 500);
 let factsRunning = false;
+// Companies without an employer, or looked at again since: linked a few hundred per tick (W3). It waits for the first
+// build (scripts/employers-link.ts --write) so the bigger employer of a domain keeps the bare slug.
+let linkRunning = false;
 
 /**
  * The `ingest-tick` queue (INGEST_MODE=tick, Phase M, M2). Every tick: each company due for a read gets its own
@@ -50,6 +54,15 @@ export async function handleIngestTick(jobs: Job<object>[]) {
         .catch(() => undefined)
         .finally(() => {
           factsRunning = false;
+        });
+    }
+    if (!linkRunning) {
+      linkRunning = true;
+      void linkPending(500)
+        .then((done) => done.linked > 0 && console.log(`ingest-tick: linked ${done.linked} companies (${done.created} new employers, ${done.merged} merged)`))
+        .catch(() => undefined)
+        .finally(() => {
+          linkRunning = false;
         });
     }
     if (!logosRunning && LOGOS_PER_TICK() > 0) {
