@@ -47,7 +47,9 @@ const sleep = (seconds: number) => new Promise<void>((resolve) => setTimeout(res
 
 async function openWindow(site: string, owner: string): Promise<ReaderWindow> {
   // Signed out and nothing kept: `fresh` loads no saved sign-in, `persist: false` saves none.
-  const session = await openBrowser((SITE_INFO as Record<string, { homeUrl: string }>)[site].homeUrl, owner, { site: site as "naukri", fresh: true, persist: false });
+  // The site's public front page, as a visitor opens it: not its signed-in home (SITE_INFO homeUrl), which sends a signed-out visitor to the login.
+  const front = `${new URL((SITE_INFO as Record<string, { homeUrl: string }>)[site].homeUrl).origin}/`;
+  const session = await openBrowser(front, owner, { site: site as "naukri", fresh: true, persist: false });
   await session.page.waitForLoadState("domcontentloaded", { timeout: 20000 }).catch(() => undefined);
   return { search: (url) => readSearch(session.page, url), job: (url, jobId) => readJob(session.page, url, jobId), close: () => session.close() };
 }
@@ -88,6 +90,12 @@ async function readBucket(
     counts.pages += 1;
     if (!read.ok) {
       // Naukri sending a signed-out page to its login is a refusal for this reader, like Access Denied.
+      // A search that finds nothing gets a client error from Naukri (27 Nov: "machine learning engineer" in remote, 1 year,
+      // last 7 days answered 400): an empty search, not a failed one, so the bucket waits its cadence.
+      if (read.stop === "error" && /answered (400|404)\b/.test(read.detail)) {
+        deps.log(`${read.detail}: read as an empty search`);
+        break;
+      }
       if (read.stop === "error") failed = read.detail;
       else stop = read.stop === "challenge" ? "challenge" : "refused";
       deps.log(`${read.stop}: ${read.detail}`);

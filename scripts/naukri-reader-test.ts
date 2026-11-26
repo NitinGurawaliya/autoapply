@@ -118,13 +118,13 @@ async function database() {
     const urls: string[] = [];
     const owners: string[] = [];
     let answer: () => unknown = () => search;
-    const fake = (clock: () => Date, errorStop?: "challenge") => ({
+    const fake = (clock: () => Date, errorStop?: "challenge" | "error", errorDetail = "Naukri asked for a check") => ({
       open: async (_site: string, owner: string) => {
         owners.push(owner);
         return {
           search: async (url: string) => {
             urls.push(url);
-            return errorStop ? { ok: false as const, stop: errorStop, detail: "Naukri asked for a check" } : { ok: true as const, json: answer() };
+            return errorStop ? { ok: false as const, stop: errorStop, detail: errorDetail } : { ok: true as const, json: answer() };
           },
           job: async () => ({ ok: false as const, stop: "error" as const, detail: "no job pages here" }),
           close: async () => undefined,
@@ -163,6 +163,14 @@ async function database() {
     urls.length = 0;
     const run3 = await runReader(SITE, { rules, deps: fake(() => new Date(base.getTime() + 120_000)) });
     check("a page it already has ends the bucket there, however many pages remain", run3.status === "ran" && run3.pages === 1 && urls.length === 1, JSON.stringify(run3));
+
+    // 4b. A search Naukri answers with a client error is an empty search, not a failure: the bucket waits its cadence.
+    await db.readerBucket.update({ where: { id: target.id }, data: { nextReadAt: base, failures: 0 } });
+    const empty = await runReader(SITE, { rules, deps: fake(() => new Date(base.getTime() + 150_000), "error", "Naukri answered 400") });
+    const emptied = await db.readerBucket.findUnique({ where: { id: target.id } });
+    check("a 400 on a search is an empty search: read, not failed, due after its cadence", empty.status === "ran" && empty.stopReason === "done" && emptied?.failures === 0 && emptied.lastStop === "done" && emptied.lastListed === 0 && emptied.nextReadAt.getTime() > base.getTime() + 20 * 3_600_000, JSON.stringify({ empty, stop: emptied?.lastStop, failures: emptied?.failures }));
+    const broken = await runReader(SITE, { rules, deps: fake(() => new Date(base.getTime() + 160_000), "error", "Naukri answered 500") }).catch(() => null);
+    check("another error with nothing due changes nothing", broken?.status === "skipped" && broken.reason === "nothing_due", JSON.stringify(broken));
 
     // 5. The daily budget.
     const spent = (await reader.readerState(SITE, rules, base)).pagesToday;
