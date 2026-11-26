@@ -28,7 +28,7 @@ export type SourceIngestOutcome =
 // A person does not open pages on a timer: the pause varies by up to half again.
 const pause = (seconds: number) => new Promise((resolve) => setTimeout(resolve, seconds * 1000 * (1 + Math.random() * 0.5)));
 
-function worthDetail(job: NaukriListing) {
+export function worthDetail(job: NaukriListing) {
   if (job.applyKind !== "naukri") return false;
   const { eligibility } = tagPosting(job);
   return (eligibility === "india" || eligibility === "remote_india") && classifyTitle(job.title).function !== "non_tech";

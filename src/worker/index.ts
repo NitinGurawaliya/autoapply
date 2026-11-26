@@ -1,9 +1,10 @@
 import { hostname } from "node:os";
 import { db } from "@/lib/db";
-import { APPLY_QUEUE, getBoss, INGEST_SOURCE_QUEUE, LEGACY_APPLY_QUEUES, SITE_APPLY_QUEUE, SOURCE_CONNECT_QUEUE, SOURCE_INGEST_TICK } from "@/lib/queue";
+import { APPLY_QUEUE, getBoss, INGEST_SOURCE_QUEUE, LEGACY_APPLY_QUEUES, READER_PLAN_QUEUE, READER_RUN_QUEUE, SITE_APPLY_QUEUE, SOURCE_CONNECT_QUEUE, SOURCE_INGEST_TICK } from "@/lib/queue";
 import { guardUndiciParserAssertions } from "@/lib/undici-guard";
 import { canShowWindow } from "@/modules/apply/browser";
 import { relayConfig, startRelay } from "@/modules/apply/sites/relay";
+import { sharedReaderOn } from "@/modules/sources";
 import { handleApply } from "./handlers/apply";
 import { handleBoardDay } from "./handlers/board-day";
 import { handleDiscover } from "./handlers/discover";
@@ -13,6 +14,7 @@ import { handleIngestTick } from "./handlers/ingest-tick";
 import { handlePrescan } from "./handlers/prescan";
 import { handleSourceConnect } from "./handlers/sourceConnect";
 import { handleSourceIngest, handleSourceIngestTick } from "./handlers/sourceIngest";
+import { handleReaderPlan, handleReaderRun } from "./handlers/reader";
 import { expirePersonHandoffs, housekeeping, reapStaleRuns } from "./reaper";
 import { registerSchedules } from "./schedule";
 import { claimWorkerLock } from "./single";
@@ -36,6 +38,18 @@ async function startSignInRelay() {
   await startRelay().catch((error) => console.error(`relay: could not start (${error instanceof Error ? error.message.slice(0, 120) : "failed"})`));
 }
 
+/**
+ * The shared reader (K14, NAUKRI_READER=1): works the plan tick and the reader windows, and keeps the tick scheduled every
+ * 20 minutes (pg-boss keeps the schedule in the database, so one worker setting it is enough and a second is harmless).
+ */
+async function startReader(boss: Awaited<ReturnType<typeof getBoss>>) {
+  if (!sharedReaderOn()) return;
+  await boss.work(READER_PLAN_QUEUE, handleReaderPlan);
+  await boss.work(READER_RUN_QUEUE, { localConcurrency: 1 }, handleReaderRun);
+  await boss.schedule(READER_PLAN_QUEUE, "*/20 * * * *", {}, { tz: "UTC", missed: "once", expireInSeconds: 600, retryLimit: 0 });
+  console.log(`reader: the shared reader is on (plan every 20 minutes)`);
+}
+
 async function sourcesOnly() {
   claimWorkerLock();
   if (!canShowWindow()) throw new Error("--only=sources needs a screen: the sign-in and the job runs open a visible Chrome window");
@@ -45,6 +59,7 @@ async function sourcesOnly() {
   await boss.work(INGEST_SOURCE_QUEUE, { localConcurrency: 1 }, handleSourceIngest);
   // Applications on the user's own signed-in site (Naukri), one at a time: never the shared apply queue.
   await boss.work(SITE_APPLY_QUEUE, { localConcurrency: 1 }, handleApply);
+  await startReader(boss);
   console.log(`worker (sources only) listening for ${SOURCE_CONNECT_QUEUE}, ${INGEST_SOURCE_QUEUE} and ${SITE_APPLY_QUEUE}; no other applications, schedules or reaping`);
   let stopping = false;
   const stop = (signal: string) => {
@@ -85,6 +100,7 @@ async function main() {
   if (applies) await boss.work(SOURCE_CONNECT_QUEUE, { localConcurrency: 2 }, handleSourceConnect);
   // A user's run on their signed-in site, in their window: one at a time per worker (docs/naukri/TDD.md 4.2).
   if (applies) await boss.work(INGEST_SOURCE_QUEUE, { localConcurrency: 1 }, handleSourceIngest);
+  if (applies) await startReader(boss);
   await boss.work(SOURCE_INGEST_TICK, handleSourceIngestTick);
   await boss.work("ingest", handleIngest);
   await boss.work("prescan", handlePrescan);

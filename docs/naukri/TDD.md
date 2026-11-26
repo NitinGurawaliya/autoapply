@@ -689,7 +689,7 @@ Starts after the job boards work is done (owner, 7 Nov), as Phase K always has.
 
 ### 13.15 Open questions for the owner
 
-Answered 23 Nov: Q1 (phone users: yes, streamed sign-in), Q12 (applies while the computer is off: yes, the myjobb way), the proxy question (per-user residential, from the start). Q3, Q5 and Q7 belonged to the extension design and fall away. Still open:
+Answered 23 Nov: Q1 (phone users: yes, streamed sign-in), Q12 (applies while the computer is off: yes, the myjobb way), the proxy question (per-user residential, from the start). Q3, Q5 and Q7 belonged to the extension design and fall away. Q5 and Q6 answered 27 Nov: see 13.17. Still open:
 
 1. **Proxy provider and budget.** Which provider, and what monthly ceiling? Request-level runs cost roughly 2–5 MB a user a day in proxy traffic (~$1–20 a day per thousand users); browser runs ~200 MB (~$100–800 a day per thousand). V2 decides which.
 2. **Address-bound sessions (V1).** If a Naukri session does not survive its address changing, each user needs one address held for months, priced per address. Accept that cost, or stop at the users it serves?
@@ -713,3 +713,21 @@ Answered 23 Nov: Q1 (phone users: yes, streamed sign-in), Q12 (applies while the
 **Flow.** Connect (consent) → `source-connect` opens Naukri's login in the stealthy Chrome through the user's proxy (K7), streamed as K8 but with no frames sent unless the phone asks → the phone sends the number to the worker (`POST /stream/<id>/login`, the K8 pass; or "use the saved number") → the worker presses "Use OTP to Login", types the number, presses "Get OTP", and answers `code_sent`, or `check` when a challenge shows (the phone then shows the page for that step, as K8), or `refused` with Naukri's own message (unknown number, too many tries) → the user types the code in the app → `POST /stream/<id>/code` → the worker types it and submits → `waitForSignIn` and the sealed save as K1 → "Connected as <first name>". Resend: the same `/login` call again after Naukri's own wait. The number and the code never pass through the web app or Postgres; the sealed number is `browser-state/<userId>/naukri-login.json` (lib/sealed.ts), deleted on Disconnect with the session.
 
 **What stays.** Test profiles refused; one sign-in per user at a time, ending with its 10-minute job; no CAPTCHA solved by code; nothing of the login pages stored, logged or screenshotted; every request from the user's own proxy.
+
+### 13.17 Shared signed-out reader (K14, owner, 27 Nov 2026)
+
+**Decision.** The owner asked for Naukri's jobs to be sourced the way ATS boards' are: read once for everyone, shared as ordinary jobs, consistent in the feed. This reverses 13.9's "no shared signed-out reader" and the 3 Nov "fetched per user" line, and answers Q5 (shared buckets: yes) and Q6 (a shared signed-out reader: yes, in a real Chrome that loads Naukri's own pages). 13.9 (iii) ruled the reader out because a server calling Naukri's API directly has to make the page's signature; this design never does: the reader is a Chrome window, the page makes its own requests, and we read the answer the page received, as K2 already does in a user's window.
+
+**Facts (26 Nov, a probe window in the screen image, signed out, its own proxy session, a person's pace).** A search page answered 200 with listings (20 of 2,008 for "java developer, Bengaluru"); 30 company-name searches (`/<company>-jobs`) all answered 200 with no check or block; 20 of the 30 sampled names from the owner's list showed that company's own listings on page 1 (the rest were spelling differences such as "EY" for "Ernst Young", or companies with few or no listings: not confirmed absent). 31 page loads cost 2.8 MB through the proxy with lean pages (K15) and Chrome's cache, about 90 KB a page, far below the 1 MB a page this design first assumed.
+
+**Design.** ARCHITECTURE 6.20 "Shared reader" is the source of truth: buckets (`ReaderBucket`), the plan tick and reader windows (`reader-plan`, `reader-run`), the reader's own proxy address that moves after a refusal, the caps in `config/rules.json shared_readers`, and what stays. Two kinds of bucket: searches the connected users share (cost grows with distinct searches, not users) and a company's own jobs from a list of names.
+
+**What stays.** Naukri jobs are shown only to users who connected Naukri; applying is only through the user's own session, proxy and pace (K4, K7, caps unchanged); no signature made, no check answered or solved, no sign-in by the reader, no user's account or address used for reading; test profiles refused as before. K2's per-user read remains the path while `NAUKRI_READER` is unset.
+
+**Failures.** A check, an "Access Denied", or Naukri's login on a signed-out page stops the window and pauses the reader for `pause_hours_after_challenge`; its next window uses a new proxy address; the unread buckets stay due. A page that fails on its own fails that bucket (tried again soon, later each time); three in a row end the window. A window that dies leaves its claims to lapse (30 minutes) and its run record without an end.
+
+**Observability.** One `ReaderRun` per window: buckets, pages, listed, created, updated, job pages, stop reason; the worker logs the same line, and the proxy bytes of the window (counts per window, `proxy:` line). Nothing from a listing is logged.
+
+**Risks.** Naukri's terms do not allow automated reading, as with every signed-in read here; the reader at least puts no user's account at risk. Naukri may turn the reader's addresses away: the caps keep it a few hundred pages a day, a stop pauses it, and a new address follows. A company name that matches loosely stores its listings under their own companies, so no job is mislabelled; a name Naukri spells differently finds nothing and waits two weeks.
+
+**Not in K14.** K13 (a Naukri listing that applies on a company's own board adds that company to the ATS ingest), several readers at once (`readers` > 1 is supported by the queue but not measured), and non-tech fields in the feed (they are stored; showing them is the later phase).

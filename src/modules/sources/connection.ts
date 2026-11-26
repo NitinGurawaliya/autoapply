@@ -6,6 +6,7 @@ import { CANCELLABLE, cancelApplication } from "@/modules/apply/lifecycle";
 import { SITE_INFO, SITES, siteStateKey, type Site } from "./sites";
 import { signStreamToken, STREAM_TOKEN_TTL_MS, streamIdOf, streamSecret } from "./stream-token";
 import { deleteLoginNumber } from "./login-number";
+import { sharedReaderOn } from "./reader";
 
 /**
  * A user's connection to a signed-in job site (docs/naukri/TDD.md 4.4). Every status change goes through here. No
@@ -33,6 +34,8 @@ export type SourcesOverview = {
   canConnect: boolean;
   /** A worker that can show a window beat in the last few minutes: the sign-in window has somewhere to open. */
   screenWorkerAlive: boolean;
+  /** NAUKRI_READER=1 (K14): our own reader finds the site's jobs for everyone, so a user's account does not read on request. */
+  sharedReader: boolean;
 };
 
 // A worker beats every minute (worker/index.ts); five minutes of silence means none is running.
@@ -70,7 +73,7 @@ export async function sourcesOverview(userId: string): Promise<SourcesOverview> 
     screenWorkerAlive(),
   ]);
   const bySite = new Map(rows.map((row) => [row.site, row]));
-  return { sites: SITES.map((site) => view(site, bySite.get(site))), canConnect: Boolean(profile && !profile.isTest), screenWorkerAlive: screen };
+  return { sites: SITES.map((site) => view(site, bySite.get(site))), canConnect: Boolean(profile && !profile.isTest), screenWorkerAlive: screen, sharedReader: sharedReaderOn() };
 }
 
 export type StartConnectResult = { ok: true } | { ok: false; reason: "test_profile" | "no_profile" | "no_screen_worker" | "already_connecting" | "queue_failed" };

@@ -18,6 +18,27 @@ const sourceRulesSchema = z.object({
 });
 export type SourceRules = z.infer<typeof sourceRulesSchema>;
 
+/**
+ * Pace and caps for the shared reader of a job site (K14, docs/naukri/TDD.md 13.17): our own signed-out window reading
+ * search buckets at a person's pace, never a crawl, never a user's account or address.
+ */
+const readerRulesSchema = z.object({
+  buckets_per_run: z.number().int().min(1),
+  pages_per_bucket: z.number().int().min(1),
+  details_per_bucket: z.number().int().min(0),
+  seconds_between_pages: z.number().min(1),
+  max_pages_per_day: z.number().int().min(1),
+  max_details_per_day: z.number().int().min(0),
+  buckets_per_user: z.number().int().min(1),
+  max_buckets: z.number().int().min(1),
+  readers: z.number().int().min(1).max(8),
+  pause_hours_after_challenge: z.number().min(1),
+  company_every_hours: z.number().min(1),
+  company_no_match_days: z.number().min(1),
+  every_hours: z.array(z.object({ users: z.number().int().min(1), hours: z.number().min(1) })).min(1),
+});
+export type ReaderRules = z.infer<typeof readerRulesSchema>;
+
 const rulesSchema = z.object({
   require_user_approval: z.boolean(),
   allow_submit_on_real_sites: z.boolean(),
@@ -33,6 +54,7 @@ const rulesSchema = z.object({
   max_ai_drafts_per_application: z.number(),
   max_attempts: z.number(),
   signed_in_sources: z.record(z.string(), sourceRulesSchema).default({}),
+  shared_readers: z.record(z.string(), readerRulesSchema).default({}),
 });
 
 export type Rules = z.infer<typeof rulesSchema>;
@@ -63,6 +85,11 @@ export function loadRules(): Rules {
 /** The pace and caps for one signed-in site, or null when the rules file has none (the site then never runs). */
 export function sourceRules(site: string): SourceRules | null {
   return loadRules().signed_in_sources[site] ?? null;
+}
+
+/** The pace and caps for the shared reader of one site, or null when the rules file has none (the reader then never runs). */
+export function readerRules(site: string): ReaderRules | null {
+  return loadRules().shared_readers[site] ?? null;
 }
 
 export async function check(stage: GovernanceStage, ctx: GovernanceContext) {

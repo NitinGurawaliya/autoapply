@@ -40,6 +40,9 @@ export const SOURCE_CONNECT_QUEUE = "source-connect";
 export const INGEST_SOURCE_QUEUE = "ingest-source";
 /** The schedule that hands each connected user a run (worker/schedule.ts SOURCE_INGEST_CRON); any worker takes it. */
 export const SOURCE_INGEST_TICK = "source-ingest-tick";
+/** The shared reader (K14): the plan tick keeps the search buckets and queues a window when some are due; a window reads them. */
+export const READER_PLAN_QUEUE = "reader-plan";
+export const READER_RUN_QUEUE = "reader-run";
 const PRESCAN_QUEUE = "prescan";
 const DISCOVER_QUEUE = "discover";
 /** The daily per-board measurement (Phase M, M1; modules/jobs/boardDay.ts). */
@@ -73,7 +76,7 @@ export function getBoss(role: "web" | "worker" = "web") {
     boss.on("error", (error: Error) => console.error(`queue: ${error.message.slice(0, 160)}`));
     const starting = boss.start().then(async (started) => {
       await Promise.all([
-        ...[...APPLY_QUEUES, INGEST_QUEUE, PRESCAN_QUEUE, DISCOVER_QUEUE, BOARD_DAY_QUEUE, INGEST_TICK_QUEUE, SOURCE_CONNECT_QUEUE, INGEST_SOURCE_QUEUE, SOURCE_INGEST_TICK].map((name) => ensureQueue(started, name)),
+        ...[...APPLY_QUEUES, INGEST_QUEUE, PRESCAN_QUEUE, DISCOVER_QUEUE, BOARD_DAY_QUEUE, INGEST_TICK_QUEUE, SOURCE_CONNECT_QUEUE, INGEST_SOURCE_QUEUE, SOURCE_INGEST_TICK, READER_PLAN_QUEUE, READER_RUN_QUEUE].map((name) => ensureQueue(started, name)),
         // One job per company at most, queued or running: a company still waiting is not sent again by the next tick.
         ensureQueue(started, INGEST_COMPANY_QUEUE, { policy: "exclusive" }),
       ]);
@@ -190,9 +193,15 @@ export async function enqueueConnect(userId: string, site: string) {
 }
 
 /** One run for one user and site; at most one queued or running each. 30 minutes covers a run's few pages. */
-export async function enqueueSourceIngest(userId: string, site: string) {
+export async function enqueueSourceIngest(userId: string, site: string, by?: "tick") {
   const boss = await getBoss();
-  return boss.send(INGEST_SOURCE_QUEUE, { userId, site }, { singletonKey: `ingest:${site}:${userId}`, expireInSeconds: 1800, retryLimit: 0 });
+  return boss.send(INGEST_SOURCE_QUEUE, { userId, site, ...(by ? { by } : {}) }, { singletonKey: `ingest:${site}:${userId}`, expireInSeconds: 1800, retryLimit: 0 });
+}
+
+/** One window of the shared reader (K14): at most one per reader at a time. */
+export async function enqueueReaderRun(site: string, reader: number) {
+  const boss = await getBoss();
+  return boss.send(READER_RUN_QUEUE, { site, reader }, { singletonKey: `reader:${site}:${reader}`, expireInSeconds: 3600, retryLimit: 0 });
 }
 
 export async function enqueuePrescan(userId: string, reason = "answers") {
