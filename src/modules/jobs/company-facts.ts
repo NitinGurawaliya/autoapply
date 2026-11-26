@@ -134,12 +134,16 @@ export type FactsRefresh = { checked: number; withDomain: number; renamed: numbe
  * run reads and counts; `write` saves each result (found or not, so it is not read again soon). A lookup that finds
  * nothing keeps the domain the row already had.
  */
-export async function refreshCompanyFacts(options: { limit: number; write: boolean; sources?: string[]; pauseMs?: number; log?: (line: string) => void }): Promise<FactsRefresh> {
+export async function refreshCompanyFacts(options: { limit: number; write: boolean; sources?: string[]; pauseMs?: number; shard?: { of: number; index: number }; log?: (line: string) => void }): Promise<FactsRefresh> {
   const sources = (options.sources ?? [...LOGO_SOURCES, ...SITES]).filter((source) => LOGO_SOURCES.includes(source) || SITE_SOURCES.includes(source));
+  // A shard is a share of the rows by id, so several sweeps can work one board at once without taking the same rows.
+  const shardOf = options.shard?.of ?? 1;
+  const shardAt = options.shard?.index ?? 0;
   const due = await db.$queryRaw<Array<{ id: string; source: string; slug: string; name: string; domain: string | null; domainBasis: string | null }>>`
     SELECT id, source, slug, name, domain, "domainBasis" FROM "Company"
     WHERE source = ANY(${sources}::text[]) AND "domainBasis" IS DISTINCT FROM 'owner'
       AND (active OR source = ANY(${[...SITES]}::text[]))
+      AND (${shardOf}::bigint <= 1 OR mod(hashtext(id)::bigint & 2147483647, ${shardOf}::bigint) = ${shardAt}::bigint)
       AND ("domainCheckedAt" IS NULL
            OR (domain IS NULL AND "domainCheckedAt" < now() - interval '30 days')
            OR "domainCheckedAt" < now() - interval '180 days')

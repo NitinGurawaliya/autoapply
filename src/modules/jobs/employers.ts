@@ -17,12 +17,27 @@ export { PRIVATE_SOURCES } from "./private-sources";
 const SELF_NAMED = new Set(["ashby", "workable", "keka", "zohorecruit"]);
 const BASIS_ORDER = ["owner", "board", "redirect", "job_links", "name_evidence"];
 
+const capital = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
+
+/** The text two or more names start with, to a whole word, case ignored ("Deloitte East Africa" and "DeloitteNZ": "Deloitte"). */
+function commonStart(names: string[]): string {
+  const first = names[0] ?? "";
+  let length = 0;
+  while (length < first.length && names.every((name) => name.charAt(length).toLowerCase() === first.charAt(length).toLowerCase())) length += 1;
+  const cut = first.slice(0, length);
+  // Whole words only: "Infosys BPM" and "Infosys Limited" share "Infosys ", but "Tatra" and "Tata Steel" share nothing useful.
+  const atWord = names.every((name) => name.length === length || !/[A-Za-z0-9]/.test(name.charAt(length)) || /[a-z]/.test(name.charAt(length - 1)) !== /[a-z]/.test(name.charAt(length)));
+  return atWord ? cut.replace(/[\s,.&-]+$/g, "") : "";
+}
+
 /**
  * An employer's display name from its rows' names: each through plainName (no legal suffix or code), generic names
  * dropped, the most common wins; a tie goes to a name a company set itself (Ashby, Workable, Keka, Zoho), then the
- * shortest. With none left: the domain's first label, capitalised.
+ * shortest. When every name is different and they all start with the same word of 4 or more letters ("Deloitte East
+ * Africa", "DeloitteNZ"), that word is the employer. With none left: the domain's first label, else a board slug's
+ * first label ("abbott.zohorecruit.com" → "Abbott"), capitalised.
  */
-export function displayName(rows: Array<{ name: string; source: string }>, domain: string | null): string {
+export function displayName(rows: Array<{ name: string; source: string; slug?: string }>, domain: string | null): string {
   const seen = new Map<string, { name: string; count: number; self: boolean }>();
   for (const row of rows) {
     const name = plainName(row.name);
@@ -33,9 +48,15 @@ export function displayName(rows: Array<{ name: string; source: string }>, domai
     seen.set(name, entry);
   }
   const best = [...seen.values()].sort((a, b) => b.count - a.count || Number(b.self) - Number(a.self) || a.name.length - b.name.length || a.name.localeCompare(b.name))[0];
-  if (best) return best.name;
-  const label = domain?.split(".")[0];
-  return label ? label.charAt(0).toUpperCase() + label.slice(1) : "Company";
+  if (best) {
+    if (best.count === 1 && seen.size >= 2) {
+      const shared = commonStart([...seen.keys()]);
+      if (shared.length >= 4 && shared.length < best.name.length) return shared;
+    }
+    return best.name;
+  }
+  const label = domain?.split(".")[0] || rows.find((row) => row.slug)?.slug?.split(/[./]/)[0];
+  return label ? capital(label) : "Company";
 }
 
 /** The slug for a new employer: free among employer slugs and aliases. */
@@ -60,7 +81,7 @@ export async function refreshEmployer(employerId: string, client?: Tx): Promise<
   const run = async (tx: Tx) => {
     const employer = await tx.employer.findUnique({ where: { id: employerId }, select: { name: true, nameBasis: true, domain: true } });
     if (!employer) return;
-    const rows = await tx.company.findMany({ where: { employerId }, select: { name: true, source: true, logoUrl: true, stage: true, indiaOpen: true } });
+    const rows = await tx.company.findMany({ where: { employerId }, select: { name: true, source: true, slug: true, logoUrl: true, stage: true, indiaOpen: true } });
     if (rows.length === 0) return;
     const name = employer.nameBasis === "owner" ? employer.name : displayName(rows, employer.domain);
     const logoUrl = [...rows].sort((a, b) => Number(b.indiaOpen > 0) - Number(a.indiaOpen > 0)).find((row) => row.logoUrl)?.logoUrl ?? null;
@@ -91,7 +112,7 @@ export async function linkCompany(companyId: string): Promise<LinkResult> {
   return db.$transaction(
     async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('employers'))`;
-      const company = await tx.company.findUnique({ where: { id: companyId }, select: { id: true, name: true, domain: true, domainBasis: true, employerId: true } });
+      const company = await tx.company.findUnique({ where: { id: companyId }, select: { id: true, name: true, slug: true, domain: true, domainBasis: true, employerId: true } });
       if (!company) return "kept";
       const current = company.employerId ? await tx.employer.findUnique({ where: { id: company.employerId }, select: { id: true, domain: true } }) : null;
       const rowsInCurrent = current ? await tx.company.count({ where: { employerId: current.id } }) : 0;
@@ -113,7 +134,7 @@ export async function linkCompany(companyId: string): Promise<LinkResult> {
           await touch();
           return "kept";
         }
-        const name = displayName([{ name: company.name, source: "" }], null);
+        const name = displayName([{ name: company.name, source: "", slug: company.slug }], null);
         const created = await tx.employer.create({ data: { slug: await freeSlug(tx, name, null), name, nameKey: nameKeyOf(name) } });
         await move(created.id);
         const merged = await leave(created.id);
@@ -130,7 +151,7 @@ export async function linkCompany(companyId: string): Promise<LinkResult> {
           await refreshEmployer(current.id, tx);
           return "domain_set";
         }
-        const name = displayName([{ name: company.name, source: "" }], domain);
+        const name = displayName([{ name: company.name, source: "", slug: company.slug }], domain);
         const created = await tx.employer.create({ data: { slug: await freeSlug(tx, name, domain), name, nameKey: nameKeyOf(name), domain, domainBasis: company.domainBasis } });
         await move(created.id);
         const merged = await leave(created.id);
@@ -153,16 +174,17 @@ export async function linkCompany(companyId: string): Promise<LinkResult> {
 }
 
 /**
- * Links the rows with no employer, never linked, or looked at again since: India-hiring first. Does nothing until the
+ * Links the rows with no employer or with a domain their employer lacks: India-hiring first. Does nothing until the
  * first build has run (buildAllEmployers), so the bigger employer of a domain keeps the bare slug.
  */
 export async function linkPending(limit = 500): Promise<{ linked: number; created: number; merged: number }> {
   const result = { linked: 0, created: 0, merged: 0 };
   if (!(await db.employer.findFirst({ select: { id: true } }))) return result;
+  // Rows that need work: no employer yet, or a domain their employer does not have (the facts sweep found it since).
   const due = await db.$queryRaw<Array<{ id: string }>>`
-    SELECT id FROM "Company"
-    WHERE "employerId" IS NULL OR "linkedAt" IS NULL OR "linkedAt" < "domainCheckedAt"
-    ORDER BY ("indiaOpen" > 0) DESC, "addedAt" ASC
+    SELECT c.id FROM "Company" c LEFT JOIN "Employer" e ON e.id = c."employerId"
+    WHERE c."employerId" IS NULL OR (c.domain IS NOT NULL AND e.domain IS DISTINCT FROM c.domain)
+    ORDER BY (c."indiaOpen" > 0) DESC, c."addedAt" ASC
     LIMIT ${limit}`;
   for (const row of due) {
     try {
@@ -175,6 +197,46 @@ export async function linkPending(limit = 500): Promise<{ linked: number; create
     }
   }
   return result;
+}
+
+/**
+ * The common relinks in a few statements (the first build left most rows without a domain; the backfill found them
+ * since): a one-row employer whose row now has a domain no employer holds takes that domain (its slug stays), and a one-row
+ * employer whose domain another employer holds joins it, its slug left as an alias. Rows that are anything else (an
+ * employer with several accounts whose domain changed) are for linkPending, which does them one at a time.
+ */
+export async function relinkDomains(): Promise<{ domainSet: number; joined: number; left: number }> {
+  return db.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('employers'))`;
+      const domainSet = await tx.$executeRaw`
+        WITH cand AS (
+          SELECT DISTINCT ON (c.domain) c.domain, c."domainBasis" AS basis, c."employerId" AS eid
+          FROM "Company" c JOIN "Employer" e ON e.id = c."employerId"
+          WHERE c.domain IS NOT NULL AND e.domain IS NULL
+            AND (SELECT count(*) FROM "Company" o WHERE o."employerId" = e.id) = 1
+            AND NOT EXISTS (SELECT 1 FROM "Employer" h WHERE h.domain = c.domain)
+          ORDER BY c.domain, c.id)
+        UPDATE "Employer" e SET domain = cand.domain, "domainBasis" = cand.basis, "updatedAt" = now() FROM cand WHERE e.id = cand.eid`;
+      const moves = await tx.$queryRaw<Array<{ id: string; old: string; target: string; slug: string }>>`
+        SELECT c.id, e.id AS old, h.id AS target, e.slug
+        FROM "Company" c JOIN "Employer" e ON e.id = c."employerId" JOIN "Employer" h ON h.domain = c.domain
+        WHERE c.domain IS NOT NULL AND e.domain IS NULL AND h.id <> e.id
+          AND (SELECT count(*) FROM "Company" o WHERE o."employerId" = e.id) = 1`;
+      for (let at = 0; at < moves.length; at += 1000) {
+        const chunk = moves.slice(at, at + 1000);
+        await tx.$executeRaw`UPDATE "Company" c SET "employerId" = v.target, "linkedAt" = now()
+          FROM (VALUES ${Prisma.join(chunk.map((m) => Prisma.sql`(${m.id}, ${m.target})`))}) AS v(id, target) WHERE c.id = v.id`;
+        await tx.$executeRaw`INSERT INTO "EmployerAlias" (slug, "employerId") SELECT v.slug, v.target
+          FROM (VALUES ${Prisma.join(chunk.map((m) => Prisma.sql`(${m.slug}, ${m.target})`))}) AS v(slug, target) ON CONFLICT (slug) DO NOTHING`;
+        await tx.$executeRaw`DELETE FROM "Employer" WHERE id = ANY(${chunk.map((m) => m.old)}::text[])`;
+      }
+      const [left] = await tx.$queryRaw<Array<{ n: number }>>`
+        SELECT count(*)::int AS n FROM "Company" c JOIN "Employer" e ON e.id = c."employerId" WHERE c.domain IS NOT NULL AND e.domain IS DISTINCT FROM c.domain`;
+      return { domainSet, joined: moves.length, left: left?.n ?? 0 };
+    },
+    { timeout: 120000, maxWait: 30000 },
+  );
 }
 
 /**
@@ -196,7 +258,7 @@ export async function refreshEmployerCounts(): Promise<number> {
     WHERE e.id = e2.id AND (e."openJobs" <> coalesce(k.open, 0) OR e."openIndia" <> coalesce(k.india, 0))`;
 }
 
-type BuildRow = { id: string; source: string; name: string; domain: string | null; domainBasis: string | null; stage: string | null; logoUrl: string | null; indiaOpen: number; lastFetchCount: number | null };
+type BuildRow = { id: string; source: string; slug: string; name: string; domain: string | null; domainBasis: string | null; stage: string | null; logoUrl: string | null; indiaOpen: number; lastFetchCount: number | null };
 
 /**
  * The first build (TDD 4.6): every Company row grouped by domain (a row without one is its own group), the employer of
@@ -205,7 +267,7 @@ type BuildRow = { id: string; source: string; name: string; domain: string | nul
  */
 export async function buildAllEmployers(options: { write: boolean }): Promise<{ employers: number; rows: number; withDomain: number; multiRow: number }> {
   if (await db.employer.findFirst({ select: { id: true } })) throw new Error("employers already exist: buildAllEmployers runs only on an empty Employer table (linkPending keeps them current)");
-  const rows = await db.$queryRaw<BuildRow[]>`SELECT id, source, name, domain, "domainBasis", stage, "logoUrl", "indiaOpen", "lastFetchCount" FROM "Company"`;
+  const rows = await db.$queryRaw<BuildRow[]>`SELECT id, source, slug, name, domain, "domainBasis", stage, "logoUrl", "indiaOpen", "lastFetchCount" FROM "Company"`;
   const groups = new Map<string, BuildRow[]>();
   for (const row of rows) {
     const key = row.domain ? `d:${row.domain}` : `c:${row.id}`;
@@ -247,6 +309,19 @@ export async function buildAllEmployers(options: { write: boolean }): Promise<{ 
   }
   await refreshEmployerCounts();
   return summary;
+}
+
+/**
+ * Recomputes the display name, logo and stage of employers whose rows changed since the build: those with several board
+ * accounts and those still named "Company" (`scope` "multi"), or every employer ("all"). Slugs never change.
+ */
+export async function refreshAllEmployers(options: { scope: "multi" | "all" }): Promise<number> {
+  const ids = await db.$queryRaw<Array<{ id: string }>>`
+    SELECT e.id FROM "Employer" e
+    WHERE ${options.scope === "all"} OR e.name = 'Company' OR (SELECT count(*) FROM "Company" c WHERE c."employerId" = e.id) > 1
+    ORDER BY e.id`;
+  for (const row of ids) await refreshEmployer(row.id).catch((error) => console.warn(`employers: refresh ${row.id} failed: ${error instanceof Error ? error.message.slice(0, 100) : "error"}`));
+  return ids.length;
 }
 
 // The owner's overrides (scripts/employer-set.ts). A row with an owner basis is never overwritten by the facts sweep.

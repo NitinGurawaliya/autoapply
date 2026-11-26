@@ -2,10 +2,17 @@
 // default. With --write: the first build when no employer exists (the bigger employer of a domain keeps the bare slug),
 // else links the rows that still have no employer or were looked at again, until none is left.
 //   npx tsx scripts/employers-link.ts [--write]
+//   npx tsx scripts/employers-link.ts --rename [--all]   recompute the display names (employers with several accounts or named "Company"; --all: every one)
 import { db } from "../src/lib/db";
-import { buildAllEmployers, linkPending } from "../src/modules/jobs/employers";
+import { buildAllEmployers, linkPending, refreshAllEmployers, relinkDomains } from "../src/modules/jobs/employers";
 
 async function main() {
+  if (process.argv.includes("--rename")) {
+    const done = await refreshAllEmployers({ scope: process.argv.includes("--all") ? "all" : "multi" });
+    console.log(`RENAME ${done} employers refreshed`);
+    await db.$disconnect();
+    return;
+  }
   const write = process.argv.includes("--write");
   console.log(write ? "WRITE" : "DRY RUN (nothing is written)");
   const existing = await db.employer.count();
@@ -14,9 +21,12 @@ async function main() {
     const summary = await buildAllEmployers({ write });
     console.log(`BUILD ${JSON.stringify(summary)} ${Math.round((Date.now() - started) / 1000)} s`);
   } else if (!write) {
-    const [row] = await db.$queryRaw<Array<{ pending: number }>>`SELECT count(*)::int AS pending FROM "Company" WHERE "employerId" IS NULL OR "linkedAt" IS NULL OR "linkedAt" < "domainCheckedAt"`;
+    const [row] = await db.$queryRaw<Array<{ pending: number }>>`SELECT count(*)::int AS pending FROM "Company" WHERE "employerId" IS NULL OR (domain IS NOT NULL AND (SELECT e.domain FROM "Employer" e WHERE e.id = "employerId") IS DISTINCT FROM domain)`;
     console.log(`${existing} employers exist; ${row?.pending ?? 0} companies are waiting to be linked`);
   } else {
+    // The common cases in a few statements; the rest one at a time.
+    const bulk = await relinkDomains();
+    console.log(`RELINK ${JSON.stringify(bulk)}`);
     let total = { linked: 0, created: 0, merged: 0 };
     for (let round = 0; round < 500; round += 1) {
       const done = await linkPending(500);

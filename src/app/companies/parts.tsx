@@ -120,7 +120,7 @@ export function CountHeading({ children, count }: { children: ReactNode; count: 
   return (
     <h2 className="m-0 mb-2.5 flex items-baseline justify-between gap-2 type-section">
       {children}
-      <span className="type-meta font-normal text-muted-foreground tabular-nums">{count.toLocaleString("en-IN")}</span>
+      <span className="type-meta font-normal text-muted-foreground">{count.toLocaleString("en-IN")}</span>
     </h2>
   );
 }

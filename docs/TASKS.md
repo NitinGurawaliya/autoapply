@@ -346,6 +346,6 @@ Design: [docs/employers/TDD.md](employers/TDD.md) (v2, 27 Nov: build sheets in i
 - [~] [W3 — Employers built from the domains, kept linked at every ingest](employers/TASKS.md#w3)
 - [~] [W4 — The feed and the guards count the employer, not the name](employers/TASKS.md#w4)
 - [~] [W5 — The company pages, drawn for approval](employers/TASKS.md#w5)
-- [~] [W6 — `/companies` A–Z and `/companies/<slug>`](employers/TASKS.md#w6)
-- [~] [W7 — Found by search: JobPosting on job pages, sitemap and robots](employers/TASKS.md#w7)
+- [x] [W6 — `/companies` A–Z and `/companies/<slug>`](employers/TASKS.md#w6)
+- [x] [W7 — Found by search: JobPosting on job pages, sitemap and robots](employers/TASKS.md#w7)
 - [ ] [W8 — End to end and switch-on](employers/TASKS.md#w8)

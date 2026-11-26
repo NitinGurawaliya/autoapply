@@ -22,7 +22,7 @@ export default async function CompaniesPage() {
       <ShareTopBar right="sign-in" />
       <h1 className="m-0 mt-2 type-heading">Companies hiring</h1>
       <p className="m-0 mt-1.5 type-meta text-muted-foreground">
-        <span className="tabular-nums">{total.toLocaleString("en-IN")}</span> {total === 1 ? "company" : "companies"} with open jobs
+        {total.toLocaleString("en-IN")} {total === 1 ? "company" : "companies"} with open jobs
       </p>
       <LetterStrip counts={counts} />
       {top.length > 0 ? (

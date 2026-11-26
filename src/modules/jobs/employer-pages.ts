@@ -19,12 +19,25 @@ export type EmployerPage =
 
 const PRIVATE = [...PRIVATE_SOURCES];
 
-/** "Bengaluru", "Bengaluru and Pune", "Bengaluru, Pune and 40 more": the cities an employer's open India jobs are in. */
+// One city under its common name: the boards write Bangalore and Bengaluru, Gurgaon and Gurugram for one place.
+const CITY_NAMES: Record<string, string> = { bangalore: "Bengaluru", bengaluru: "Bengaluru", bombay: "Mumbai", madras: "Chennai", calcutta: "Kolkata", gurgaon: "Gurugram", "new delhi": "Delhi", poona: "Pune" };
+
+/** A listing's first place as a city name: no "India - " in front, one spelling per city, capitals if it came in lower case. */
+function cityOf(location: string): string | null {
+  const first = location.split(/[,;|/]/)[0]?.replace(/^\s*(india|ind|in)\s*[-:]\s*/i, "").trim() ?? "";
+  // "US - California - Remote": a place in another country, listed on a job that is also open in India.
+  if (first.length < 2 || /\d/.test(first) || /^[a-z]{2,3}\s+-\s/i.test(first)) return null;
+  const known = CITY_NAMES[first.toLowerCase()];
+  if (known) return known;
+  return first === first.toLowerCase() ? first.replace(/[a-z]/g, (letter) => letter.toUpperCase()) : first;
+}
+
+/** "Bengaluru", "Bengaluru and Pune", "Bengaluru, Pune and 40 more": the cities of an employer's open India jobs. */
 export function placesLine(locations: Array<{ location: string; n: number }>): string {
   const cities = new Map<string, number>();
   for (const row of locations) {
-    const city = row.location.split(/[,;|/]/)[0]?.trim();
-    if (city && city.length >= 2) cities.set(city, (cities.get(city) ?? 0) + row.n);
+    const city = cityOf(row.location);
+    if (city) cities.set(city, (cities.get(city) ?? 0) + row.n);
   }
   const ranked = [...cities].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([city]) => city);
   if (ranked.length === 0) return "";

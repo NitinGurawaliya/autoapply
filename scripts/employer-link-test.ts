@@ -2,7 +2,7 @@
 // (names carry a stamp), deleted at the end. npx tsx scripts/employer-link-test.ts
 import { db } from "../src/lib/db";
 import { redirectDomain } from "../src/modules/jobs/company-facts";
-import { displayName, linkCompany, refreshEmployer, refreshEmployerCounts, setEmployerName, splitCompany } from "../src/modules/jobs/employers";
+import { displayName, linkCompany, refreshEmployer, refreshEmployerCounts, relinkDomains, setEmployerName, splitCompany } from "../src/modules/jobs/employers";
 
 let failed = 0;
 function ok(name: string, pass: boolean, detail = "") {
@@ -129,6 +129,28 @@ async function main() {
     ok("8. one open public job counts (not the Naukri or the closed one)", counted?.openJobs === 1 && counted?.openIndia === 1, `${counted?.openJobs}/${counted?.openIndia}`);
     ok("8. a company read 4 days ago counts none", staleEmployer?.openJobs === 0);
 
+    // 10. relinkDomains, in bulk: one-row employers whose rows have since found a domain.
+    const holder = await company(`W3T${stamp} Holder`, D("holder"));
+    await linkCompany(holder.id);
+    const holderEmployer = await employerOf(holder.id);
+    const r1 = await company(`W3T${stamp} Later One`, null);
+    const r2 = await company(`W3T${stamp} Later Two`, null);
+    const r3 = await company(`W3T${stamp} Later Three`, null);
+    for (const row of [r1, r2, r3]) await linkCompany(row.id);
+    const oldSlugs = await Promise.all([r1, r2, r3].map(async (row) => (await employerOf(row.id))?.slug ?? ""));
+    await db.company.update({ where: { id: r1.id }, data: { domain: D("later"), domainBasis: "board", domainCheckedAt: new Date() } });
+    await db.company.update({ where: { id: r2.id }, data: { domain: D("later"), domainBasis: "job_links", domainCheckedAt: new Date() } });
+    await db.company.update({ where: { id: r3.id }, data: { domain: D("holder"), domainBasis: "board", domainCheckedAt: new Date() } });
+    const bulk = await relinkDomains();
+    const l1 = await employerOf(r1.id);
+    const l2 = await employerOf(r2.id);
+    const l3 = await employerOf(r3.id);
+    ok("10. two rows with a new shared domain end in one employer that holds it", Boolean(l1) && l1?.id === l2?.id && l1?.domain === D("later"), `${bulk.domainSet} set, ${bulk.joined} joined`);
+    ok("10. a row whose domain another employer holds joins that employer", l3?.id === holderEmployer?.id);
+    const aliasRows = await db.employerAlias.findMany({ where: { slug: { in: oldSlugs } } });
+    const kept = oldSlugs.filter((slug) => slug === l1?.slug).length;
+    ok("10. every employer a row left leaves its slug as an alias (the one that took the domain keeps its own)", aliasRows.length === oldSlugs.length - kept && aliasRows.every((row) => row.employerId === l1?.id || row.employerId === holderEmployer?.id), `${aliasRows.length} aliases, ${kept} kept`);
+
     // 9. An owner's name survives refreshEmployer; display names follow the rules.
     const named = await employerOf(a1.id);
     await setEmployerName(named?.slug ?? "", `W3T${stamp} Acme Corporation`);
@@ -138,6 +160,9 @@ async function main() {
     ok("displayName: a tie goes to a self-named board, then the shortest", displayName([{ name: "Alpha Beta", source: "greenhouse" }, { name: "Alpha", source: "workable" }], null) === "Alpha");
     ok("displayName: generic names are dropped", displayName([{ name: "Careers", source: "zohorecruit" }, { name: "Orbit Labs", source: "lever" }], null) === "Orbit Labs");
     ok("displayName: nothing left, the domain's label", displayName([{ name: "Careers", source: "zohorecruit" }], "orbit.com") === "Orbit");
+    ok("displayName: names that all differ but start with one word give that word", displayName([{ name: "Deloitte East Africa", source: "workable" }, { name: "DeloitteNZ", source: "smartrecruiters" }, { name: "DeloitteNordic", source: "smartrecruiters" }], "deloitte.com") === "Deloitte");
+    ok("displayName: a shared start that cuts a word is not used", displayName([{ name: "Alphabet", source: "lever" }, { name: "Alphanumeric", source: "ashby" }], null) !== "Alpha");
+    ok("displayName: a generic name with no domain falls back to the board slug's label", displayName([{ name: "Careers", source: "zohorecruit", slug: "abbott.zohorecruit.com" }], null) === "Abbott");
   } finally {
     await db.company.deleteMany({ where: { id: { in: made } } });
     const leftovers = await db.employer.findMany({ where: { OR: [{ slug: { contains: String(stamp) } }, { name: { contains: String(stamp) } }, { domain: { contains: String(stamp) } }] }, select: { id: true } });

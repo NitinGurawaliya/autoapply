@@ -123,7 +123,7 @@ Done 27 Nov: `migrate status` was clean before; `migrate deploy` applied `202611
 **Done when:** the owner approves the drawing (their words quoted in the Done line).
 
 <a id="w6"></a>
-### [~] W6 — `/companies` A–Z and `/companies/<slug>`
+### [x] W6 — `/companies` A–Z and `/companies/<slug>`
 **Do:**
 - `src/lib/company-pages-gate.ts`, `src/proxy.ts`.
 - `src/modules/jobs/employer-pages.ts`.
@@ -139,8 +139,10 @@ Done 27 Nov: `migrate status` was clean before; `migrate deploy` applied `202611
 - Screenshots at 390 px, light and dark, match W5's drawing.
 - typecheck and lint pass.
 
+Done 27 Nov: `company-pages-smoke` PASS (18 checks, signed out, against `next dev`). Screenshots at 390 px on real data: `/companies` (dark), `/companies/razorpay` (dark), `/companies/browse/r` (light), matching the W5 drawing (W5 itself not yet approved). A `loading.tsx` made `notFound()` answer 200, so existence is checked in layouts above the loading screens (TDD 10.7). Pages are dynamic (`?page=`), no `revalidate`.
+
 <a id="w7"></a>
-### [~] W7 — Found by search: JobPosting on job pages, sitemap and robots
+### [x] W7 — Found by search: JobPosting on job pages, sitemap and robots
 **Do:**
 - `src/lib/job-posting.ts`.
 - `publicJob`'s extra fields.
@@ -157,6 +159,8 @@ Done 27 Nov: `migrate status` was clean before; `migrate deploy` applied `202611
 - One job sitemap lists only open public jobs.
 - `/robots.txt` names the sitemaps.
 - typecheck and lint pass.
+
+Done 27 Nov: `job-posting-test` PASS (25). On `next dev`: `/robots.txt` names `/sitemap/0.xml` to `/2.xml`; sitemap 0 has 2,161 employer URLs and sitemap 1 has 45,000 job URLs, checked against the database: 0 closed, Naukri, mock or stale jobs, 0 unlisted employers. A real Greenhouse job page carries one `JobPosting` and `index, follow`. Description is already shown in full on the page (lead plus the collapsed "Read the full description"). Google's Rich Results Test is in W8.
 
 <a id="w8"></a>
 ### [ ] W8 — End to end and switch-on

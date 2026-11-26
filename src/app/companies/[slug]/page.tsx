@@ -87,7 +87,7 @@ export default async function CompanyPage({ params, searchParams }: Props) {
       </header>
       <div className="mt-3.5 flex flex-col gap-0.5">
         <span className="type-section">
-          <span className="tabular-nums">{employer.openJobs.toLocaleString("en-IN")}</span> open {employer.openJobs === 1 ? "job" : "jobs"}
+          {employer.openJobs.toLocaleString("en-IN")} open {employer.openJobs === 1 ? "job" : "jobs"}
         </span>
         {boards ? <span className="type-meta text-muted-foreground">Hires through {boards}</span> : null}
       </div>

@@ -65,6 +65,20 @@ eq("empty", employerDomain(""), null);
 eq("null", employerDomain(null), null);
 eq("a mailto-looking value", employerDomain("not a url at all"), null);
 eq("sites.google.com is refused", employerDomain("sites.google.com/view/acme"), null);
+// Public suffixes (27 Nov: schools on edu.au and edu.sg, firms on us.com, were all merged as "edu.au", "us.com").
+eq("a school under edu.sg is its own site", employerDomain("https://www.gess.edu.sg/careers"), "gess.edu.sg");
+eq("edu.sg itself is nobody's", employerDomain("edu.sg"), null);
+eq("an Australian school sits under its state", employerDomain("medowie.nsw.edu.au"), "medowie.nsw.edu.au");
+eq("a Victorian school too, whatever its subdomain", employerDomain("jobs.smartplay.vic.edu.au"), "smartplay.vic.edu.au");
+eq("edu.au itself is nobody's", employerDomain("edu.au"), null);
+eq("a firm under us.com keeps its label", employerDomain("itac.us.com"), "itac.us.com");
+eq("us.com itself is nobody's", employerDomain("us.com"), null);
+eq("a Quebec site", employerDomain("delan.qc.ca"), "delan.qc.ca");
+eq("qc.ca itself is nobody's", employerDomain("qc.ca"), null);
+eq("co.in keeps its label", employerDomain("www.example.co.in"), "example.co.in");
+eq("a subdomain of co.uk", employerDomain("careers.acme.co.uk"), "acme.co.uk");
+eq("a plain .com is two labels", employerDomain("jobs.us.example.com"), "example.com");
+eq("a .co (Colombia) site is two labels", employerDomain("bank.co"), "bank.co");
 
 // Generic board names.
 eq("Careers is generic", isGenericCompanyName("Careers"), true);

@@ -51,7 +51,7 @@ export default async function LetterPage({ params, searchParams }: Props) {
       {total > 0 ? (
         <>
           <p className="m-0 mt-1.5 type-meta text-muted-foreground">
-            <span className="tabular-nums">{total.toLocaleString("en-IN")}</span> {total === 1 ? "company" : "companies"}
+            {total.toLocaleString("en-IN")} {total === 1 ? "company" : "companies"}
           </p>
           <div className="mt-5">
             <EmployerList rows={rows} />
