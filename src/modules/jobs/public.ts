@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { SITES } from "@/modules/sources/sites";
 import { APPLY_BOARDS } from "./pool";
 
 /**
@@ -62,6 +63,8 @@ export async function publicJob(id: string): Promise<PublicJob | null> {
     },
   });
   if (!job) return null;
+  // Signed-in sources (Naukri) are read through a user's own account and never republished (docs/employers/TDD.md 4.7).
+  if ((SITES as readonly string[]).includes(job.source)) return null;
   const { reading, readingCurrent, applyUrl, ...rest } = job;
   const parsed = readingCurrent && reading != null ? readingSchema.safeParse(reading) : null;
   const read = parsed?.success ? parsed.data : null;

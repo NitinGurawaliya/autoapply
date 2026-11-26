@@ -16,6 +16,7 @@ import { APPLY_BOARDS, DEFAULT_FEED_DAYS, FEED_BOARDS, DEFAULT_PLACES, listFeed,
 import { formatSalary } from "@/modules/jobs/salary";
 import { absoluteUrl, jobPath } from "@/lib/job-slug";
 import { shareLinksEnabled } from "@/lib/share-gate";
+import { SITES } from "@/modules/sources/sites";
 import { FeedBackLink } from "./feed-back-link";
 import { ShareButton } from "./share-button";
 import { JobActions, NextJobLink, type NextJob } from "./job-actions";
@@ -146,8 +147,8 @@ export default async function JobPage({ params, searchParams }: { params: Promis
         </FeedBackLink>
         <span className="type-body font-medium">Feed</span>
         <span className="flex-1" />
-        {/* Share links (Phase U9): only for an open job the agent applies to, while share pages are switched on. */}
-        {shareLinksEnabled() && !job.closedAt && APPLY_BOARDS.includes(job.source) ? (
+        {/* Share links (Phase U9): only for an open job the agent applies to (never a Naukri one: not republished), while share pages are switched on. */}
+        {shareLinksEnabled() && !job.closedAt && APPLY_BOARDS.includes(job.source) && !(SITES as readonly string[]).includes(job.source) ? (
           <ShareButton url={absoluteUrl(`${jobPath({ id: job.id, title: job.title, company: job.company })}?s=app`)} title={`${job.title} at ${job.company.name}`} />
         ) : null}
       </div>

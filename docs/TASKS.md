@@ -340,7 +340,7 @@ Design: [docs/accounts/TDD.md](accounts/TDD.md) (v1, 21 Nov; replaces M5, M6, M8
 
 Design: [docs/employers/TDD.md](employers/TDD.md) (v2, 27 Nov: build sheets in its section 10, decisions closed in section 11). Tasks: [docs/employers/TASKS.md](employers/TASKS.md), with the session prompt. W0 any time; then W1 → W4, then W5 → W8; pages behind `COMPANY_PAGES` until W8.
 
-- [ ] [W0 — No Naukri job on a public page](employers/TASKS.md#w0)
+- [x] [W0 — No Naukri job on a public page](employers/TASKS.md#w0)
 - [ ] [W1 — Employer tables and the company's domain columns](employers/TASKS.md#w1)
 - [ ] [W2 — Each board account's own website, and its real name](employers/TASKS.md#w2)
 - [ ] [W3 — Employers built from the domains, kept linked at every ingest](employers/TASKS.md#w3)

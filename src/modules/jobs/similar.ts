@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { SITES } from "@/modules/sources/sites";
 import { APPLY_BOARDS } from "./pool";
 
 /**
@@ -22,6 +23,7 @@ export async function similarJobs(jobId: string, n = 3): Promise<SimilarJob[]> {
     WHERE j.id <> ${jobId}
       AND j."closedAt" IS NULL
       AND j.source = ANY(${[...APPLY_BOARDS]}::text[])
+      AND j.source <> ALL(${[...SITES]}::text[])
       AND j.eligibility IN ('india', 'remote_india')
       AND j."postedAt" > now() - make_interval(days => ${WINDOW_DAYS}::int)
       AND j."companyId" <> src."companyId"

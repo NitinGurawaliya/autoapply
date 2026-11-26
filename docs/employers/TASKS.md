@@ -22,7 +22,7 @@ Mark `[~]` / `[x]` here first, then on the root line.
 **Migrations.** They are hand-written SQL in `prisma/migrations/<stamp>_<name>/migration.sql`, applied with `npx prisma migrate deploy` only. Never `prisma migrate dev`, and never `migrate diff` with the real database as shadow (that wiped Neon on 10 Oct).
 
 <a id="w0"></a>
-### [ ] W0 — No Naukri job on a public page
+### [x] W0 — No Naukri job on a public page
 **Do:**
 - `src/modules/jobs/public.ts`: `publicJob` gives null for a signed-in source.
 - `src/modules/jobs/similar.ts`: excludes signed-in sources.
@@ -35,6 +35,8 @@ Mark `[~]` / `[x]` here first, then on the root line.
 - `public-sources-test` PASS.
 - `/j/<slug>` of a Naukri job answers 404 signed out on `npm run dev` (curl output pasted).
 - typecheck and lint pass.
+
+Done 27 Nov: `public-sources-test` PASS (4 checks: `publicJob` null for Naukri, `similarJobs` never returns one, control Greenhouse job returned). Dev server: a real Naukri job `/j/…` 404, a Greenhouse one 200. Changed `jobs/public.ts`, `jobs/similar.ts`, `(app)/jobs/[id]/page.tsx`. typecheck: only errors left are in files untouched (`openai` module missing in the shared node_modules, `LayoutProps`); eslint clean on the changed files.
 
 <a id="w1"></a>
 ### [ ] W1 — Employer tables and the company's domain columns
