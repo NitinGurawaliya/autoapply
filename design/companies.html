@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Company pages</title>
+<!-- Phase W5 mockup (docs/employers/TDD.md §5): the public A–Z company pages. Direction B tokens (globals.css [data-look="b"]), as design/share.html. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600&display=swap">
+<style>
+  .light {
+    --bg:#f6f4ef; --card:#fffefc; --muted:#eeebe4; --text:#1a1814; --muted-text:#77726a; --faint:#a8a39a;
+    --line:rgb(26 24 20 / 10%); --line-strong:rgb(26 24 20 / 18%); --input:rgb(26 24 20 / 22%);
+    --inv:#1a1814; --on-inv:#f6f4ef; --primary:#c2410c; --on-primary:#fffaf5; --brand-text:#b23c0b;
+    --track:rgb(26 24 20 / 8%); --bar:#1a1814; --dash:#bdb7ad;
+    --lift:0 0 0 0.5px rgb(26 24 20 / 8%), 0 1px 1px rgb(26 24 20 / 3%), 0 28px 56px -18px rgb(26 24 20 / 16%);
+  }
+  .dark {
+    --bg:#11100e; --card:#1b1916; --muted:#26231f; --text:#efebe5; --muted-text:#9d978e; --faint:#6a655e;
+    --line:rgb(239 235 229 / 9%); --line-strong:rgb(239 235 229 / 16%); --input:rgb(239 235 229 / 20%);
+    --inv:#efebe5; --on-inv:#11100e; --primary:#e2733f; --on-primary:#1a1814; --brand-text:#ec8a5a;
+    --track:rgb(239 235 229 / 9%); --bar:#efebe5; --dash:#4a453e;
+    --lift:0 0 0 0.5px rgb(255 255 255 / 6%), 0 28px 56px -18px rgb(0 0 0 / 60%), inset 0 1px 0 rgb(255 255 255 / 6%);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Schibsted Grotesk', system-ui, sans-serif; background: #d9d6cf; color: #1a1814; }
+  .page-head { padding: 24px 24px 0; }
+  .page-head h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.025em; margin: 0 0 6px; }
+  .page-head p { margin: 0; font-size: 14px; color: #4a453e; max-width: 860px; line-height: 1.5; }
+  .switch { margin-top: 14px; display: inline-flex; padding: 4px; border-radius: 999px; background: #fffefc; gap: 4px; }
+  .switch button { border: 0; background: none; padding: 8px 16px; border-radius: 999px; font: 500 14px 'Schibsted Grotesk', sans-serif; cursor: pointer; color: #1a1814; }
+  .switch button[aria-pressed="true"] { background: #1a1814; color: #f6f4ef; }
+  .row { display: flex; flex-wrap: wrap; gap: 32px; padding: 24px; align-items: flex-start; }
+  figure { margin: 0; }
+  figcaption { font-size: 13px; color: #4a453e; margin: 0 0 10px; max-width: 390px; line-height: 1.45; }
+  figcaption b { color: #1a1814; font-weight: 600; }
+
+  .phone { width: 390px; min-height: 780px; background: var(--bg); color: var(--text); border-radius: 24px; overflow: hidden; position: relative; display: flex; flex-direction: column; }
+  .desktop { width: 920px; min-height: 560px; background: var(--bg); color: var(--text); border-radius: 12px; overflow: hidden; display: flex; justify-content: center; }
+  .desktop .col { width: 480px; display: flex; flex-direction: column; }
+  .scroll { flex: 1; padding: 0 20px 24px; }
+  .topbar { height: 52px; display: flex; align-items: center; justify-content: space-between; }
+  .wordmark { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; }
+  .mark { width: 22px; height: 22px; border-radius: 6px; background: var(--primary); }
+  .text-link { font-size: 15px; color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+  .text-link.tap { display: inline-flex; align-items: center; min-height: 44px; }
+
+  .type-heading { font-size: 24px; line-height: 1.2; font-weight: 600; letter-spacing: -0.025em; margin: 0; }
+  .type-section { font-size: 17px; line-height: 1.35; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+  .type-body { font-size: 15px; line-height: 1.5; margin: 0; }
+  .type-meta { font-size: 13px; line-height: 1.5; color: var(--muted-text); margin: 0; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  .crumbs { margin-top: 4px; display: flex; align-items: center; gap: 4px; min-height: 44px; }
+  .crumbs .text-link { font-size: 13px; color: var(--muted-text); }
+  .crumbs svg { width: 14px; height: 14px; stroke: var(--faint); fill: none; stroke-width: 2; }
+  h1.type-heading { margin-top: 4px; }
+  .lede { margin-top: 6px; }
+
+  /* The letter strip: seven to a row, 44 px targets; a letter with no company is plain faint text, not a filled tag. */
+  .letters { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-top: 16px; }
+  .letters a { height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: var(--muted); font-size: 15px; font-weight: 500; color: var(--text); text-decoration: none; }
+  .letters a.on { background: var(--inv); color: var(--on-inv); }
+  .letters a.none { background: transparent; color: var(--faint); font-weight: 400; }
+
+  .section { margin-top: 28px; }
+  .section h2 { margin-bottom: 10px; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .section h2 .type-meta { font-weight: 400; }
+
+  .tile { width: 40px; height: 40px; flex: none; border-radius: 10px; background: var(--inv); color: var(--on-inv); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 16px; overflow: hidden; }
+  .tile.lg { width: 56px; height: 56px; border-radius: 10px; font-size: 22px; }
+  .tile.logo { background: var(--card); box-shadow: inset 0 0 0 0.5px var(--line-strong); }
+  .tile.logo i { display: block; width: 22px; height: 22px; border-radius: 50%; background: var(--primary); }
+  .chev { width: 16px; height: 16px; stroke: var(--faint); fill: none; stroke-width: 2; flex: none; }
+
+  /* A list of employers or jobs: one card, rows split by hairlines. */
+  .list { background: var(--card); border-radius: 16px; box-shadow: var(--lift); }
+  .item { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 12px 14px; text-decoration: none; color: inherit; }
+  .item + .item { border-top: 0.5px solid var(--line); }
+  .item .co { flex: 1; min-width: 0; }
+  .item .co b { display: block; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .co span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .n { font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; flex: none; }
+  .job { flex-direction: column; align-items: stretch; gap: 4px; }
+  .job .top { display: flex; align-items: flex-start; gap: 12px; }
+  .job .role { flex: 1; font-size: 15px; font-weight: 500; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .job .top .chev { margin-top: 3px; }
+
+  .pager { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
+
+  .head { display: flex; align-items: center; gap: 14px; margin-top: 8px; }
+  .head .co { flex: 1; min-width: 0; }
+  .head .co h1 { margin: 0; }
+  .facts { margin-top: 14px; display: flex; flex-direction: column; gap: 2px; }
+  .facts .big { font-size: 17px; font-weight: 600; }
+
+  .bar { position: sticky; bottom: 0; padding: 12px 20px 20px; background: var(--bg); border-top: 0.5px solid var(--line); }
+  .btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 52px; border-radius: 10px; border: 0; font: 600 17px 'Schibsted Grotesk', sans-serif; cursor: pointer; text-decoration: none; }
+  .btn.primary { background: var(--primary); color: var(--on-primary); }
+  .btn.outline { background: transparent; color: var(--text); box-shadow: inset 0 0 0 1px var(--input); }
+  .bar .type-meta { text-align: center; margin-top: 8px; }
+
+  .panel { background: var(--card); border-radius: 16px; box-shadow: var(--lift); padding: 16px; }
+  .panel.dashed { background: transparent; box-shadow: none; border: 1px dashed var(--dash); }
+  .panel .type-section + .type-body { margin-top: 4px; }
+  .notice { margin-top: 20px; }
+  .empty { margin-top: 48px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .empty .type-heading { font-size: 20px; }
+  .empty .btn { width: auto; padding: 0 20px; margin-top: 12px; }
+  .empty .glyph { width: 44px; height: 44px; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--dash); display: flex; align-items: center; justify-content: center; margin-bottom: 4px; }
+  .empty .glyph svg { width: 20px; height: 20px; stroke: var(--muted-text); fill: none; stroke-width: 2; }
+
+  .skel { background: var(--muted); border-radius: 6px; animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.45; } }
+  .skel.tile { background: var(--muted); border-radius: 10px; }
+</style>
+</head>
+<body>
+<div class="page-head">
+  <h1>Company pages</h1>
+  <p>The public A–Z of employers with open jobs, and one page per employer with its jobs from every board. Phase W (docs/employers/TDD.md §5). Signed out, no tab bar; one primary action per screen, and it is on the company page only. Naukri listings never appear. The phones show 390 px; the last frame is the desktop column.</p>
+  <div class="switch" role="group" aria-label="Theme">
+    <button type="button" aria-pressed="true" data-theme="light">Light</button>
+    <button type="button" aria-pressed="false" data-theme="dark">Dark</button>
+  </div>
+</div>
+
+<div id="root" class="light">
+<div class="row">
+
+<!-- 1. Index -->
+<figure>
+  <figcaption><b>1. /companies.</b> Every letter that has a company is a tag; a letter with none is plain grey text, not a dead button. Below, the employers with the most open jobs in India.</figcaption>
+  <div class="phone">
+    <div class="scroll">
+      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><a class="text-link">Sign in</a></div>
+      <h1 class="type-heading" style="margin-top:8px">Companies hiring</h1>
+      <p class="type-meta lede"><span class="num">412</span> companies with open jobs</p>
+      <nav class="letters" aria-label="Companies by letter">
+        <a class="on">A</a><a>B</a><a>C</a><a>D</a><a>E</a><a>F</a><a>G</a>
+        <a>H</a><a>I</a><a>J</a><a>K</a><a>L</a><a>M</a><a>N</a>
+        <a>O</a><a>P</a><a class="none">Q</a><a>R</a><a>S</a><a>T</a><a>U</a>
+        <a>V</a><a>W</a><a class="none">X</a><a>Y</a><a>Z</a><a>#</a>
+      </nav>
+      <div class="section">
+        <h2 class="type-section">Most hiring in India</h2>
+        <div class="list">
+          <a class="item"><span class="tile">I</span><span class="co"><b>Infosys</b><span class="type-meta">Bengaluru, Pune and 40 more</span></span><span class="n">1,284</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></a>
+          <a class="item"><span class="tile">T</span><span class="co"><b>Tata Consultancy Services</b><span class="type-meta">Mumbai, Chennai and 31 more</span></span><span class="n">902</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></a>
+          <a class="item"><span class="tile logo"><i></i></span><span class="co"><b>Razorpay</b><span class="type-meta">Bengaluru</span></span><span class="n">38</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></a>
+          <a class="item"><span class="tile">J</span><span class="co"><b>Jupiter</b><span class="type-meta">Bengaluru and Mumbai</span></span><span class="n">21</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></a>
+          <a class="item"><span class="tile">Z</span><span class="co"><b>Zoho</b><span class="type-meta">Chennai and Tenkasi</span></span><span class="n">17</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></a>
+        </div>
+        <p class="type-meta" style="margin-top:8px">Open jobs in India, today.</p>
+      </div>
+    </div>
+  </div>
+</figure>
+
+<!-- 2. A letter -->
+<figure>
+  <figcaption><b>2. /companies/browse/r.</b> Alphabetical, 200 to a page. The count on the right is all open jobs. A page two link is plain text at the foot.</figcaption>
+  <div class="phone">
+    <div class="scroll">
+      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><a class="text-link">Sign in</a></div>
+      <div class="crumbs"><a class="text-link">Companies</a><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+      <h1 class="type-heading">Companies starting with R</h1>
+      <p class="type-meta lede"><span class="num">23</span> companies</p>
+      <div class="section" style="margin-top:20px">
+        <div class="list">
+          <a class="item"><span class="tile logo"><i></i></span><span class="co"><b>Rapido</b><span class="type-meta">Bengaluru</span></span><span class="n">9</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></a>
+          <a class="item"><span class="tile">R</span><span class="co"><b>Razorpay</b><span class="type-meta">Bengaluru</span></span><span class="n">38</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></a>
+          <a class="item"><span class="tile">R</span><span class="co"><b>Reach</b><span class="type-meta">Remote</span></span><span class="n">2</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></a>
+          <a class="item"><span class="tile">R</span><span class="co"><b>Red Hat</b><span class="type-meta">Pune, Bengaluru</span></span><span class="n">64</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></a>
+          <a class="item"><span class="tile">R</span><span class="co"><b>Rippling</b><span class="type-meta">Bengaluru</span></span><span class="n">11</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></a>
+        </div>
+        <div class="pager"><a class="text-link tap">All companies</a><a class="text-link tap">Next page</a></div>
+      </div>
+    </div>
+  </div>
+</figure>
+
+<!-- 3. A company, many jobs -->
+<figure>
+  <figcaption><b>3. /companies/razorpay.</b> One company, every board it hires through. India first, then "Outside India". Each row opens the job's page; Apply lives there. The only button is the one that starts the agent.</figcaption>
+  <div class="phone">
+    <div class="scroll">
+      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><a class="text-link">Sign in</a></div>
+      <div class="crumbs"><a class="text-link">Companies</a><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+      <div class="head">
+        <span class="tile lg">R</span>
+        <div class="co"><h1 class="type-heading">Razorpay</h1><a class="text-link type-meta" style="color:var(--muted-text)">razorpay.com</a></div>
+      </div>
+      <div class="facts"><span class="big"><span class="num">41</span> open jobs</span><span class="type-meta">Hires through Greenhouse and Workday</span></div>
+      <div class="section">
+        <h2 class="type-section">In India <span class="type-meta num">38</span></h2>
+        <div class="list">
+          <a class="item job"><span class="top"><span class="role">Backend Engineer, Payments</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span><span class="type-meta">Bengaluru, 2 days ago</span></a>
+          <a class="item job"><span class="top"><span class="role">Senior Site Reliability Engineer, Infrastructure and Platform Reliability</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span><span class="type-meta">Bengaluru, 3 days ago</span></a>
+          <a class="item job"><span class="top"><span class="role">Product Designer</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span><span class="type-meta">Remote in India, 5 days ago</span></a>
+          <a class="item job"><span class="top"><span class="role">Data Analyst, Risk</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span><span class="type-meta">Bengaluru, 1 week ago</span></a>
+        </div>
+        <div class="pager"><span class="type-meta">1 to 4 of 38</span><a class="text-link tap">Next page</a></div>
+      </div>
+      <div class="section" style="margin-top:20px">
+        <h2 class="type-section">Outside India <span class="type-meta num">3</span></h2>
+        <div class="list">
+          <a class="item job"><span class="top"><span class="role">Engineering Manager</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span><span class="type-meta">Singapore, 4 days ago</span></a>
+        </div>
+      </div>
+    </div>
+    <div class="bar">
+      <a class="btn primary">Let your agent apply</a>
+      <p class="type-meta">Upload your resume once. Your agent fills in the forms and sends them.</p>
+    </div>
+  </div>
+</figure>
+
+<!-- 4. One job -->
+<figure>
+  <figcaption><b>4. A company with one job.</b> Listed like any other (decision: one open job is enough). No second heading; the count says "1 open job".</figcaption>
+  <div class="phone">
+    <div class="scroll">
+      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><a class="text-link">Sign in</a></div>
+      <div class="crumbs"><a class="text-link">Companies</a><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+      <div class="head">
+        <span class="tile lg logo"><i style="width:26px;height:26px"></i></span>
+        <div class="co"><h1 class="type-heading">Jupiter</h1><a class="text-link type-meta" style="color:var(--muted-text)">jupiter.money</a></div>
+      </div>
+      <div class="facts"><span class="big"><span class="num">1</span> open job</span><span class="type-meta">Hires through Keka</span></div>
+      <div class="section">
+        <div class="list">
+          <a class="item job"><span class="top"><span class="role">Android Engineer</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span><span class="type-meta">Bengaluru, 6 days ago</span></a>
+        </div>
+      </div>
+    </div>
+    <div class="bar">
+      <a class="btn primary">Let your agent apply</a>
+      <p class="type-meta">Upload your resume once. Your agent fills in the forms and sends them.</p>
+    </div>
+  </div>
+</figure>
+
+<!-- 5. Only outside India -->
+<figure>
+  <figcaption><b>5. Jobs only outside India.</b> The India section is replaced by one plain line, so nobody wonders where it went. The jobs stay listed.</figcaption>
+  <div class="phone">
+    <div class="scroll">
+      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><a class="text-link">Sign in</a></div>
+      <div class="crumbs"><a class="text-link">Companies</a><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+      <div class="head">
+        <span class="tile lg">G</span>
+        <div class="co"><h1 class="type-heading">Glide</h1><a class="text-link type-meta" style="color:var(--muted-text)">glideapps.com</a></div>
+      </div>
+      <div class="facts"><span class="big"><span class="num">6</span> open jobs</span><span class="type-meta">Hires through Ashby</span></div>
+      <div class="panel dashed notice"><h2 class="type-section">None in India right now</h2><p class="type-body">Its open jobs are in other countries.</p></div>
+      <div class="section" style="margin-top:20px">
+        <h2 class="type-section">Outside India <span class="type-meta num">6</span></h2>
+        <div class="list">
+          <a class="item job"><span class="top"><span class="role">Staff Software Engineer</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span><span class="type-meta">San Francisco, 2 days ago</span></a>
+          <a class="item job"><span class="top"><span class="role">Customer Success Manager</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span><span class="type-meta">Remote in the US, 1 week ago</span></a>
+        </div>
+      </div>
+    </div>
+    <div class="bar">
+      <a class="btn primary">Let your agent apply</a>
+      <p class="type-meta">Upload your resume once. Your agent fills in the forms and sends them.</p>
+    </div>
+  </div>
+</figure>
+
+<!-- 6. A letter with none -->
+<figure>
+  <figcaption><b>6. A letter with no company.</b> Reached by a typed address; the letter strip never links to it.</figcaption>
+  <div class="phone">
+    <div class="scroll">
+      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><a class="text-link">Sign in</a></div>
+      <div class="crumbs"><a class="text-link">Companies</a><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+      <h1 class="type-heading">Companies starting with Q</h1>
+      <div class="empty">
+        <div class="glyph"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg></div>
+        <h2 class="type-heading">No companies under Q yet</h2>
+        <p class="type-body" style="color:var(--muted-text)">Companies appear here while they have open jobs.</p>
+        <a class="btn outline">All companies</a>
+      </div>
+    </div>
+  </div>
+</figure>
+
+<!-- 7. Not found -->
+<figure>
+  <figcaption><b>7. A company with no open jobs, or a wrong address.</b> The same page for both (a real 404 status). It does not say which: a company can come back.</figcaption>
+  <div class="phone">
+    <div class="scroll">
+      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><a class="text-link">Sign in</a></div>
+      <div class="empty" style="margin-top:96px">
+        <div class="glyph"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg></div>
+        <h1 class="type-heading">We can't find that company</h1>
+        <p class="type-body" style="color:var(--muted-text)">It may have no open jobs right now.</p>
+        <a class="btn outline">All companies</a>
+      </div>
+    </div>
+  </div>
+</figure>
+
+<!-- 8. Loading -->
+<figure>
+  <figcaption><b>8. Loading.</b> The company page's shape in grey: header, count, a few rows. The letter and index pages use the same row skeleton.</figcaption>
+  <div class="phone">
+    <div class="scroll">
+      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><span class="skel" style="width:48px;height:16px"></span></div>
+      <div class="head" style="margin-top:52px">
+        <span class="skel tile lg"></span>
+        <div class="co"><div class="skel" style="height:24px;width:60%"></div><div class="skel" style="height:14px;width:36%;margin-top:8px"></div></div>
+      </div>
+      <div class="skel" style="height:20px;width:30%;margin-top:18px"></div>
+      <div class="skel" style="height:14px;width:55%;margin-top:8px"></div>
+      <div class="skel" style="height:20px;width:26%;margin-top:32px"></div>
+      <div class="list" style="margin-top:12px">
+        <div class="item job"><div class="skel" style="height:16px;width:70%"></div><div class="skel" style="height:12px;width:40%"></div></div>
+        <div class="item job"><div class="skel" style="height:16px;width:55%"></div><div class="skel" style="height:12px;width:34%"></div></div>
+        <div class="item job"><div class="skel" style="height:16px;width:64%"></div><div class="skel" style="height:12px;width:38%"></div></div>
+      </div>
+    </div>
+  </div>
+</figure>
+
+<!-- 9. Error -->
+<figure>
+  <figcaption><b>9. Could not load.</b> One line and one way out. The page keeps its top bar.</figcaption>
+  <div class="phone">
+    <div class="scroll">
+      <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><a class="text-link">Sign in</a></div>
+      <div class="empty" style="margin-top:96px">
+        <div class="glyph"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.2v.1"/></svg></div>
+        <h1 class="type-heading">That didn't load</h1>
+        <p class="type-body" style="color:var(--muted-text)">Check your connection and try again.</p>
+        <a class="btn outline">Try again</a>
+      </div>
+    </div>
+  </div>
+</figure>
+
+<!-- 10. Desktop -->
+<figure>
+  <figcaption><b>10. Desktop.</b> The same column, centred at 480 px on the page background, as the feed and the share page. Nothing is added at the sides.</figcaption>
+  <div class="desktop">
+    <div class="col">
+      <div class="scroll">
+        <div class="topbar"><span class="wordmark"><span class="mark"></span>SwipeApply</span><a class="text-link">Sign in</a></div>
+        <div class="crumbs"><a class="text-link">Companies</a><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+        <div class="head">
+          <span class="tile lg">R</span>
+          <div class="co"><h1 class="type-heading">Razorpay</h1><a class="text-link type-meta" style="color:var(--muted-text)">razorpay.com</a></div>
+        </div>
+        <div class="facts"><span class="big"><span class="num">41</span> open jobs</span><span class="type-meta">Hires through Greenhouse and Workday</span></div>
+        <div class="section">
+          <h2 class="type-section">In India <span class="type-meta num">38</span></h2>
+          <div class="list">
+            <a class="item job"><span class="top"><span class="role">Backend Engineer, Payments</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span><span class="type-meta">Bengaluru, 2 days ago</span></a>
+            <a class="item job"><span class="top"><span class="role">Product Designer</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span><span class="type-meta">Remote in India, 5 days ago</span></a>
+          </div>
+        </div>
+      </div>
+      <div class="bar"><a class="btn primary">Let your agent apply</a></div>
+    </div>
+  </div>
+</figure>
+
+</div>
+</div>
+
+<script>
+  document.querySelectorAll('.switch button').forEach(function (button) {
+    button.addEventListener('click', function () {
+      document.getElementById('root').className = button.dataset.theme;
+      document.querySelectorAll('.switch button').forEach(function (b) { b.setAttribute('aria-pressed', String(b === button)); });
+    });
+  });
+</script>
+</body>
+</html>

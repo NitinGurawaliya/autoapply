@@ -112,7 +112,7 @@ Done 27 Nov: `migrate status` was clean before; `migrate deploy` applied `202611
 - typecheck and lint pass.
 
 <a id="w5"></a>
-### [ ] W5 — The company pages, drawn for approval
+### [~] W5 — The company pages, drawn for approval
 **Do:**
 - `design/companies.html`.
 - One line in `docs/DESIGN.md`.
