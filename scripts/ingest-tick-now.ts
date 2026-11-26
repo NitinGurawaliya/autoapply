@@ -3,11 +3,13 @@
 // logos. Embedding, skills labels, job reading, warming and cleanup are the shared tail (modules/jobs/after-ingest.ts),
 // which the workflow runs as its own job after this one (scripts/after-ingest-now.ts). Prints per board: companies read,
 // unchanged, failed, new jobs, tiers after. The scheduled ingest on GitHub Actions runs this (M21, .github/workflows/jobs.yml).
-//   npx tsx scripts/ingest-tick-now.ts [--all] [--board greenhouse] [--limit 500] [--logos 300]
+//   npx tsx scripts/ingest-tick-now.ts [--all] [--board greenhouse] [--limit 500] [--logos 300] [--facts 600]
 //   --all reads every active company, due or not.
 import { db } from "../src/lib/db";
 import { guardUndiciParserAssertions } from "../src/lib/undici-guard";
 import { ingestOne, startTickRun } from "../src/modules/jobs/ingest";
+import { refreshCompanyFacts } from "../src/modules/jobs/company-facts";
+import { linkPending, relinkDomains } from "../src/modules/jobs/employers";
 import { refreshLogos } from "../src/modules/jobs/logos";
 
 function arg(name: string) {
@@ -72,6 +74,19 @@ async function main() {
   if (logos > 0) {
     const found = await refreshLogos({ limit: logos, write: true }).catch(() => null);
     if (found) console.log(`logos: ${found.found} found of ${found.checked} looked at`);
+  }
+  // Employers (Phase W, docs/employers/TDD.md 4.6): each new company's own website and name from its board page (three
+  // sweeps at once, a share of the rows each), then every company with no employer, or with a domain its employer lacks,
+  // is put under the right one. The set-based pass first, the per-row pass for what is left.
+  const facts = Number(arg("--facts") ?? 600);
+  if (facts > 0) {
+    const shares = await Promise.all([0, 1, 2].map((index) => refreshCompanyFacts({ limit: Math.ceil(facts / 3), write: true, shard: { of: 3, index } }).catch(() => null)));
+    const checked = shares.reduce((sum, share) => sum + (share?.checked ?? 0), 0);
+    const withDomain = shares.reduce((sum, share) => sum + (share?.withDomain ?? 0), 0);
+    console.log(`facts: ${withDomain} with a domain of ${checked} looked at`);
+    const bulk = await relinkDomains().catch(() => null);
+    const rest = await linkPending(500).catch(() => null);
+    console.log(`employers: ${bulk ? `${bulk.domainSet} took a domain, ${bulk.joined} joined` : "bulk relink failed"}; ${rest ? `${rest.linked} linked, ${rest.created} new, ${rest.merged} merged` : "link failed"}`);
   }
 }
 main().finally(() => db.$disconnect());
