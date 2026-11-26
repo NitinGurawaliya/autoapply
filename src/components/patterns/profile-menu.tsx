@@ -63,7 +63,7 @@ export function ProfileMenu({ align = "left" }: { align?: "left" | "right" }) {
             <span className="truncate type-body font-semibold">{shell.name || "Your account"}</span>
             <span className="truncate type-meta text-muted-foreground">{shell.email}</span>
           </div>
-          {LINKS.map((link) => (
+          {[...(shell.companies ? [{ href: "/companies", label: "Companies hiring" }] : []), ...LINKS].map((link) => (
             <Link
               key={link.href}
               href={link.href}

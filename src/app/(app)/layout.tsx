@@ -4,6 +4,7 @@ import { NeedsInputNotifier } from "@/components/notifications";
 import { SentCelebration } from "@/components/sent-celebration";
 import { SignOutForm } from "@/components/sign-out-form";
 import { getCurrentUser } from "@/lib/auth";
+import { companyPagesEnabled } from "@/lib/company-pages-gate";
 import { ApplicationsSummaryProvider } from "@/components/applications-summary";
 import { ShellProvider } from "@/components/patterns/shell-context";
 import { TabBar } from "@/components/patterns/tab-bar";
@@ -17,7 +18,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <ApplicationsSummaryProvider>
-      <ShellProvider value={{ name: user.name, email: user.email, signOut: <SignOutForm /> }}>
+      <ShellProvider value={{ name: user.name, email: user.email, signOut: <SignOutForm />, companies: companyPagesEnabled() }}>
         <main className="mx-auto flex min-h-dvh w-full max-w-120 flex-1 flex-col bg-background pt-[max(12px,env(safe-area-inset-top))] pb-[calc(82px+max(0px,env(safe-area-inset-bottom)-24px))]">
           {children}
         </main>

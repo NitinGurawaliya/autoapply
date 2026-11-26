@@ -3,8 +3,9 @@
 import { createContext, useContext, type ReactNode } from "react";
 
 // What every page's top bar needs from the signed-in layout: who is signed in, and the sign-out form
-// (a server action, so it is rendered by the server layout and handed down).
-type Shell = { name: string | null; email: string; signOut: ReactNode };
+// (a server action, so it is rendered by the server layout and handed down). `companies`: the public company pages
+// (/companies, Phase W) are switched on, so the profile menu links to them.
+type Shell = { name: string | null; email: string; signOut: ReactNode; companies?: boolean };
 
 const ShellContext = createContext<Shell | null>(null);
 
