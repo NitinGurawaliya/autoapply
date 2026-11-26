@@ -335,3 +335,16 @@ Design: [docs/accounts/TDD.md](accounts/TDD.md) (v1, 21 Nov; replaces M5, M6, M8
 - [ ] [V6 — Darwinbox apply](accounts/TASKS.md#v6)
 - [ ] [V7 — SuccessFactors](accounts/TASKS.md#v7)
 - [ ] [V8 — iCIMS (only on numbers)](accounts/TASKS.md#v8)
+
+## Phase W — Employers: one real company above its board accounts, and public A–Z company pages (owner, 25–26 Nov)
+
+Design: [docs/employers/TDD.md](employers/TDD.md) (v1, 26 Nov; decisions to confirm in its section 11). Tasks: [docs/employers/TASKS.md](employers/TASKS.md). Order W1 → W4, then W5 → W8; pages behind `COMPANY_PAGES` until W8.
+
+- [ ] [W1 — Employer tables and the company's domain columns](employers/TASKS.md#w1)
+- [ ] [W2 — Each board account's own website, and its real name](employers/TASKS.md#w2)
+- [ ] [W3 — Employers built from the domains, kept linked at every ingest](employers/TASKS.md#w3)
+- [ ] [W4 — The feed and the guards count the employer, not the name](employers/TASKS.md#w4)
+- [ ] [W5 — The company pages, drawn for approval](employers/TASKS.md#w5)
+- [ ] [W6 — `/companies` A–Z and `/companies/<slug>`](employers/TASKS.md#w6)
+- [ ] [W7 — Found by search: JobPosting on job pages, sitemap and robots](employers/TASKS.md#w7)
+- [ ] [W8 — End to end and switch-on](employers/TASKS.md#w8)
