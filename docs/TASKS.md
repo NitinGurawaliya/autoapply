@@ -344,7 +344,7 @@ Design: [docs/employers/TDD.md](employers/TDD.md) (v2, 27 Nov: build sheets in i
 - [x] [W1 — Employer tables and the company's domain columns](employers/TASKS.md#w1)
 - [~] [W2 — Each board account's own website, and its real name](employers/TASKS.md#w2)
 - [~] [W3 — Employers built from the domains, kept linked at every ingest](employers/TASKS.md#w3)
-- [~] [W4 — The feed and the guards count the employer, not the name](employers/TASKS.md#w4)
+- [x] [W4 — The feed and the guards count the employer, not the name](employers/TASKS.md#w4)
 - [~] [W5 — The company pages, drawn for approval](employers/TASKS.md#w5)
 - [x] [W6 — `/companies` A–Z and `/companies/<slug>`](employers/TASKS.md#w6)
 - [x] [W7 — Found by search: JobPosting on job pages, sitemap and robots](employers/TASKS.md#w7)

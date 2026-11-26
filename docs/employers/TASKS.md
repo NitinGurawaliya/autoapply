@@ -95,7 +95,7 @@ Done 27 Nov: `migrate status` was clean before; `migrate deploy` applied `202611
 - typecheck and lint pass.
 
 <a id="w4"></a>
-### [~] W4 — The feed and the guards count the employer, not the name
+### [x] W4 — The feed and the guards count the employer, not the name
 **Do:**
 - `src/modules/governance/history.ts` (`employerKey`, and the three readers).
 - `src/modules/governance/index.ts`.
@@ -110,6 +110,8 @@ Done 27 Nov: `migrate status` was clean before; `migrate deploy` applied `202611
 - `guards-test` and `feed-sql-test` PASS.
 - The owner's feed count before and after is pasted.
 - typecheck and lint pass.
+
+Done 27 Nov: `feed-dedupe-test` PASS (11), `guards-test` PASS, `feed-sql-test` PASS (12). Feeds of the 6 most active real accounts, origin/main code against this branch (employers partly linked, 7,600 rows relinked): 5, 40, 5, 6, 15, 40 cards before and after, the same job ids; one account differed by a card between two runs of the same old code (new jobs arriving), not by this change. Cross-board duplicates are rare today (6 open pairs), so little changes yet. A same-name, same-title role on two boards with no found domain is now two cards and no longer shares a duplicate guard: that is the decision (names never merge).
 
 <a id="w5"></a>
 ### [~] W5 — The company pages, drawn for approval
