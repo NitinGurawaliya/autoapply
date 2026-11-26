@@ -164,7 +164,7 @@ export function withDetail(listing: NaukriListing, json: unknown): NaukriListing
 }
 
 // The phrase Naukri is searched with for each of our tracks (modules/jobs/functions.ts TRACKS).
-const TRACK_SEARCH: Record<string, string> = {
+export const TRACK_SEARCH: Record<string, string> = {
   ml_ai: "machine learning engineer",
   data_science: "data scientist",
   data_engineering: "data engineer",
@@ -183,7 +183,7 @@ const TRACK_SEARCH: Record<string, string> = {
 
 export type NaukriSearch = { keyword: string; location: string | null; experience: number | null };
 
-const slugPart = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+export const slugPart = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
 /**
  * Where every user's searches look besides their own city (owner, 23 Nov: a city-only search on the owner's account found

@@ -195,7 +195,7 @@ Design: [docs/naukri/TDD.md](naukri/TDD.md) (final, 3 Nov). Tasks with their Do,
 - [ ] [K11 — Pilot of 20 accounts, then a load test](naukri/TASKS.md#k11)
 - [ ] [K12 — Workday apply adapter](naukri/TASKS.md#k12)
 - [ ] [K13 — Naukri as a company directory for our ATS ingest](naukri/TASKS.md#k13)
-- [ ] [K14 — Discovery by search bucket, in the cloud](naukri/TASKS.md#k14)
+- [~] [K14 — Shared signed-out reader: search and company buckets](naukri/TASKS.md#k14)
 
 ## Phase L — Resume tailored to each job (owner, 5 Nov)
 

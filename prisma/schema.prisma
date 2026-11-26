@@ -320,6 +320,50 @@ model SourceRun {
   @@index([userId, site, startedAt])
 }
 
+// The shared reader of a job site (K14, docs/naukri/TDD.md 13.17): the searches every connected user wants, deduped into
+// buckets, each read once a window by our own signed-out window. One row per (site, bucket); nothing about a user.
+model ReaderBucket {
+  id           String    @id @default(cuid())
+  site         String
+  key          String // "java-developer|bengaluru|3" (modules/jobs/fetchers/naukriBuckets.ts bucketKey)
+  kind         String    @default("search") // search (role, place, years: from connected users) | company (a company's own jobs, from a list)
+  keyword      String
+  location     String?
+  experience   Int?
+  users        Int       @default(0) // connected users whose searches it serves at the last plan
+  everyHours   Int       @default(24)
+  nextReadAt   DateTime  @default(now())
+  lastReadAt   DateTime?
+  claimedUntil DateTime? // a reader holds it until then (one window at a time)
+  lastStop     String? // done | challenge | refused | error
+  lastListed   Int?
+  failures     Int       @default(0) // reads in a row that listed nothing because of an error
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+
+  @@unique([site, key])
+  @@index([site, active, nextReadAt])
+}
+
+// One reader window's run: counts only, never a title or a company. Its stop reason pauses the reader after a check.
+model ReaderRun {
+  id         String    @id @default(cuid())
+  site       String
+  reader     String // "reader-1": the window's own proxy session name (rotates after a refusal)
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  buckets    Int       @default(0)
+  pages      Int       @default(0)
+  listed     Int       @default(0)
+  created    Int       @default(0)
+  updated    Int       @default(0)
+  details    Int       @default(0)
+  stopReason String? // done | budget | challenge | refused | error
+  error      String?
+
+  @@index([site, startedAt])
+}
+
 model Job {
   id            String   @id @default(cuid())
   source        String

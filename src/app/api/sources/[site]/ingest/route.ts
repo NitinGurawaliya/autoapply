@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { enqueueSourceIngest } from "@/lib/queue";
 import { rateLimit } from "@/lib/rate-limit";
 import { sourceRules } from "@/modules/governance";
-import { isSite, runsToday, screenWorkerAlive, usableConnection } from "@/modules/sources";
+import { isSite, runsToday, screenWorkerAlive, sharedReaderOn, usableConnection } from "@/modules/sources";
 
 // "Fetch my Naukri jobs now" (docs/naukri/TDD.md 6): one run soon, within the same per-day budget as the schedule.
 export async function POST(_req: Request, context: { params: Promise<{ site: string }> }) {
@@ -11,6 +11,8 @@ export async function POST(_req: Request, context: { params: Promise<{ site: str
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { site } = await context.params;
   if (!isSite(site)) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  // Our own reader finds the jobs (K14); a user's account reads nothing on request.
+  if (sharedReaderOn()) return NextResponse.json({ error: "shared_reader" }, { status: 409 });
   if (!(await usableConnection(user.id, site))) return NextResponse.json({ error: "not_connected" }, { status: 409 });
   if (!(await screenWorkerAlive())) return NextResponse.json({ error: "no_screen_worker" }, { status: 409 });
   const rules = sourceRules(site);

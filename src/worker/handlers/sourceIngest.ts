@@ -3,13 +3,15 @@ import { db } from "@/lib/db";
 import { enqueueSourceIngest } from "@/lib/queue";
 import { runSourceIngest } from "@/modules/apply/sites/ingest";
 import { sourceRules } from "@/modules/governance";
-import { isSite, runsToday, SITES } from "@/modules/sources";
+import { isSite, runsToday, sharedReaderOn, SITES } from "@/modules/sources";
 
 /** One user's run on a signed-in site, in their window (lib/queue.ts INGEST_SOURCE_QUEUE; worker with a screen). */
-export async function handleSourceIngest(jobs: Job<{ userId: string; site: string }>[]) {
+export async function handleSourceIngest(jobs: Job<{ userId: string; site: string; by?: string }>[]) {
   for (const job of jobs) {
     const { userId, site } = job.data;
     if (typeof userId !== "string" || typeof site !== "string" || !isSite(site)) continue;
+    // With the shared reader on (K14) a user's own account no longer reads on a timer: only a run they asked for.
+    if (job.data.by === "tick" && sharedReaderOn()) continue;
     try {
       const outcome = await runSourceIngest(userId, site);
       if (outcome.status === "skipped") console.log(`source-ingest ${site} …${userId.slice(-6)}: skipped (${outcome.reason})`);
@@ -34,7 +36,7 @@ export async function handleSourceIngestTick() {
     if (!isSite(site)) continue;
     const rules = sourceRules(site);
     if (!rules || (await runsToday(userId, site, now)) >= rules.runs_per_day) continue;
-    if (await enqueueSourceIngest(userId, site).catch(() => null)) queued += 1;
+    if (await enqueueSourceIngest(userId, site, "tick").catch(() => null)) queued += 1;
   }
   if (connections.length > 0) console.log(`source-ingest tick: ${queued} of ${connections.length} connected account(s) queued`);
 }

@@ -1,4 +1,4 @@
-export { check, loadRules, sourceRules } from "./rules";
+export { check, loadRules, readerRules, sourceRules, type ReaderRules } from "./rules";
 export type { GovernanceContext, GovernanceStage, Rules, SourceRules } from "./rules";
 export { writeEvent } from "./audit";
 export { governanceOverview } from "./overview";
