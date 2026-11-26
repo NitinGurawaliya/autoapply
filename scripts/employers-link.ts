@@ -2,6 +2,7 @@
 // default. With --write: the first build when no employer exists (the bigger employer of a domain keeps the bare slug),
 // else links the rows that still have no employer or were looked at again, until none is left.
 //   npx tsx scripts/employers-link.ts [--write]
+//   npx tsx scripts/employers-link.ts --bulk             only the set-based relink (repeatable while the facts backfill runs)
 //   npx tsx scripts/employers-link.ts --rename [--all]   recompute the display names (employers with several accounts or named "Company"; --all: every one)
 import { db } from "../src/lib/db";
 import { buildAllEmployers, linkPending, refreshAllEmployers, relinkDomains } from "../src/modules/jobs/employers";
@@ -10,6 +11,12 @@ async function main() {
   if (process.argv.includes("--rename")) {
     const done = await refreshAllEmployers({ scope: process.argv.includes("--all") ? "all" : "multi" });
     console.log(`RENAME ${done} employers refreshed`);
+    await db.$disconnect();
+    return;
+  }
+  if (process.argv.includes("--bulk")) {
+    // Only the set-based pass (a few statements): safe to repeat while the facts backfill is still adding domains.
+    console.log(`RELINK ${JSON.stringify(await relinkDomains())}`);
     await db.$disconnect();
     return;
   }

@@ -58,7 +58,7 @@ Done 27 Nov: `public-sources-test` PASS (4 checks: `publicJob` null for Naukri, 
 Done 27 Nov: `migrate status` was clean before; `migrate deploy` applied `20261127090000_employers` on Neon (Employer, EmployerAlias empty, 5 Company columns, `Job_companyId_closedAt_idx`); status "up to date". `employer-slug-test` PASS (22 checks), `feed-sql-test` PASS (12 ok). Changed `prisma/schema.prisma`, the migration, `lib/employer-slug.ts`, ARCHITECTURE §4 and new §6.25. typecheck: only the `openai` module errors in files untouched; eslint clean.
 
 <a id="w2"></a>
-### [~] W2 — Each board account's own website, and its real name
+### [x] W2 — Each board account's own website, and its real name
 **Do:**
 - `src/modules/jobs/domains.ts`, `src/modules/jobs/company-facts.ts`, and the exports in `logos.ts`.
 - The facts sweep in `src/worker/handlers/ingest-tick.ts`.
@@ -77,8 +77,10 @@ Done 27 Nov: `migrate status` was clean before; `migrate deploy` applied `202611
 - `logos-test` PASS.
 - typecheck and lint pass.
 
+Done 27 Nov: `company-facts-test` PASS (67 checks, one live snippet per board) and `logos-test` PASS. The backfill looked at every row (31,412 of 31,413; the mock row is skipped). Rows with a stored open job that hold a domain: 1,808 of 2,195 = 82% without Naukri (never shown publicly); by board: workable 100%, ashby 99, zoho 98, lever 91, greenhouse 84, smartrecruiters 81, keka 77, workday 59 (its postings carry no website field, so only the name lookup applies). Generic names left: 4 (377 before). Logos 27,973 before, 28,011 after. Found on the way and fixed: public suffixes (edu.au, us.com), hosting and platform hosts (azurewebsites.net, weebly.com, wpengine.com, wikipedia.org) taken as employer domains; 37 rows repaired and relinked.
+
 <a id="w3"></a>
-### [~] W3 — Employers built from the domains, kept linked at every ingest
+### [x] W3 — Employers built from the domains, kept linked at every ingest
 **Do:**
 - `src/modules/jobs/employers.ts`.
 - `linkPending` in the ingest tick; hourly `refreshEmployerCounts` in `after-ingest.ts`.
@@ -93,6 +95,8 @@ Done 27 Nov: `migrate status` was clean before; `migrate deploy` applied `202611
 - The report is pasted: totals, and the first 30 "names disagree" lines.
 - Glide, Ghost, Reach and Slate are separate employers unless their domains agree (query output pasted).
 - typecheck and lint pass.
+
+Done 27 Nov: `employer-link-test` PASS (27 checks, including the bulk relink). First build on Neon: 31,275 employers in 45 s; after the backfill and the final relink: 30,381 employers, 937 with several board accounts, 2,159 listed (open public jobs), 937 aliases, 0 companies without an employer. Glide, Ghost, Reach and Slate are separate employers (3, 3, 5 and 4, one per domain). The report lists 71 joins whose names disagree (most are legitimate: a board slug against a brand, or a regional name); the owner reviews them with `employers-report.ts` and fixes any with `employer-set.ts`. Naukri rows: 3 of 139 joined by a redirect, the rest are one-row employers (Naukri-native applies name no site). Set-based relink (`--bulk`) added because per-row linking costs a dozen round trips a row.
 
 <a id="w4"></a>
 ### [x] W4 — The feed and the guards count the employer, not the name

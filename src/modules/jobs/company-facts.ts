@@ -129,7 +129,7 @@ export async function fetchCompanyFacts(company: { id: string; source: string; s
 export type FactsRefresh = { checked: number; withDomain: number; renamed: number };
 
 /**
- * The facts of companies not looked at yet, or looked at and found nothing 30 days ago, or found 180 days ago; rows with
+ * The facts of companies (switched-off boards too: a company may come back, and its domain still joins it to its employer) not looked at yet, or looked at and found nothing 30 days ago, or found 180 days ago; rows with
  * an owner domain never. India-hiring and listing companies first (they are the pages), then the longest unlooked. A dry
  * run reads and counts; `write` saves each result (found or not, so it is not read again soon). A lookup that finds
  * nothing keeps the domain the row already had.
@@ -142,7 +142,6 @@ export async function refreshCompanyFacts(options: { limit: number; write: boole
   const due = await db.$queryRaw<Array<{ id: string; source: string; slug: string; name: string; domain: string | null; domainBasis: string | null }>>`
     SELECT id, source, slug, name, domain, "domainBasis" FROM "Company"
     WHERE source = ANY(${sources}::text[]) AND "domainBasis" IS DISTINCT FROM 'owner'
-      AND (active OR source = ANY(${[...SITES]}::text[]))
       AND (${shardOf}::bigint <= 1 OR mod(hashtext(id)::bigint & 2147483647, ${shardOf}::bigint) = ${shardAt}::bigint)
       AND ("domainCheckedAt" IS NULL
            OR (domain IS NULL AND "domainCheckedAt" < now() - interval '30 days')

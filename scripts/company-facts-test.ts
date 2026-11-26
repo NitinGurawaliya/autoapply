@@ -79,6 +79,17 @@ eq("co.in keeps its label", employerDomain("www.example.co.in"), "example.co.in"
 eq("a subdomain of co.uk", employerDomain("careers.acme.co.uk"), "acme.co.uk");
 eq("a plain .com is two labels", employerDomain("jobs.us.example.com"), "example.com");
 eq("a .co (Colombia) site is two labels", employerDomain("bank.co"), "bank.co");
+// Hosting and platform domains a board field sometimes names instead of the company's own site (27 Nov report).
+eq("an Azure site keeps its own label", employerDomain("core10.azurewebsites.net"), "core10.azurewebsites.net");
+eq("azurewebsites.net itself is nobody's", employerDomain("azurewebsites.net"), null);
+eq("a Weebly site keeps its own label", employerDomain("manning.weebly.com"), "manning.weebly.com");
+eq("weebly.com itself is nobody's", employerDomain("https://www.weebly.com/"), null);
+eq("a Zoho Sites site keeps its own label", employerDomain("promax.zohosites.com"), "promax.zohosites.com");
+eq("a host's own site is not a company's", employerDomain("wpengine.com"), null);
+eq("wikipedia is not a company's website", employerDomain("https://en.wikipedia.org/wiki/Acme"), null);
+eq("uk.net is a suffix", employerDomain("aec.uk.net"), "aec.uk.net");
+eq("a Brazilian tec.br site", employerDomain("datadriven.tec.br"), "datadriven.tec.br");
+eq("tec.br itself is nobody's", employerDomain("tec.br"), null);
 
 // Generic board names.
 eq("Careers is generic", isGenericCompanyName("Careers"), true);

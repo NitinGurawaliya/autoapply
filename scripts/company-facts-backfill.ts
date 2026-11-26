@@ -42,7 +42,8 @@ async function main() {
   // row's domain (a Naukri job that redirects to a board we read), so those rows must have been looked at.
   const isSite = (source: string) => (SITES as readonly string[]).includes(source);
   await Promise.all(sources.filter((source) => !isSite(source)).flatMap((source) => Array.from({ length: shards }, (_, index) => run(source, index))));
-  for (const source of sources.filter(isSite)) await run(source);
+  // Every share of a signed-in source's rows, one after another (a share is a slice of the rows: shard 0 alone is 1/N).
+  for (const source of sources.filter(isSite)) for (let index = 0; index < shards; index += 1) await run(source, index);
   console.log("FACTS", JSON.stringify(totals));
   await db.$disconnect();
 }
