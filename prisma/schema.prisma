@@ -244,10 +244,50 @@ model Company {
   listHash       String? // the board's cheap list at the last fetch (Greenhouse, Workday): unchanged → nothing else read
   // Abroad jobs are stored only for the companies watched before Phase M (owner, 9 Nov); everyone else: India only.
   keepAbroad     Boolean   @default(false)
+  // Phase W (docs/employers/TDD.md): the real employer this board account belongs to, and the evidence for it.
+  employerId      String?   // null only between a new row's creation and the next linkPending()
+  domain          String?   // this row's own website domain (TDD 4.4); null: none found
+  domainBasis     String?   // board | redirect | job_links | name_evidence | owner (owner: never overwritten)
+  domainCheckedAt DateTime? // the facts sweep's last look; null: never looked
+  linkedAt        DateTime? // linkCompany's last run; linkPending picks rows whose domainCheckedAt is newer
+  employer        Employer? @relation(fields: [employerId], references: [id], onDelete: SetNull)
   jobs           Job[]
 
   @@unique([source, slug])
   @@index([active, nextFetchAt])
+  @@index([employerId])
+}
+
+// Phase W (docs/employers/TDD.md 4.3): one real business, identified by its website's registrable domain. Not
+// EmployerAccount (Phase V: a user's own login on an employer's ATS).
+model Employer {
+  id          String    @id @default(cuid())
+  slug        String    @unique // /companies/<slug>: [a-z0-9-], 2-60 characters; set once at creation, never changed
+  name        String    // display name (TDD 4.4)
+  nameBasis   String?   // owner: the owner set it, refreshEmployer leaves it alone
+  domain      String?   @unique // registrable domain, "razorpay.com"; null: none found yet (a one-row employer)
+  domainBasis String?   // board | redirect | job_links | name_evidence | owner
+  logoUrl     String?
+  stage       String?   // startup | midsize | mnc: the most common among its rows
+  openJobs    Int       @default(0) // open public jobs (TDD 4.9), refreshEmployerCounts
+  openIndia   Int       @default(0) // of those, eligibility india | remote_india
+  nameKey     String    // sort key: lower-case ASCII of name; its first character is the letter ("0" for a digit)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  companies   Company[]
+  aliases     EmployerAlias[]
+
+  @@index([nameKey, openJobs])
+  @@index([openIndia])
+}
+
+model EmployerAlias {
+  slug       String   @id // an old slug (a merged employer's): answers 308 to the employer's slug
+  employerId String
+  createdAt  DateTime @default(now())
+  employer   Employer @relation(fields: [employerId], references: [id], onDelete: Cascade)
+
+  @@index([employerId])
 }
 
 // Every company discovery has checked (modules/jobs/discovery.ts), so it never checks the same name twice and always
@@ -397,6 +437,7 @@ model Job {
   @@index([source, eligibility, postedAt])
   @@index([track])
   @@index([terms], type: Gin) // feedRows looks skills up here (migration job_terms_index)
+  @@index([companyId, closedAt]) // a company page and the employer counts read jobs by company
 }
 
 model Swipe {

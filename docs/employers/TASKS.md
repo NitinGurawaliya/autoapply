@@ -39,7 +39,7 @@ Mark `[~]` / `[x]` here first, then on the root line.
 Done 27 Nov: `public-sources-test` PASS (4 checks: `publicJob` null for Naukri, `similarJobs` never returns one, control Greenhouse job returned). Dev server: a real Naukri job `/j/…` 404, a Greenhouse one 200. Changed `jobs/public.ts`, `jobs/similar.ts`, `(app)/jobs/[id]/page.tsx`. typecheck: only errors left are in files untouched (`openai` module missing in the shared node_modules, `LayoutProps`); eslint clean on the changed files.
 
 <a id="w1"></a>
-### [ ] W1 — Employer tables and the company's domain columns
+### [x] W1 — Employer tables and the company's domain columns
 **Do:**
 - `prisma/schema.prisma` (`Employer`, `EmployerAlias`, the `Company` columns, the `Job` index).
 - `prisma/migrations/20261127090000_employers/migration.sql`.
@@ -55,8 +55,10 @@ Done 27 Nov: `public-sources-test` PASS (4 checks: `publicJob` null for Naukri, 
 - `feed-sql-test` PASS.
 - typecheck and lint pass.
 
+Done 27 Nov: `migrate status` was clean before; `migrate deploy` applied `20261127090000_employers` on Neon (Employer, EmployerAlias empty, 5 Company columns, `Job_companyId_closedAt_idx`); status "up to date". `employer-slug-test` PASS (22 checks), `feed-sql-test` PASS (12 ok). Changed `prisma/schema.prisma`, the migration, `lib/employer-slug.ts`, ARCHITECTURE §4 and new §6.25. typecheck: only the `openai` module errors in files untouched; eslint clean.
+
 <a id="w2"></a>
-### [ ] W2 — Each board account's own website, and its real name
+### [~] W2 — Each board account's own website, and its real name
 **Do:**
 - `src/modules/jobs/domains.ts`, `src/modules/jobs/company-facts.ts`, and the exports in `logos.ts`.
 - The facts sweep in `src/worker/handlers/ingest-tick.ts`.

@@ -124,7 +124,16 @@ model Answer { id String @id @default(cuid()); userId String
 
 model Company { id String @id @default(cuid()); source String; slug String; name String
   active Boolean @default(true); stage String? /* startup | midsize | mnc */; lastFetchedAt DateTime?; lastFetchCount Int?; lastError String? /* last fetch failure, null when it worked */
-  jobs Job[]; @@unique([source, slug]) }
+  employerId String? /* Phase W (6.25): the real employer */; domain String?; domainBasis String? /* board | redirect | job_links | name_evidence | owner */; domainCheckedAt DateTime?; linkedAt DateTime?
+  employer Employer? @relation(fields:[employerId], references:[id], onDelete: SetNull)
+  jobs Job[]; @@unique([source, slug]); @@index([employerId]) }
+
+/* Phase W (6.25): one real business, identified by its website's registrable domain. Not EmployerAccount (6.24). */
+model Employer { id String @id @default(cuid()); slug String @unique /* /companies/<slug>, set once, never changed */; name String; nameBasis String? /* owner */
+  domain String? @unique; domainBasis String?; logoUrl String?; stage String?; openJobs Int @default(0); openIndia Int @default(0) /* open public jobs, refreshed after ingest */
+  nameKey String /* sort key, first character is the A-Z letter */; createdAt DateTime @default(now()); updatedAt DateTime @updatedAt
+  companies Company[]; aliases EmployerAlias[]; @@index([nameKey, openJobs]); @@index([openIndia]) }
+model EmployerAlias { slug String @id /* an old slug: 308 to the employer's */; employerId String; createdAt DateTime @default(now()); employer Employer @relation(fields:[employerId], references:[id], onDelete: Cascade) }
 
 model Job { id String @id @default(cuid()); source String; externalId String
   companyId String; company Company @relation(fields:[companyId], references:[id])
@@ -512,6 +521,14 @@ Design: `docs/share/TDD.md`. A job's public page is `/j/<company>-<title>-<id>` 
 ### 6.24 Employer accounts and Workday (Phase V, owner, 21-23 Nov)
 
 Boards that need an account before applying (Workday first; Darwinbox and SuccessFactors next; design `docs/accounts/TDD.md`). **One password per user, made by the agent** (owner, 23 Nov; replaces the 9 Nov user-set password): 16 characters with upper and lower case, digits and symbols (`modules/accounts/vault.ts generatePassword`), made on first need, stored AES-256-GCM with `ACCOUNTS_KEY` in `User.applicationSecret`, and shown to the user in Account ("Employer accounts": Show, Copy, and every account made) so they can sign in themselves; `POST /api/accounts/password` returns it to the signed-in user alone, rate-limited, never cached or logged. `modules/accounts` is the only code that decrypts. One `EmployerAccount` row per (user, system, employer) with its state (`creating`, `needs_verification`, `active`, `exists_elsewhere`, `failed`) and a copy of the password used. No account is made without the user's standing permission `create_employer_accounts` (Yes/No, asked once on the needs-you card the first time an employer needs one, or set with the switch in Account's Employer accounts; never guessed, as `accept_acknowledgements` is never guessed); with No, a job that needs an account fails with the reason and nothing is sent, and accounts made before keep working. An account board's adapter has `prepare(page, ctx)`, which the runner calls after the form opens and before `inspect`; it runs `accountStep.ts`: signed in already, or sign in with the stored account, or create one with the user's own email (the employer's required privacy box only under `accept_acknowledgements`). The employer's email to verify the account ends the run `needs_input` with a "Verify your email for Acme" card (`EMPLOYER_VERIFIED_KEY`, never stored as an answer); its Done runs the application again, which signs in. An email that already has an account there (made before us), or a refused password, ends the run failed with the reason, nothing sent. **Workday** (`adapters/workday.ts`): the posting's `/apply/applyManually` page; sign-up and sign-in press the button behind Workday's `click_filter` layer and type at a person's pace; the decoy `beecatcher` input is never filled; each wizard page's `formField-*` blocks are read (text, listbox, search prompt, radio, checkbox, date, file) and filled; Save and Continue until Review; Submit; Workday's confirmation words. The resume asked for on a later page (My Experience) is uploaded there (runner). Workday stays out of `APPLY_BOARDS` until a real application by the owner (U4). Checks: `scripts/accounts-vault-test.ts`; `scripts/workday-dry-run.ts` (a real posting, stops at Review, Submit never pressed).
+
+### 6.25 Employers: one real company above its board accounts (Phase W, owner, 25-27 Nov)
+
+Design `docs/employers/TDD.md`, tasks `docs/employers/TASKS.md` (W0-W8). **An `Employer` is one website domain; every `Company` row (one account on one board) belongs to one employer (`Company.employerId`); names never merge rows on their own; `Job` stays under `Company`.** Why: one employer's jobs were split across board rows (31,375 rows, 1,362 repeated names, many of them different businesses), so there was no page per company and the feed and the per-company cap could not tell "Glide" from "Glide".
+- The domain comes from the board's own page (Ashby `publicWebsite`, Workable `url`, Lever footer link, Keka `companyWebsite`, Zoho `org_info.website`, SmartRecruiters job-page header link, Greenhouse `logo.href`), else the company's own job links, else Clearbit's suggest with evidence in its postings, else the owner (`basis = owner`, never overwritten). Workday and Naukri name none (Naukri joins by the board its job redirects to).
+- Rows with one domain are one employer; same name on different domains stay two; no domain is a one-row employer, merged when a domain turns up (the old slug becomes an `EmployerAlias`).
+- The slug (`lib/employer-slug.ts`) is set once and never changes. Public pages (W6, `COMPANY_PAGES`) list only employers with open public jobs and never a Naukri listing; `JobPosting` data and the sitemap come with W7.
+- Migrations are hand-written SQL applied with `prisma migrate deploy` only (`20261127090000_employers`).
 
 ## 7. Governance (`config/rules.json` + `modules/governance/rules.ts`)
 
