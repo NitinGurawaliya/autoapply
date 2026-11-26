@@ -7,7 +7,10 @@
 //   stop, a company's bucket keeping only its own jobs, a check ending the window and pausing the reader, the daily page
 //   budget. Own site name ("naukri-smoke"), users, jobs, companies and rows; all removed at the end.
 //
-// A live window (real Naukri, the reader's own proxy address): npx tsx scripts/naukri-reader-test.ts --live
+// Live windows (real Naukri, signed out, the reader's own proxy address; needs a worker with a screen, the screen image):
+//   npx tsx scripts/naukri-reader-test.ts --live <user id suffix>
+//   One window on company buckets (load them first: scripts/naukri-company-buckets.ts --write) and one on the search
+//   buckets of that connected user; pages and job pages kept small. Prints each run and what was stored.
 process.env.INGEST_DAYS = "3650"; // the recorded listings are old by the time this runs again
 
 import { readFileSync } from "node:fs";
@@ -210,7 +213,38 @@ async function database() {
   }
 }
 
+async function live(suffix: string) {
+  const { db } = await import("../src/lib/db");
+  const { readerRules } = await import("../src/modules/governance");
+  const reader = await import("../src/modules/sources/reader");
+  const { runReader } = await import("../src/modules/apply/sites/reader");
+  const rules = readerRules("naukri");
+  if (!rules) throw new Error("no reader rules");
+  const user = (await db.user.findMany({ where: { id: { endsWith: suffix } }, select: { id: true } }))[0];
+  if (!user) throw new Error("no user with that id suffix");
+  const jobs0 = await db.job.count({ where: { source: "naukri" } });
+  const companyBuckets = await db.readerBucket.count({ where: { site: "naukri", kind: "company", active: true } });
+  check("company buckets are loaded", companyBuckets > 0, `${companyBuckets}`);
+  const window1 = await runReader("naukri", { rules: { ...rules, buckets_per_run: 6, pages_per_bucket: 1, details_per_bucket: 3 } });
+  check("a window on company buckets ran", window1.status === "ran" && window1.pages >= 1 && ["done", "budget"].includes(window1.stopReason), JSON.stringify(window1));
+  const plan = await reader.planReaderBuckets("naukri", rules, new Date(), { userIds: [user.id] });
+  console.log(`plan for the connected user: ${JSON.stringify(plan)}`);
+  const window2 = await runReader("naukri", { rules: { ...rules, buckets_per_run: 3, pages_per_bucket: 2, details_per_bucket: 3 } });
+  check("a window on the connected user's search buckets ran", window2.status === "ran" && window2.pages >= 1 && ["done", "budget"].includes(window2.stopReason), JSON.stringify(window2));
+  const read = await db.readerBucket.findMany({ where: { site: "naukri", lastReadAt: { gte: new Date(Date.now() - 3_600_000) } }, orderBy: { lastReadAt: "asc" }, select: { kind: true, keyword: true, location: true, experience: true, lastStop: true, lastListed: true } });
+  for (const row of read) console.log(`  ${row.kind} "${row.keyword}"${row.location ? ` in ${row.location}` : ""}${row.experience != null ? ` ${row.experience}y` : ""}: ${row.lastStop}, ${row.lastListed ?? 0} listed`);
+  const jobs1 = await db.job.count({ where: { source: "naukri" } });
+  check("Naukri jobs were stored", jobs1 > jobs0, `${jobs0} -> ${jobs1}`);
+  await db.$disconnect();
+}
+
 async function main() {
+  const at = process.argv.indexOf("--live");
+  if (at >= 0) {
+    await live(process.argv[at + 1] ?? "");
+    console.log(failed === 0 ? "PASS naukri-reader-test --live" : `FAIL naukri-reader-test --live (${failed})`);
+    process.exit(failed === 0 ? 0 : 1);
+  }
   await pure();
   await database();
   console.log(failed === 0 ? "PASS naukri-reader-test" : `FAIL naukri-reader-test (${failed})`);
