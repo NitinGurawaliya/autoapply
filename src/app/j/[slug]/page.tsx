@@ -9,6 +9,8 @@ import { readShareIntent } from "@/lib/share-intent";
 import { boardLabel } from "@/lib/board-label";
 import { explainOutcome } from "@/lib/explain";
 import { absoluteUrl, jobIdFromSlug, jobPath } from "@/lib/job-slug";
+import { jobPostingJsonLd } from "@/lib/job-posting";
+import { JsonLd } from "@/components/patterns/json-ld";
 import { shareLinksEnabled } from "@/lib/share-gate";
 import { publicJob, type PublicJob } from "@/modules/jobs";
 import { shareMatchScore, shareOutcome, trackShareStep, type ShareOutcome } from "@/modules/share";
@@ -41,8 +43,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title,
     description,
     alternates: { canonical: url },
-    // Not indexed in this phase (docs/share/TDD.md §1): the posting belongs to the company.
-    robots: { index: false, follow: false },
+    // Indexed only while the page carries its JobPosting data (Phase W7, docs/employers/TDD.md 4.2): an open job of a
+    // public source, read in the last 3 days. Closed, Naukri and stale jobs stay out of search.
+    robots: jobPostingJsonLd(job, url) ? { index: true, follow: true } : { index: false, follow: false },
     openGraph: { type: "website", siteName: "SwipeApply", title, description, url },
     twitter: { card: "summary_large_image", title, description },
   };
@@ -95,6 +98,7 @@ export default async function SharePage({ params, searchParams }: Props) {
   // their browser first. Signed in, Apply needs no Google, so it stays.
   const inApp = user ? null : inAppBrowser(requestHeaders.get("user-agent"));
   const hasProfile = Boolean(user?.hasProfile);
+  const posting = jobPostingJsonLd(job, absoluteUrl(canonical));
   const open = !job.closedAt && job.applyable;
   const board = boardLabel(job.source);
   // The funnel (U7): this view, with the link's source; signed in with this job's intent is the return from Google.
@@ -108,6 +112,7 @@ export default async function SharePage({ params, searchParams }: Props) {
 
   return (
     <Screen className="px-5">
+      {posting ? <JsonLd data={posting} /> : null}
       <ShareTopBar right={user ? "feed" : "sign-in"} />
       <ShareJobHeader
         job={job}

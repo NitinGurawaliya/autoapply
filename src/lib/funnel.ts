@@ -9,8 +9,8 @@ import { db } from "@/lib/db";
 
 export const FUNNEL_STEPS = ["view", "apply_tap", "signed_in", "resume_read", "profile_saved", "queued", "blocked", "landed", "submitted"] as const;
 export type FunnelStep = (typeof FUNNEL_STEPS)[number];
-// li, x, wa: the owner's posts (scripts/share-link.ts --s); app: shared from a job page in the app (U9).
-export const SOURCES = ["li", "x", "wa", "copy", "app"] as const;
+// li, x, wa: the owner's posts (scripts/share-link.ts --s); app: shared from a job page in the app (U9); co: opened from a company page (Phase W6).
+export const SOURCES = ["li", "x", "wa", "copy", "app", "co"] as const;
 
 /** A link's ?s= as a known source, or null. */
 export function funnelSource(value: unknown): string | null {

@@ -730,6 +730,8 @@ Traps:
    - with `COMPANY_PAGES=0` and `NODE_ENV=production`, the gate function returns false (unit check, not HTTP).
 8. Screenshots at 390 px, light and dark, against W5's drawing.
 
+Built differently from step 5 (27 Nov): a `loading.tsx` starts the response, so `notFound()` and redirects under it answer 200 (Next's `loading.md`). Existence is therefore settled in a `layout.tsx` (`[slug]/layout.tsx` via `employerRoute`, `browse/[letter]/layout.tsx`), and each loading screen sits below its layout (`[slug]/`, `browse/[letter]/`, and the index in a `(index)` route group, so none wraps another segment). The pages are dynamic (they read `?page=`), so there is no hourly `revalidate`.
+
 ### 10.8 W7 — Search
 
 1. `src/lib/job-posting.ts`: `jobPostingJsonLd(job: PostingInput, url: string): Record<string, unknown> | null`, pure. It returns null for a closed job, a private source, or a company not read in 3 days.

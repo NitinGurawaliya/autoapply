@@ -20,7 +20,7 @@ Goals:
 Non-goals:
 - No change to governance: the Apply tap is the right swipe, and the `swipe_right` checks (minimum score 40, caps,
   duplicates) apply unchanged.
-- No search-engine indexing of job pages in this phase (`noindex`).
+- No search-engine indexing of job pages in this phase (`noindex`). Phase W7 (27 Nov, owner) reverses this for open jobs of public sources: `JobPosting` data and `index, follow` (docs/employers/TDD.md 4.2).
 - No referral rewards, sharer attribution or invite links.
 - No daily email; retention after the first apply uses push as today (ARCHITECTURE 6.11).
 - No change to onboarding's questions or resume parsing (Phase S stays as built).

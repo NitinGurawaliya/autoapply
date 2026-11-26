@@ -7,6 +7,7 @@ import { Icon } from "@/components/ui/icons";
 import { CompanyMark } from "@/components/ui/marks";
 import { LogoMark } from "@/components/patterns/opening";
 import { boardLabel } from "@/lib/board-label";
+import { companyPagesEnabled } from "@/lib/company-pages-gate";
 import { describe, previewCount, type DescriptionBlock } from "@/lib/description";
 import { daysSince, experienceChip, postedLabel, whereLabel } from "@/lib/job-facts";
 import { Skeleton } from "@/components/ui/eyebrow";
@@ -45,9 +46,16 @@ export function ShareJobHeader({ job, score }: { job: PublicJob; score?: ReactNo
       <div className="flex items-center gap-3">
         <CompanyMark name={job.company.name} logoUrl={job.company.logoUrl} size={44} />
         <div className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate type-body font-semibold" title={job.company.name}>
-            {job.company.name}
-          </span>
+          {/* The company's own page (Phase W6), while the pages are on and the employer has open jobs. */}
+          {companyPagesEnabled() && job.employer && job.employer.openJobs > 0 ? (
+            <Link href={`/companies/${job.employer.slug}`} className="truncate type-body font-semibold underline decoration-1 underline-offset-4" title={job.company.name}>
+              {job.company.name}
+            </Link>
+          ) : (
+            <span className="truncate type-body font-semibold" title={job.company.name}>
+              {job.company.name}
+            </span>
+          )}
           <span className="truncate type-meta text-muted-foreground">
             {board ? `via ${board}` : "On the company's site"} · {postedLabel(daysSince(job.postedAt)).replace(/^Posted /, "")}
           </span>

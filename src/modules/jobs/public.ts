@@ -23,6 +23,9 @@ export type PublicJob = {
   seniority: string | null;
   description: string;
   source: string;
+  country: string;
+  eligibility: string;
+  kind: string | null;
   postedAt: Date;
   closedAt: Date | null;
   salaryMin: number | null;
@@ -30,6 +33,10 @@ export type PublicJob = {
   salaryCurrency: string | null;
   salaryPeriod: string | null;
   company: { name: string; logoUrl: string | null };
+  /** The real employer of the company (Phase W), for its page and the JobPosting data; null until linked. */
+  /** When the board account was last read (the job is only as fresh as that: JobPosting data needs it within 3 days). */
+  companyLastFetchedAt: Date | null;
+  employer: { slug: string; name: string; domain: string | null; logoUrl: string | null; openJobs: number } | null;
   summary: string | null;
   requirements: string[];
   /** The agent applies on this job's board. */
@@ -50,6 +57,9 @@ export async function publicJob(id: string): Promise<PublicJob | null> {
       seniority: true,
       description: true,
       source: true,
+      country: true,
+      eligibility: true,
+      kind: true,
       postedAt: true,
       closedAt: true,
       salaryMin: true,
@@ -59,17 +69,20 @@ export async function publicJob(id: string): Promise<PublicJob | null> {
       applyUrl: true,
       reading: true,
       readingCurrent: true,
-      company: { select: { name: true, logoUrl: true } },
+      company: { select: { name: true, logoUrl: true, lastFetchedAt: true, employer: { select: { slug: true, name: true, domain: true, logoUrl: true, openJobs: true } } } },
     },
   });
   if (!job) return null;
   // Signed-in sources (Naukri) are read through a user's own account and never republished (docs/employers/TDD.md 4.7).
   if ((SITES as readonly string[]).includes(job.source)) return null;
-  const { reading, readingCurrent, applyUrl, ...rest } = job;
+  const { reading, readingCurrent, applyUrl, company, ...rest } = job;
   const parsed = readingCurrent && reading != null ? readingSchema.safeParse(reading) : null;
   const read = parsed?.success ? parsed.data : null;
   return {
     ...rest,
+    company: { name: company.name, logoUrl: company.logoUrl },
+    employer: company.employer,
+    companyLastFetchedAt: company.lastFetchedAt,
     summary: read?.summary.trim() || null,
     requirements: (read?.requirements ?? []).map((line) => line.trim()).filter(Boolean).slice(0, 6),
     applyable: APPLY_BOARDS.includes(job.source),

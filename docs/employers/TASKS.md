@@ -123,7 +123,7 @@ Done 27 Nov: `migrate status` was clean before; `migrate deploy` applied `202611
 **Done when:** the owner approves the drawing (their words quoted in the Done line).
 
 <a id="w6"></a>
-### [ ] W6 — `/companies` A–Z and `/companies/<slug>`
+### [~] W6 — `/companies` A–Z and `/companies/<slug>`
 **Do:**
 - `src/lib/company-pages-gate.ts`, `src/proxy.ts`.
 - `src/modules/jobs/employer-pages.ts`.
@@ -140,7 +140,7 @@ Done 27 Nov: `migrate status` was clean before; `migrate deploy` applied `202611
 - typecheck and lint pass.
 
 <a id="w7"></a>
-### [ ] W7 — Found by search: JobPosting on job pages, sitemap and robots
+### [~] W7 — Found by search: JobPosting on job pages, sitemap and robots
 **Do:**
 - `src/lib/job-posting.ts`.
 - `publicJob`'s extra fields.

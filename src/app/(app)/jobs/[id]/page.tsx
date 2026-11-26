@@ -15,6 +15,7 @@ import { daysSince, experienceChip, postedLabel, STAGE_LABEL, whereLabel } from 
 import { APPLY_BOARDS, DEFAULT_FEED_DAYS, FEED_BOARDS, DEFAULT_PLACES, listFeed, parseFeedFilters, type FeedView } from "@/modules/jobs";
 import { formatSalary } from "@/modules/jobs/salary";
 import { absoluteUrl, jobPath } from "@/lib/job-slug";
+import { companyPagesEnabled } from "@/lib/company-pages-gate";
 import { shareLinksEnabled } from "@/lib/share-gate";
 import { SITES } from "@/modules/sources/sites";
 import { FeedBackLink } from "./feed-back-link";
@@ -88,7 +89,7 @@ export default async function JobPage({ params, searchParams }: { params: Promis
         salaryMax: true,
         salaryCurrency: true,
         salaryPeriod: true,
-        company: { select: { name: true, logoUrl: true, stage: true } },
+        company: { select: { name: true, logoUrl: true, stage: true, employer: { select: { slug: true, openJobs: true } } } },
       },
     }),
     db.swipe.findUnique({ where: { userId_jobId: { userId: user.id, jobId: id } }, select: { direction: true } }),
@@ -157,7 +158,13 @@ export default async function JobPage({ params, searchParams }: { params: Promis
           <div className="flex items-center gap-3">
             <CompanyMark name={job.company.name} logoUrl={job.company.logoUrl} size={40} />
             <div className="flex min-w-0 flex-1 flex-col">
-              <span className="truncate type-body font-semibold">{job.company.name}</span>
+              {companyPagesEnabled() && job.company.employer && job.company.employer.openJobs > 0 ? (
+                <Link href={`/companies/${job.company.employer.slug}`} className="truncate type-body font-semibold underline decoration-1 underline-offset-4">
+                  {job.company.name}
+                </Link>
+              ) : (
+                <span className="truncate type-body font-semibold">{job.company.name}</span>
+              )}
               <span className="truncate type-meta text-muted-foreground">
                 {board ? `via ${board}` : "On the company's site"} · {postedLabel(daysAgo).replace(/^Posted /, "")}
                 {match?.isNew ? <span className="font-semibold text-foreground"> · New</span> : null}

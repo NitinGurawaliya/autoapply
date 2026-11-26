@@ -2,17 +2,16 @@ import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { employerSlug, nameKeyOf, slugBase } from "@/lib/employer-slug";
-import { SITES } from "@/modules/sources/sites";
 import { employerDomain, isGenericCompanyName } from "./domains";
 import { plainName } from "./logos";
+import { PRIVATE_SOURCES } from "./private-sources";
 
 // Employers: one real business above its board accounts (Phase W, docs/employers/TDD.md 4.4 and 4.6). An Employer is
 // one website domain; every Company row belongs to one; names never merge rows on their own; Job stays under Company.
 
 type Tx = Prisma.TransactionClient;
 
-/** Sources whose jobs are never shown publicly or counted for a public page: signed-in ones (Naukri) and the mock board. */
-export const PRIVATE_SOURCES: readonly string[] = [...SITES, "mock"];
+export { PRIVATE_SOURCES } from "./private-sources";
 
 // Boards whose account name the company set itself (a tie between two spellings goes to these).
 const SELF_NAMED = new Set(["ashby", "workable", "keka", "zohorecruit"]);

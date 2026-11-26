@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { mockFormEnabled } from "@/lib/mock-gate";
+import { companyPagesEnabled } from "@/lib/company-pages-gate";
 import { shareLinksEnabled } from "@/lib/share-gate";
 import { newVisitorId, VISITOR_COOKIE, VISITOR_MAX_AGE_S } from "@/lib/visitor";
 
@@ -10,6 +11,8 @@ export default auth(async (req) => {
   if (pathname.startsWith("/mock")) return mockFormEnabled() ? NextResponse.next() : new NextResponse("Not found", { status: 404 });
   // The UI gallery (src/app/dev/ui) holds no data and is a 404 in production: open it without signing in in development.
   if (pathname.startsWith("/dev/") && process.env.NODE_ENV !== "production") return NextResponse.next();
+  // The company pages (Phase W): public for everyone, signed in or not; a real 404 while switched off.
+  if (pathname === "/companies" || pathname.startsWith("/companies/")) return companyPagesEnabled() ? NextResponse.next() : new NextResponse("Not found", { status: 404 });
   // Share links (Phase U): public for everyone, signed in or not, with or without a profile; a 404 while switched off.
   if (pathname.startsWith("/j/")) {
     if (!shareLinksEnabled()) return new NextResponse("Not found", { status: 404 });
