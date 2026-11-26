@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 // logo address (Workday); else its website's icon, the website named by the board (Ashby, Workable) or found by its name (Clearbit's free name-to-domain suggest, accepted only when the domain is the company's
 // own name or board slug), and the icon taken from Google's icon service, which answers 404 when a site has none.
 
-const BOARD_PAGE: Record<string, (slug: string) => string> = {
+export const BOARD_PAGE: Record<string, (slug: string) => string> = {
   greenhouse: (slug) => `https://job-boards.greenhouse.io/${encodeURIComponent(slug)}`,
   lever: (slug) => `https://jobs.lever.co/${encodeURIComponent(slug)}`,
   ashby: (slug) => `https://jobs.ashbyhq.com/${encodeURIComponent(slug)}`,
@@ -196,7 +196,7 @@ const stem = (value: string) => {
 };
 
 // Job boards, ATS and link hosts: a job link there says nothing about the company's own website.
-const NOT_OWN_SITE =
+export const NOT_OWN_SITE =
   /(^|\.)(greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|keka\.com|smartrecruiters\.com|myworkdayjobs\.com|myworkdaysite\.com|zohorecruit\.(com|in|eu)|linkedin\.com|icims\.com|jobvite\.com|taleo\.net|successfactors\.(com|eu)|bamboohr\.com|recruitee\.com|breezy\.hr|applytojob\.com|rippling\.com|wellfound\.com|indeed\.com|naukri\.com|instahyre\.com|google\.com|bit\.ly|tinyurl\.com|forms\.gle|typeform\.com|notion\.site|teamtailor\.com|personio\.(de|com)|pinpointhq\.com|gem\.com|dover\.com|ycombinator\.com|freshteam\.com|darwinbox\.in|hirist\.tech|cutshort\.io)$/i;
 
 /** The registrable part of a host: "cclfg.cclgroup.com" → cclgroup.com, "careers.acme.co.uk" → acme.co.uk. */
@@ -226,7 +226,7 @@ export function ownSiteOf(hosts: string[], name: string, slug: string): string |
 }
 
 /** The hosts of the company's job links, most used first. */
-async function jobHosts(source: string, slug: string) {
+export async function jobHosts(source: string, slug: string) {
   const rows = await db.$queryRaw<Array<{ host: string | null }>>`
     SELECT lower(substring(j."applyUrl" from '^https?://([^/:?#]+)')) AS host FROM "Job" j JOIN "Company" c ON c.id = j."companyId"
     WHERE c.source = ${source} AND c.slug = ${slug} GROUP BY 1 ORDER BY count(*) DESC LIMIT 3`.catch(() => []);
@@ -246,7 +246,7 @@ export function guessedDomains(name: string, slug: string): Suggestion[] {
  * The company's domain from its name (Clearbit's suggest): a sure one at once; one matching its name or slug only when
  * the company's own job posts mention it (`mentioned`: its website or email in a description or apply link).
  */
-async function domainByName(name: string, slug: string, mentioned: (host: string) => Promise<boolean>): Promise<string | null> {
+export async function domainByName(name: string, slug: string, mentioned: (host: string) => Promise<boolean>): Promise<string | null> {
   const queries = [...new Set([plainName(name), leadWords(name), slug].filter((query) => query && query.length >= 2))];
   const found: Suggestion[] = [];
   for (const query of queries) {
@@ -264,7 +264,7 @@ async function domainByName(name: string, slug: string, mentioned: (host: string
 }
 
 /** Whether any of this company's jobs names the domain in its description or apply link. */
-async function mentionedInJobs(source: string, slug: string, host: string) {
+export async function mentionedInJobs(source: string, slug: string, host: string) {
   const like = `%${host}%`;
   const rows = await db.$queryRaw<Array<{ one: number }>>`
     SELECT 1 AS one FROM "Job" j JOIN "Company" c ON c.id = j."companyId"

@@ -2,6 +2,7 @@ import type { Job } from "pg-boss";
 import { enqueueIngestCompanies } from "@/lib/queue";
 import { dueCompanies, startTickRun } from "@/modules/jobs";
 import { afterIngest, afterIngestDeadline } from "@/modules/jobs/after-ingest";
+import { refreshCompanyFacts } from "@/modules/jobs/company-facts";
 import { refreshLogos } from "@/modules/jobs/logos";
 
 // How many due companies one tick sends at most: 2,000 every 5 minutes reads 20,000 newly seeded companies within an
@@ -14,6 +15,10 @@ let afterRunning = false;
 // in the background so the tick is not held up; never two sweeps at once.
 const LOGOS_PER_TICK = () => Math.min(Math.max(Number(process.env.LOGOS_PER_TICK) || 40, 0), 500);
 let logosRunning = false;
+// Each board account's own website and real name (Phase W, W2, docs/employers/TDD.md 4.5): a few per tick, in the
+// background, never two sweeps at once. FACTS_PER_TICK=0 turns it off.
+const FACTS_PER_TICK = () => Math.min(Math.max(Number(process.env.FACTS_PER_TICK) || 40, 0), 500);
+let factsRunning = false;
 
 /**
  * The `ingest-tick` queue (INGEST_MODE=tick, Phase M, M2). Every tick: each company due for a read gets its own
@@ -36,6 +41,15 @@ export async function handleIngestTick(jobs: Job<object>[]) {
         .catch(() => undefined)
         .finally(() => {
           afterRunning = false;
+        });
+    }
+    if (!factsRunning && FACTS_PER_TICK() > 0) {
+      factsRunning = true;
+      void refreshCompanyFacts({ limit: FACTS_PER_TICK(), write: true })
+        .then((done) => done.checked > 0 && console.log(`ingest-tick: facts ${done.withDomain} with a domain of ${done.checked} looked at, ${done.renamed} renamed`))
+        .catch(() => undefined)
+        .finally(() => {
+          factsRunning = false;
         });
     }
     if (!logosRunning && LOGOS_PER_TICK() > 0) {
