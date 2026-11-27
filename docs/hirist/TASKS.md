@@ -10,9 +10,10 @@ Design: [4.1 Site drivers](TDD.md#41-site-drivers) · [4.5 Env](TDD.md#45-env).
 Done 27 Nov: the four Naukri checks, `site-flags-test` and `feed-sql-test` PASS; typecheck and lint clean. `drivers.ts` (reader and login of a site), `read.ts` (shared page read), `siteListing.ts` (`SiteListing`, `applyKind` "naukri" is now "site"), `siteSearches.ts` (pure planners), `site-flags.ts` (`ENABLE_<SITE>`, `ENABLE_<SITE>_APPLY`, `<SITE>_READER`; `sharedReaderOn(site)`, `sharedReaders` in the overview). Apply stays Naukri's until K19.
 
 <a id="k17"></a>
-### [ ] K17 — Hirist reader
+### [x] K17 — Hirist reader
 Do: `hirist` in `SITES`/`SITE_INFO`, a `boards.ts` entry, `lean.ts`, `jobs/fetchers/hirist.ts`, the reader part of `apply/sites/hirist.ts`, `shared_readers.hirist` in `config/rules.json`, company buckets for Hirist from the approved list; a probe window first for the page's own call URLs and JSON keys.
 Design: [2 Facts](TDD.md#2-facts-the-design-rests-on-27-nov-2026) · [4.2 Reading](TDD.md#42-reading-as-naukri-1317).
+**Done 27 Nov:** probe (signed out, the reader's own address, no check): `/search/<text>` fetches `gladiator.hirist.tech/job/search`, a job page `/job/detail?jobcode=<id>`; `hirist-listing-test` 31 ok and `hirist-reader-test` PASS; one live window in the screen image: 4 buckets, 4 pages, 2 job pages, 3 listed, 3 new, 1.8 MB through the proxy, no check; `siteListed` keeps Hirist off Account until `ENABLE_HIRIST=1`. Company names are searched by their first word (Hirist's search matches any word).
 **Done when:** `hirist-listing-test` and `hirist-reader-test` PASS; one live window in the screen image stores Hirist jobs and records its `ReaderRun` (proxy bytes in the Done line); Hirist jobs show to a connected test user and not to an unconnected one.
 
 <a id="k18"></a>

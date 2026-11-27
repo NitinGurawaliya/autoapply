@@ -197,7 +197,7 @@ Design: [docs/naukri/TDD.md](naukri/TDD.md) (final, 3 Nov). Tasks with their Do,
 - [ ] [K13 — Naukri as a company directory for our ATS ingest](naukri/TASKS.md#k13)
 - [x] [K14 — Shared signed-out reader: search and company buckets](naukri/TASKS.md#k14)
 - [x] [K16 — Site drivers: the Naukri seams behind one interface](hirist/TASKS.md#k16)
-- [ ] [K17 — Hirist reader](hirist/TASKS.md#k17)
+- [x] [K17 — Hirist reader](hirist/TASKS.md#k17)
 - [ ] [K18 — Hirist connect: email or mobile + OTP, streamed](hirist/TASKS.md#k18)
 - [ ] [K19 — Hirist apply](hirist/TASKS.md#k19)
 

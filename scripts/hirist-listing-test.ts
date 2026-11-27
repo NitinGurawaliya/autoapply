@@ -3,7 +3,7 @@
 // npx tsx scripts/hirist-listing-test.ts
 import { readFileSync } from "node:fs";
 import { adapterBoardOfHost } from "../src/modules/jobs/boards";
-import { fromSearch, jobUrl, planSearches, searchUrl, withDetail } from "../src/modules/jobs/fetchers/hirist";
+import { companyQuery, fromSearch, jobUrl, planSearches, searchUrl, withDetail } from "../src/modules/jobs/fetchers/hirist";
 import { requiredYears, tagPosting } from "../src/modules/jobs/tagging";
 
 let failed = 0;
@@ -63,7 +63,8 @@ check("a search per track phrase and the title, no place (Hirist has no place fi
 check("a limit is respected", planSearches({ tracks: ["backend", "fullstack"], currentTitle: null, city: null, yearsExperience: null }, 1).length === 1);
 check("page 1 has no number, years go as a window", searchUrl({ keyword: "backend developer", location: null, experience: 3 }, 1) === "https://www.hirist.tech/search/backend%20developer?minexp=2&maxexp=5", searchUrl({ keyword: "backend developer", location: null, experience: 3 }, 1));
 check("a later page is numbered", searchUrl({ keyword: "data engineer", location: null, experience: null }, 2) === "https://www.hirist.tech/search/data%20engineer?page=2");
-check("a company is searched by its name alone", searchUrl({ keyword: "Acme Software", location: null, experience: 3 }, 1, "company") === "https://www.hirist.tech/search/Acme%20Software");
+check("a company is searched by its first word, no years", searchUrl({ keyword: "Acme Software", location: null, experience: 3 }, 1, "company") === "https://www.hirist.tech/search/Acme");
+check("a short first word takes the second as well", companyQuery("TCS Digital Ltd.") === "TCS Digital" && companyQuery("Cadence Design Systems") === "Cadence" && companyQuery("  ") === "");
 
 console.log(failed === 0 ? "PASS hirist-listing-test" : `FAIL hirist-listing-test (${failed})`);
 process.exit(failed === 0 ? 0 : 1);

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { asDate, plainText } from "../normalize";
 import { slugPart, TRACK_SEARCH } from "./naukri";
+import { cleanCompanyName } from "./naukriBuckets";
 import type { ApplyKind, SearchPage, SiteListing, SiteSearch } from "./siteListing";
 
 /**
@@ -189,8 +190,20 @@ export function planSearches(input: { tracks: string[]; currentTitle: string | n
 }
 
 /**
+ * What Hirist is asked for to find a company's jobs. Its search matches on any word of the phrase ("Cadence Design
+ * Systems" answered 20 jobs of other companies, "Cadence" 4 of Cadence's own: probe, 27 Nov), so a company is searched by
+ * its first word, or its first two when the first is short; the reader then keeps only the listings of that company
+ * (matchesCompany).
+ */
+export function companyQuery(name: string) {
+  const words = cleanCompanyName(name).split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "";
+  return (words[0].length >= 4 ? words[0] : words.slice(0, 2).join(" ")).trim();
+}
+
+/**
  * Hirist's own search page for a search ("/search/backend%20developer?minexp=2&maxexp=5&page=2"), the page a person would
- * open; page 1 has no number. A company's search is its name alone. The years go as a window around the band.
+ * open; page 1 has no number. A company's search is its name (companyQuery) alone. The years go as a window around the band.
  */
 export function searchUrl(search: SiteSearch, page: number, kind: "search" | "company" = "search") {
   const query = new URLSearchParams();
@@ -200,5 +213,6 @@ export function searchUrl(search: SiteSearch, page: number, kind: "search" | "co
   }
   if (page > 1) query.set("page", String(page));
   const text = query.toString();
-  return `${HIRIST_ORIGIN}/search/${encodeURIComponent(search.keyword.trim())}${text ? `?${text}` : ""}`;
+  const phrase = kind === "company" ? companyQuery(search.keyword) : search.keyword.trim();
+  return `${HIRIST_ORIGIN}/search/${encodeURIComponent(phrase)}${text ? `?${text}` : ""}`;
 }

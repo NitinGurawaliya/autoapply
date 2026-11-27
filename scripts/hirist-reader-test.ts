@@ -93,7 +93,7 @@ async function offline() {
     const before = await db.job.count({ where: { source: SITE } });
     const run4 = await runReader(SITE, { rules, deps: fake(() => new Date(base.getTime() + 180_000)) });
     check("a company's search keeps only the listings of that company", run4.status === "ran" && run4.buckets === 2 && run4.listed === 2 && (await db.job.count({ where: { source: SITE } })) === before, JSON.stringify(run4));
-    check("a company is searched by its name alone: no years, no number", urls.includes("https://www.hirist.tech/search/Acme%20Software") && urls.includes("https://www.hirist.tech/search/Nobody%20Corp"), urls.join(" "));
+    check("a company is searched by its first word: no years, no number", urls.includes("https://www.hirist.tech/search/Acme") && urls.includes("https://www.hirist.tech/search/Nobody"), urls.join(" "));
     const nobody = await db.readerBucket.findUnique({ where: { site_key: { site: SITE, key: "co|nobody-corp" } } });
     check("a name with no jobs of its own waits about two weeks", nobody?.lastStop === "no_match" && nobody.nextReadAt.getTime() > base.getTime() + 12 * 86_400_000, `${nobody?.lastStop}`);
 
@@ -134,7 +134,7 @@ async function live() {
   const { runReader } = await import("../src/modules/apply/sites/reader");
   const rules = readerRules("hirist");
   if (!rules) throw new Error("no reader rules for hirist");
-  const names = ["Cadence Design Systems", "Flipkart", "Razorpay"];
+  const names = ["Cadence Design Systems", "Deloitte", "Hdfc Bank", "Schneider Electric"];
   const seeded = await reader.seedCompanyBuckets("hirist", names, rules.company_every_hours, new Date());
   console.log(`seeded ${JSON.stringify(seeded)}`);
   await db.readerBucket.updateMany({ where: { site: "hirist", kind: "company", keyword: { in: names } }, data: { nextReadAt: new Date(), claimedUntil: null } });
