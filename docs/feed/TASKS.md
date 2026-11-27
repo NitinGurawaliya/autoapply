@@ -22,12 +22,14 @@ Done 27 Nov: `feed-funnel.ts` for Nitin: 23,246 recent India jobs, 5,113 in his 
 Done 27 Nov: `profile-fit-test` PASS (18 checks: years, level both ways, field incl. software and nearby, never-show, non-tech, missing skills, weak score, model reason, unknown score). `src/modules/jobs/profile-fit.ts` reuses `jobGate`, `feedTracks`, `levelAllowed`, `yearsReach`, `compareSkills`.
 
 <a id="x3"></a>
-### [ ] X3 — All jobs in the feed
+### [x] X3 — All jobs in the feed
 **Do:** `browseJobs` in `match.ts`; the switch, list, filters and sort in `src/app/(app)/feed/`; `lib/feed-url.ts`;
 `api/jobs/route.ts`; `scripts/feed-browse-test.ts`; ARCHITECTURE §6.3.
 **Design:** [4.3 All jobs](TDD.md#43-all-jobs-browsejobs) · [5 UI](TDD.md#5-ui) · [6 API](TDD.md#6-api).
 **Done when:** `feed-browse-test` PASS (past the 5 cap; widening brings jobs in labelled with the right reason and no
 Apply; role text; skipped); Nitin's All jobs inside his profile lists the candidates ranked; `feed-sql-test` PASS.
+
+Done 2026-11-27: Nitin 134 jobs in All jobs inside his profile (24 of the first 25 match) vs 5 in today's picks; widened 9,344, every non-match with its reason; feed-sql-test PASS. `modules/jobs/browse.ts`, `lib/browse-url.ts` (in place of feed-url/api: the list is a server component), `feed/all-jobs.tsx`, `browse-apply.tsx`, `page.tsx`, `match.ts` feedRows options, ARCHITECTURE 6.3.
 
 <a id="x4"></a>
 ### [ ] X4 — Company page: matching jobs first

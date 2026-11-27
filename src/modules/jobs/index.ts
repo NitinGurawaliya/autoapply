@@ -28,3 +28,7 @@ export type { PublicJob } from "./public";
 export { similarJobs } from "./similar";
 export type { SimilarJob } from "./similar";
 export type { FitVerdict } from "./fit";
+export { BROWSE_PAGE, browseJobs } from "./browse";
+export type { BrowseCard, BrowsePage } from "./browse";
+export { profileFit } from "./profile-fit";
+export type { FitJob, FitProfile, ProfileFit } from "./profile-fit";

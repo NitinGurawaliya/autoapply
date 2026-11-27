@@ -416,7 +416,7 @@ export function scoreJob(
 }
 
 /** The job's skills for the score: the model's labels count only while they belong to this version of the posting. */
-function labelledSkills(job: { skills: string[]; skillsRequired: string[]; skillsHash: string | null; contentHash: string | null }): JobSkillsInput {
+export function labelledSkills(job: { skills: string[]; skillsRequired: string[]; skillsHash: string | null; contentHash: string | null }): JobSkillsInput {
   const labelled = job.skillsHash != null && job.skillsHash === (job.contentHash ?? "none");
   return { names: job.skills, required: labelled ? job.skillsRequired : null };
 }
@@ -624,7 +624,7 @@ function usesSkills(hits: string[]) {
   return `Uses your ${shown.length > 1 ? `${shown.slice(0, -1).join(", ")} and ${shown[shown.length - 1]}` : shown[0]}`;
 }
 
-function daysAgo(postedAt: Date) {
+export function daysAgo(postedAt: Date) {
   const elapsed = Date.now() - postedAt.getTime();
   return Math.max(0, Math.floor(elapsed / (24 * 60 * 60 * 1000)));
 }
@@ -652,6 +652,8 @@ export function dedupeListings<T extends { roleKey: string; location: string; so
 }
 
 export type FeedRow = {
+  /** All jobs (X3): how many rows the whole query found, on each row of a page. */
+  totalRows?: number;
   id: string;
   title: string;
   /** For the verdict cache (semantic.ts judgeJobs): read here, so the shortlist needs no second query. */
@@ -733,8 +735,21 @@ export async function feedRows(input: {
   readingGate?: boolean;
   /** The profile's "Never show me" values (P4); empty until then. */
   avoid?: readonly string[];
+  /** All jobs (Phase X, X3): a role or skill to find, in the title or among the posting's words. */
+  query?: string | null;
+  /** All jobs: the closeness floor (default SIMILARITY_FLOOR); 0 once the person searched or widened their fields. */
+  minSimilarity?: number;
+  /** All jobs: only jobs whose board states pay. */
+  payStated?: boolean;
+  /** All jobs: the jobs swiped left come back too (never the ones applied to). */
+  includeSkipped?: boolean;
+  /** All jobs: one page in this order, each row carrying the total (default: every row, by id). */
+  page?: { order: "match" | "new"; limit: number; offset: number } | null;
 }) {
   const onlyIds = input.onlyIds ?? null;
+  const query = input.query?.trim().toLowerCase() || null;
+  const queryWords = query ? query.split(/[^a-z0-9+#]+/).filter(Boolean) : [];
+  const page = input.page ?? null;
   // One row per skill: its words (all must be among the job's words, looked up in the GIN index on terms) and, for
   // a skill that is more than one word, the regex that then checks they appear in that exact spelling.
   const indexes: number[] = [];
@@ -787,7 +802,10 @@ export async function feedRows(input: {
         AND ${input.readingGate
           ? gateSql({ tracks: input.tracks, avoid: input.avoid })
           : Prisma.sql`(${input.tracks}::text[] IS NULL OR j.source = 'mock' OR j.track = ANY(${input.tracks}::text[]))`}
-        AND (${input.vector}::text IS NULL OR j.embedding IS NULL OR 1 - (j.embedding <=> ${input.vector}::halfvec) >= ${SIMILARITY_FLOOR})
+        AND (${input.vector}::text IS NULL OR j.embedding IS NULL OR 1 - (j.embedding <=> ${input.vector}::halfvec) >= ${input.minSimilarity ?? SIMILARITY_FLOOR})
+        -- All jobs (X3): a role or skill typed by the person, in the title or among the posting's words; pay stated.
+        AND (${query}::text IS NULL OR lower(j.title) LIKE ${`%${query ?? ""}%`} OR (cardinality(${queryWords}::text[]) > 0 AND j.terms @> ${queryWords}::text[]))
+        AND (NOT ${input.payStated ?? false}::boolean OR j."salaryMin" IS NOT NULL)
         AND (${onlyIds}::text[] IS NULL OR j.id = ANY(${onlyIds}::text[]))
         AND (${onlyIds}::text[] IS NOT NULL OR j."postedAt" >= ${input.cutoff})
         AND (${onlyIds}::text[] IS NOT NULL OR j."closedAt" IS NULL)
@@ -795,18 +813,22 @@ export async function feedRows(input: {
         -- A swiped job never comes back to the feed, left or right; the skipped view is the left ones alone.
         AND (${onlyIds}::text[] IS NOT NULL OR CASE WHEN ${input.skippedOnly ?? false}::boolean
                   THEN EXISTS (SELECT 1 FROM "Swipe" s WHERE s."userId" = ${input.userId} AND s."jobId" = j.id AND s.direction = 'left')
+                  WHEN ${input.includeSkipped ?? false}::boolean
+                  THEN NOT EXISTS (SELECT 1 FROM "Swipe" s WHERE s."userId" = ${input.userId} AND s."jobId" = j.id AND s.direction = 'right')
                   ELSE NOT EXISTS (SELECT 1 FROM "Swipe" s WHERE s."userId" = ${input.userId} AND s."jobId" = j.id) END)
     )
-    SELECT * FROM candidates
+    SELECT *${page ? Prisma.sql`, count(*) OVER ()::int AS "totalRows"` : Prisma.empty} FROM candidates
     WHERE NOT ${input.prefilter}
        OR source = 'mock'
        OR cardinality(hits) > 0
        OR regexp_split_to_array(lower(title), '[^a-z0-9+#]+') && ${input.titleWords}::text[]
-    ORDER BY id`;
+    ${page
+      ? Prisma.sql`ORDER BY ${page.order === "new" ? Prisma.sql`"postedAt" DESC` : Prisma.sql`similarity DESC NULLS LAST`}, id LIMIT ${page.limit} OFFSET ${page.offset}`
+      : Prisma.sql`ORDER BY id`}`;
 }
 
 /** Every word in a job title that titleTokens() would count as one of the candidate's title words (aliases included). */
-function titleWordsFor(currentTitle: string | null) {
+export function titleWordsFor(currentTitle: string | null) {
   const wanted = new Set(titleTokens(currentTitle ?? ""));
   const aliases = Object.entries(ROLE_ALIASES).filter(([, to]) => wanted.has(to)).map(([from]) => from);
   return [...wanted, ...aliases];

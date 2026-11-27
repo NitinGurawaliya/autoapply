@@ -21,6 +21,9 @@ import { DeckEmptyArt } from "@/components/patterns/drawings";
 import { DailyReading } from "@/components/patterns/daily-reveal";
 import { JobCardSkeleton } from "@/components/patterns/job-card";
 import { FeedTopBar } from "@/components/patterns/top-bar";
+import { browseHref, parseBrowseFilters } from "@/lib/browse-url";
+import { TRACKS } from "@/modules/jobs";
+import { AllJobsList, AllJobsSkeleton, BrowseFilterSheet, BrowseSearch, FeedModeSwitch } from "./all-jobs";
 import { FilterSheet } from "./filter-sheet";
 import { SwipeDeck } from "./swipe-deck";
 
@@ -108,6 +111,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
   const params = await searchParams;
+  if (one(params.mode) === "all") return <AllJobs userId={user.id} params={params} />;
   const filters = parseFeedFilters({
     boards: one(params.boards),
     country: one(params.country),
@@ -262,6 +266,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
       <Suspense fallback={null}>
         <GapsLine userId={user.id} />
       </Suspense>
+      {view === "new" ? <FeedModeSwitch mode="picks" picksHref={mainHref} /> : null}
       {view === "skipped" ? (
         <div className="flex items-center justify-between gap-3 px-5 pt-3">
           <h1 className="m-0 type-heading">Jobs you skipped</h1>
@@ -284,6 +289,24 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
           editFilters={sheet("edit")}
           widenFilters={sheet("widen")}
         />
+      </Suspense>
+    </>
+  );
+}
+
+/** All jobs (Phase X, X3): the switch, the search and filters, and the list streamed in below them. */
+async function AllJobs({ userId, params }: { userId: string; params: Query }) {
+  const profile = await db.profile.findUnique({ where: { userId }, select: { tracks: true, currentTitle: true, skills: true, experience: true } });
+  const myTracks = profile ? tracksOf(profile) : [];
+  const filters = parseBrowseFilters(params, TRACKS);
+  const page = Math.max(1, Number(one(params.page)) || 1);
+  return (
+    <>
+      <FeedTopBar usage={<DailyUsage userId={userId} />} filters={<BrowseFilterSheet filters={filters} myTracks={myTracks} />} />
+      <FeedModeSwitch mode="all" picksHref="/feed" />
+      <BrowseSearch filters={filters} />
+      <Suspense key={browseHref(filters, page)} fallback={<AllJobsSkeleton />}>
+        <AllJobsList userId={userId} filters={filters} page={page} />
       </Suspense>
     </>
   );
