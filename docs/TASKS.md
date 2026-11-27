@@ -349,3 +349,14 @@ Design: [docs/employers/TDD.md](employers/TDD.md) (v2, 27 Nov: build sheets in i
 - [x] [W6 — `/companies` A–Z and `/companies/<slug>`](employers/TASKS.md#w6)
 - [x] [W7 — Found by search: JobPosting on job pages, sitemap and robots](employers/TASKS.md#w7)
 - [ ] [W8 — End to end and switch-on](employers/TASKS.md#w8)
+
+## Phase X — A feed that shows what fits, explains what doesn't, and uses companies (owner, 27 Nov)
+
+Design: [docs/feed/TDD.md](feed/TDD.md). Tasks: [docs/feed/TASKS.md](feed/TASKS.md). Order X1 → X6.
+
+- [ ] [X1 — No dead end after today's picks](feed/TASKS.md#x1)
+- [ ] [X2 — One judgement of a job against the profile](feed/TASKS.md#x2)
+- [ ] [X3 — All jobs in the feed](feed/TASKS.md#x3)
+- [ ] [X4 — Company page: matching jobs first](feed/TASKS.md#x4)
+- [ ] [X5 — Apply to all that fit](feed/TASKS.md#x5)
+- [ ] [X6 — The employer in the feed](feed/TASKS.md#x6)
