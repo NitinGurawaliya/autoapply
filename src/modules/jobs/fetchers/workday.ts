@@ -88,7 +88,25 @@ const detailSchema = z.object({
     remoteType: z.string().optional(),
     externalUrl: z.string().optional(),
   }),
+  // The company the posting is for ("MRI Software India Private Limited"): the board's own name for its tenant.
+  hiringOrganization: z.object({ name: z.string().optional() }).passthrough().optional(),
 });
+
+/** A hiring organisation's name without "Private Limited", "Inc" and the like; null when empty. */
+export function cleanHiringName(name: string | null | undefined) {
+  const clean = (name ?? "").replace(/\b(india\s+)?(private|pvt\.?)\s+(limited|ltd\.?)|\b(inc|llc|ltd|limited|corporation|corp)\.?$/gi, "").replace(/[\s,]+$/, "").replace(/\s+/g, " ").trim();
+  return clean || null;
+}
+
+/** The hiring organisation most of a read's postings name (a Workday list names none; each posting's page does), or null. */
+export function hiringNameOf(jobs: Array<{ raw: Record<string, unknown> }>) {
+  const counts = new Map<string, number>();
+  for (const job of jobs) {
+    const name = typeof job.raw.hiringOrganization === "string" ? job.raw.hiringOrganization : null;
+    if (name) counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? null;
+}
 
 /** The India value of the tenant's location facets ("locationCountry", "locationHierarchy1", …), or null. */
 function indiaFacet(facets: z.infer<typeof facetValue>[], parameter?: string): { parameter: string; id: string } | null {
@@ -211,7 +229,7 @@ export async function fetchWorkday(slug: string, options: WorkdayOptions = {}): 
         applyUrl: info.externalUrl ?? `${site.origin}/${site.site}${posting.externalPath}`,
         postedAt,
         isRemote: /remote/i.test(info.remoteType ?? "") || /remote/i.test(location),
-        raw: { id: info.id, externalPath: posting.externalPath, location, startDate: info.startDate ?? null, remoteType: info.remoteType ?? null },
+        raw: { id: info.id, externalPath: posting.externalPath, location, startDate: info.startDate ?? null, remoteType: info.remoteType ?? null, hiringOrganization: cleanHiringName(parsed.data.hiringOrganization?.name) },
       });
     }
   };
@@ -227,6 +245,5 @@ export async function workdayName(slug: string, http: BoardHttp = processHttp) {
   const path = page?.jobPostings?.[0]?.externalPath;
   if (!path) return null;
   const body = (await http.fetch(`${site.api}${path}`, { headers: { Accept: "application/json" } }).then((r) => (r.ok ? r.json() : null)).catch(() => null)) as { hiringOrganization?: { name?: unknown } } | null;
-  const name = typeof body?.hiringOrganization?.name === "string" ? body.hiringOrganization.name : "";
-  return name.replace(/\b(india\s+)?(private|pvt\.?)\s+(limited|ltd\.?)|\b(inc|llc|ltd|limited|corporation|corp)\.?$/gi, "").replace(/[\s,]+$/, "").trim() || null;
+  return cleanHiringName(typeof body?.hiringOrganization?.name === "string" ? body.hiringOrganization.name : null);
 }

@@ -2,7 +2,8 @@ import { db } from "@/lib/db";
 import { SITES } from "@/modules/sources/sites";
 import { boardFromUrl } from "./boardSeeds";
 import { employerDomain, isGenericCompanyName } from "./domains";
-import { BOARD_PAGE, domainByName, jobHosts, LOGO_SOURCES, mentionedInJobs, ownSiteOf, slugKey } from "./logos";
+import { refreshEmployer } from "./employers";
+import { BOARD_PAGE, domainByName, jobHosts, LOGO_SOURCES, mentionedInJobs, nameByDomain, ownSiteOf, slugKey } from "./logos";
 
 // What a board account says about its company: its own website and its name (Phase W, docs/employers/TDD.md 4.4 and
 // 4.5). One read of the board's public page, the same address logos.ts reads, so the logo sweep and this one see the
@@ -101,7 +102,13 @@ export async function redirectDomain(companyId: string): Promise<string | null> 
   return null;
 }
 
-export type CompanyFacts = { domain: string | null; basis: DomainBasis | null; name: string | null };
+/** The company's own name from its board's page alone (no website lookup), or null. */
+export async function boardPageName(source: string, slug: string): Promise<string | null> {
+  const page = await readBoardPage(source, slug).catch(() => "");
+  return page ? nameFromBoardPage(source, page) : null;
+}
+
+export type CompanyFacts ={ domain: string | null; basis: DomainBasis | null; name: string | null };
 
 /**
  * One company's website domain and name, with the evidence, in the order of TDD 4.4: its board's own field, then (a
@@ -115,15 +122,20 @@ export async function fetchCompanyFacts(company: { id: string; source: string; s
     return { domain, basis: domain ? "redirect" : null, name: null };
   }
   const page = await readBoardPage(company.source, company.slug);
-  const name = page ? nameFromBoardPage(company.source, page) : null;
+  const boardName = page ? nameFromBoardPage(company.source, page) : null;
+  // A row named only by its board address (a Workday site, whose page names no company): the name of the domain found.
+  const named = async (facts: Omit<CompanyFacts, "name">): Promise<CompanyFacts> => ({
+    ...facts,
+    name: boardName ?? (facts.domain && isGenericCompanyName(company.name) ? await nameByDomain(facts.domain).catch(() => null) : null),
+  });
   const fromBoard = page ? employerDomain(websiteFromBoardPage(company.source, page)) : null;
-  if (fromBoard) return { domain: fromBoard, basis: "board", name };
+  if (fromBoard) return named({ domain: fromBoard, basis: "board" });
   const key = slugKey(company.source, company.slug);
   const fromLinks = employerDomain(ownSiteOf(await jobHosts(company.source, company.slug).catch(() => []), company.name, key));
-  if (fromLinks) return { domain: fromLinks, basis: "job_links", name };
+  if (fromLinks) return named({ domain: fromLinks, basis: "job_links" });
   const byName = await domainByName(company.name, key, (host) => mentionedInJobs(company.source, company.slug, host)).catch(() => null);
   const fromName = employerDomain(byName);
-  return { domain: fromName, basis: fromName ? "name_evidence" : null, name };
+  return named({ domain: fromName, basis: fromName ? "name_evidence" : null });
 }
 
 export type FactsRefresh = { checked: number; withDomain: number; renamed: number };
@@ -163,6 +175,11 @@ export async function refreshCompanyFacts(options: { limit: number; write: boole
       // is due again in a day (stamped 29 days back), not in 30.
       const retrySoon = !domain && SITE_SOURCES.includes(company.source);
       await db.$executeRaw`UPDATE "Company" SET domain = ${domain}, "domainBasis" = ${basis}, "domainCheckedAt" = now() - (${retrySoon ? 29 : 0}::int * interval '1 day'), name = coalesce(${rename}, name) WHERE id = ${company.id}`;
+      // A renamed row's employer takes the new name now (linkPending relinks only a changed domain).
+      if (rename) {
+        const row = await db.company.findUnique({ where: { id: company.id }, select: { employerId: true } });
+        if (row?.employerId) await refreshEmployer(row.employerId).catch(() => undefined);
+      }
     }
     await new Promise((resolve) => setTimeout(resolve, options.pauseMs ?? PAUSE_MS));
   }

@@ -52,7 +52,17 @@ export function employerDomain(urlOrHost: string | null | undefined): string | n
   return root;
 }
 
-/** A board's name for a company that says nothing about it ("Careers", "Jobs", empty): the facts sweep replaces it. */
+/**
+ * A name that is the board's address for the company, not its name: a Workday site ("mrisoftware.wd501/External_CareerSite",
+ * a discovered tenant whose site named no hiring organisation), a Zoho Recruit portal ("buc.zohorecruit.com/careers"),
+ * or a bare Workday site id ("External_CareerSite"). "Turn/River" and "AM/PM Door" are names.
+ */
+export function isBoardIdName(name: string | null | undefined): boolean {
+  const text = (name ?? "").trim();
+  return /^[a-z0-9-]+\.wd\d{1,3}(\/\S*)?$/i.test(text) || /^[a-z0-9-]+\.zohorecruit\.[a-z.]+(\/\S*)?$/i.test(text) || /^\S*External_\S*$/i.test(text);
+}
+
+/** A board's name for a company that says nothing about it ("Careers", "Jobs", empty, its board address): the facts sweep replaces it. */
 export function isGenericCompanyName(name: string | null | undefined): boolean {
-  return /^(|careers?|jobs?|career portal|careers page|job openings|current openings|openings|home|join us)$/i.test((name ?? "").trim());
+  return /^(|careers?|jobs?|career portal|careers page|job openings|current openings|openings|home|join us)$/i.test((name ?? "").trim()) || isBoardIdName(name);
 }

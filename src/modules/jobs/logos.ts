@@ -263,6 +263,34 @@ export async function domainByName(name: string, slug: string, mentioned: (host:
   return null;
 }
 
+/**
+ * The company Clearbit's suggest names for a domain ("cat.com" → "Caterpillar", "mrisoftware.com" → "MRI Software"),
+ * asked by the domain's first label and taken only from the suggestion with exactly that domain; null otherwise. For a
+ * board that names no company (Workday) once its domain is known.
+ */
+export async function nameByDomain(domain: string): Promise<string | null> {
+  return suggestedName(domain.split(".")[0] ?? "", (host) => host === domain);
+}
+
+/** The same by a bare label (a Workday tenant, "mrisoftware"): the suggestion whose domain's first label is exactly it. */
+export async function nameByLabel(label: string): Promise<string | null> {
+  return suggestedName(label, (host) => host.split(".")[0] === label.toLowerCase());
+}
+
+async function suggestedName(label: string, accept: (host: string) => boolean): Promise<string | null> {
+  if (label.length < 2) return null;
+  const suggestions = await fetch(`https://autocomplete.clearbit.com/v1/companies/suggest?query=${encodeURIComponent(label)}`, { signal: AbortSignal.timeout(10000) })
+    .then((response) => (response.ok ? (response.json() as Promise<Suggestion[]>) : []))
+    .catch(() => [] as Suggestion[]);
+  const hit = Array.isArray(suggestions)
+    ? suggestions.find((suggestion) => {
+        const host = suggestion.domain ? hostOf(suggestion.domain) : null;
+        return !!suggestion.name?.trim() && !!host && accept(host);
+      })
+    : undefined;
+  return hit?.name?.trim() ?? null;
+}
+
 /** Whether any of this company's jobs names the domain in its description or apply link. */
 export async function mentionedInJobs(source: string, slug: string, host: string) {
   const like = `%${host}%`;

@@ -5,6 +5,9 @@ import { afterIngest, afterIngestDeadline } from "./after-ingest";
 import { boardOf } from "./boards";
 import { GENTLE_BOARDS, GENTLE_GROUP_TIER, GENTLE_PER_TICK, GENTLE_SCALE, nextFetchAt, REFUSED, tierOf, type Tier } from "./cadence";
 import type { NaukriListing } from "./fetchers/naukri";
+import { isGenericCompanyName } from "./domains";
+import { nameBoardIdCompany } from "./employers";
+import { hiringNameOf } from "./fetchers/workday";
 import { classifyTitle } from "./functions";
 import type { BoardHttp, FetchedJob } from "./normalize";
 import { forgetJobVectors } from "./semantic";
@@ -79,7 +82,7 @@ export type CompanyResult = {
   error?: string;
 };
 
-export type IngestCompany = { id: string; source: string; slug: string; keepAbroad?: boolean; listHash?: string | null };
+export type IngestCompany = { id: string; source: string; slug: string; name?: string; keepAbroad?: boolean; listHash?: string | null };
 
 /** One company: fetch its board (one retry), create new jobs, update changed ones, close the ones it no longer lists. */
 export async function ingestCompany(company: IngestCompany, cutoff: number, options: { http?: BoardHttp } = {}): Promise<CompanyResult> {
@@ -112,6 +115,10 @@ export async function ingestCompany(company: IngestCompany, cutoff: number, opti
   const kept = jobs.filter((job) => job.postedAt.getTime() >= cutoff && storedFromBoard(company.source, job, company.keepAbroad));
   const written = await storeJobs(company, kept);
   const closed = await markClosed(company.id, company.source, jobs.map((job) => job.externalId));
+  // A Workday row named only by its site ("mrisoftware.wd501/External_CareerSite"): the hiring organisation its postings name.
+  if (company.source === "workday" && company.name !== undefined && isGenericCompanyName(company.name)) {
+    await nameBoardIdCompany(company.id, hiringNameOf(jobs)).catch(() => false);
+  }
   return { fetched: jobs.length, ...written, closed, indiaListed, listHash };
 }
 

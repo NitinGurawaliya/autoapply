@@ -40,6 +40,8 @@ function commonStart(names: string[]): string {
 export function displayName(rows: Array<{ name: string; source: string; slug?: string }>, domain: string | null): string {
   const seen = new Map<string, { name: string; count: number; self: boolean }>();
   for (const row of rows) {
+    // A board address ("mrisoftware.wd501/External_CareerSite") is never a name; judged before plainName cuts "india" out of it.
+    if (isGenericCompanyName(row.name)) continue;
     const name = plainName(row.name);
     if (!name || isGenericCompanyName(name)) continue;
     const entry = seen.get(name) ?? { name, count: 0, self: false };
@@ -89,6 +91,21 @@ export async function refreshEmployer(employerId: string, client?: Tx): Promise<
   };
   if (client) await run(client);
   else await db.$transaction(run, { timeout: 30000 });
+}
+
+/**
+ * Names a board row that carries only its board address ("mrisoftware.wd501/External_CareerSite") with the name its
+ * board or website gives (`name`), and its employer after it (unless the owner named that). A row with a real name, or
+ * a `name` that is itself generic, is left alone. True when the row was renamed.
+ */
+export async function nameBoardIdCompany(companyId: string, name: string | null | undefined): Promise<boolean> {
+  const clean = name?.replace(/\s+/g, " ").trim();
+  if (!clean || isGenericCompanyName(clean)) return false;
+  const row = await db.company.findUnique({ where: { id: companyId }, select: { name: true, employerId: true } });
+  if (!row || !isGenericCompanyName(row.name)) return false;
+  await db.company.update({ where: { id: companyId }, data: { name: clean } });
+  if (row.employerId) await refreshEmployer(row.employerId);
+  return true;
 }
 
 /** The loser's slug (and every alias pointing at it) becomes an alias of the survivor; the loser is deleted. */
