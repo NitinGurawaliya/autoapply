@@ -32,11 +32,13 @@ Apply; role text; skipped); Nitin's All jobs inside his profile lists the candid
 Done 2026-11-27: Nitin 134 jobs in All jobs inside his profile (24 of the first 25 match) vs 5 in today's picks; widened 9,344, every non-match with its reason; feed-sql-test PASS. `modules/jobs/browse.ts`, `lib/browse-url.ts` (in place of feed-url/api: the list is a server component), `feed/all-jobs.tsx`, `browse-apply.tsx`, `page.tsx`, `match.ts` feedRows options, ARCHITECTURE 6.3.
 
 <a id="x4"></a>
-### [ ] X4 — Company page: matching jobs first
+### [x] X4 — Company page: matching jobs first
 **Do:** `employer-pages.ts`, `app/companies/[slug]/page.tsx`, `job-cards.tsx`; `company-pages-smoke.ts` extended.
 **Design:** [4.4 Company page](TDD.md#44-company-page-signed-in).
 **Done when:** signed in, "Matches your profile" comes first with Apply and the others show a reason and no Apply;
 signed out unchanged; smoke PASS.
+
+Done 2026-11-27: Equifax signed in (test account): 1 role in "Matches your profile" with Apply, 6 others each with a reason, no Apply; smoke PASS (8 new checks). `browse.ts employerFits` (browse refactored to share it), `employer-pages.ts` (`fits`, `matched`), `[slug]/page.tsx`, `job-cards.tsx` (`notMatching`), `match.ts` feedRows `employerId`, ARCHITECTURE 6.25.
 
 <a id="x5"></a>
 ### [ ] X5 — Apply to all that fit

@@ -5,6 +5,7 @@ import { randomBytes } from "node:crypto";
 import { db } from "../src/lib/db";
 import { companyPagesEnabled } from "../src/lib/company-pages-gate";
 import { refreshEmployerCounts } from "../src/modules/jobs/employers";
+import { employerPage } from "../src/modules/jobs/employer-pages";
 
 const BASE = (process.env.BASE ?? "http://localhost:3000").replace(/\/$/, "");
 let failed = 0;
@@ -43,8 +44,8 @@ async function main() {
     const gh = await company("gh", multi.id);
     const lever = await company("lever", multi.id);
     const naukriCo = await company("nk", multi.id, "naukri");
-    await job(gh.id, "g1", "greenhouse", `W6 Greenhouse Role ${stamp}`);
-    await job(lever.id, "l1", "lever", `W6 Lever Role ${stamp}`);
+    const ghJob = await job(gh.id, "g1", "greenhouse", `W6 Greenhouse Role ${stamp}`);
+    const leverJob = await job(lever.id, "l1", "lever", `W6 Lever Role ${stamp}`);
     await job(lever.id, "l2", "lever", `W6 Abroad Role ${stamp}`, "abroad");
     const sentJob = await job(gh.id, "s1", "greenhouse", `W6 Senior Account Executive ${stamp}`);
     await job(naukriCo.id, "n1", "naukri", `W6 NAUKRI ONLY JOB ${stamp}`);
@@ -97,6 +98,28 @@ async function main() {
     ok("signed in: a line says what they have done here", /You have applied to 1 job here/.test(signedIn.body.replace(/<!-- -->/g, "")));
     ok("signed in: the job they applied to shows Sent in place of Apply", /Sent/.test(signedIn.body) && (signedIn.body.match(/\$ACTION_\d+:0/g) ?? []).length < (page.body.match(/\$ACTION_\d+:0/g) ?? []).length);
     ok("signed out: no personal line and no Sent", !/You have applied/.test(page.body) && !/>Sent</.test(page.body));
+
+    // Phase X, X4: signed in, the jobs are judged against the profile; the matching ones come first, the rest say why.
+    const flat = signedIn.body.replace(/<!-- -->/g, "");
+    const head = flat.indexOf("Matches your profile");
+    ok("signed in: a Matches your profile group comes first", head > -1 && head < flat.indexOf(`W6 Greenhouse Role ${stamp}`) && flat.includes("Other roles here"));
+    ok("signed in: a job outside the profile says why", /Doesn(&#x27;|')t match your profile: <\/span>Not a tech role/.test(flat));
+    ok("signed in: a job on a board the agent can't use says so", flat.includes("Your agent can&#x27;t apply on this board yet") || flat.includes("Your agent can't apply on this board yet"));
+    ok("signed in: no Apply on a job that doesn't match", (signedIn.body.match(/\$ACTION_\d+:0/g) ?? []).length === 0, String((signedIn.body.match(/\$ACTION_\d+:0/g) ?? []).length));
+    ok("signed out: no fit shown", !/Matches your profile|Doesn(&#x27;|')t match your profile/.test(page.body));
+    const fits = new Map([
+      [ghJob.id, { matches: true, hard: false, score: 80, reasons: [] }],
+      [leverJob.id, { matches: false, hard: true, score: null, reasons: ["W6 reason"] }],
+      [sentJob.id, { matches: true, hard: false, score: 90, reasons: [] }],
+    ]);
+    const split = await employerPage(`w6-multi-${stamp}`, 1, { q: "", department: null }, fits);
+    ok(
+      "the matching jobs leave the pages for their own group, best first",
+      split?.kind === "page" && split.matched.map((row) => row.id).join() === [sentJob.id, ghJob.id].join() && split.india.every((row) => !fits.get(row.id)?.matches) && split.indiaTotal === split.india.length,
+    );
+    ok("the others carry their reason", split?.kind === "page" && split.india.find((row) => row.id === leverJob.id)?.fit?.reasons[0] === "W6 reason");
+    const plain = await employerPage(`w6-multi-${stamp}`, 1);
+    ok("without fits the page is as before", plain?.kind === "page" && plain.matched.length === 0 && [...plain.india, ...plain.abroad].every((row) => row.fit === null));
 
     ok("a Naukri-only employer is a 404", (await get(`/companies/w6-naukrionly-${stamp}`)).status === 404);
     const everything = [index, page, await get("/companies/browse/w")].map((r) => r.body).join("\n");

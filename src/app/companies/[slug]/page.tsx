@@ -15,6 +15,7 @@ import { daysSince, postedLabel } from "@/lib/job-facts";
 import { absoluteUrl, jobPath } from "@/lib/job-slug";
 import { shareLinksEnabled } from "@/lib/share-gate";
 import { employerPage, myApplicationsAt, parseEmployerFilters, type EmployerJobRow, type MyApplication } from "@/modules/jobs/employer-pages";
+import { employerFits } from "@/modules/jobs/browse";
 import { companyHref, CountHeading, Crumbs, Filters, JsonLd, Pager } from "../parts";
 import { JobCard, JobCards, type JobStatus } from "../job-cards";
 
@@ -64,13 +65,16 @@ function factsOf(job: EmployerJobRow): string[] {
 export default async function CompanyPage({ params, searchParams }: Props) {
   const [{ slug }, query] = await Promise.all([params, searchParams]);
   const filters = filtersOf(query);
-  const found = await load(slug, pageOf(query), filters.q, filters.department ?? "");
-  if (!found) notFound();
-  if (found.kind === "redirect") permanentRedirect(`/companies/${found.slug}`);
-  const { employer, india, abroad, page, pages, total, indiaTotal, all, newThisWeek, departments } = found;
-  // Signed in: what they have already done at this employer, and the match the app has already worked out for them.
-  const user = await getCurrentUser();
-  const mine = user ? await myApplicationsAt(user.id, employer.id, [...india, ...abroad].map((job) => job.id)) : null;
+  const [first, user] = await Promise.all([load(slug, pageOf(query), filters.q, filters.department ?? ""), getCurrentUser()]);
+  if (!first) notFound();
+  if (first.kind === "redirect") permanentRedirect(`/companies/${first.slug}`);
+  // Signed in with a profile (Phase X, X4): each job judged against it; the matching ones come first, the rest say why.
+  const fits = user?.hasProfile ? await employerFits(user.id, first.employer.id) : null;
+  const found = fits ? ((await employerPage(slug, pageOf(query), filters, fits)) ?? first) : first;
+  if (found.kind !== "page") notFound();
+  const { employer, matched, india, abroad, page, pages, total, indiaTotal, all, newThisWeek, departments } = found;
+  // Signed in: what they have already done at this employer.
+  const mine = user ? await myApplicationsAt(user.id, employer.id, [...matched, ...india, ...abroad].map((job) => job.id)) : null;
   const statusOf = (application: MyApplication | undefined): JobStatus | null => {
     if (!application) return null;
     const meta = statusMeta(application.status);
@@ -92,10 +96,12 @@ export default async function CompanyPage({ params, searchParams }: Props) {
           isNew={job.isNew}
           facts={factsOf(job)}
           salary={job.salary}
-          score={user?.hasProfile ? cachedFeedScore(user.id, job.id) : null}
+          score={job.fit ? job.fit.score : user?.hasProfile ? cachedFeedScore(user.id, job.id) : null}
           status={statusOf(mine?.byJob.get(job.id))}
           href={linked ? `${jobPath({ id: job.id, title: job.title, company: { name: job.companyName } })}?s=co` : null}
-          apply={linked && job.applyable ? applyFromShare.bind(null, job.id) : null}
+          // A job that doesn't match the profile has no Apply (owner, 27 Nov): its reason shows instead.
+          apply={linked && job.applyable && (!job.fit || job.fit.matches) ? applyFromShare.bind(null, job.id) : null}
+          notMatching={job.fit && !job.fit.matches ? job.fit.reasons : null}
         />
       ))}
     </JobCards>
@@ -189,6 +195,19 @@ export default async function CompanyPage({ params, searchParams }: Props) {
             </p>
           ) : null}
           {!filtered && employer.openIndia === 0 ? <ShareNotice title="None in India right now">Its open jobs are in other countries.</ShareNotice> : null}
+          {fits ? (
+            <section className="mt-6">
+              <CountHeading count={matched.length}>Matches your profile</CountHeading>
+              {matched.length > 0 ? (
+                cards(matched)
+              ) : (
+                <p className="m-0 mt-2 type-meta text-muted-foreground">
+                  None of {employer.name}&apos;s open roles{filtered ? " here" : ""} match your profile right now. Each role below says why.
+                </p>
+              )}
+            </section>
+          ) : null}
+          {fits && india.length + abroad.length > 0 ? <h2 className="m-0 mt-8 type-section">Other roles here</h2> : null}
           {india.length > 0 ? (
             <section className="mt-6">
               <CountHeading count={indiaTotal}>In India</CountHeading>

@@ -745,6 +745,8 @@ export async function feedRows(input: {
   includeSkipped?: boolean;
   /** All jobs: one page in this order, each row carrying the total (default: every row, by id). */
   page?: { order: "match" | "new"; limit: number; offset: number } | null;
+  /** The company page (X4): only this employer's jobs. */
+  employerId?: string | null;
 }) {
   const onlyIds = input.onlyIds ?? null;
   const query = input.query?.trim().toLowerCase() || null;
@@ -806,6 +808,7 @@ export async function feedRows(input: {
         -- All jobs (X3): a role or skill typed by the person, in the title or among the posting's words; pay stated.
         AND (${query}::text IS NULL OR lower(j.title) LIKE ${`%${query ?? ""}%`} OR (cardinality(${queryWords}::text[]) > 0 AND j.terms @> ${queryWords}::text[]))
         AND (NOT ${input.payStated ?? false}::boolean OR j."salaryMin" IS NOT NULL)
+        AND (${input.employerId ?? null}::text IS NULL OR c."employerId" = ${input.employerId ?? null})
         AND (${onlyIds}::text[] IS NULL OR j.id = ANY(${onlyIds}::text[]))
         AND (${onlyIds}::text[] IS NOT NULL OR j."postedAt" >= ${input.cutoff})
         AND (${onlyIds}::text[] IS NOT NULL OR j."closedAt" IS NULL)

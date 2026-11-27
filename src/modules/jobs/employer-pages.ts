@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { DEPARTMENTS, departmentOf, isDepartment, type DepartmentId } from "@/lib/department";
 import { APPLY_BOARDS } from "./pool";
+import type { ProfileFit } from "./profile-fit";
 import { PRIVATE_SOURCES } from "./private-sources";
 import { formatSalary } from "./salary";
 
@@ -31,12 +32,16 @@ export type EmployerJobRow = {
   salary: string | null;
   /** The agent applies on this job's board. */
   applyable: boolean;
+  /** Signed in with a profile (X4): whether the job matches it and why not; null signed out. */
+  fit: ProfileFit | null;
 };
 export type EmployerFilters = { q: string; department: DepartmentId | null };
 export type EmployerPage =
   | {
       kind: "page";
       employer: EmployerHead;
+      /** Signed in (X4): the jobs matching the person's profile, best first, whatever the page; empty signed out. */
+      matched: EmployerJobRow[];
       india: EmployerJobRow[];
       abroad: EmployerJobRow[];
       page: number;
@@ -157,7 +162,13 @@ export async function employerRoute(slug: string): Promise<{ kind: "ok" } | { ki
  * counts follow the search. An old slug (a merged employer's) gives a redirect; an unknown slug, or an employer with no
  * open public job, gives null (a 404). One read of the employer's jobs (a few thousand rows at most), filtered here.
  */
-export async function employerPage(slug: string, page: number, filters: EmployerFilters = { q: "", department: null }): Promise<EmployerPage | null> {
+export async function employerPage(
+  slug: string,
+  page: number,
+  filters: EmployerFilters = { q: "", department: null },
+  /** Signed in (X4, browse.ts employerFits): each job's fit to the person's profile; matching jobs leave the pages. */
+  fits: Map<string, ProfileFit> | null = null,
+): Promise<EmployerPage | null> {
   if (!/^[a-z0-9-]{2,60}$/.test(slug)) return null;
   const employer = await db.employer.findUnique({ where: { slug }, select: { id: true, slug: true, name: true, logoUrl: true, domain: true, openJobs: true, openIndia: true } });
   if (!employer) {
@@ -185,7 +196,20 @@ export async function employerPage(slug: string, page: number, filters: Employer
   const departments = DEPARTMENTS.filter((department) => counts.has(department.id))
     .map((department) => ({ id: department.id, label: department.label, count: counts.get(department.id) ?? 0 }))
     .sort((a, b) => b.count - a.count || DEPARTMENTS.findIndex((d) => d.id === a.id) - DEPARTMENTS.findIndex((d) => d.id === b.id));
-  const shown = filters.department ? matching.filter((row) => row.department === filters.department) : matching;
+  const inDepartment = filters.department ? matching.filter((row) => row.department === filters.department) : matching;
+  // Signed in: a job without a fit was left out of the person's judgement, for the reason given here.
+  const fitOf = (row: (typeof matching)[number]): ProfileFit | null => {
+    if (!fits) return null;
+    const found = fits.get(row.id);
+    if (found) return found;
+    const reason = !BOARDS.includes(row.source) ? "Your agent can't apply on this board yet" : !row.india ? "Outside India" : "Posted over 60 days ago";
+    return { matches: false, hard: true, score: null, reasons: [reason] };
+  };
+  const matched = inDepartment
+    .filter((row) => fits?.get(row.id)?.matches)
+    .sort((a, b) => (fits?.get(b.id)?.score ?? 0) - (fits?.get(a.id)?.score ?? 0));
+  const matchedIds = new Set(matched.map((row) => row.id));
+  const shown = matchedIds.size > 0 ? inDepartment.filter((row) => !matchedIds.has(row.id)) : inDepartment;
   const pages = Math.max(1, Math.ceil(shown.length / JOBS_PER_PAGE));
   const at = Math.min(Math.max(1, Math.floor(page) || 1), pages);
   const slice = shown.slice((at - 1) * JOBS_PER_PAGE, at * JOBS_PER_PAGE);
@@ -202,6 +226,7 @@ export async function employerPage(slug: string, page: number, filters: Employer
     experience: row.experienceMin == null ? null : row.experienceMin <= 0 ? "Fresher" : `${row.experienceMin}+ yrs`,
     salary: formatSalary({ min: row.salaryMin, max: row.salaryMax, currency: row.salaryCurrency, period: row.salaryPeriod }),
     applyable: BOARDS.includes(row.source),
+    fit: fitOf(row),
   });
   const boards = await db.$queryRaw<Array<{ source: string }>>`
     SELECT j.source FROM "Company" c JOIN "Job" j ON j."companyId" = c.id
@@ -210,6 +235,7 @@ export async function employerPage(slug: string, page: number, filters: Employer
   return {
     kind: "page",
     employer: { ...employer, boards: boards.map((row) => row.source) },
+    matched: matched.map(card),
     india: slice.filter((row) => row.india).map(card),
     abroad: slice.filter((row) => !row.india).map(card),
     page: at,

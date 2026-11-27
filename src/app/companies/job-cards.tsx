@@ -175,9 +175,11 @@ export type JobCardProps = {
   score: number | null;
   /** What already happened to this job for the signed-in person. */
   status: JobStatus | null;
+  /** Signed in (Phase X, X4): why the job doesn't match their profile; the page gives such a card no Apply. */
+  notMatching?: string[] | null;
 };
 
-export function JobCard({ id, title, department, departmentLabel, isNew, facts, salary, href, apply, score, status }: JobCardProps) {
+export function JobCard({ id, title, department, departmentLabel, isNew, facts, salary, href, apply, score, status, notMatching }: JobCardProps) {
   const activeId = useContext(ActiveJob);
   const active = activeId === id;
   return (
@@ -212,6 +214,12 @@ export function JobCard({ id, title, department, departmentLabel, isNew, facts, 
               {facts.join(" · ")}
               {salary ? <span className="ml-2 font-mono text-foreground">{salary}</span> : null}
             </p>
+            {notMatching && notMatching.length > 0 && !status ? (
+              <p className="m-0 mt-1 type-meta text-muted-foreground">
+                <span className="font-semibold text-foreground">Doesn&apos;t match your profile: </span>
+                {notMatching.slice(0, 2).join(" · ")}
+              </p>
+            ) : null}
           </div>
         </div>
         <div className="flex flex-none items-center justify-between gap-4 lg:justify-end">
