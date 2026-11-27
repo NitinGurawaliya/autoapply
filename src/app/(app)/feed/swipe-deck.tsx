@@ -10,7 +10,7 @@ import { Icon } from "@/components/ui/icons";
 import { SegmentedProgress } from "@/components/ui/segmented-progress";
 import { EmptyState } from "@/components/patterns/content";
 import { DeckDoneArt } from "@/components/patterns/drawings";
-import type { JobCardData } from "@/components/patterns/job-card";
+import { JobCardSkeleton, type JobCardData } from "@/components/patterns/job-card";
 import { StackCount, SwipeStage, type Direction, type SwipeStageHandle } from "@/components/patterns/swipe-stage";
 import { AgentToast } from "@/components/patterns/agent-toast";
 import { DailyReveal, type RevealPick } from "@/components/patterns/daily-reveal";
@@ -21,7 +21,9 @@ import { statusMeta } from "@/lib/status-meta";
 import type { DailyView, FeedJob, FeedView } from "@/modules/jobs";
 import { markOpenedFromFeed } from "../jobs/[id]/feed-back-link";
 
-const REFILL_BELOW = 5;
+// More cards are fetched in the background while this many or fewer are left, so the deck never runs dry while more
+// jobs match (owner, 27 Nov: "keep fetching in the background so the user doesn't have to reload").
+const REFILL_BELOW = 10;
 const TOAST_POLL_MS = 1500;
 // While the agent works the toast stays (a mock run takes ~30 s, a wait in the queue can be longer); a new right swipe
 // replaces it. Once the outcome is in: sent and needs-you go quickly (the needs-you sheet opens by itself), a
@@ -172,16 +174,55 @@ export function SwipeDeck({
   // Today's reveal (Phase R) while unseen: what the agent did, played before the cards. Only in the default view.
   const [reveal, setReveal] = useState(view === "new" && daily?.reveal && initial.length >= 2 ? daily.reveal : null);
 
+  // The deck's own feed address: the page's, until today's set is done and the deck carries on with the rest (rest=1).
+  const [feedQuery, setFeedQuery] = useState(query);
+  const restQuery = [query, "rest=1"].filter(Boolean).join("&");
+  // Past today's set, in place (27 Nov): the rest of the ranked list, fetched in the background while the set's last
+  // cards are on screen; empty when nothing more matches, null until asked.
+  const [rest, setRest] = useState<FeedJob[] | null>(null);
+  const restLoading = useRef(false);
+  const [pastSet, setPastSet] = useState(false);
+
   function setDeck(next: FeedJob[]) {
     deck.current = next;
     setCards(next);
   }
 
+  async function loadRest() {
+    if (restLoading.current) return;
+    restLoading.current = true;
+    try {
+      const response = await fetch(`/api/jobs?${restQuery}`, { cache: "no-store" });
+      const body = response.ok ? ((await response.json()) as { jobs: FeedJob[] }) : { jobs: [] };
+      setRest(body.jobs.filter((job) => !seen.current.has(job.id) && !deck.current.some((card) => card.id === job.id)));
+    } catch {
+      setRest([]);
+    }
+  }
+
+  // Today's set with no batch left: fetch what follows it once its last cards are near, and when the set is done carry
+  // on with those cards (no reload, no button); nothing more to show keeps the day's end screen.
+  const setDone = Boolean(set && !set.more && cards.length === 0);
+  useEffect(() => {
+    if (set && !set.more && cards.length <= REFILL_BELOW) void loadRest();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadRest guards itself; it runs once per deck
+  }, [set, cards.length]);
+  useEffect(() => {
+    if (!setDone || !rest || rest.length === 0) return;
+    const fresh = rest.filter((job) => !seen.current.has(job.id));
+    if (fresh.length === 0) return;
+    setFeedQuery(restQuery);
+    setSet(null);
+    setPastSet(true);
+    setDeck(fresh);
+    setRest(null);
+  }, [setDone, rest, restQuery]);
+
   async function refill() {
     if (refilling.current) return;
     refilling.current = true;
     try {
-      const response = await fetch(`/api/jobs?${query}`, { cache: "no-store" });
+      const response = await fetch(`/api/jobs?${feedQuery}`, { cache: "no-store" });
       if (!response.ok) return;
       const body = (await response.json()) as { jobs: FeedJob[] };
       const have = new Set(deck.current.map((job) => job.id));
@@ -300,7 +341,8 @@ export function SwipeDeck({
     }
     // In the skipped view a left swipe keeps the job skipped: there is nothing new to save.
     if (!(view === "skipped" && direction === "left")) void send(job, direction, toastKey);
-    // Inside today's set the deck holds just the release: nothing is fetched until "4 more".
+    // Inside today's set the deck holds just the release: nothing is fetched until "4 more" (what follows the set is
+    // fetched by loadRest above).
     if (!set && deck.current.length <= REFILL_BELOW) void refill();
   }
 
@@ -458,6 +500,17 @@ export function SwipeDeck({
   }
 
   if (!top && set) {
+    // The set is done and what follows it is still on its way: a moment of the card skeleton, not the end screen.
+    if (!set.more && (rest === null || rest.length > 0)) {
+      return (
+        <>
+          <div className="flex flex-1 flex-col justify-center px-5" aria-busy="true" aria-label="Loading more jobs">
+            <JobCardSkeleton />
+          </div>
+          {toastNode}
+        </>
+      );
+    }
     return (
       <>
         <DayDone total={set.total} sent={sentToday ?? stats.sentToday} filling={inProgress ?? stats.inProgress} waiting={waiting?.length ?? 0} />
@@ -512,17 +565,17 @@ export function SwipeDeck({
             Today&apos;s jobs
           </p>
         ) : (
-          <StackCount total={cards.length} label={view === "skipped" ? "you skipped" : "in your feed"} />
+          <StackCount total={cards.length} label={view === "skipped" ? "you skipped" : pastSet ? "more that match you" : "in your feed"} />
         )}
         <SwipeStage
           ref={stage}
-          top={{ id: top.id, source: top.source, card: cardData(top, query) }}
-          next={next ? { id: next.id, card: cardData(next, query) } : undefined}
-          after={after ? { id: after.id, card: cardData(after, query) } : undefined}
+          top={{ id: top.id, source: top.source, card: cardData(top, feedQuery) }}
+          next={next ? { id: next.id, card: cardData(next, feedQuery) } : undefined}
+          after={after ? { id: after.id, card: cardData(after, feedQuery) } : undefined}
           onCommit={swipe}
           onOpen={() => {
             markOpenedFromFeed(top.id);
-            router.push(jobHref(top.id, query));
+            router.push(jobHref(top.id, feedQuery));
           }}
         />
       </div>

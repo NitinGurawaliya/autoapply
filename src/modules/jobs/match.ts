@@ -335,10 +335,13 @@ const UNSTATED_CAP = 74;
  * feed shows only cards scoring FEED_FLOOR (65) or more, but never fewer than FEED_FLOOR_MIN (5): a thin profile gets its
  * best few, not an empty feed. FEED_FLOOR=0 turns it off; the same value on every process. Not applied to the skipped
  * view (it lists what the user skipped) nor to the evaluation, which compares rules on the whole ranked list.
+ * Off by default since 27 Nov (owner: "show all the jobs in the feed, not a batch of five"): with it on, a thin profile
+ * saw 5 cards and the next 5 only after a reload (Nitin: 25 jobs passed every rule and the minimum, 5 were shown). The
+ * deck now shows the whole ranked list, strongest first; FEED_FLOOR=65 turns the cut back on.
  */
 export const feedFloor = () => {
   const value = Number(process.env.FEED_FLOOR);
-  return process.env.FEED_FLOOR !== undefined && process.env.FEED_FLOOR !== "" && Number.isFinite(value) ? Math.max(0, value) : 65;
+  return process.env.FEED_FLOOR !== undefined && process.env.FEED_FLOOR !== "" && Number.isFinite(value) ? Math.max(0, value) : 0;
 };
 export const feedFloorMin = () => {
   const value = Number(process.env.FEED_FLOOR_MIN);

@@ -9,7 +9,8 @@ import { db } from "../src/lib/db";
 import { dropFromFeed, forgetFeed } from "../src/lib/feed-cache";
 import { deleteAccount } from "../src/modules/account";
 import { dailyView, ensureDailySet, hasSetToday, isDefaultFeed, listFeed, markRevealed, parseFeedFilters, releaseMore } from "../src/modules/jobs";
-import { pushDailySets } from "../src/modules/jobs/daily";
+import { PER_EMPLOYER, pushDailySets, spreadEmployers } from "../src/modules/jobs/daily";
+import { employerKey } from "../src/modules/governance";
 
 let failed = 0;
 function check(name: string, ok: boolean, detail = "") {
@@ -47,7 +48,11 @@ async function main() {
     check("two requests at once get the same set", JSON.stringify(a?.jobIds) === JSON.stringify(b?.jobIds));
     const set = a!.jobIds;
     const ranked = (await listFeed(user.id, parseFeedFilters({}))).map((job) => job.id);
-    check("the set is the top 12 of the ranked feed, in order", JSON.stringify(set) === JSON.stringify(ranked.slice(0, 12)));
+    // The top of the ranked feed with at most 2 of one employer (Phase X, X6), as the set builder takes it.
+    const owners = await db.job.findMany({ where: { id: { in: ranked } }, select: { id: true, companyId: true, company: { select: { employerId: true } } } });
+    const keyOf = new Map(owners.map((job) => [job.id, employerKey({ employerId: job.company.employerId, companyId: job.companyId })]));
+    const expected = spreadEmployers(ranked, (id) => keyOf.get(id) ?? id, PER_EMPLOYER, 12);
+    check("the set is the top 12 of the ranked feed (2 per employer at most), in order", JSON.stringify(set) === JSON.stringify(expected));
     // Phase R: what the agent did is kept with the set, and the day's reveal is offered until it is seen.
     const stats = a?.stats;
     check("the set keeps what the agent did (read, fields, fits, a field sample)", !!stats && stats.read > 0 && stats.fields >= stats.fits && stats.fits >= 12 && stats.field.length > 0 && stats.field.length <= 130 && stats.field.every((f) => typeof f.company === "string"), JSON.stringify({ ...stats, field: stats?.field.length }));
