@@ -23,7 +23,7 @@ export function ApplyAll({
   const [state, submit, pending] = useActionState(action, null);
   return (
     <Sheet>
-      <SheetTrigger render={<Button variant="primary" size="lg" className="mt-3 w-full rounded-full lg:w-auto" />}>
+      <SheetTrigger render={<Button variant="primary" size="lg" className="mt-3 w-full lg:w-auto" />}>
         Apply to all {jobs.length} that fit
         <Icon name="arrowRight" size={16} />
       </SheetTrigger>

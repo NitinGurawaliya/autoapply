@@ -39,15 +39,15 @@ export function BrowseApply({ jobId, company }: { jobId: string; company: string
 
   if (state.kind === "sent") {
     return (
-      <Link href={`/applications/${state.applicationId}`} className="flex h-11 flex-none items-center gap-2 rounded-full px-4 type-body font-semibold text-foreground ring-1 ring-line-strong active:bg-sunk">
-        <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-foreground" />
-        Applying
+      <Link href={`/applications/${state.applicationId}`} className="flex h-11 flex-none items-center gap-2 rounded-control px-4 type-body font-semibold text-foreground ring-1 ring-line-strong active:bg-sunk">
+        <Icon name="check" size={16} />
+        Sent to your agent
       </Link>
     );
   }
   if (state.kind === "blocked") return <span className="flex-none type-meta text-muted-foreground">{state.text}</span>;
   return (
-    <Button variant="primary" size="md" className="flex-none rounded-full" disabled={state.kind === "busy"} aria-busy={state.kind === "busy"} onClick={() => void apply()}>
+    <Button variant="primary" size="md" className="flex-none" disabled={state.kind === "busy"} aria-busy={state.kind === "busy"} onClick={() => void apply()}>
       {state.kind === "busy" ? "Sending…" : "Apply"}
       {state.kind === "busy" ? null : <Icon name="arrowRight" size={16} />}
     </Button>

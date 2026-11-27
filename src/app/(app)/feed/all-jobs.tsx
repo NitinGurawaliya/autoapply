@@ -77,9 +77,9 @@ export function BrowseFilterSheet({ filters, myTracks }: { filters: BrowseFilter
 /** Today's picks | All jobs: two links, the current one filled. */
 export function FeedModeSwitch({ mode, picksHref }: { mode: "picks" | "all"; picksHref: string }) {
   const tab = (selected: boolean) =>
-    `flex h-9 flex-1 items-center justify-center rounded-full type-body font-semibold no-underline ${selected ? "bg-inverse text-inverse-foreground" : "text-muted-foreground active:text-foreground"}`;
+    `flex h-9 flex-1 items-center justify-center rounded-control type-body font-semibold no-underline ${selected ? "bg-inverse text-inverse-foreground" : "text-muted-foreground active:text-foreground"}`;
   return (
-    <nav aria-label="Feed" className="mx-5 mt-3 flex rounded-full p-1 ring-1 ring-line">
+    <nav aria-label="Feed" className="mx-5 mt-3 flex rounded-control p-1 ring-1 ring-line">
       <Link href={picksHref} aria-current={mode === "picks" ? "page" : undefined} className={tab(mode === "picks")}>
         Today&apos;s picks
       </Link>
@@ -158,7 +158,7 @@ function BrowseJobCard({ job }: { job: BrowseCard }) {
       {fit.matches ? (
         <div className="mt-3 flex items-center justify-between gap-3">
           <span className="flex items-center gap-1.5 type-meta font-semibold text-foreground">
-            <span aria-hidden="true" className="size-2 rounded-full bg-primary" />
+            <Icon name="check" size={16} />
             Matches your profile
           </span>
           <BrowseApply jobId={job.id} company={job.company} />
