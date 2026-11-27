@@ -51,6 +51,8 @@ export const BOARD_DAY_QUEUE = "board-day";
 /** Tick mode (INGEST_MODE=tick, M2): every few minutes the tick sends each company due for a read its own job. */
 export const INGEST_TICK_QUEUE = "ingest-tick";
 export const INGEST_COMPANY_QUEUE = "ingest-company";
+/** Phase Y, Y2: one job per inbound WhatsApp message (modules/whatsapp, worker/handlers/whatsapp-inbound.ts). */
+export const WHATSAPP_INBOUND_QUEUE = "whatsapp-inbound";
 
 async function ensureQueue(boss: PgBoss, name: string, options?: Parameters<PgBoss["createQueue"]>[1]) {
   const existing = await boss.getQueue(name);
@@ -77,7 +79,7 @@ export function getBoss(role: "web" | "worker" = "web") {
     boss.on("error", (error: Error) => console.error(`queue: ${error.message.slice(0, 160)}`));
     const starting = boss.start().then(async (started) => {
       await Promise.all([
-        ...[...APPLY_QUEUES, INGEST_QUEUE, PRESCAN_QUEUE, DISCOVER_QUEUE, BOARD_DAY_QUEUE, INGEST_TICK_QUEUE, SOURCE_CONNECT_QUEUE, INGEST_SOURCE_QUEUE, SOURCE_INGEST_TICK, READER_PLAN_QUEUE, READER_RUN_QUEUE].map((name) => ensureQueue(started, name)),
+        ...[...APPLY_QUEUES, INGEST_QUEUE, PRESCAN_QUEUE, DISCOVER_QUEUE, BOARD_DAY_QUEUE, INGEST_TICK_QUEUE, SOURCE_CONNECT_QUEUE, INGEST_SOURCE_QUEUE, SOURCE_INGEST_TICK, READER_PLAN_QUEUE, READER_RUN_QUEUE, WHATSAPP_INBOUND_QUEUE].map((name) => ensureQueue(started, name)),
         // One job per company at most, queued or running: a company still waiting is not sent again by the next tick.
         ensureQueue(started, INGEST_COMPANY_QUEUE, { policy: "exclusive" }),
       ]);
@@ -161,6 +163,17 @@ export async function enqueueIngestCompanies(companies: Array<{ id: string; sour
     sent += ids?.length ?? 0;
   }
   return sent;
+}
+
+/**
+ * One inbound WhatsApp message (Y2). `group` is a key of the sender, not the number (modules/whatsapp phoneKey): the worker
+ * takes one job per group at a time (groupConcurrency 1), so a user's messages are handled in order and none is dropped.
+ * The job carries the sender and the text for the minutes it lives: it is deleted an hour after it completes (the only
+ * place besides WhatsAppLink a number is held, ARCHITECTURE 6.25).
+ */
+export async function enqueueWhatsAppInbound(data: Record<string, unknown>, group: string) {
+  const boss = await getBoss();
+  return boss.send(WHATSAPP_INBOUND_QUEUE, data, { group: { id: group }, expireInSeconds: 120, retryLimit: 2, retryDelay: 5, retentionSeconds: 3600, deleteAfterSeconds: 3600 });
 }
 
 export async function enqueueIngest(days: number) {

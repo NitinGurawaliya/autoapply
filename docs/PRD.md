@@ -64,7 +64,7 @@ Indian software engineers with 0–5 years' experience applying to startups and 
 
 ## 8. Out of scope
 
-Payments, mobile app, push notifications, WhatsApp / extension / MCP, Workday apply, resume tailoring, cover-letter studio, interview prep, admin panel, cloud deployment of the worker (it runs on the laptop for the demo but is a separate process already).
+Payments, mobile app, push notifications, WhatsApp (taken into scope 26 Nov: Phase Y, `docs/whatsapp/TDD.md`) / extension / MCP, Workday apply, resume tailoring, cover-letter studio, interview prep, admin panel, cloud deployment of the worker (it runs on the laptop for the demo but is a separate process already).
 
 ## 9. Hard rules (also in CLAUDE.md)
 

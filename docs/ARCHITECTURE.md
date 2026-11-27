@@ -541,6 +541,15 @@ Design `docs/employers/TDD.md`, tasks `docs/employers/TASKS.md` (W0-W8). **An `E
 - The slug (`lib/employer-slug.ts`) is set once and never changes. Public pages (W6, `COMPANY_PAGES`) list only employers with open public jobs and never a Naukri listing; `JobPosting` data and the sitemap come with W7. Signed in with a profile (Phase X, X4, owner 27 Nov), the page judges the employer's open India and remote-India jobs on the agent's boards against the profile (`browse.ts employerFits`: `feedRows` for that employer with no field, years or gate filter, `profileFit` on each, the model on the closest 30 that pass the rules): "Matches your profile (N)" comes first, best first, each with Apply; "Other roles here" follows, paged as before, each card with its reason (a job left out of the judgement says why: a board the agent can't use, outside India, posted over 60 days ago) and no Apply. Signed out: unchanged. The job page (X6) links "N more roles at <employer> match you" to that page, from the same judgement with cached verdicts only (`employerFits(…, { cachedOnly: true })`, `judgeJobs` / `fitJobs` without a model call), streamed so the page never waits on it. Check: `scripts/company-pages-smoke.ts`.
 - Migrations are hand-written SQL applied with `prisma migrate deploy` only (`20261127090000_employers`).
 
+### 6.26 SwipeApply on WhatsApp (Phase Y, owner, 26 Nov; Y2 built 28 Nov)
+
+The app on WhatsApp through **Meta's Cloud API directly** (no Twilio, no BSP; design `docs/whatsapp/TDD.md`, tasks `docs/whatsapp/TASKS.md`). The user links their number from Account; later tasks put the morning digest, job drops, Apply/Skip and form questions in the chat. Off unless `WHATSAPP_ENABLED=1` (the same on the web app and every worker): the card is not rendered, the routes answer 503, the webhook answers 200 and drops, the worker takes no `whatsapp-inbound` jobs.
+- **Receive.** `POST /api/whatsapp/webhook` reads the raw body (`req.text()`), checks `X-Hub-Signature-256` (HMAC-SHA256 with `WHATSAPP_APP_SECRET`, constant-time), stores one `WhatsAppMessage` row (the unique `wamid` makes a second delivery a no-op) and enqueues `whatsapp-inbound`; the answer is only 200 or 403, whatever fails after the signature. `GET` answers Meta's one-time check against `WHATSAPP_VERIFY_TOKEN` even while the switch is off, so the webhook can be saved in Meta's dashboard first. Statuses update the outbound row (the error code only). The webhook is reachable without a session: `/api` is outside the proxy's matcher.
+- **No body, one phone.** `WhatsAppMessage` has no text column; `WhatsAppLink.phone` is the only stored copy of a number (E.164), shown masked (`+91 ••••• ••482`). Two transient exceptions: the queue job for an inbound message carries the sender and the text while it lives (pg-boss `deleteAfterSeconds` 3600; the TDD's job payload was `{ messageRowId }`, which cannot work with no body stored), and the rate-limit keys use `phoneKey` (an HMAC of the number), never the number. No log line, event or thrown error carries a number or a text. `lib/queue.ts enqueueWhatsAppInbound` groups by that key and the worker takes `groupConcurrency: 1`: one message per sender at a time, in order, none dropped (the TDD said a singleton key, which would drop a second message while the first waits).
+- **Link.** `POST /api/whatsapp/link` makes a code (8 characters of a 32-letter alphabet, 15 minutes, one use, bound to the user; an earlier unused code of theirs stops working) and returns the `wa.me/<number>?text=Join%20<code>` URL; `GET` returns the masked status the card polls; `DELETE` unlinks (the row and the number, at once). The worker reads "Join <code>" from the user's own message: `claimLink` spends the code in one SQL step (`updateMany` where unused and unexpired), refuses a number already linked to another user, and refuses a test profile (`Profile.isTest`) for a number not in `WHATSAPP_TEST_NUMBERS`. A refused join gets one generic line (five a day to a number); a message from a number nobody linked gets the one link line once a day and nothing more. A linked user's message only opens the 24-hour window in Y2; the conversation is Y3 to Y5.
+- **Code.** `src/modules/whatsapp`: `client.ts` (the Graph API, the only reader of `WHATSAPP_ACCESS_TOKEN`, typed errors, a row per send), `webhook.ts` and `state.ts` (pure), `link.ts`, `inbound.ts`, `copy.ts`, `store.ts` (the one place that touches Prisma; everything else takes a `Store`, so `scripts/whatsapp-test.ts` runs offline against a memory one; a file the TDD's code map did not list). Web code imports only `@/modules/whatsapp`, never `@/modules/apply`.
+- **Migration.** `20261201000000_whatsapp`, additive (three tables), written by hand and applied with `prisma migrate deploy` only.
+
 ## 7. Governance (`config/rules.json` + `modules/governance/rules.ts`)
 
 ```json
@@ -648,6 +657,17 @@ HIRIST_READER=                   # 1 (K17): the same for Hirist; worker with a s
 ENABLE_HIRIST=                   # 1: Hirist jobs show to users who connected it, and Account offers the connect (K18)
 ENABLE_HIRIST_APPLY=             # 1 (with ENABLE_HIRIST=1): a right swipe on a Hirist job applies there (K19); on after the owner's first real apply
 SOURCE_INGEST_CRON=0 */8 * * *   # each connected account's run on its signed-in site, UTC (6.20)
+WHATSAPP_ENABLED=0                # Phase Y (6.26): the switch; off = no card, webhook answers 200 and drops; the same on every process
+WHATSAPP_PHONE_NUMBER_ID=         # Meta's id of our number
+WHATSAPP_BUSINESS_ACCOUNT_ID=
+WHATSAPP_ACCESS_TOKEN=            # System User token (whatsapp_business_messaging); read only by modules/whatsapp/client.ts, worker side
+WHATSAPP_APP_SECRET=              # HMAC key of the webhooks; also keys phoneKey
+WHATSAPP_VERIFY_TOKEN=            # our own string for Meta's one-time GET check
+WHATSAPP_NUMBER_E164=             # our number, for the wa.me link on the Account card
+WHATSAPP_TEST_NUMBERS=            # comma separated: the only numbers a test profile may link
+WHATSAPP_GRAPH_VERSION=v25.0
+WHATSAPP_NUDGE_CRON=*/5 * * * *   # Y3
+WHATSAPP_TEMPLATE_RATE_INR=0.115  # report only (Y8)
 ```
 `ANTHROPIC_API_KEY` is read only by `lib/claude.ts` (§8); the main LLM is OpenAI.
 

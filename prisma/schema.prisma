@@ -35,6 +35,8 @@ model User {
   dailySets    DailySet[]
   employerAccounts EmployerAccount[]
   funnelEvents FunnelEvent[]
+  // Phase Y, Y2 (docs/whatsapp/TDD.md 4.3): the WhatsApp number linked to this user, if any.
+  whatsapp     WhatsAppLink?
 }
 
 // Phase P, P5 (modules/profile/brief.ts): what the agent knows about the candidate for judging fit: tracks, nearby,
@@ -763,4 +765,64 @@ model FunnelEvent {
   @@unique([visitorId, jobId, step])
   @@index([at, step])
   @@index([detail])
+}
+
+// Phase Y, Y2 (docs/whatsapp/TDD.md 4.3, modules/whatsapp): SwipeApply on WhatsApp through Meta's Cloud API. The link is the
+// user's opt-in. `phone` is the only copy of the number anywhere: never logged, never in an event, shown masked.
+model WhatsAppLink {
+  userId         String    @id
+  // E.164 with the plus, e.g. +919876543210
+  phone          String    @unique
+  linkedAt       DateTime  @default(now())
+  // STOP (Y5): nothing is sent until the user writes again
+  optedOutAt     DateTime?
+  // "pause for 3 days" (Y5)
+  pausedUntil    DateTime?
+  timezone       String    @default("Asia/Kolkata")
+  // HH:mm in the user's zone
+  morningAt      String    @default("08:30")
+  // 0-3, bounded by the whatsapp_drops_per_day rule (Y5)
+  dropsPerDay    Int       @default(2)
+  // The service window: open while now - lastInboundAt is under 24 hours
+  lastInboundAt  DateTime?
+  lastOutboundAt DateTime?
+  // today's times (Y3, Y5), Zod-validated in modules/whatsapp/state.ts
+  plan           Json?
+  // the conversation state (Y3, Y4), Zod-validated in modules/whatsapp/state.ts
+  state          Json?
+  // drops in a row with no reply; the back-off reads it (Y5)
+  ignored        Int       @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// One row per message in or out; no body is ever stored. The unique wamid makes a second delivery of one inbound a no-op.
+model WhatsAppMessage {
+  id            String   @id @default(cuid())
+  wamid         String   @unique
+  // null for a message from an unlinked number (pruned after 24 hours)
+  userId        String?
+  // in | out
+  direction     String
+  // text | button | list | flow | document | other | template:<name> | status
+  kind          String
+  applicationId String?
+  // sent | delivered | read | failed (outbound, from the status webhooks)
+  status        String?
+  // Meta's error code only, never a message text
+  error         String?
+  createdAt     DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+}
+
+// "Join <code>": 8 characters, 15 minutes, one use, bound to the user who asked for it.
+model WhatsAppLinkCode {
+  code      String    @id
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  @@index([userId])
 }

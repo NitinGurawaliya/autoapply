@@ -9,6 +9,8 @@ import { AccountActions } from "./account-actions";
 import { BriefSection } from "./brief-section";
 import { ConnectedSites } from "./connected-sites";
 import { EmployerAccounts } from "./employer-accounts";
+import { WhatsAppCard } from "@/components/account/whatsapp-card";
+import { whatsappEnabled } from "@/modules/whatsapp";
 
 export default async function AccountPage() {
   const user = await getCurrentUser();
@@ -28,6 +30,8 @@ export default async function AccountPage() {
       <AccountActions hasResume={Boolean(profile?.resumeKey)}>
         <BriefSection brief={brief.brief} avoid={profile?.avoid ?? []} learned={brief.learned} failed={brief.failed} />
         <EmployerAccounts accounts={rows} passwordSet={password.set} allowed={allowed} />
+        {/* Phase Y: off unless WHATSAPP_ENABLED=1 (docs/whatsapp/TDD.md 4.13). */}
+        {whatsappEnabled() ? <WhatsAppCard /> : null}
       </AccountActions>
     </>
   );

@@ -364,3 +364,16 @@ Design: [docs/feed/TDD.md](feed/TDD.md). Tasks: [docs/feed/TASKS.md](feed/TASKS.
 - [x] [X4 — Company page: matching jobs first](feed/TASKS.md#x4)
 - [x] [X5 — Apply to all that fit](feed/TASKS.md#x5)
 - [x] [X6 — The employer in the feed](feed/TASKS.md#x6)
+
+## Phase Y — SwipeApply on WhatsApp: the app, optional (owner, 26 Nov)
+
+Design: [docs/whatsapp/TDD.md](whatsapp/TDD.md) (v1, 26 Nov; the seven decisions in its section 11 closed with the owner the same day). Tasks: [docs/whatsapp/TASKS.md](whatsapp/TASKS.md), in build order, behind `WHATSAPP_ENABLED` until W7. Y1 before any template is submitted.
+
+- [ ] [Y1 — The card and the chat, drawn for approval](whatsapp/TASKS.md#y1)
+- [~] [Y2 — Receive, send, link](whatsapp/TASKS.md#y2)
+- [ ] [Y3 — The morning digest and the deck](whatsapp/TASKS.md#y3)
+- [ ] [Y4 — Questions and results on WhatsApp](whatsapp/TASKS.md#y4)
+- [ ] [Y5 — Drops, pace and consent](whatsapp/TASKS.md#y5)
+- [ ] [Y6 — Plain words](whatsapp/TASKS.md#y6)
+- [ ] [Y7 — The real number, end to end, switch-on](whatsapp/TASKS.md#y7)
+- [ ] [Y8 — A resume sent as a document (only on numbers)](whatsapp/TASKS.md#y8)

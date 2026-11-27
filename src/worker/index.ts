@@ -1,10 +1,11 @@
 import { hostname } from "node:os";
 import { db } from "@/lib/db";
-import { APPLY_QUEUE, getBoss, INGEST_SOURCE_QUEUE, LEGACY_APPLY_QUEUES, READER_PLAN_QUEUE, READER_RUN_QUEUE, SITE_APPLY_QUEUE, SOURCE_CONNECT_QUEUE, SOURCE_INGEST_TICK } from "@/lib/queue";
+import { APPLY_QUEUE, getBoss, INGEST_SOURCE_QUEUE, LEGACY_APPLY_QUEUES, READER_PLAN_QUEUE, READER_RUN_QUEUE, SITE_APPLY_QUEUE, SOURCE_CONNECT_QUEUE, SOURCE_INGEST_TICK, WHATSAPP_INBOUND_QUEUE } from "@/lib/queue";
 import { guardUndiciParserAssertions } from "@/lib/undici-guard";
 import { canShowWindow } from "@/modules/apply/browser";
 import { relayConfig, startRelay } from "@/modules/apply/sites/relay";
 import { sharedReaderOn } from "@/modules/sources";
+import { whatsappEnabled } from "@/modules/whatsapp";
 import { handleApply } from "./handlers/apply";
 import { handleBoardDay } from "./handlers/board-day";
 import { handleDiscover } from "./handlers/discover";
@@ -15,6 +16,7 @@ import { handlePrescan } from "./handlers/prescan";
 import { handleSourceConnect } from "./handlers/sourceConnect";
 import { handleSourceIngest, handleSourceIngestTick } from "./handlers/sourceIngest";
 import { handleReaderPlan, handleReaderRun } from "./handlers/reader";
+import { handleWhatsAppInbound } from "./handlers/whatsapp-inbound";
 import { expirePersonHandoffs, housekeeping, reapStaleRuns } from "./reaper";
 import { registerSchedules } from "./schedule";
 import { claimWorkerLock } from "./single";
@@ -115,6 +117,9 @@ async function main() {
   // A gentle board (Workday, modules/jobs/cadence.ts) one company at a time (owner, 18 Nov: its bot check).
   await boss.work("ingest-company", { localConcurrency: ingestConcurrency, groupConcurrency: { default: perHost, tiers: { gentle: 1 } } }, handleIngestCompany);
   console.log(applies ? `worker listening for apply (x${concurrency}), ${SOURCE_CONNECT_QUEUE}, ${INGEST_SOURCE_QUEUE} and ingest` : "worker listening for ingest only (no screen, so no applications)");
+  // Phase Y, Y2: WhatsApp messages need no screen, so the Docker worker takes them too. One job per sender at a time (the
+  // group), so a user's messages are handled in order. Off unless WHATSAPP_ENABLED=1.
+  if (whatsappEnabled()) await boss.work(WHATSAPP_INBOUND_QUEUE, { localConcurrency: 4, groupConcurrency: 1 }, handleWhatsAppInbound);
 
   // Graceful stop (Ctrl+C, `docker stop -t 960`): take no new jobs and let the runs in progress finish, up to a handoff's
   // 15-minute wait, so a restart never cuts off a run after its Submit (21 Oct: a restart seconds after Rubrik's Submit
