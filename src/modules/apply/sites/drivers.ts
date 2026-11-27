@@ -67,8 +67,10 @@ const naukri: SiteDriver = {
   login: { loginId: "mobile", waitForSignIn, onSignedInPage, sendCode: sendLoginCode, enterCode: enterLoginCode },
 };
 
-const DRIVERS: Record<Site, SiteDriver> = { naukri };
+const DRIVERS: Partial<Record<Site, SiteDriver>> = { naukri };
 
 export function driverOf(site: Site): SiteDriver {
-  return DRIVERS[site];
+  const driver = DRIVERS[site];
+  if (!driver) throw new Error(`no driver for ${site} yet`);
+  return driver;
 }

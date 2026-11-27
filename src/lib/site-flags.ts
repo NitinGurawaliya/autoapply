@@ -22,3 +22,11 @@ export function siteOn(site: string, flag: SiteFlag, env: Env = process.env): bo
 export function sitesOn(flag: SiteFlag, env: Env = process.env): string[] {
   return SITES.filter((site) => siteOn(site, flag, env));
 }
+
+/**
+ * Whether users are offered the site: its card on Account and its connect. Naukri predates the switch and is always
+ * offered; every later site (Hirist) only with ENABLE_<SITE>=1, so a site built but not switched on shows nothing.
+ */
+export function siteListed(site: string, env: Env = process.env): boolean {
+  return site === "naukri" || siteOn(site, "feed", env);
+}

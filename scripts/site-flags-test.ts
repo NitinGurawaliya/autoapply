@@ -1,5 +1,5 @@
 // K16: the per-site switches (src/lib/site-flags.ts) keep Naukri's env names and give every site the same three.
-import { siteOn, sitesOn } from "../src/lib/site-flags";
+import { siteListed, siteOn, sitesOn } from "../src/lib/site-flags";
 import { sharedReaderOn } from "../src/modules/sources/reader";
 import { plannerOf } from "../src/modules/jobs/fetchers/siteSearches";
 
@@ -19,6 +19,7 @@ check("another site's switch does not turn Naukri on", !siteOn("naukri", "feed",
 check("the names follow the site (hirist)", siteOn("hirist", "feed", { ENABLE_HIRIST: "1" }) && siteOn("hirist", "reader", { HIRIST_READER: "1" }));
 check("sitesOn lists the registered sites that are on", JSON.stringify(sitesOn("feed", { ENABLE_NAUKRI: "1" })) === JSON.stringify(["naukri"]), JSON.stringify(sitesOn("feed", { ENABLE_NAUKRI: "1" })));
 check("sharedReaderOn(site) and sharedReaderOn() agree with the env", sharedReaderOn("naukri", { NAUKRI_READER: "1" }) && sharedReaderOn(undefined, { NAUKRI_READER: "1" }) && !sharedReaderOn("naukri", none) && !sharedReaderOn(undefined, none));
+check("Naukri is always offered, a later site only with its switch", siteListed("naukri", none) && !siteListed("hirist", none) && siteListed("hirist", { ENABLE_HIRIST: "1" }));
 const plan = plannerOf("naukri")({ tracks: ["backend"], currentTitle: null, city: "Pune", yearsExperience: 2 }, 3);
 check("the planner for naukri (and a check's own naukri-smoke) plans searches", plan.length > 0 && plannerOf("naukri-smoke") === plannerOf("naukri"), `${plan.length} searches`);
 let threw = false;

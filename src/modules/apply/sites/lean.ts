@@ -53,6 +53,8 @@ const COMMON: string[] = [
 const BY_SITE: Record<Site, string[]> = {
   // Naukri's picture hosts and its own log pings.
   naukri: ["*img.naukimg.com*", "*media.naukri.com*", "*videocdn.naukri.com*", "*logs.naukri.com*", "*logs.infoedgeindia.com*", "*lg.naukri.com*"],
+  // Hirist's picture hosts and pings are added from the K17 probe's own request list.
+  hirist: [],
 };
 // Never dropped, whatever the patterns say: reCAPTCHA, which the site may show.
 const NEVER = /^https:\/\/(www\.)?(google\.com|gstatic\.com|recaptcha\.net)\/recaptcha\//;

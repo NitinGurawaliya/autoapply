@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
+import { siteListed } from "@/lib/site-flags";
 import { isSite, startConnect } from "@/modules/sources";
 
 // The user accepted the account-risk notice: a window opens on their computer for them to sign in themselves.
@@ -19,7 +20,7 @@ export async function POST(req: Request, context: { params: Promise<{ site: stri
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { site } = await context.params;
-  if (!isSite(site)) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (!isSite(site) || !siteListed(site)) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "consent_required" }, { status: 400 });
   const limit = await rateLimit(`source-connect:${user.id}`, 6, 3600);

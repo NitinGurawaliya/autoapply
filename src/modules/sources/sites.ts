@@ -3,7 +3,7 @@
  * browser: the web app, the worker and browser.ts all read it. LinkedIn joins with K3.
  */
 
-export const SITES = ["naukri"] as const;
+export const SITES = ["naukri", "hirist"] as const;
 export type Site = (typeof SITES)[number];
 
 export type SiteInfo = {
@@ -24,6 +24,15 @@ export const SITE_INFO: Record<Site, SiteInfo> = {
     domain: "naukri.com",
     loginUrl: "https://www.naukri.com/nlogin/login",
     homeUrl: "https://www.naukri.com/mnjuser/homepage",
+  },
+  // Hirist (K16-K19, docs/hirist/TDD.md): login and signed-in page confirmed in the connect task (K18); the reader (K17)
+  // needs only the domain and the front page.
+  hirist: {
+    site: "hirist",
+    label: "Hirist",
+    domain: "hirist.tech",
+    loginUrl: "https://www.hirist.tech/",
+    homeUrl: "https://www.hirist.tech/",
   },
 };
 

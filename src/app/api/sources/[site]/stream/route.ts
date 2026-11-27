@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { siteListed } from "@/lib/site-flags";
 import { isSite, streamTicket } from "@/modules/sources";
 
 // K8: the phone's pass to the user's own streamed sign-in, the worker's address and a 10-minute token for that window
@@ -9,7 +10,7 @@ export async function GET(_req: Request, context: { params: Promise<{ site: stri
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { site } = await context.params;
-  if (!isSite(site)) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (!isSite(site) || !siteListed(site)) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const ticket = await streamTicket(user.id, site);
   return NextResponse.json(ticket, { headers: { "Cache-Control": "no-store" } });
 }

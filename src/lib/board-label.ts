@@ -9,6 +9,7 @@ const LABELS: Record<string, string> = {
   workday: "Workday",
   zohorecruit: "Zoho Recruit",
   naukri: "Naukri",
+  hirist: "Hirist",
 };
 
 /** "Greenhouse" for "greenhouse"; null for a source people would not recognise (the mock form). */

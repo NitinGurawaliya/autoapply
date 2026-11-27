@@ -16,7 +16,7 @@ import { tagPosting } from "./tagging";
  * here plus a fetcher and an adapter (docs/INGEST_CONTRACT.md).
  */
 
-export type BoardSource = "greenhouse" | "lever" | "ashby" | "workday" | "zohorecruit" | "keka" | "smartrecruiters" | "workable" | "naukri";
+export type BoardSource = "greenhouse" | "lever" | "ashby" | "workday" | "zohorecruit" | "keka" | "smartrecruiters" | "workable" | "naukri" | "hirist";
 
 /** How discovery (discovery.ts) checks names against a board. */
 export type BoardDiscovery = {
@@ -377,6 +377,19 @@ export const BOARDS: Board[] = [
     },
     stores: indiaEligible,
     formHost: /^www\.naukri\.com$/i,
+    slugOf: (text) => text.trim(),
+  },
+  {
+    // Hirist (K16-K19, docs/hirist/TDD.md): the same shape as Naukri's. Read by the shared signed-out reader, applied on
+    // through the user's own account; its company rows are inactive.
+    source: "hirist",
+    label: "Hirist",
+    perUser: true,
+    fetch: async () => {
+      throw new Error("hirist is read by the shared reader, through the user's own account");
+    },
+    stores: indiaEligible,
+    formHost: /^www\.hirist\.tech$/i,
     slugOf: (text) => text.trim(),
   },
 ];
