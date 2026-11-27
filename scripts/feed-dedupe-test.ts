@@ -4,6 +4,7 @@
 import { db } from "../src/lib/db";
 import { employerKey, historyFor, roleKey } from "../src/modules/governance";
 import { dedupeListings } from "../src/modules/jobs/match";
+import { PER_EMPLOYER, spreadEmployers } from "../src/modules/jobs/daily";
 
 let failed = 0;
 function ok(name: string, pass: boolean, detail = "") {
@@ -26,6 +27,20 @@ async function main() {
   // 2. Two employers that share a name, same title: two cards.
   const glides = dedupeListings([row("a", "ashby", "E-glide-1", "c-a", "Product Designer"), row("l", "lever", "E-glide-2", "c-l", "Product Designer")]);
   ok("2. two employers named Glide, same title: two cards", glides.length === 2);
+
+  // 6 (Phase X, X6). Today's set takes at most PER_EMPLOYER jobs of one employer, in rank order.
+  const ranked6 = [
+    { id: "a1", employerId: "EA", companyId: "c1" },
+    { id: "a2", employerId: "EA", companyId: "c2" },
+    { id: "a3", employerId: "EA", companyId: "c1" },
+    { id: "b1", employerId: "EB", companyId: "c3" },
+    { id: "u1", employerId: null, companyId: "c9" },
+    { id: "b2", employerId: "EB", companyId: "c3" },
+    { id: "b3", employerId: "EB", companyId: "c4" },
+  ];
+  const spread = spreadEmployers(ranked6, employerKey, PER_EMPLOYER, 12).map((job) => job.id);
+  ok(`6. at most ${PER_EMPLOYER} per employer, rank order kept, across its board accounts`, spread.join() === "a1,a2,b1,u1,b2", spread.join());
+  ok("6. the set stops at its size", spreadEmployers(ranked6, employerKey, PER_EMPLOYER, 3).map((job) => job.id).join() === "a1,a2,b1");
 
   // 5 (pure half). An unlinked company never matches another by name.
   const unlinked = dedupeListings([row("x", "greenhouse", null, "c-x", "Designer"), row("y", "lever", null, "c-y", "Designer")]);

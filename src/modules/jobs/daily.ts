@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { db } from "@/lib/db";
 import { sendPush } from "@/lib/push";
+import { employerKey } from "@/modules/governance";
 import { tracksOf } from "./functions";
 import { readingGateOn } from "./gate";
 import { feedTracks, type FeedFilters, type FeedJob, type FeedPool, parseFeedFilters, rankedFeed } from "./match";
@@ -20,6 +21,23 @@ function envInt(name: string, fallback: number) {
   return Number.isInteger(value) && value > 0 ? value : fallback;
 }
 export const setSize = () => envInt("DAILY_SET_SIZE", 12);
+/** At most this many jobs of one employer in a day's set (Phase X, X6), so one company cannot fill the day. */
+export const PER_EMPLOYER = 2;
+
+/** In rank order, at most `perEmployer` items of one employer, up to `size` (X6). Pure. */
+export function spreadEmployers<T>(items: T[], keyOf: (item: T) => string, perEmployer: number, size: number): T[] {
+  const taken = new Map<string, number>();
+  const out: T[] = [];
+  for (const item of items) {
+    if (out.length >= size) break;
+    const key = keyOf(item);
+    const count = taken.get(key) ?? 0;
+    if (count >= perEmployer) continue;
+    taken.set(key, count + 1);
+    out.push(item);
+  }
+  return out;
+}
 // The whole set at once since Phase R (owner, 20 Nov: "just show today's jobs"); DAILY_RELEASE still releases it in batches.
 export const releaseSize = () => envInt("DAILY_RELEASE", setSize());
 const pushHour = () => envInt("DAILY_PUSH_HOUR_IST", 8);
@@ -125,9 +143,13 @@ async function buildDailySet(userId: string, ranked?: { jobs: FeedJob[]; degrade
     return existing;
   }
   // Swipes from the table, not the cached list: a swipe saved by another process may not have reached this cache.
-  const top = feed.jobs.slice(0, setSize() + 20).map((job) => job.id);
+  const top = feed.jobs.slice(0, setSize() * 4).map((job) => job.id);
   const swiped = await swipedAmong(userId, top);
-  const jobIds = top.filter((id) => !swiped.has(id)).slice(0, setSize());
+  const open = top.filter((id) => !swiped.has(id));
+  // At most PER_EMPLOYER of one employer (X6): its key is the employer (governance employerKey), else the board account.
+  const owners = await db.job.findMany({ where: { id: { in: open } }, select: { id: true, companyId: true, company: { select: { employerId: true } } } });
+  const keyOf = new Map(owners.map((job) => [job.id, employerKey({ employerId: job.company.employerId, companyId: job.companyId })]));
+  const jobIds = spreadEmployers(open, (id) => keyOf.get(id) ?? id, PER_EMPLOYER, setSize());
   // Fewer than a set to pick (or a set built on another basis that no longer fits): the ranked list, as before. The day
   // is still marked decided with an empty row, so the feed does not show the agent reading on every visit only to fall
   // back to the list (21 Nov: a well-swiped account saw the reading flash before each load); a basis change tries again.

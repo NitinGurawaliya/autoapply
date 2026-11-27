@@ -359,4 +359,4 @@ Design: [docs/feed/TDD.md](feed/TDD.md). Tasks: [docs/feed/TASKS.md](feed/TASKS.
 - [x] [X3 — All jobs in the feed](feed/TASKS.md#x3)
 - [x] [X4 — Company page: matching jobs first](feed/TASKS.md#x4)
 - [x] [X5 — Apply to all that fit](feed/TASKS.md#x5)
-- [ ] [X6 — The employer in the feed](feed/TASKS.md#x6)
+- [x] [X6 — The employer in the feed](feed/TASKS.md#x6)

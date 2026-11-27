@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import { employerFits } from "@/modules/jobs/browse";
 import { buttonVariants } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
 import { CompanyMark, tierFor } from "@/components/ui/marks";
@@ -52,6 +54,25 @@ function Block({ block }: { block: DescriptionBlock }) {
 }
 
 /**
+ * "4 more roles at Razorpay match you" (Phase X, X6): the employer's other jobs matching the profile and not applied to,
+ * linking to its company page, where they come first. Cached verdicts only, so opening a job never calls the model.
+ */
+async function MoreAtEmployer({ userId, jobId, employer }: { userId: string; jobId: string; employer: { id: string; slug: string; name: string } }) {
+  const fits = await employerFits(userId, employer.id, { cachedOnly: true }).catch(() => new Map<string, { matches: boolean }>());
+  const others = [...fits.entries()].filter(([id, fit]) => fit.matches && id !== jobId).map(([id]) => id);
+  if (others.length === 0) return null;
+  const applied = await db.swipe.count({ where: { userId, direction: "right", jobId: { in: others } } });
+  const count = others.length - applied;
+  if (count <= 0) return null;
+  return (
+    <Link href={`/companies/${employer.slug}`} className="mt-4 inline-flex min-h-11 items-center gap-1.5 self-start type-body font-semibold underline decoration-1 underline-offset-4">
+      {count} more {count === 1 ? "role" : "roles"} at {employer.name} {count === 1 ? "matches" : "match"} you
+      <Icon name="chevronRight" size={16} />
+    </Link>
+  );
+}
+
+/**
  * One job in full (opened from the feed card; design/job.html, Phase M7): the score and the facts, why it is a match
  * (matches and gaps), the job's skills against the candidate's, the whole description set out to read, how the score
  * was reached, and Apply or Skip, which swipe it like the deck does and open the next job in the same feed
@@ -89,7 +110,7 @@ export default async function JobPage({ params, searchParams }: { params: Promis
         salaryMax: true,
         salaryCurrency: true,
         salaryPeriod: true,
-        company: { select: { name: true, logoUrl: true, stage: true, employer: { select: { slug: true, openJobs: true } } } },
+        company: { select: { name: true, logoUrl: true, stage: true, employer: { select: { id: true, slug: true, name: true, openJobs: true } } } },
       },
     }),
     db.swipe.findUnique({ where: { userId_jobId: { userId: user.id, jobId: id } }, select: { direction: true } }),
@@ -182,6 +203,11 @@ export default async function JobPage({ params, searchParams }: { params: Promis
             ]}
           />
           {match?.hint ? <p className="m-0 mt-4 type-meta text-muted-foreground">{match.hint}</p> : null}
+          {companyPagesEnabled() && job.company.employer && job.company.employer.openJobs > 1 ? (
+            <Suspense fallback={null}>
+              <MoreAtEmployer userId={user.id} jobId={job.id} employer={job.company.employer} />
+            </Suspense>
+          ) : null}
         </header>
 
         <div className="mt-8 flex flex-col gap-8">

@@ -254,6 +254,7 @@ export async function judgeJobs(
    * read every description just to check its cache, about 1 s a batch of 150). */
   jobs: Array<{ id: string; title: string; description?: string; contentHash: string | null }>,
   store: JudgementStore = jobJudgementStore,
+  options: { cachedOnly?: boolean } = {},
 ): Promise<Map<string, Judgement>> {
   const out = new Map<string, Judgement>();
   if (jobs.length === 0) return out;
@@ -271,6 +272,8 @@ export async function judgeJobs(
     }
     return true;
   });
+  // Cached verdicts only (X6: a count on the job page never calls the model).
+  if (options.cachedOnly) return out;
   const unread = missing.filter((job) => job.description == null).map((job) => job.id);
   const texts = unread.length > 0 ? new Map((await db.job.findMany({ where: { id: { in: unread } }, select: { id: true, description: true } })).map((row) => [row.id, row.description])) : new Map<string, string>();
   const toJudge = missing.map((job) => ({ ...job, description: job.description ?? texts.get(job.id) ?? "" }));

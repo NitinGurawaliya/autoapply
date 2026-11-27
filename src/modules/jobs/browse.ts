@@ -66,17 +66,17 @@ async function personOf(userId: string) {
   };
 }
 
-/** The model's verdicts for these rows (cached): the fit path when it is on, else the old judge. */
-async function judge(person: Person, rows: FeedRow[]): Promise<Map<string, Judgement>> {
+/** The model's verdicts for these rows (cached): the fit path when it is on, else the old judge. `cachedOnly`: no model call. */
+async function judge(person: Person, rows: FeedRow[], cachedOnly = false): Promise<Map<string, Judgement>> {
   const judgements = new Map<string, Judgement>();
   const real = rows.filter((row) => row.source !== "mock");
   if (real.length === 0) return judgements;
   if (fitOn()) {
     const who = { userId: person.userId, profileId: person.profile.id, brief: briefOf(person.profile as Profile), shows: person.shows, years: person.years };
-    for (const [id, verdict] of await fitJobs(who, real.map((row) => row.id), { judge: true, lease: false, lane: "interactive" }).catch(() => new Map())) judgements.set(id, verdict);
+    for (const [id, verdict] of await fitJobs(who, real.map((row) => row.id), { judge: !cachedOnly, lease: false, lane: "interactive" }).catch(() => new Map())) judgements.set(id, verdict);
   } else {
     const texts = real.map((row) => ({ id: row.id, title: row.title, contentHash: row.contentHash }));
-    for (const [id, judgement] of await judgeJobs(person.profile, texts).catch(() => new Map<string, Judgement>())) judgements.set(id, judgement);
+    for (const [id, judgement] of await judgeJobs(person.profile, texts, undefined, { cachedOnly }).catch(() => new Map<string, Judgement>())) judgements.set(id, judgement);
   }
   return judgements;
 }
@@ -169,9 +169,10 @@ export async function browseJobs(userId: string, filters: BrowseFilters, page = 
  * The company page, signed in (X4, docs/feed/TDD.md 4.4): profileFit for each of one employer's open jobs in India and
  * remote India on the boards the agent applies on, swiped left or not (never the ones applied to). No field, years or
  * gate filter in SQL, so every job gets its reason from profileFit. The model judges the closest EMPLOYER_JUDGED that
- * pass the rules; the rest keep the cheap score. Empty for a person with no profile.
+ * pass the rules; the rest keep the cheap score (`cachedOnly`: verdicts already cached only, no model call, for a count on
+ * a page that must stay cheap). Empty for a person with no profile.
  */
-export async function employerFits(userId: string, employerId: string): Promise<Map<string, ProfileFit>> {
+export async function employerFits(userId: string, employerId: string, options: { cachedOnly?: boolean } = {}): Promise<Map<string, ProfileFit>> {
   const person = await personOf(userId);
   if (!person) return new Map();
   const rows = await feedRows({
@@ -197,6 +198,6 @@ export async function employerFits(userId: string, employerId: string): Promise<
   });
   const unjudged = await cardsOf(person, rows, new Map(), null);
   const passing = new Set(unjudged.filter((card) => !card.fit.hard).slice(0, EMPLOYER_JUDGED).map((card) => card.id));
-  const cards = passing.size > 0 ? await cardsOf(person, rows, await judge(person, rows.filter((row) => passing.has(row.id))), null) : unjudged;
+  const cards = passing.size > 0 ? await cardsOf(person, rows, await judge(person, rows.filter((row) => passing.has(row.id)), options.cachedOnly), null) : unjudged;
   return new Map(cards.map((card) => [card.id, card.fit]));
 }

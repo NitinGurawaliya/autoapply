@@ -26,10 +26,11 @@ async function main() {
   for (const u of [user, other]) {
     await db.profile.create({ data: { userId: u.id, isTest: true, resumeKey: "x", resumeText: "x", fullName: "Daily", email: u.email, currentTitle: "Frontend Engineer", yearsExperience: 1, skills: ["React"], tracks: ["frontend"], experience: [], education: [], rawJson: {} } });
   }
-  const company = await db.company.create({ data: { source: "mock", slug: `daily-${stamp}`, name: `Daily Co ${stamp}`, active: false } });
+  // One company per job: a day's set takes at most 2 jobs of one employer (Phase X, X6).
+  const companies = await Promise.all(Array.from({ length: MOCK_JOBS }, (_, i) => db.company.create({ data: { source: "mock", slug: `daily-${i}-${stamp}`, name: `Daily Co ${i} ${stamp}`, active: false } })));
   await Promise.all(
     Array.from({ length: MOCK_JOBS }, (_, i) =>
-      db.job.create({ data: { source: "mock", externalId: `daily-${i}-${stamp}`, companyId: company.id, title: `Frontend Engineer ${i + 1}`, track: "frontend", location: "Bengaluru, India", country: "IN", remoteType: "unknown", description: "React. 0-1 years of experience.", applyUrl: "http://localhost:3000/mock/greenhouse", postedAt: new Date(), fetchedAt: new Date(), raw: {} } }),
+      db.job.create({ data: { source: "mock", externalId: `daily-${i}-${stamp}`, companyId: companies[i].id, title: `Frontend Engineer ${i + 1}`, track: "frontend", location: "Bengaluru, India", country: "IN", remoteType: "unknown", description: "React. 0-1 years of experience.", applyUrl: "http://localhost:3000/mock/greenhouse", postedAt: new Date(), fetchedAt: new Date(), raw: {} } }),
     ),
   );
   const swipe = async (jobId: string, direction = "left") => {
@@ -120,8 +121,8 @@ async function main() {
     if (hour < 1) check("no set push before the push hour (00:00-01:00 IST)", push1.pushed === 0 && push2.pushed === 0 && pushedAt == null, `${push1.pushed} ${push2.pushed}`);
     else check("one set push per user per day", push1.pushed === 1 && push2.pushed === 0 && pushedAt != null, `${push1.pushed} ${push2.pushed}`);
   } finally {
-    await db.job.deleteMany({ where: { companyId: company.id } });
-    await db.company.delete({ where: { id: company.id } });
+    await db.job.deleteMany({ where: { companyId: { in: companies.map((company) => company.id) } } });
+    await db.company.deleteMany({ where: { id: { in: companies.map((company) => company.id) } } });
     await deleteAccount(user.id).catch(() => undefined);
     await deleteAccount(other.id).catch(() => undefined);
     const left = await db.dailySet.count({ where: { userId: { in: [user.id, other.id] } } });

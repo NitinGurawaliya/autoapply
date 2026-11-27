@@ -51,8 +51,9 @@ message; events written; `guards-test` PASS.
 Done 2026-11-27: mock jobs, test profile: 3 of 6 sent best first, 3 held by the weekly cap and never swiped, events on each; a second tap sends none; guards-test PASS. Okta (test account): sheet lists 4 best first. `lifecycle.ts applyToAll`, `companies/actions.ts`, `apply-all.tsx`, `[slug]/page.tsx`, `scripts/apply-matching-test.ts`, ARCHITECTURE 6.9.
 
 <a id="x6"></a>
-### [ ] X6 — The employer in the feed
+### [x] X6 — The employer in the feed
 **Do:** "N more roles here match you" on the job page and card; at most 2 jobs per employer in today's set (`daily.ts`).
 **Design:** [4.6 Employer in the feed](TDD.md#46-employer-in-the-feed).
 **Done when:** a test shows the set takes at most 2 per employer; the job page shows the count and link;
 `feed-dedupe-test` PASS.
+Done 2026-11-27: today's set takes at most 2 per employer (feed-dedupe-test 6, daily-set PASS with one company per fixture job); Okta job page reads "3 more roles at Okta match you" → /companies/okta, cached verdicts only. The feed card count was left out: it needs a judgement per employer per card. `daily.ts`, `jobs/[id]/page.tsx`, `browse.ts`/`semantic.ts` cachedOnly, ARCHITECTURE 6.3, 6.25.
