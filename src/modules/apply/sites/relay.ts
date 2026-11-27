@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { z } from "zod";
 import { streamSecret, verifyStreamToken, type Site } from "@/modules/sources";
-import type { OtpStep } from "./naukriOtp";
+import type { OtpStep } from "./drivers";
 import { inputEventSchema, viewportSchema, type ScreenStream } from "./screen-stream";
 
 /**

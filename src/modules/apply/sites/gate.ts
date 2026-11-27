@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { sourceRules } from "@/modules/governance";
+import { SITE_INFO, SITES, type Site } from "@/modules/sources/sites";
 import { SUBMIT_ATTEMPT } from "../outcome";
 
 // Applying through the user's own signed-in account (K4, docs/naukri/TDD.md 4.7, 4.8): which jobs apply on the site
@@ -7,10 +8,10 @@ import { SUBMIT_ATTEMPT } from "../outcome";
 // applies). Database only, no browser; the swipe (lifecycle.ts) and the run (runner.ts) share it.
 
 /** Sites whose own Apply the agent presses, through the user's own account. */
-export const SIGNED_IN_APPLY_SITES = ["naukri"] as const;
-export type SignedInApplySite = (typeof SIGNED_IN_APPLY_SITES)[number];
+export const SIGNED_IN_APPLY_SITES: readonly Site[] = SITES;
+export type SignedInApplySite = Site;
 
-const LABEL: Record<SignedInApplySite, string> = { naukri: "Naukri" };
+const LABEL: Record<SignedInApplySite, string> = Object.fromEntries(SITES.map((site) => [site, SITE_INFO[site].label])) as Record<SignedInApplySite, string>;
 
 export function isSignedInApplySite(source: string): source is SignedInApplySite {
   return (SIGNED_IN_APPLY_SITES as readonly string[]).includes(source);

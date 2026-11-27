@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { asDate, plainText, type FetchedJob } from "../normalize";
+import { asDate, plainText } from "../normalize";
+import type { ApplyKind, SiteListing, SiteSearch } from "./siteListing";
 
 /**
  * Naukri listings, as Naukri's own search and job pages fetched them in the user's signed-in window (Phase K,
@@ -10,15 +11,9 @@ import { asDate, plainText, type FetchedJob } from "../normalize";
 
 export const NAUKRI_ORIGIN = "https://www.naukri.com";
 
-/** Where a Naukri job is applied to: Naukri's own Apply, a board we apply on, or nowhere we can (not stored). */
-export type ApplyKind = "naukri" | "board" | "none";
-
-export type NaukriListing = FetchedJob & {
-  applyKind: ApplyKind;
-  /** The board whose adapter applies, for a job that leaves Naukri for it ("greenhouse"); null for Naukri's own Apply. */
-  applyVia: string | null;
-  company: { slug: string; name: string; logoUrl: string | null };
-};
+export type { ApplyKind } from "./siteListing";
+/** A Naukri listing is a SiteListing; "site" is Naukri's own Apply. */
+export type NaukriListing = SiteListing;
 
 const placeholderSchema = z.object({ type: z.string(), label: z.string() });
 const listingSchema = z.object({
@@ -82,7 +77,7 @@ function describe(body: string, skills: string[], experience: string) {
  * null; passed in so this file stays free of the board registry.
  */
 export function applyKindOf(listing: { companyApplyJob?: boolean | null; applyRedirectUrl?: string | null }, boardOfHost: (host: string) => string | null): { kind: ApplyKind; via: string | null; url: string | null } {
-  if (!listing.companyApplyJob) return { kind: "naukri", via: null, url: null };
+  if (!listing.companyApplyJob) return { kind: "site", via: null, url: null };
   if (!listing.applyRedirectUrl) return { kind: "none", via: null, url: null };
   let url: URL;
   try {
@@ -181,7 +176,7 @@ export const TRACK_SEARCH: Record<string, string> = {
   software: "software engineer",
 };
 
-export type NaukriSearch = { keyword: string; location: string | null; experience: number | null };
+export type NaukriSearch = SiteSearch;
 
 export const slugPart = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 

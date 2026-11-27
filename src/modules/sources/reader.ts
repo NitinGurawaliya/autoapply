@@ -1,8 +1,10 @@
 import { Prisma, type ReaderBucket } from "@prisma/client";
 import { db } from "@/lib/db";
+import { siteOn, sitesOn } from "@/lib/site-flags";
 import type { ReaderRules } from "@/modules/governance";
 import { tracksOf } from "@/modules/jobs/functions";
 import { companyBucket, everyHours, planBuckets, type BucketInput } from "@/modules/jobs/fetchers/naukriBuckets";
+import { plannerOf } from "@/modules/jobs/fetchers/siteSearches";
 
 /**
  * The shared reader's bookkeeping (K14, docs/naukri/TDD.md 13.17): which search buckets exist, which are due, what each
@@ -10,9 +12,12 @@ import { companyBucket, everyHours, planBuckets, type BucketInput } from "@/modu
  * The window itself is modules/apply/sites/reader.ts.
  */
 
-/** NAUKRI_READER=1: this process works the shared reader, and a user's own account no longer reads on a timer. */
-export function sharedReaderOn(env: Record<string, string | undefined> = process.env) {
-  return env.NAUKRI_READER === "1";
+/**
+ * <SITE>_READER=1 (NAUKRI_READER, HIRIST_READER): this process works the site's shared reader, and a user's own account no
+ * longer reads on a timer. Without a site: any site's.
+ */
+export function sharedReaderOn(site?: string, env: Record<string, string | undefined> = process.env) {
+  return site ? siteOn(site, "reader", env) : sitesOn("reader", env).length > 0;
 }
 
 const CONNECTED = ["connected", "limited"];
@@ -31,7 +36,7 @@ export async function planReaderBuckets(site: string, rules: ReaderRules, now = 
     select: { tracks: true, currentTitle: true, city: true, yearsExperience: true, skills: true, experience: true },
   });
   const inputs: BucketInput[] = profiles.map((profile) => ({ tracks: tracksOf(profile), currentTitle: profile.currentTitle, city: profile.city, yearsExperience: profile.yearsExperience }));
-  const planned = planBuckets(inputs, { perUser: rules.buckets_per_user, max: rules.max_buckets });
+  const planned = planBuckets(inputs, { perUser: rules.buckets_per_user, max: rules.max_buckets, plan: plannerOf(site) });
   // Only the searches users want: a company's bucket comes from a list (seedCompanyBuckets) and is never retired here.
   const existing = new Set((await db.readerBucket.findMany({ where: { site, kind: "search" }, select: { key: true } })).map((row) => row.key));
   let added = 0;

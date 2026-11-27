@@ -20,7 +20,7 @@ const page = fromSearch(search, adapterBoardOfHost);
 check("three listings read, none skipped", page.listings.length === 3 && page.skipped === 0, `${page.listings.length}/${page.skipped}`);
 check("Naukri's own total kept", page.total === 364);
 const [infosys, broadridge, cisco] = page.listings;
-check("Naukri's own Apply", infosys.applyKind === "naukri" && infosys.applyVia === null);
+check("Naukri's own Apply", infosys.applyKind === "site" && infosys.applyVia === null);
 check("apply URL is Naukri's job page", infosys.applyUrl === "https://www.naukri.com/job-listings-women-s-hiring-for-full-stack-developers-infosys-bpm-bengaluru-2-to-3-years-301026015262");
 check("Workday redirect is not appliable (not stored)", cisco.applyKind === "none", cisco.applyKind);
 

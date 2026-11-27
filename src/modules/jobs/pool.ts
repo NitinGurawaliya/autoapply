@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { sitesOn } from "@/lib/site-flags";
 
 // Boards the agent applies on: the feed, its filters, swipes, retries and the runner all read this list. One fixed list
 // (owner, 18 Nov), no per-board switches: every board runs in the stealthy Chrome (modules/apply/real-browser.ts), the
@@ -14,7 +15,7 @@ const SHARED_BOARDS: readonly string[] = ["greenhouse", "ashby", "keka", "workab
  * ENABLE_NAUKRI=1 and ENABLE_NAUKRI_APPLY=1, and then only for a user connected to it (modules/apply/sites/gate.ts).
  * Never in the shared pool (poolSql): a user who has not connected Naukri never sees its jobs.
  */
-export const SIGNED_IN_APPLY_BOARDS: readonly string[] = process.env.ENABLE_NAUKRI === "1" && process.env.ENABLE_NAUKRI_APPLY === "1" ? ["naukri"] : [];
+export const SIGNED_IN_APPLY_BOARDS: readonly string[] = sitesOn("apply");
 export const APPLY_BOARDS: readonly string[] = [...SHARED_BOARDS, ...SIGNED_IN_APPLY_BOARDS];
 
 /**

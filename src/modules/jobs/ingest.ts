@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { afterIngest, afterIngestDeadline } from "./after-ingest";
 import { boardOf } from "./boards";
 import { GENTLE_BOARDS, GENTLE_GROUP_TIER, GENTLE_PER_TICK, GENTLE_SCALE, nextFetchAt, REFUSED, tierOf, type Tier } from "./cadence";
-import type { NaukriListing } from "./fetchers/naukri";
+import type { SiteListing } from "./fetchers/siteListing";
 import { classifyTitle } from "./functions";
 import type { BoardHttp, FetchedJob } from "./normalize";
 import { forgetJobVectors } from "./semantic";
@@ -201,11 +201,11 @@ export type SiteStoreResult = { kept: number; created: number; updated: number; 
 /**
  * Stores what one user's run on a signed-in site found (Phase K): ordinary Job rows shared by every connected user,
  * under inactive Company rows (the company ingest never fetches them). Listings Naukri sends to a site we cannot apply
- * on never reach here (fetchers/naukri.ts applyKind "none").
+ * on never reach here (a fetcher's applyKind "none").
  */
-export async function storeSiteListings(site: string, listings: NaukriListing[], cutoff: number, now = new Date()): Promise<SiteStoreResult> {
+export async function storeSiteListings(site: string, listings: SiteListing[], cutoff: number, now = new Date()): Promise<SiteStoreResult> {
   const kept = listings.filter((job) => job.applyKind !== "none" && job.postedAt.getTime() >= cutoff && storedFromBoard(site, job));
-  const byCompany = new Map<string, NaukriListing[]>();
+  const byCompany = new Map<string, SiteListing[]>();
   for (const job of kept) byCompany.set(job.company.slug, [...(byCompany.get(job.company.slug) ?? []), job]);
   const applyVia = new Map(kept.map((job) => [job.externalId, job.applyVia]));
   const totals: SiteStoreResult = { kept: kept.length, created: 0, updated: 0, createdEligible: 0, closed: 0, companies: byCompany.size };

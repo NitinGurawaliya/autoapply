@@ -1,6 +1,9 @@
 import type { Page, Response } from "playwright";
 import { SITE_INFO } from "@/modules/sources/sites";
 import { livePage } from "../browser";
+import { CHECK_TEXT, readCall as readPageCall, type PageRead, type PageStop } from "./read";
+
+export type { PageRead, PageStop } from "./read";
 
 /**
  * Naukri in the user's own visible window (Phase K, docs/naukri/TDD.md 4.5). Worker only. The agent never reads or
@@ -74,13 +77,8 @@ export async function confirmSignedIn(page: Page): Promise<{ signedIn: boolean; 
   }
 }
 
-/** Why a page read stopped a run (docs/naukri/TDD.md 4.8). */
-export type PageStop = "needs_signin" | "challenge" | "refused" | "error";
-export type PageRead = { ok: true; json: unknown } | { ok: false; stop: PageStop; detail: string };
-
 const SEARCH_CALL = /\/jobapi\/v3\/search\b/i;
 const JOB_CALL = (jobId: string) => new RegExp(`/jobapi/v4/job/${jobId.replace(/[^0-9a-z]/gi, "")}\\b`, "i");
-const CHECK_TEXT = /verify (?:that )?you(?:'re| are) (?:a )?human|unusual (?:activity|traffic)|are you a robot|complete the security check|captcha/i;
 
 /**
  * What the page is showing when it did not give us the listings: Naukri's login (signed out), a check (CAPTCHA,
@@ -97,24 +95,8 @@ export async function pageStop(page: Page): Promise<{ stop: PageStop; detail: st
 }
 
 /** A response Naukri's own page received: its status decides; 406 is Naukri's "recaptcha required", 403 a refusal. */
-async function readCall(page: Page, url: string, call: RegExp): Promise<PageRead> {
-  const awaited = page.waitForResponse((response) => call.test(response.url()) && response.request().method() === "GET", { timeout: 30000 });
-  // Handled at once: when it times out while the page is still loading, an unhandled rejection ended the whole worker
-  // process (25 Nov, a slow page through the proxy). It is still awaited below.
-  awaited.catch(() => undefined);
-  try {
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
-  } catch {
-    return { ok: false, ...(await pageStop(page)) };
-  }
-  const response = await awaited.catch(() => null);
-  if (!response) return { ok: false, ...(await pageStop(page)) };
-  if (response.status() === 406) return { ok: false, stop: "challenge", detail: "Naukri asked its page for a reCAPTCHA" };
-  if (response.status() === 403) return { ok: false, stop: "refused", detail: "Naukri refused the page (403)" };
-  if (response.status() === 401) return { ok: false, stop: "needs_signin", detail: "Naukri answered 401" };
-  if (!response.ok()) return { ok: false, stop: "error", detail: `Naukri answered ${response.status()}` };
-  const json = await response.json().catch(() => null);
-  return json ? { ok: true, json } : { ok: false, stop: "error", detail: "Naukri's answer was not JSON" };
+function readCall(page: Page, url: string, call: RegExp): Promise<PageRead> {
+  return readPageCall(page, url, call, { label: "Naukri", stopOf: pageStop, statuses: { 406: { stop: "challenge", detail: "Naukri asked its page for a reCAPTCHA" } } });
 }
 
 /** One of Naukri's own search pages, as a person opens it; the listings its own script fetched. */

@@ -22,6 +22,7 @@ import { formUrlAllowed, mockSiteOf } from "./urls";
 import { LockStopped, withSubmitLock } from "./submitLock";
 import { sendPush } from "@/lib/push";
 import { markStopped } from "@/modules/sources";
+import { SITE_INFO, SITES } from "@/modules/sources/sites";
 import { isSignedInApplySite, runGate, type SignedInApplySite } from "./sites/gate";
 import { answer, ApplyWatch, pressApply, readJobPage, type NaukriStep } from "./sites/naukriApply";
 import type { Answer, Profile } from "@prisma/client";
@@ -695,7 +696,7 @@ async function execute(applicationId: string, options: { person?: boolean }) {
 // first. Nothing is sent while a question is open: Naukri applies when the last answer is saved, and says so in its
 // own apply service's reply to its own page (sites/naukriChat.ts readApplyReply).
 const SITE_MAX_QUESTIONS = 15;
-const SITE_LABEL: Record<SignedInApplySite, string> = { naukri: "Naukri" };
+const SITE_LABEL: Record<SignedInApplySite, string> = Object.fromEntries(SITES.map((site) => [site, SITE_INFO[site].label])) as Record<SignedInApplySite, string>;
 
 type SiteRunInput = {
   application: { id: string; userId: string; attempt: number };

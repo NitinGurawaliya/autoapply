@@ -12,7 +12,7 @@ export async function POST(_req: Request, context: { params: Promise<{ site: str
   const { site } = await context.params;
   if (!isSite(site)) return NextResponse.json({ error: "not_found" }, { status: 404 });
   // Our own reader finds the jobs (K14); a user's account reads nothing on request.
-  if (sharedReaderOn()) return NextResponse.json({ error: "shared_reader" }, { status: 409 });
+  if (sharedReaderOn(site)) return NextResponse.json({ error: "shared_reader" }, { status: 409 });
   if (!(await usableConnection(user.id, site))) return NextResponse.json({ error: "not_connected" }, { status: 409 });
   if (!(await screenWorkerAlive())) return NextResponse.json({ error: "no_screen_worker" }, { status: 409 });
   const rules = sourceRules(site);

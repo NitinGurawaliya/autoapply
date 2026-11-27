@@ -1,14 +1,14 @@
 import { db } from "@/lib/db";
 import { readerRules, type ReaderRules } from "@/modules/governance";
-import { adapterBoardOfHost } from "@/modules/jobs/boards";
-import { fromSearch, searchUrl, withDetail, type NaukriListing } from "@/modules/jobs/fetchers/naukri";
 import { jobAgeFor, matchesCompany } from "@/modules/jobs/fetchers/naukriBuckets";
+import type { SiteListing } from "@/modules/jobs/fetchers/siteListing";
 import { storeSiteListings } from "@/modules/jobs/ingest";
 import { embedPendingJobs } from "@/modules/jobs/semantic";
-import { claimBuckets, failBucket, finishBucket, finishReaderRun, readerOwner, readerState, releaseBuckets, SITE_INFO, startReaderRun, type ReaderCounts } from "@/modules/sources";
+import { claimBuckets, failBucket, finishBucket, finishReaderRun, isSite, readerOwner, readerState, releaseBuckets, startReaderRun, type ReaderCounts, type Site } from "@/modules/sources";
 import { openBrowser } from "../browser";
 import { worthDetail } from "./ingest";
-import { readJob, readSearch, type PageRead } from "./naukri";
+import { driverOf, type SiteDriver } from "./drivers";
+import type { PageRead } from "./read";
 
 /**
  * The shared reader (K14, docs/naukri/TDD.md 13.17): one signed-out Chrome window of ours, through a proxy address of its
@@ -18,7 +18,6 @@ import { readJob, readSearch, type PageRead } from "./naukri";
  * never signs in and never touches a user's account. Worker with a screen only.
  */
 
-const PAGE_SIZE = 20;
 const INGEST_DAYS = Number(process.env.INGEST_DAYS) || 60;
 // This many buckets in a row that failed on their own page end the window: something is wrong, not one search.
 const FAILED_IN_A_ROW = 3;
@@ -45,13 +44,25 @@ export type ReaderOutcome =
 // A person does not open pages on a timer: the pause varies by up to half again.
 const sleep = (seconds: number) => new Promise<void>((resolve) => setTimeout(resolve, seconds * 1000 * (1 + Math.random() * 0.5)));
 
+/** The real site a reader window is for; a check's own site ("naukri-smoke") reads as its site ("naukri"). */
+function siteOfReader(site: string): Site | null {
+  const base = site.split("-")[0];
+  return isSite(site) ? site : isSite(base) ? base : null;
+}
+
+function readerDriverFor(site: string): SiteDriver["reader"] | null {
+  const real = siteOfReader(site);
+  return real ? driverOf(real).reader : null;
+}
+
 async function openWindow(site: string, owner: string): Promise<ReaderWindow> {
   // Signed out and nothing kept: `fresh` loads no saved sign-in, `persist: false` saves none.
   // The site's public front page, as a visitor opens it: not its signed-in home (SITE_INFO homeUrl), which sends a signed-out visitor to the login.
-  const front = `${new URL((SITE_INFO as Record<string, { homeUrl: string }>)[site].homeUrl).origin}/`;
-  const session = await openBrowser(front, owner, { site: site as "naukri", fresh: true, persist: false });
+  const reader = readerDriverFor(site);
+  if (!reader) throw new Error(`no driver for ${site}`);
+  const session = await openBrowser(reader.frontUrl, owner, { site: siteOfReader(site) ?? undefined, fresh: true, persist: false });
   await session.page.waitForLoadState("domcontentloaded", { timeout: 20000 }).catch(() => undefined);
-  return { search: (url) => readSearch(session.page, url), job: (url, jobId) => readJob(session.page, url, jobId), close: () => session.close() };
+  return { search: (url) => reader.readSearch(session.page, url), job: (url, jobId) => reader.readJob(session.page, url, jobId), close: () => session.close() };
 }
 
 const defaultDeps: ReaderDeps = { open: openWindow, pause: sleep, now: () => new Date(), log: (line) => console.log(`reader: ${line}`), embed: embedPendingJobs };
@@ -67,6 +78,7 @@ async function storedIds(site: string, ids: string[]) {
 /** One bucket: its first pages (further ones only while they still bring jobs we do not have), the job pages of new jobs worth showing, stored. */
 async function readBucket(
   site: string,
+  driver: SiteDriver["reader"],
   bucket: { kind: string; keyword: string; location: string | null; experience: number | null; lastReadAt: Date | null },
   window: ReaderWindow,
   rules: ReaderRules,
@@ -75,7 +87,7 @@ async function readBucket(
   deps: ReaderDeps,
 ): Promise<{ stop: Stop | null; failed: string | null; listed: number; unmatched: boolean }> {
   const company = bucket.kind === "company";
-  const found = new Map<string, NaukriListing>();
+  const found = new Map<string, SiteListing>();
   let stop: Stop | null = null;
   let failed: string | null = null;
   let listed = 0;
@@ -86,13 +98,13 @@ async function readBucket(
       break;
     }
     await deps.pause(rules.seconds_between_pages);
-    const read = await window.search(searchUrl({ keyword: bucket.keyword, location: bucket.location, experience: bucket.experience }, pageNo, jobAge));
+    const read = await window.search(driver.searchUrl({ keyword: bucket.keyword, location: bucket.location, experience: bucket.experience }, pageNo, jobAge, company ? "company" : "search"));
     counts.pages += 1;
     if (!read.ok) {
-      // Naukri sending a signed-out page to its login is a refusal for this reader, like Access Denied.
-      // A search that finds nothing gets a client error from Naukri (27 Nov: "machine learning engineer" in remote, 1 year,
-      // last 7 days answered 400): an empty search, not a failed one, so the bucket waits its cadence.
-      if (read.stop === "error" && /answered (400|404)\b/.test(read.detail)) {
+      // The site sending a signed-out page to its login is a refusal for this reader, like Access Denied.
+      // A search the site answers as empty (Naukri: a 400 for a search that finds nothing) is not a failed one, so the
+      // bucket waits its cadence.
+      if (driver.emptySearch(read)) {
         deps.log(`${read.detail}: read as an empty search`);
         break;
       }
@@ -101,7 +113,7 @@ async function readBucket(
       deps.log(`${read.stop}: ${read.detail}`);
       break;
     }
-    const result = fromSearch(read.json, adapterBoardOfHost);
+    const result = driver.parseSearch(read.json);
     // A company's bucket keeps only that company's listings: Naukri's search by a name also returns other companies' jobs.
     const kept = company ? result.listings.filter((listing) => matchesCompany(bucket.keyword, listing.company.name)) : result.listings;
     listed += kept.length;
@@ -109,7 +121,7 @@ async function readBucket(
     const known = await storedIds(site, kept.map((listing) => listing.externalId));
     const fresh = kept.filter((listing) => !known.has(listing.externalId)).length;
     // A later page only while the whole page was the company's own.
-    const more = result.listings.length + result.skipped >= PAGE_SIZE && (result.total == null || pageNo * PAGE_SIZE < result.total) && (!company || kept.length === result.listings.length);
+    const more = result.listings.length + result.skipped >= driver.pageSize && (result.total == null || pageNo * driver.pageSize < result.total) && (!company || kept.length === result.listings.length);
     if (!more || fresh === 0) break;
   }
 
@@ -127,7 +139,7 @@ async function readBucket(
         deps.log(`${read.stop}: ${read.detail}`);
         break;
       }
-      found.set(job.externalId, withDetail(job, read.json));
+      found.set(job.externalId, driver.parseDetail(job, read.json));
       counts.details += 1;
     }
   }
@@ -150,7 +162,8 @@ async function readBucket(
 export async function runReader(site: string, options: { reader?: number; rules?: ReaderRules; deps?: Partial<ReaderDeps> } = {}): Promise<ReaderOutcome> {
   const deps: ReaderDeps = { ...defaultDeps, ...options.deps };
   const rules = options.rules ?? readerRules(site);
-  if (!rules) return { status: "skipped", reason: "no_rules" };
+  const driver = readerDriverFor(site);
+  if (!rules || !driver) return { status: "skipped", reason: "no_rules" };
   const now = deps.now();
   const state = await readerState(site, rules, now);
   if (state.pausedUntil) return { status: "skipped", reason: "paused" };
@@ -169,7 +182,7 @@ export async function runReader(site: string, options: { reader?: number; rules?
   try {
     window = await deps.open(site, owner);
     for (const bucket of buckets) {
-      const outcome = await readBucket(site, bucket, window, rules, { pages: state.pagesToday, details: state.detailsToday }, counts, deps);
+      const outcome = await readBucket(site, driver, bucket, window, rules, { pages: state.pagesToday, details: state.detailsToday }, counts, deps);
       counts.buckets += 1;
       if (outcome.stop) {
         stop = outcome.stop;

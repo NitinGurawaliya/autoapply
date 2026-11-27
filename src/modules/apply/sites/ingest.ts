@@ -1,15 +1,15 @@
 import { db } from "@/lib/db";
 import { appUrl, sendPush } from "@/lib/push";
 import { sourceRules } from "@/modules/governance";
-import { adapterBoardOfHost } from "@/modules/jobs/boards";
-import { fromSearch, planSearches, searchUrl, withDetail, type NaukriListing } from "@/modules/jobs/fetchers/naukri";
+import type { SiteListing } from "@/modules/jobs/fetchers/siteListing";
 import { classifyTitle, tracksOf } from "@/modules/jobs/functions";
 import { storeSiteListings } from "@/modules/jobs/ingest";
 import { embedPendingJobs } from "@/modules/jobs/semantic";
 import { tagPosting } from "@/modules/jobs/tagging";
 import { getConnection, markStopped, recordIngest, runsToday, SITE_INFO, usableConnection, type Site } from "@/modules/sources";
 import { openBrowser } from "../browser";
-import { onSignedInPage, readJob, readSearch, type PageStop } from "./naukri";
+import { driverOf } from "./drivers";
+import type { PageStop } from "./read";
 
 /**
  * One user's run on a signed-in site (Phase K, docs/naukri/TDD.md 4.6): Naukri's own search pages in the user's own
@@ -18,7 +18,6 @@ import { onSignedInPage, readJob, readSearch, type PageStop } from "./naukri";
  * Worker with a screen only.
  */
 
-const PAGE_SIZE = 20;
 const INGEST_DAYS = Number(process.env.INGEST_DAYS) || 60;
 
 export type SourceIngestOutcome =
@@ -28,8 +27,8 @@ export type SourceIngestOutcome =
 // A person does not open pages on a timer: the pause varies by up to half again.
 const pause = (seconds: number) => new Promise((resolve) => setTimeout(resolve, seconds * 1000 * (1 + Math.random() * 0.5)));
 
-export function worthDetail(job: NaukriListing) {
-  if (job.applyKind !== "naukri") return false;
+export function worthDetail(job: SiteListing) {
+  if (job.applyKind !== "site") return false;
   const { eligibility } = tagPosting(job);
   return (eligibility === "india" || eligibility === "remote_india") && classifyTitle(job.title).function !== "non_tech";
 }
@@ -51,25 +50,26 @@ export async function runSourceIngest(userId: string, site: Site, options: { log
   let budgetHit = false;
   let error: string | null = null;
   const info = SITE_INFO[site];
+  const driver = driverOf(site);
   // Saved back only at the end, and only while the connection is still there: closing after a Disconnect must not
   // write back the sign-in the user just deleted.
   const session = await openBrowser(info.homeUrl, userId, { site, persist: false });
   const stillConnected = async () => (await getConnection(userId, site))?.status === "connected";
   try {
     await session.page.waitForLoadState("domcontentloaded", { timeout: 15000 }).catch(() => undefined);
-    if (!onSignedInPage(session.page)) {
+    if (!driver.login.onSignedInPage(session.page)) {
       stop = "needs_signin";
       return await finish();
     }
 
-    const searches = planSearches({ tracks: tracksOf(profile), currentTitle: profile.currentTitle, city: profile.city, yearsExperience: profile.yearsExperience }, rules.searches_per_run);
-    const found = new Map<string, NaukriListing>();
+    const searches = driver.reader.searchesFor({ tracks: tracksOf(profile), currentTitle: profile.currentTitle, city: profile.city, yearsExperience: profile.yearsExperience }, rules.searches_per_run);
+    const found = new Map<string, SiteListing>();
     for (const search of searches) {
       counts.searches += 1;
       for (let pageNo = 1; pageNo <= rules.pages_per_search; pageNo += 1) {
         if (!(await stillConnected())) return await finish();
         await pause(rules.seconds_between_pages);
-        const read = await readSearch(session.page, searchUrl(search, pageNo));
+        const read = await driver.reader.readSearch(session.page, driver.reader.searchUrl(search, pageNo, 7, "search"));
         counts.pages += 1;
         if (!read.ok) {
           if (read.stop === "error") {
@@ -80,10 +80,10 @@ export async function runSourceIngest(userId: string, site: Site, options: { log
           log(`stopped: ${read.detail}`);
           return await finish(found);
         }
-        const result = fromSearch(read.json, adapterBoardOfHost);
+        const result = driver.reader.parseSearch(read.json);
         for (const listing of result.listings) found.set(listing.externalId, listing);
         counts.listed += result.listings.length;
-        const more = result.listings.length + result.skipped >= PAGE_SIZE && (result.total == null || pageNo * PAGE_SIZE < result.total);
+        const more = result.listings.length + result.skipped >= driver.reader.pageSize && (result.total == null || pageNo * driver.reader.pageSize < result.total);
         if (!more) break;
         if (pageNo === rules.pages_per_search) budgetHit = true;
       }
@@ -99,14 +99,14 @@ export async function runSourceIngest(userId: string, site: Site, options: { log
     for (const job of wanted.slice(0, rules.details_per_run)) {
       if (!(await stillConnected())) return await finish(found);
       await pause(rules.seconds_between_pages);
-      const read = await readJob(session.page, job.applyUrl, job.externalId);
+      const read = await driver.reader.readJob(session.page, job.applyUrl, job.externalId);
       if (!read.ok) {
         if (read.stop === "error") continue;
         stop = read.stop;
         log(`stopped: ${read.detail}`);
         return await finish(found);
       }
-      found.set(job.externalId, withDetail(job, read.json));
+      found.set(job.externalId, driver.reader.parseDetail(job, read.json));
       counts.details += 1;
     }
     return await finish(found);
@@ -118,13 +118,13 @@ export async function runSourceIngest(userId: string, site: Site, options: { log
   }
 
   // Stores what was read (also when a run stops part way), records the run, and settles the connection.
-  async function finish(found?: Map<string, NaukriListing>): Promise<SourceIngestOutcome> {
+  async function finish(found?: Map<string, SiteListing>): Promise<SourceIngestOutcome> {
     const connected = await stillConnected();
     if (found && found.size > 0) {
       const all = [...found.values()];
       const elsewhere = all.filter((job) => job.applyKind === "none").length;
       const onBoard = all.filter((job) => job.applyKind === "board").length;
-      const tech = all.filter((job) => job.applyKind === "naukri" && worthDetail(job)).length;
+      const tech = all.filter((job) => job.applyKind === "site" && worthDetail(job)).length;
       kept = `; ${found.size} unique: ${all.length - elsewhere - onBoard} apply on Naukri (${tech} India tech), ${onBoard} on a board we apply on, ${elsewhere} elsewhere (not kept)`;
     }
     if (found && found.size > 0 && connected) {

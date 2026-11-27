@@ -10,8 +10,8 @@ import { dueBuckets, isSite, planReaderBuckets, sharedReaderOn, SITES } from "@/
  * for a worker with a screen.
  */
 export async function handleReaderPlan() {
-  if (!sharedReaderOn()) return;
   for (const site of SITES) {
+    if (!sharedReaderOn(site)) continue;
     const rules = readerRules(site);
     if (!rules) continue;
     const plan = await planReaderBuckets(site, rules);

@@ -11,7 +11,7 @@ export async function handleSourceIngest(jobs: Job<{ userId: string; site: strin
     const { userId, site } = job.data;
     if (typeof userId !== "string" || typeof site !== "string" || !isSite(site)) continue;
     // With the shared reader on (K14) a user's own account no longer reads on a timer: only a run they asked for.
-    if (job.data.by === "tick" && sharedReaderOn()) continue;
+    if (job.data.by === "tick" && sharedReaderOn(site)) continue;
     try {
       const outcome = await runSourceIngest(userId, site);
       if (outcome.status === "skipped") console.log(`source-ingest ${site} …${userId.slice(-6)}: skipped (${outcome.reason})`);

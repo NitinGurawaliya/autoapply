@@ -1,4 +1,5 @@
 import { planSearches, slugPart, type NaukriSearch } from "./naukri";
+import type { SearchPlanner } from "./siteSearches";
 
 /**
  * Search buckets for the shared Naukri reader (K14, docs/naukri/TDD.md 13.17): the searches every connected user wants,
@@ -26,10 +27,10 @@ export function bucketKey(search: Pick<NaukriSearch, "keyword" | "location" | "e
 }
 
 /** The buckets one user's searches fall into, field first as their own run would search them (planSearches). */
-export function bucketsOf(input: BucketInput, limit: number): Bucket[] {
+export function bucketsOf(input: BucketInput, limit: number, plan: SearchPlanner = planSearches): Bucket[] {
   const seen = new Set<string>();
   const buckets: Bucket[] = [];
-  for (const search of planSearches(input, limit)) {
+  for (const search of plan(input, limit)) {
     const experience = bandOf(search.experience);
     const bucket: Bucket = { key: bucketKey({ keyword: search.keyword, location: search.location, experience }), keyword: search.keyword, location: search.location, experience };
     if (!seen.has(bucket.key)) {
@@ -44,10 +45,10 @@ export function bucketsOf(input: BucketInput, limit: number): Bucket[] {
  * Every user's buckets together, with how many users each serves: the most wanted first, at most `max`. Cost follows the
  * number of distinct buckets, not the number of users.
  */
-export function planBuckets(inputs: BucketInput[], options: { perUser: number; max: number }): PlannedBucket[] {
+export function planBuckets(inputs: BucketInput[], options: { perUser: number; max: number; plan?: SearchPlanner }): PlannedBucket[] {
   const planned = new Map<string, PlannedBucket>();
   for (const input of inputs) {
-    for (const bucket of bucketsOf(input, options.perUser)) {
+    for (const bucket of bucketsOf(input, options.perUser, options.plan)) {
       const known = planned.get(bucket.key);
       if (known) known.users += 1;
       else planned.set(bucket.key, { ...bucket, users: 1 });

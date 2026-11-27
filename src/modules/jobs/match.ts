@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { sitesOn } from "@/lib/site-flags";
 import { daysAgoLabel } from "@/lib/days";
 import { cachedFeed, cachedFeedDegraded, cachedFeedExtra, rememberFeed } from "@/lib/feed-cache";
 import { employerKey, feedHistory, loadRules, roleKey } from "@/modules/governance";
@@ -26,7 +27,7 @@ export { APPLY_BOARDS };
  * ENABLE_NAUKRI=1, and then only for a user whose account is connected (feedBoardsFor). Applying on them is a separate
  * switch (APPLY_BOARDS), turned on after the adapter's first real submit (K4).
  */
-export const SIGNED_IN_FEED_BOARDS: readonly string[] = process.env.ENABLE_NAUKRI === "1" ? ["naukri"] : [];
+export const SIGNED_IN_FEED_BOARDS: readonly string[] = sitesOn("feed");
 /** Every board the feed can show: the boards the agent applies on, then the signed-in sites. */
 export const FEED_BOARDS: readonly string[] = [...APPLY_BOARDS, ...SIGNED_IN_FEED_BOARDS.filter((board) => !APPLY_BOARDS.includes(board))];
 const BOARDS = FEED_BOARDS;

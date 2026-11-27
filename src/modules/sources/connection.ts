@@ -34,8 +34,8 @@ export type SourcesOverview = {
   canConnect: boolean;
   /** A worker that can show a window beat in the last few minutes: the sign-in window has somewhere to open. */
   screenWorkerAlive: boolean;
-  /** NAUKRI_READER=1 (K14): our own reader finds the site's jobs for everyone, so a user's account does not read on request. */
-  sharedReader: boolean;
+  /** The sites whose shared reader is on (K14, <SITE>_READER=1): our own reader finds their jobs for everyone, so a user's account does not read on request. */
+  sharedReaders: string[];
 };
 
 // A worker beats every minute (worker/index.ts); five minutes of silence means none is running.
@@ -73,7 +73,7 @@ export async function sourcesOverview(userId: string): Promise<SourcesOverview> 
     screenWorkerAlive(),
   ]);
   const bySite = new Map(rows.map((row) => [row.site, row]));
-  return { sites: SITES.map((site) => view(site, bySite.get(site))), canConnect: Boolean(profile && !profile.isTest), screenWorkerAlive: screen, sharedReader: sharedReaderOn() };
+  return { sites: SITES.map((site) => view(site, bySite.get(site))), canConnect: Boolean(profile && !profile.isTest), screenWorkerAlive: screen, sharedReaders: SITES.filter((site) => sharedReaderOn(site)) };
 }
 
 export type StartConnectResult = { ok: true } | { ok: false; reason: "test_profile" | "no_profile" | "no_screen_worker" | "already_connecting" | "queue_failed" };

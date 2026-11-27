@@ -3,10 +3,11 @@
 The task file for [TDD.md](TDD.md). Root [docs/TASKS.md](../TASKS.md) lists these one line each. Mark `[~]` / `[x]` here first, then on the root line. Order K16 → K17 → K18 → K19.
 
 <a id="k16"></a>
-### [~] K16 — Site drivers: the Naukri seams behind one interface
+### [x] K16 — Site drivers: the Naukri seams behind one interface
 Do: `apply/sites/read.ts` (shared `readCall`, `PageRead`, `PageStop`), `apply/sites/drivers.ts` (`SiteDriver`, `driverOf`), `jobs/fetchers/siteListing.ts` (`SiteListing`, `applyKind: site | board | none`), `lib/site-flags.ts` (`siteOn(site, feed | apply | reader)`); the reader, per-user ingest, connect, relay, gate, runner, queue, pool and match code go through them. No behaviour change.
 Design: [4.1 Site drivers](TDD.md#41-site-drivers) · [4.5 Env](TDD.md#45-env).
-**Done when:** `naukri-reader-test`, `naukri-listing-test`, `naukri-adapter-test` and `naukri-lean-test` print PASS unchanged; typecheck and lint pass.
+**Done when:** `naukri-reader-test`, `naukri-listing-test`, `naukri-adapter-test` and `naukri-lean-test` print PASS unchanged, with `site-flags-test` PASS; typecheck and lint pass.
+Done 27 Nov: the four Naukri checks, `site-flags-test` and `feed-sql-test` PASS; typecheck and lint clean. `drivers.ts` (reader and login of a site), `read.ts` (shared page read), `siteListing.ts` (`SiteListing`, `applyKind` "naukri" is now "site"), `siteSearches.ts` (pure planners), `site-flags.ts` (`ENABLE_<SITE>`, `ENABLE_<SITE>_APPLY`, `<SITE>_READER`; `sharedReaderOn(site)`, `sharedReaders` in the overview). Apply stays Naukri's until K19.
 
 <a id="k17"></a>
 ### [ ] K17 — Hirist reader

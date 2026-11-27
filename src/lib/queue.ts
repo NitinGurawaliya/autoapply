@@ -1,5 +1,6 @@
 import { PgBoss } from "pg-boss";
 import { db, loadEnvFile } from "@/lib/db";
+import { SITES } from "@/modules/sources/sites";
 
 loadEnvFile();
 
@@ -20,7 +21,7 @@ export const LEGACY_APPLY_QUEUES = ["apply-handoff", "apply-unprotected", "apply
  */
 export const SITE_APPLY_QUEUE = "apply-site";
 /** The sources whose applications go on SITE_APPLY_QUEUE (modules/sources/sites.ts SITES). */
-const SIGNED_IN_SOURCES: readonly string[] = ["naukri"];
+const SIGNED_IN_SOURCES: readonly string[] = SITES;
 export const APPLY_QUEUES = [APPLY_QUEUE, ...LEGACY_APPLY_QUEUES, SITE_APPLY_QUEUE];
 /**
  * Boards whose challenge goes to the person in the window (the adapters' `ctx.handoff`), and where an Ashby check, once

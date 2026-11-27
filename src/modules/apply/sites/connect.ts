@@ -4,8 +4,7 @@ import { sealKeyReady } from "@/lib/sealed";
 import { failConnect, finishConnect, getConnection, loginNumber, maskNumber, saveLoginNumber, setStreamUrl, SITE_INFO, siteStateKey, type Site } from "@/modules/sources";
 import { storage } from "@/lib/storage";
 import { livePage, openBrowser } from "../browser";
-import { waitForSignIn } from "./naukri";
-import { enterLoginCode, sendLoginCode } from "./naukriOtp";
+import { driverOf, type SiteDriver } from "./drivers";
 import { openStream, relayReady, type StreamOutcome } from "./relay";
 import { ScreenStream } from "./screen-stream";
 
@@ -16,7 +15,7 @@ export const SIGN_IN_WAIT_MS = 10 * 60 * 1000;
  * For checks only: a local page instead of the site's login, that page's own sign-in test, and `firstRun: false` so a
  * throwaway user's connect queues no real first read.
  */
-export type ConnectOptions = { loginUrl?: string; waitForSignIn?: typeof waitForSignIn; firstRun?: boolean };
+export type ConnectOptions = { loginUrl?: string; waitForSignIn?: SiteDriver["login"]["waitForSignIn"]; firstRun?: boolean };
 
 /**
  * Connect a user's own account on a job site (worker, screen only): the login page in a fresh visible window, the person
@@ -40,6 +39,7 @@ export async function runConnect(userId: string, site: Site, options: ConnectOpt
     return "failed" as const;
   }
   const info = SITE_INFO[site];
+  const login = driverOf(site).login;
   const loginUrl = options.loginUrl ?? info.loginUrl;
   const streamed = relayReady();
   // A window that does not finish signing in must never replace a saved sign-in: persist only on success.
@@ -62,14 +62,14 @@ export async function runConnect(userId: string, site: Site, options: ConnectOpt
           if (!mobile) return { state: "refused", message: "Enter your 10-digit mobile number." };
           const page = livePage(session.page);
           if (!page) return { state: "refused", message: "The sign-in closed. Connect again." };
-          const step = await sendLoginCode(page, mobile);
+          const step = await login.sendCode(page, mobile);
           if (step.state === "code_sent") usedNumber = mobile;
           return step;
         },
         enter: async (code) => {
           const page = livePage(session.page);
           if (!page) return { state: "refused", message: "The sign-in closed. Connect again." };
-          return enterLoginCode(page, code);
+          return login.enterCode(page, code);
         },
       });
       if (!(await setStreamUrl(userId, site, relay.url))) {
@@ -86,7 +86,7 @@ export async function runConnect(userId: string, site: Site, options: ConnectOpt
       url: appUrl("/account"),
       tag: `connect-${site}`,
     }).catch(() => 0);
-    const wait = options.waitForSignIn ?? waitForSignIn;
+    const wait = options.waitForSignIn ?? login.waitForSignIn;
     const result = await wait(session.page, SIGN_IN_WAIT_MS, async () => (await getConnection(userId, site))?.status !== "connecting");
     if (result.status === "cancelled") {
       outcome = "cancelled";

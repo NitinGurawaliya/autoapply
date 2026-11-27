@@ -167,8 +167,8 @@ export function ConnectedSites({ initial }: { initial: SourcesOverview }) {
             {site.status === "connecting" ? <AgentStatus text="Waiting for you to sign in" size={32} /> : null}
             {linked ? (
               <div className="flex flex-col gap-2">
-                {site.status === "connected" && overview.sharedReader ? <InfoNote size="sm">{`Your agent finds ${site.label} jobs for you on its own, a few times a day. New ones reach your feed by themselves.`}</InfoNote> : null}
-                {site.status === "connected" && !overview.sharedReader ? (
+                {site.status === "connected" && overview.sharedReaders.includes(site.site) ? <InfoNote size="sm">{`Your agent finds ${site.label} jobs for you on its own, a few times a day. New ones reach your feed by themselves.`}</InfoNote> : null}
+                {site.status === "connected" && !overview.sharedReaders.includes(site.site) ? (
                   <Button type="button" variant="primary" size="lg" className="w-full" disabled={busy === site.site} onClick={() => void fetchNow(site)}>
                     {`Find ${site.label} jobs now`}
                   </Button>
