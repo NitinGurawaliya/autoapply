@@ -16,6 +16,9 @@ import { absoluteUrl, jobPath } from "@/lib/job-slug";
 import { shareLinksEnabled } from "@/lib/share-gate";
 import { employerPage, myApplicationsAt, parseEmployerFilters, type EmployerJobRow, type MyApplication } from "@/modules/jobs/employer-pages";
 import { employerFits } from "@/modules/jobs/browse";
+import { loadRules } from "@/modules/governance";
+import { applyToMatching } from "../actions";
+import { ApplyAll } from "../apply-all";
 import { companyHref, CountHeading, Crumbs, Filters, JsonLd, Pager } from "../parts";
 import { JobCard, JobCards, type JobStatus } from "../job-cards";
 
@@ -75,6 +78,8 @@ export default async function CompanyPage({ params, searchParams }: Props) {
   const { employer, matched, india, abroad, page, pages, total, indiaTotal, all, newThisWeek, departments } = found;
   // Signed in: what they have already done at this employer.
   const mine = user ? await myApplicationsAt(user.id, employer.id, [...matched, ...india, ...abroad].map((job) => job.id)) : null;
+  // The matching jobs they haven't applied to: what "Apply to all that fit" sends (X5).
+  const open = matched.filter((job) => !mine?.byJob.has(job.id));
   const statusOf = (application: MyApplication | undefined): JobStatus | null => {
     if (!application) return null;
     const meta = statusMeta(application.status);
@@ -198,6 +203,14 @@ export default async function CompanyPage({ params, searchParams }: Props) {
           {fits ? (
             <section className="mt-6">
               <CountHeading count={matched.length}>Matches your profile</CountHeading>
+              {open.length >= 2 ? (
+                <ApplyAll
+                  company={employer.name}
+                  jobs={open.map((job) => ({ id: job.id, title: job.title, score: job.fit?.score ?? null }))}
+                  perWeek={loadRules().max_per_company_per_week}
+                  action={applyToMatching.bind(null, employer.slug)}
+                />
+              ) : null}
               {matched.length > 0 ? (
                 cards(matched)
               ) : (

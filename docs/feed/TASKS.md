@@ -41,12 +41,14 @@ signed out unchanged; smoke PASS.
 Done 2026-11-27: Equifax signed in (test account): 1 role in "Matches your profile" with Apply, 6 others each with a reason, no Apply; smoke PASS (8 new checks). `browse.ts employerFits` (browse refactored to share it), `employer-pages.ts` (`fits`, `matched`), `[slug]/page.tsx`, `job-cards.tsx` (`notMatching`), `match.ts` feedRows `employerId`, ARCHITECTURE 6.25.
 
 <a id="x5"></a>
-### [ ] X5 — Apply to all that fit
+### [x] X5 — Apply to all that fit
 **Do:** `src/app/companies/actions.ts` (`applyToMatching`), the confirm sheet; `scripts/apply-matching-test.ts`;
 ARCHITECTURE §6.9.
 **Design:** [4.5 Apply to all](TDD.md#45-apply-to-all-that-fit).
 **Done when:** on mock jobs with a test profile it applies best first and stops at the weekly company cap with the
 message; events written; `guards-test` PASS.
+
+Done 2026-11-27: mock jobs, test profile: 3 of 6 sent best first, 3 held by the weekly cap and never swiped, events on each; a second tap sends none; guards-test PASS. Okta (test account): sheet lists 4 best first. `lifecycle.ts applyToAll`, `companies/actions.ts`, `apply-all.tsx`, `[slug]/page.tsx`, `scripts/apply-matching-test.ts`, ARCHITECTURE 6.9.
 
 <a id="x6"></a>
 ### [ ] X6 — The employer in the feed

@@ -161,6 +161,70 @@ export async function resolveVerification(applicationId: string, userId: string,
   return sent ? ("submitted" as const) : ("failed" as const);
 }
 
+/** The caps "Apply to all" reads before it sends anything (the same numbers the swipe check refuses on). */
+const CAP_RULES = new Set(["max_per_company_per_week", "max_applications_per_day", "max_in_flight"]);
+
+export type ApplyAllResult = {
+  /** The applications started, in the order sent (best first). */
+  sent: string[];
+  /** Jobs that fit but wait for room under a cap, and the cap. */
+  held: number;
+  heldBy: string | null;
+  /** Jobs the swipe check refused for another reason (already applied, the same role, the score), or already decided. */
+  skipped: number;
+};
+
+/**
+ * Apply to all that fit (Phase X, X5, docs/feed/TDD.md 4.5): a right swipe on each job, best first, one at a time, each
+ * through swipeRight and its every rule and event. The room under the caps (this employer this week, today, in flight) is
+ * read first and only that many are sent, so a job over a cap is never swiped (a refusal inside swipeRight records the
+ * swipe, and the job could not be applied to next week); the rest are held and said so. All the jobs are one employer's.
+ */
+export async function applyToAll(
+  userId: string,
+  jobIds: string[],
+  enqueue: (applicationId: string, job: { source: string; applyUrl: string }) => Promise<string | null> = (applicationId, job) => enqueueApply(applicationId, 0, { job }),
+): Promise<ApplyAllResult> {
+  const none: ApplyAllResult = { sent: [], held: 0, heldBy: null, skipped: 0 };
+  if (jobIds.length === 0) return none;
+  const first = await db.job.findUnique({ where: { id: jobIds[0] }, select: { title: true, companyId: true } });
+  if (!first) return { ...none, skipped: jobIds.length };
+  const rules = loadRules();
+  const history = await historyFor(userId, first);
+  const caps = [
+    { rule: "max_per_company_per_week", room: rules.max_per_company_per_week - history.companyWeekCount },
+    { rule: "max_applications_per_day", room: rules.max_applications_per_day - history.applicationsToday },
+    { rule: "max_in_flight", room: rules.max_in_flight_per_user - history.inFlight },
+  ];
+  const tightest = caps.reduce((a, b) => (b.room < a.room ? b : a));
+  const room = Math.max(0, tightest.room);
+  const sent: string[] = [];
+  let skipped = 0;
+  let heldBy: string | null = null;
+  let index = 0;
+  while (index < jobIds.length && sent.length < room) {
+    const result = await swipeRight(userId, jobIds[index], enqueue);
+    if (result.ok) {
+      sent.push(result.applicationId);
+      index += 1;
+      continue;
+    }
+    if (result.reason === "blocked" && CAP_RULES.has(result.rule)) {
+      // Another tab or the deck took the room meanwhile. A full queue records nothing, so that job waits too.
+      heldBy = result.rule;
+      if (result.rule !== "max_in_flight") {
+        skipped += 1;
+        index += 1;
+      }
+      break;
+    }
+    skipped += 1;
+    index += 1;
+  }
+  const held = jobIds.length - index;
+  return { sent, held, heldBy: held > 0 ? (heldBy ?? tightest.rule) : null, skipped };
+}
+
 export type SwipeResult =
   | { ok: true; applicationId: string }
   | { ok: false; reason: "not_found" | "already_swiped" | "profile_required" | "queue_failed" }
