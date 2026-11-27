@@ -537,6 +537,21 @@ export function SwipeDeck({
  * shell's live counts, so an application sent while this is on screen moves from "being filled in" to "sent".
  */
 function DayDone({ total, sent, filling, waiting }: { total: number; sent: number; filling: number; waiting: number }) {
+  // Past today's set (X1): the rest of the ranked list that matches, counted once the day is done, so the end of the set
+  // is never a dead end. Null while counting or when the count failed: the button stays hidden.
+  const [more, setMore] = useState<number | null>(null);
+  useEffect(() => {
+    let live = true;
+    fetch("/api/jobs?rest=1")
+      .then((response) => (response.ok ? (response.json() as Promise<{ jobs?: unknown[] }>) : null))
+      .then((body) => {
+        if (live && body?.jobs) setMore(body.jobs.length);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
   return (
     <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">
       <div className="my-auto">
@@ -566,9 +581,16 @@ function DayDone({ total, sent, filling, waiting }: { total: number; sent: numbe
           {sent + filling + waiting === 0 ? <p className="m-0 type-body text-muted-foreground">You skipped all {total}.</p> : null}
         </div>
       </div>
-      <Link href="/applications" className={buttonVariants({ variant: "primary", size: "xl", className: "w-full" })}>
-        See applications
-      </Link>
+      <div className="flex flex-col gap-2">
+        {more ? (
+          <Link href="/feed?rest=1" className={buttonVariants({ variant: "primary", size: "xl", className: "w-full" })}>
+            Keep going: {more} more that {more === 1 ? "matches" : "match"} you
+          </Link>
+        ) : null}
+        <Link href="/applications" className={buttonVariants({ variant: more ? "line" : "primary", size: "xl", className: "w-full" })}>
+          See applications
+        </Link>
+      </div>
     </div>
   );
 }

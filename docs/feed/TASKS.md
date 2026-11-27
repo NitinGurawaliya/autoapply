@@ -4,12 +4,14 @@ The task file for [TDD.md](TDD.md). Root [docs/TASKS.md](../TASKS.md) lists each
 here first, then on the root line. Order: X1 → X2 → X3 → X4 → X5 → X6.
 
 <a id="x1"></a>
-### [ ] X1 — No dead end after today's picks
+### [x] X1 — No dead end after today's picks
 **Do:** `src/app/(app)/feed/swipe-deck.tsx` (`DayDone`, caught-up state) and `page.tsx`: "Keep going: N more that
 match you" → `?rest=1`; an empty daily set opens the ranked list; `scripts/feed-funnel.ts --email` (read-only).
 **Design:** [2 Facts](TDD.md#2-facts-the-design-rests-on-code-and-data-27-nov) · [5 UI](TDD.md#5-ui).
 **Done when:** the funnel prints Nitin's stages; after today's set the deck offers the rest with its count and opens it;
 typecheck and lint pass.
+
+Done 27 Nov: `feed-funnel.ts` for Nitin: 23,246 recent India jobs, 5,113 in his fields, 805 within years and level, 772 close, 285 swiped, 487 left before the model and the floor; 7 empty daily sets in 7 days. `DayDone` counts `/api/jobs?rest=1` and offers "Keep going: N more that match you"; it shows only where `DAILY_SET=1` (off locally), so the screen itself is checked in production. Nitin, with no set, gets All jobs (X3).
 
 <a id="x2"></a>
 ### [ ] X2 — One judgement of a job against the profile

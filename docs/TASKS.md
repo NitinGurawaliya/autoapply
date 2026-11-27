@@ -354,7 +354,7 @@ Design: [docs/employers/TDD.md](employers/TDD.md) (v2, 27 Nov: build sheets in i
 
 Design: [docs/feed/TDD.md](feed/TDD.md). Tasks: [docs/feed/TASKS.md](feed/TASKS.md). Order X1 → X6.
 
-- [ ] [X1 — No dead end after today's picks](feed/TASKS.md#x1)
+- [x] [X1 — No dead end after today's picks](feed/TASKS.md#x1)
 - [ ] [X2 — One judgement of a job against the profile](feed/TASKS.md#x2)
 - [ ] [X3 — All jobs in the feed](feed/TASKS.md#x3)
 - [ ] [X4 — Company page: matching jobs first](feed/TASKS.md#x4)
