@@ -17,10 +17,11 @@ Design: [2 Facts](TDD.md#2-facts-the-design-rests-on-27-nov-2026) · [4.2 Readin
 **Done when:** `hirist-listing-test` and `hirist-reader-test` PASS; one live window in the screen image stores Hirist jobs and records its `ReaderRun` (proxy bytes in the Done line); Hirist jobs show to a connected test user and not to an unconnected one.
 
 <a id="k18"></a>
-### [ ] K18 — Hirist connect: email or mobile + OTP, streamed
+### [~] K18 — Hirist connect: email or mobile + OTP, streamed
 Do: the login part of `apply/sites/hirist.ts` (`sendCode`, `enterCode`, signed-in detection), the relay and `login-number.ts` taking an email or a mobile, the Account card copy by site.
 Design: [4.3 Connect](TDD.md#43-connect-as-naukri-1316).
-**Done when:** `hirist-connect-smoke` PASS on a mock login page; the owner's real code connect leaves the connection `connected` with the session sealed; the worker log holds no code, number, email or page content.
+Built 27 Nov, offline checks PASS: `hirist-otp-test` (the steps against a page laid out like Hirist's login: both code-box layouts, Hirist's own refusals without digits, the wait confirmed by the page's own `auth/validate`), `hirist-login-id-test` (mobile or email kept sealed); form read signed out by `scripts/hirist-login-probe.ts` (`input[name=otpIdentifier]`, "Get OTP", header "Login"; no captcha). Open: the code screen's real layout and the signed-in answer are confirmed by the owner's real connect.
+**Done when:** `hirist-otp-test` PASS on a page laid out like Hirist's login (was: `hirist-connect-smoke`); the owner's real code connect leaves the connection `connected` with the session sealed; the worker log holds no code, number, email or page content.
 
 <a id="k19"></a>
 ### [ ] K19 — Hirist apply

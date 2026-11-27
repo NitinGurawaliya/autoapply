@@ -6,7 +6,7 @@ import type { BucketInput } from "@/modules/jobs/fetchers/naukriBuckets";
 import type { SearchPage, SiteListing, SiteSearch } from "@/modules/jobs/fetchers/siteListing";
 import { plannerOf } from "@/modules/jobs/fetchers/siteSearches";
 import type { Site } from "@/modules/sources";
-import { readJob as hiristReadJob, readSearch as hiristReadSearch } from "./hirist";
+import { enterLoginCode as hiristEnterCode, readJob as hiristReadJob, readSearch as hiristReadSearch, sendLoginCode as hiristSendCode, waitForSignIn as hiristWaitForSignIn } from "./hirist";
 import { onSignedInPage, readJob, readSearch, waitForSignIn, type SignInResult } from "./naukri";
 import { enterLoginCode, sendLoginCode, type OtpStep } from "./naukriOtp";
 import type { PageRead, PageStop } from "./read";
@@ -69,10 +69,6 @@ const naukri: SiteDriver = {
   login: { loginId: "mobile", waitForSignIn, onSignedInPage, sendCode: sendLoginCode, enterCode: enterLoginCode },
 };
 
-// Hirist's sign-in is K18: until then connecting it is not offered (siteListed) and its login steps refuse.
-const notYet = async (): Promise<never> => {
-  throw new Error("Hirist sign-in is not built yet (K18)");
-};
 const hirist: SiteDriver = {
   site: "hirist",
   label: "Hirist",
@@ -89,7 +85,8 @@ const hirist: SiteDriver = {
     emptySearch: () => false,
     searchesFor: hiristPlan,
   },
-  login: { loginId: "mobile_or_email", waitForSignIn: notYet, onSignedInPage: () => false, sendCode: notYet, enterCode: notYet },
+  // Hirist has no per-user read (its jobs come from the shared reader), so there is no signed-in page to check.
+  login: { loginId: "mobile_or_email", waitForSignIn: hiristWaitForSignIn, onSignedInPage: () => false, sendCode: hiristSendCode, enterCode: hiristEnterCode },
 };
 
 const DRIVERS: Partial<Record<Site, SiteDriver>> = { naukri, hirist };

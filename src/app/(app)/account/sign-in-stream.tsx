@@ -45,6 +45,16 @@ const SPECIAL_KEYS = new Set(["Enter", "Backspace", "Tab", "ArrowLeft", "ArrowRi
 const RESEND_AFTER_S = 30;
 const CODE_LENGTH = 6;
 
+// What the user types to get a code: a 10-digit mobile number, and on Hirist an email too (K18).
+const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
+function loginBody(value: string) {
+  const digits = value.replace(/\D/g, "");
+  return !value.includes("@") && /^\d{10}$/.test(digits.slice(-10)) ? { mobile: digits.slice(-10) } : { email: value.trim() };
+}
+function loginUsable(site: string, value: string) {
+  return site === "hirist" ? value.includes("@") ? EMAIL.test(value.trim()) : /^\d{10}$/.test(value.replace(/\D/g, "").slice(-10)) : /^\d{10}$/.test(value);
+}
+
 /** The page size to ask the worker for: the picture is drawn 1:1 in the sheet, so text on it reads at its own size. */
 function phoneViewport() {
   const width = Math.round(Math.min(window.innerWidth, 480) - 40);
@@ -256,7 +266,7 @@ export function SignInStream({ site, label, onSettled, onClose, onCancel }: { si
     if (otpBusy) return;
     setOtpBusy(true);
     setOtpError("");
-    const reply = (await post("login", useSaved ? { saved: true } : { mobile })) as OtpReply | null;
+    const reply = (await post("login", useSaved ? { saved: true } : loginBody(mobile))) as OtpReply | null;
     setOtpBusy(false);
     if (!reply) return setOtpError(`Could not reach ${label}'s sign-in. Try again.`);
     if (reply.state === "code_sent") {
@@ -270,7 +280,8 @@ export function SignInStream({ site, label, onSettled, onClose, onCancel }: { si
   }
 
   async function submitCode(value: string) {
-    if (otpBusy || value.length !== CODE_LENGTH) return;
+    // Naukri's code is six digits; Hirist's length is the user's to say (the worker takes four to eight).
+    if (otpBusy || (site === "hirist" ? value.length < 4 || value.length > 8 : value.length !== CODE_LENGTH)) return;
     setOtpBusy(true);
     setOtpError("");
     const reply = (await post("code", { code: value })) as OtpReply | null;
@@ -365,7 +376,8 @@ export function SignInStream({ site, label, onSettled, onClose, onCancel }: { si
   const live = phase.name === "live" && frame;
 
   if (phase.name === "number") {
-    const usable = /^\d{10}$/.test(mobile);
+    const usable = loginUsable(site, mobile);
+    const orEmail = site === "hirist";
     return (
       <form
         className="flex flex-col gap-4 pt-4"
@@ -380,7 +392,7 @@ export function SignInStream({ site, label, onSettled, onClose, onCancel }: { si
             Cancel
           </Button>
         </div>
-        <p className="m-0 type-body text-muted-foreground">{label} texts you a code. You type it here.</p>
+        <p className="m-0 type-body text-muted-foreground">{label} {orEmail ? "sends" : "texts"} you a code. You type it here.</p>
         {phase.saved ? (
           <>
             <Button type="button" variant="primary" size="xl" className="w-full" disabled={otpBusy} onClick={() => void sendCode(true)}>
@@ -394,17 +406,30 @@ export function SignInStream({ site, label, onSettled, onClose, onCancel }: { si
         ) : (
           <>
             <div className="flex flex-col gap-2">
-              <FieldLabel htmlFor="naukri-mobile">Mobile number on your {label} account</FieldLabel>
-              <InputBox
-                id="naukri-mobile"
-                prefix="+91"
-                inputMode="numeric"
-                autoComplete="tel-national"
-                placeholder="10 digits"
-                value={mobile}
-                onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(-10))}
-                aria-invalid={Boolean(otpError) || undefined}
-              />
+              <FieldLabel htmlFor="naukri-mobile">{orEmail ? "Mobile number or email" : "Mobile number"} on your {label} account</FieldLabel>
+              {orEmail ? (
+                <InputBox
+                  id="naukri-mobile"
+                  inputMode="email"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  placeholder="Mobile number or email"
+                  value={mobile}
+                  onChange={(event) => setMobile(event.target.value.slice(0, 254))}
+                  aria-invalid={Boolean(otpError) || undefined}
+                />
+              ) : (
+                <InputBox
+                  id="naukri-mobile"
+                  prefix="+91"
+                  inputMode="numeric"
+                  autoComplete="tel-national"
+                  placeholder="10 digits"
+                  value={mobile}
+                  onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(-10))}
+                  aria-invalid={Boolean(otpError) || undefined}
+                />
+              )}
               {otpError ? <FieldError>{otpError}</FieldError> : null}
             </div>
             <Button type="submit" variant="primary" size="xl" className="w-full" disabled={!usable || otpBusy}>
@@ -426,19 +451,48 @@ export function SignInStream({ site, label, onSettled, onClose, onCancel }: { si
             Cancel
           </Button>
         </div>
-        <p className="m-0 type-body text-muted-foreground">{label} just texted it to your phone.</p>
-        <OtpInput
-          id="naukri-code"
-          label={`Code from ${label}`}
-          length={CODE_LENGTH}
-          value={code}
-          disabled={otpBusy}
-          onChange={(value) => {
-            const digits = value.replace(/\D/g, "");
-            setCode(digits);
-            if (digits.length === CODE_LENGTH) void submitCode(digits);
-          }}
-        />
+        {site === "hirist" ? (
+          <>
+            <p className="m-0 type-body text-muted-foreground">{label} just sent it to your {mobile.includes("@") ? "email" : "phone"}.</p>
+            <form
+              className="flex flex-col gap-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (code.length >= 4) void submitCode(code);
+              }}
+            >
+              <FieldLabel htmlFor="naukri-code">Code from {label}</FieldLabel>
+              <InputBox
+                id="naukri-code"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="The code"
+                value={code}
+                disabled={otpBusy}
+                onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 8))}
+              />
+              <Button type="submit" variant="primary" size="xl" className="w-full" disabled={code.length < 4 || otpBusy}>
+                Verify code
+              </Button>
+            </form>
+          </>
+        ) : (
+          <>
+            <p className="m-0 type-body text-muted-foreground">{label} just texted it to your phone.</p>
+            <OtpInput
+              id="naukri-code"
+              label={`Code from ${label}`}
+              length={CODE_LENGTH}
+              value={code}
+              disabled={otpBusy}
+              onChange={(value) => {
+                const digits = value.replace(/\D/g, "");
+                setCode(digits);
+                if (digits.length === CODE_LENGTH) void submitCode(digits);
+              }}
+            />
+          </>
+        )}
         {otpError ? <FieldError>{otpError}</FieldError> : null}
         {otpBusy ? <AgentStatus text="Checking the code" size={32} /> : null}
         <div className="flex items-center justify-between gap-3">

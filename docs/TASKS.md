@@ -198,7 +198,7 @@ Design: [docs/naukri/TDD.md](naukri/TDD.md) (final, 3 Nov). Tasks with their Do,
 - [x] [K14 — Shared signed-out reader: search and company buckets](naukri/TASKS.md#k14)
 - [x] [K16 — Site drivers: the Naukri seams behind one interface](hirist/TASKS.md#k16)
 - [x] [K17 — Hirist reader](hirist/TASKS.md#k17)
-- [ ] [K18 — Hirist connect: email or mobile + OTP, streamed](hirist/TASKS.md#k18)
+- [~] [K18 — Hirist connect: email or mobile + OTP, streamed](hirist/TASKS.md#k18)
 - [ ] [K19 — Hirist apply](hirist/TASKS.md#k19)
 
 ## Phase L — Resume tailored to each job (owner, 5 Nov)

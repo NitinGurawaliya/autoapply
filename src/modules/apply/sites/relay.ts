@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { z } from "zod";
-import { streamSecret, verifyStreamToken, type Site } from "@/modules/sources";
+import { SITE_INFO, streamSecret, verifyStreamToken, type Site } from "@/modules/sources";
 import type { OtpStep } from "./drivers";
 import { inputEventSchema, viewportSchema, type ScreenStream } from "./screen-stream";
 
@@ -29,10 +29,10 @@ export type StreamOutcome = "connected" | "failed" | "cancelled" | "expired";
 
 /** OTP connect (K8b): what the worker does with the number and the code. Neither is kept here. */
 export type OtpHandlers = {
-  /** The number to text a code to, or null for the saved one. */
-  send: (mobile: string | null) => Promise<OtpStep>;
+  /** The mobile number or email to send a code to, or null for the saved one. */
+  send: (loginId: string | null) => Promise<OtpStep>;
   enter: (code: string) => Promise<OtpStep>;
-  /** The saved number, masked ("+91 ••••• •4175"), or null. */
+  /** The saved number or email, masked ("+91 ••••• •4175", "a•••@example.com"), or null. */
   savedNumber: string | null;
 };
 
@@ -62,7 +62,12 @@ let publicBase: string | null = null;
 const MAX_BODY_BYTES = 16 * 1024;
 const HEARTBEAT_MS = 15_000;
 const bodySchema = z.object({ events: z.array(inputEventSchema).max(64), viewport: viewportSchema.optional(), frames: z.boolean().optional() });
-const loginSchema = z.union([z.object({ mobile: z.string().regex(/^\d{10}$/) }), z.object({ saved: z.literal(true) })]);
+// What the user types to get a code: a 10-digit mobile number, on Hirist an email too (K18), or the saved one.
+const loginSchema = z.union([
+  z.object({ mobile: z.string().regex(/^\d{10}$/) }),
+  z.object({ email: z.string().max(254).regex(/^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/) }),
+  z.object({ saved: z.literal(true) }),
+]);
 const codeSchema = z.object({ code: z.string().regex(/^\d{4,8}$/) });
 // Naukri's own wait between codes is about 30 s; a few codes and a few tries are all a person needs.
 const MAX_SENDS = 4;
@@ -305,6 +310,8 @@ async function otpStep(req: IncomingMessage, res: ServerResponse, entry: Entry, 
   const reply = (status: number, body: unknown) => {
     res.writeHead(status, { "Content-Type": "application/json" }).end(JSON.stringify(body));
   };
+  const site = entry.site;
+  const label = SITE_INFO[site].label;
   if (!entry.otp) return reply(409, { state: "refused", message: "This sign-in does not take a code." });
   if (entry.busy) return reply(409, { state: "busy" });
   const raw = await readBody(req);
@@ -316,7 +323,8 @@ async function otpStep(req: IncomingMessage, res: ServerResponse, entry: Entry, 
   }
   if (login) {
     const parsed = loginSchema.safeParse(body);
-    if (!parsed.success) return reply(400, { state: "refused", message: "Enter your 10-digit mobile number." });
+    if (!parsed.success) return reply(400, { state: "refused", message: site === "hirist" ? "Enter your mobile number or email." : "Enter your 10-digit mobile number." });
+    if ("email" in parsed.data && site !== "hirist") return reply(400, { state: "refused", message: "Enter your 10-digit mobile number." });
     if (entry.sends >= MAX_SENDS) return reply(429, { state: "refused", message: "That is enough codes for one sign-in. Connect again in a few minutes." });
     const wait = entry.lastSend + RESEND_AFTER_MS - Date.now();
     if (wait > 0) return reply(429, { state: "wait", seconds: Math.ceil(wait / 1000) });
@@ -324,18 +332,18 @@ async function otpStep(req: IncomingMessage, res: ServerResponse, entry: Entry, 
     entry.sends += 1;
     entry.lastSend = Date.now();
     try {
-      const step = await entry.otp.send("mobile" in parsed.data ? parsed.data.mobile : null);
+      const step = await entry.otp.send("mobile" in parsed.data ? parsed.data.mobile : "email" in parsed.data ? parsed.data.email : null);
       if (step.state === "check") showFrames(entry, true);
       return reply(200, step);
     } catch {
-      return reply(200, { state: "refused", message: "Naukri's login did not answer. Try again in a minute." });
+      return reply(200, { state: "refused", message: `${label}'s login did not answer. Try again in a minute.` });
     } finally {
       entry.busy = false;
     }
   }
   const parsed = codeSchema.safeParse(body);
-  if (!parsed.success) return reply(400, { state: "refused", message: "Enter the code Naukri texted you." });
-  if (entry.codes >= MAX_CODES) return reply(429, { state: "refused", message: "Too many tries for one code. Ask Naukri for a new one." });
+  if (!parsed.success) return reply(400, { state: "refused", message: `Enter the code ${label} sent you.` });
+  if (entry.codes >= MAX_CODES) return reply(429, { state: "refused", message: `Too many tries for one code. Ask ${label} for a new one.` });
   entry.busy = true;
   entry.codes += 1;
   try {
@@ -348,7 +356,7 @@ async function otpStep(req: IncomingMessage, res: ServerResponse, entry: Entry, 
     // few seconds for that check.
     for (let waited = 0; !entry.outcome && waited < 5000; waited += 250) await new Promise((done) => setTimeout(done, 250));
     if (entry.outcome === "connected") return reply(200, { state: "accepted" });
-    return reply(200, { state: "refused", message: "Naukri's login did not answer. Try again." });
+    return reply(200, { state: "refused", message: `${label}'s login did not answer. Try again.` });
   } finally {
     entry.busy = false;
   }

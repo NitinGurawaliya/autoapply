@@ -30,3 +30,17 @@ export function sitesOn(flag: SiteFlag, env: Env = process.env): string[] {
 export function siteListed(site: string, env: Env = process.env): boolean {
   return site === "naukri" || siteOn(site, "feed", env);
 }
+
+/**
+ * Sites with no read through a user's own account at all (Hirist, K17: its jobs come from the shared reader only). A user's
+ * connection there is for applying; no run, no tick and no "Find jobs now" reads with it.
+ */
+const READER_ONLY: readonly string[] = ["hirist"];
+export function readerOnly(site: string): boolean {
+  return READER_ONLY.includes(site);
+}
+
+/** Whether a user's account does not read the site's jobs on request or on a timer: reader-only, or its shared reader is on. */
+export function userReadOff(site: string, env: Env = process.env): boolean {
+  return readerOnly(site) || siteOn(site, "reader", env);
+}

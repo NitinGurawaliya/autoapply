@@ -3,11 +3,10 @@ import { db } from "@/lib/db";
 import { enqueueConnect, SOURCE_CONNECT_QUEUE } from "@/lib/queue";
 import { storage } from "@/lib/storage";
 import { CANCELLABLE, cancelApplication } from "@/modules/apply/lifecycle";
-import { siteListed } from "@/lib/site-flags";
+import { siteListed, userReadOff } from "@/lib/site-flags";
 import { SITE_INFO, SITES, siteStateKey, type Site } from "./sites";
 import { signStreamToken, STREAM_TOKEN_TTL_MS, streamIdOf, streamSecret } from "./stream-token";
 import { deleteLoginNumber } from "./login-number";
-import { sharedReaderOn } from "./reader";
 
 /**
  * A user's connection to a signed-in job site (docs/naukri/TDD.md 4.4). Every status change goes through here. No
@@ -74,7 +73,7 @@ export async function sourcesOverview(userId: string): Promise<SourcesOverview> 
     screenWorkerAlive(),
   ]);
   const bySite = new Map(rows.map((row) => [row.site, row]));
-  return { sites: SITES.filter((site) => siteListed(site)).map((site) => view(site, bySite.get(site))), canConnect: Boolean(profile && !profile.isTest), screenWorkerAlive: screen, sharedReaders: SITES.filter((site) => sharedReaderOn(site)) };
+  return { sites: SITES.filter((site) => siteListed(site)).map((site) => view(site, bySite.get(site))), canConnect: Boolean(profile && !profile.isTest), screenWorkerAlive: screen, sharedReaders: SITES.filter((site) => userReadOff(site)) };
 }
 
 export type StartConnectResult = { ok: true } | { ok: false; reason: "test_profile" | "no_profile" | "no_screen_worker" | "already_connecting" | "queue_failed" };

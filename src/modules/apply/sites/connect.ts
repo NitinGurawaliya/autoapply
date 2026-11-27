@@ -59,7 +59,7 @@ export async function runConnect(userId: string, site: Site, options: ConnectOpt
         savedNumber: saved ? maskNumber(saved) : null,
         send: async (given) => {
           const mobile = given ?? saved;
-          if (!mobile) return { state: "refused", message: "Enter your 10-digit mobile number." };
+          if (!mobile) return { state: "refused", message: login.loginId === "mobile_or_email" ? "Enter your mobile number or email." : "Enter your 10-digit mobile number." };
           const page = livePage(session.page);
           if (!page) return { state: "refused", message: "The sign-in closed. Connect again." };
           const step = await login.sendCode(page, mobile);
@@ -81,7 +81,7 @@ export async function runConnect(userId: string, site: Site, options: ConnectOpt
     await sendPush(userId, {
       title: `Sign in to ${info.label}`,
       body: streamed
-        ? `Connect ${info.label} in SwipeApply: your mobile number, then the code ${info.label} texts you.`
+        ? `Connect ${info.label} in SwipeApply: your ${login.loginId === "mobile_or_email" ? "mobile number or email" : "mobile number"}, then the code ${info.label} sends you.`
         : `A Chrome window opened on your computer. Sign in to ${info.label} there; your agent never sees your password.`,
       url: appUrl("/account"),
       tag: `connect-${site}`,
