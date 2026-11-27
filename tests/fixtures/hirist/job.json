@@ -1,0 +1,11 @@
+{
+  "data": {
+    "id": 9100001, "title": "Senior Backend Engineer",
+    "introText": "<p>Build <b>payment APIs</b> in Java.</p><ul><li>5+ years</li></ul>",
+    "jobdesignation": "Engineer", "min": 5, "max": 8,
+    "tags": [{ "id": 100, "name": "Java", "isMandatory": true }, { "id": 101, "name": "Spring Boot", "isMandatory": false }, { "id": 105, "name": "Kafka", "isMandatory": false }],
+    "locations": [{ "id": 7, "name": "Pune" }, { "id": 8, "name": "Mumbai" }],
+    "otherLocation": "Noida, Pune", "workFromHome": 0, "applyUrl": "", "hasExpired": false, "permanentlyRemoved": false,
+    "companyData": { "companyId": 7001, "companyName": "Acme Software" }
+  }
+}

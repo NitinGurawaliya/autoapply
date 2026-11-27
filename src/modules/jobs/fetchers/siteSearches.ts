@@ -1,3 +1,4 @@
+import { planSearches as hiristPlan } from "./hirist";
 import { planSearches } from "./naukri";
 import type { SiteSearch } from "./siteListing";
 
@@ -9,7 +10,7 @@ import type { SiteSearch } from "./siteListing";
 export type SearchInput = { tracks: string[]; currentTitle: string | null; city: string | null; yearsExperience: number | null };
 export type SearchPlanner = (input: SearchInput, limit: number) => SiteSearch[];
 
-const PLANNERS: Record<string, SearchPlanner> = { naukri: planSearches };
+const PLANNERS: Record<string, SearchPlanner> = { naukri: planSearches, hirist: hiristPlan };
 
 export function plannerOf(site: string): SearchPlanner {
   const planner = PLANNERS[site] ?? PLANNERS[site.split("-")[0]];

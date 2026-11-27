@@ -1,10 +1,12 @@
 import type { Page } from "playwright";
 import { adapterBoardOfHost } from "@/modules/jobs/boards";
 import { fromSearch, NAUKRI_ORIGIN, searchUrl, withDetail } from "@/modules/jobs/fetchers/naukri";
+import { fromSearch as hiristFromSearch, HIRIST_ORIGIN, HIRIST_PAGE_SIZE, planSearches as hiristPlan, searchUrl as hiristSearchUrl, withDetail as hiristWithDetail } from "@/modules/jobs/fetchers/hirist";
 import type { BucketInput } from "@/modules/jobs/fetchers/naukriBuckets";
 import type { SearchPage, SiteListing, SiteSearch } from "@/modules/jobs/fetchers/siteListing";
 import { plannerOf } from "@/modules/jobs/fetchers/siteSearches";
 import type { Site } from "@/modules/sources";
+import { readJob as hiristReadJob, readSearch as hiristReadSearch } from "./hirist";
 import { onSignedInPage, readJob, readSearch, waitForSignIn, type SignInResult } from "./naukri";
 import { enterLoginCode, sendLoginCode, type OtpStep } from "./naukriOtp";
 import type { PageRead, PageStop } from "./read";
@@ -67,7 +69,30 @@ const naukri: SiteDriver = {
   login: { loginId: "mobile", waitForSignIn, onSignedInPage, sendCode: sendLoginCode, enterCode: enterLoginCode },
 };
 
-const DRIVERS: Partial<Record<Site, SiteDriver>> = { naukri };
+// Hirist's sign-in is K18: until then connecting it is not offered (siteListed) and its login steps refuse.
+const notYet = async (): Promise<never> => {
+  throw new Error("Hirist sign-in is not built yet (K18)");
+};
+const hirist: SiteDriver = {
+  site: "hirist",
+  label: "Hirist",
+  reader: {
+    frontUrl: `${HIRIST_ORIGIN}/`,
+    pageSize: HIRIST_PAGE_SIZE,
+    // Hirist's search has no "last N days" filter: a page of jobs we already hold ends the bucket (reader.ts).
+    searchUrl: (search, page, _jobAge, kind) => hiristSearchUrl(search, page, kind),
+    readSearch: hiristReadSearch,
+    readJob: hiristReadJob,
+    parseSearch: (json) => hiristFromSearch(json, adapterBoardOfHost),
+    parseDetail: (listing, json) => hiristWithDetail(listing, json, adapterBoardOfHost),
+    // A search that finds nothing answers with an empty list, which is not a failed read.
+    emptySearch: () => false,
+    searchesFor: hiristPlan,
+  },
+  login: { loginId: "mobile_or_email", waitForSignIn: notYet, onSignedInPage: () => false, sendCode: notYet, enterCode: notYet },
+};
+
+const DRIVERS: Partial<Record<Site, SiteDriver>> = { naukri, hirist };
 
 export function driverOf(site: Site): SiteDriver {
   const driver = DRIVERS[site];

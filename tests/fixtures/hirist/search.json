@@ -1,0 +1,44 @@
+{
+  "data": [
+    {
+      "id": 9100001, "title": "Senior Backend Engineer", "min": 5, "max": 8, "jobdesignation": "Engineer", "status": 1,
+      "femaleCandidate": 0, "differentlyAbled": 0, "exDefence": 0, "workFromHome": 0, "femaleBackWorkForce": 0, "confidential": 0,
+      "premium": 0, "brandedJd": 0, "createdTimeMs": 1795753248424, "createdTime": 1, "tagIdString": "1,2",
+      "tags": [{ "id": 100, "name": "Java", "isMandatory": true }, { "id": 101, "name": "Spring Boot", "isMandatory": false }],
+      "locations": [{ "id": 7, "name": "Pune" }], "createdByAlias": "HR", "assessmentFlags": 0, "minSal": 0, "maxSal": 0, "hideSal": 1,
+      "brandJobFlag": 0,
+      "companyData": { "companyId": 7001, "companyName": "Acme Software", "companyStatus": 1, "companyLogoFilePath": "https://img.example.test/acme.png" },
+      "refCode": "r1", "latitude": null, "longitude": null, "refJobId": 1, "location": [{ "id": 7, "name": "Pune" }], "minRatingAb": 0
+    },
+    {
+      "id": 9100002, "title": "Data Engineer", "min": 2, "max": 4, "jobdesignation": "Engineer", "status": 1,
+      "femaleCandidate": 0, "differentlyAbled": 0, "exDefence": 0, "workFromHome": 1, "femaleBackWorkForce": 0, "confidential": 0,
+      "premium": 0, "brandedJd": 0, "createdTimeMs": 1795753248424, "createdTime": 1, "tagIdString": "3,4",
+      "tags": [{ "id": 102, "name": "Python", "isMandatory": true }, { "id": 103, "name": "Spark", "isMandatory": false }],
+      "locations": [{ "id": 1, "name": "Bangalore" }], "createdByAlias": "HR", "assessmentFlags": 0, "minSal": 12, "maxSal": 20, "hideSal": 0,
+      "brandJobFlag": 0,
+      "companyData": { "companyId": 7001, "companyName": "Acme Software", "companyStatus": 1, "companyLogoFilePath": "https://img.example.test/acme.png" },
+      "refCode": "r2", "latitude": null, "longitude": null, "refJobId": 2, "location": [{ "id": 1, "name": "Bangalore" }], "minRatingAb": 0
+    },
+    {
+      "id": 9100003, "title": "QA Engineer", "min": 3, "max": 6, "jobdesignation": "Engineer", "status": 1,
+      "femaleCandidate": 0, "differentlyAbled": 0, "exDefence": 0, "workFromHome": 0, "femaleBackWorkForce": 0, "confidential": 0,
+      "premium": 0, "brandedJd": 0, "createdTimeMs": 1795753248424, "createdTime": 1, "tagIdString": "5",
+      "tags": [{ "id": 104, "name": "Selenium", "isMandatory": true }],
+      "locations": [{ "id": 7, "name": "Pune" }], "createdByAlias": "HR", "assessmentFlags": 0, "minSal": 0, "maxSal": 0, "hideSal": 1,
+      "brandJobFlag": 0, "applyUrl": "https://job-boards.greenhouse.io/betalabs/jobs/1",
+      "companyData": { "companyId": 7002, "companyName": "Beta Labs", "companyStatus": 1, "companyLogoFilePath": "" },
+      "refCode": "r3", "latitude": null, "longitude": null, "refJobId": 3, "location": [{ "id": 7, "name": "Pune" }], "minRatingAb": 0
+    },
+    {
+      "id": 9100004, "title": "Hidden Role", "min": 3, "max": 6, "jobdesignation": "Engineer", "status": 1,
+      "femaleCandidate": 0, "differentlyAbled": 0, "exDefence": 0, "workFromHome": 0, "femaleBackWorkForce": 0, "confidential": 1,
+      "premium": 0, "brandedJd": 0, "createdTimeMs": 1795753248424, "createdTime": 1, "tagIdString": "1",
+      "tags": [], "locations": [{ "id": 7, "name": "Pune" }], "createdByAlias": "HR", "assessmentFlags": 0, "minSal": 0, "maxSal": 0, "hideSal": 1,
+      "brandJobFlag": 0,
+      "companyData": { "companyId": 0, "companyName": "", "companyStatus": 1 },
+      "refCode": "r4", "latitude": null, "longitude": null, "refJobId": 4, "location": [{ "id": 7, "name": "Pune" }], "minRatingAb": 0
+    }
+  ],
+  "page": "1", "limit": 20, "count": 4, "totalJobs": 4, "count1Year": 4, "totalPages": 1, "hasMore": false
+}

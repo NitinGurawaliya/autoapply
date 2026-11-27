@@ -13,7 +13,8 @@
   "max_ai_drafts_per_application": 3,
   "max_attempts": 2,
   "shared_readers": {
-    "naukri": { "buckets_per_run": 8, "pages_per_bucket": 2, "details_per_bucket": 10, "seconds_between_pages": 6, "max_pages_per_day": 300, "max_details_per_day": 250, "buckets_per_user": 15, "max_buckets": 400, "readers": 1, "pause_hours_after_challenge": 24, "company_every_hours": 96, "company_no_match_days": 14, "every_hours": [{ "users": 20, "hours": 6 }, { "users": 5, "hours": 12 }, { "users": 1, "hours": 24 }] }
+    "naukri": { "buckets_per_run": 8, "pages_per_bucket": 2, "details_per_bucket": 10, "seconds_between_pages": 6, "max_pages_per_day": 300, "max_details_per_day": 250, "buckets_per_user": 15, "max_buckets": 400, "readers": 1, "pause_hours_after_challenge": 24, "company_every_hours": 96, "company_no_match_days": 14, "every_hours": [{ "users": 20, "hours": 6 }, { "users": 5, "hours": 12 }, { "users": 1, "hours": 24 }] },
+    "hirist": { "buckets_per_run": 6, "pages_per_bucket": 2, "details_per_bucket": 8, "seconds_between_pages": 10, "max_pages_per_day": 120, "max_details_per_day": 100, "buckets_per_user": 10, "max_buckets": 300, "readers": 1, "pause_hours_after_challenge": 24, "company_every_hours": 96, "company_no_match_days": 14, "every_hours": [{ "users": 20, "hours": 6 }, { "users": 5, "hours": 12 }, { "users": 1, "hours": 24 }] }
   },
   "signed_in_sources": {
     "naukri": { "searches_per_run": 15, "pages_per_search": 3, "details_per_run": 40, "seconds_between_pages": 4, "runs_per_day": 2, "max_applies_per_day": 30, "min_minutes_between_applies": 1, "pause_hours_after_challenge": 24 }
